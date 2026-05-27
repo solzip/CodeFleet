@@ -586,6 +586,75 @@ Trace-level Harness
 
 장기적으로는 Sandbox-level Harness와 Command-policy Harness로 확장할 수 있다.
 
+## 8.4 Safe Orchestration
+
+CodeFleet이 말하는 "안전한 오케스트레이션"은 AI가 실수하지 않도록 보장한다는 뜻이 아니다. AI가 실수할 수 있다는 전제 위에서, 실수의 범위와 영향을 제한하고 검토 가능한 기록을 남기는 운영 구조를 뜻한다.
+
+최종 정의:
+
+> 안전한 오케스트레이션이란 사용자의 의도를 명시적 Task로 구조화하고, 사람이 승인한 뒤, Workspace 정책과 Harness가 허용한 권한 안에서만 AI Agent가 작업하게 하며, 모든 실행 결과를 검증 가능하고 되돌릴 수 있고 감사 가능한 기록으로 남기는 것이다.
+
+짧게 표현하면:
+
+> AI가 마음대로 일하지 못하게 하고, 승인된 작업·허용된 범위·검증된 결과 안에서만 일하게 만드는 운영 구조다.
+
+최종 실행 흐름:
+
+```text
+User Intent
+  -> Draft Harness
+  -> DRAFT Task
+  -> Human Approval
+  -> READY Task
+  -> Execution Harness
+  -> Isolated / Controlled Agent Run
+  -> Diff + Logs + Verification
+  -> Review
+  -> Close / Retry / Reject
+```
+
+최종 안전 조건:
+
+```text
+1. Explicit Task
+   모든 AI 작업은 명시적 Task에서 시작한다.
+
+2. Human Approval
+   AI가 만든 Task Draft는 사람이 승인해야 실행 가능하다.
+
+3. Non-relaxable Workspace Policy
+   Project Profile 정책은 Task가 완화할 수 없다.
+   더 엄격해지는 것만 허용한다.
+
+4. Least Privilege
+   Agent는 필요한 최소 read/write/command 권한만 가진다.
+
+5. Isolation
+   가능하면 git worktree, temp workspace, container 등 격리된 실행 환경에서 작업한다.
+
+6. Verification Gate
+   테스트, lint, build, terraform plan, nginx -t 같은 검증 결과 없이는 성공으로 닫지 않는다.
+
+7. Auditable Trace
+   prompt, policy snapshot, commands, stdout/stderr, diff, changed files, verification, review, result를 남긴다.
+```
+
+최종 안전 모델:
+
+> CodeFleet에서 안전한 오케스트레이션은 AI Agent에게 작업을 직접 맡기는 것이 아니라, 승인된 Task와 비완화 Workspace Policy를 바탕으로 Harness가 최소 권한·격리·검증·추적 조건을 적용해 실행하고, 그 결과를 사람이 검토 가능한 Run Trace로 남기는 것이다.
+
+안전 철학:
+
+```text
+Trust the process, not the agent.
+```
+
+한국어로는:
+
+```text
+AI를 신뢰하는 것이 아니라, AI가 일하는 절차와 경계를 신뢰한다.
+```
+
 ## 9. Policy 병합 원칙
 
 정책 병합 방향:
