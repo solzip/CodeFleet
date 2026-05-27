@@ -196,3 +196,7 @@ The generated prompt is passed to the configured command on stdin. Treat execute
 ## Architecture
 
 See `docs/architecture.md` for a text-based architecture overview with diagrams that do not require Mermaid rendering.
+
+## Concept Foundation
+
+See `docs/concept-foundation.md` for the current product definition, Core/Workspace/Profile/Harness concepts, and the agreed long-term orchestration direction.
