@@ -524,6 +524,28 @@ Task
 
 Draft Harness는 사용자의 자연어 Intent를 DRAFT Task Spec으로 구조화한다.
 
+Task는 단순한 작업 메모가 아니다.
+
+> Task는 AI에게 위임할 작업의 목표, 범위, 권한, 검증 기준, 완료 조건을 명시한 실행 전 계약서다.
+
+따라서 코드 수정 Task를 제대로 정의하려면 Draft 단계에서도 프로젝트를 어느 정도 읽어야 할 수 있다. 예를 들어 "회원가입 API 에러 응답을 통일해줘"라는 Intent를 Task로 만들려면 회원가입 API가 어느 Controller에 있는지, 에러 응답이 어디서 만들어지는지, 공통 응답 타입이 이미 있는지, 테스트 위치가 어디인지 정도는 파악해야 한다.
+
+하지만 Draft Harness는 실행 계층이 아니다.
+
+핵심 원칙:
+
+```text
+Draft Harness performs bounded discovery, not execution.
+```
+
+한국어:
+
+```text
+Draft Harness는 제한된 사전 조사를 수행하지만, 작업 실행은 수행하지 않는다.
+```
+
+bounded discovery는 Task를 정의하는 데 필요한 범위 안에서만 제한적으로 프로젝트를 탐색하고 읽는 것을 의미한다.
+
 책임:
 
 ```text
@@ -532,6 +554,44 @@ Draft Harness는 사용자의 자연어 Intent를 DRAFT Task Spec으로 구조�
 - 보수적인 guardrail 기본값 적용
 - status: DRAFT로 저장
 - 실행하지 않음
+```
+
+Draft Harness가 할 수 있는 것:
+
+```text
+- Project Profile 읽기
+- .codefleet/context 읽기
+- 파일 트리 탐색
+- 관련 파일 후보 검색
+- 관련 소스 일부 읽기
+- scope 후보 제안
+- agentRole 제안
+- verification 후보 제안
+- needsReview 기록
+```
+
+Draft Harness가 하면 안 되는 것:
+
+```text
+- 파일 수정
+- shell command 실행
+- 테스트 실행
+- terraform plan/apply 실행
+- Agent에게 코드 수정 지시
+```
+
+읽기와 실행은 분리한다.
+
+```text
+User Intent
+  -> Draft Harness
+     - read-only bounded discovery
+     - DRAFT Task 생성
+  -> Human Approval
+  -> Execution Harness
+     - READY Task 실행
+     - 수정/검증/로그 수집
+  -> Run Trace
 ```
 
 ### 8.2 Execution Harness
