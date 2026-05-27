@@ -439,6 +439,66 @@ Harness는 CodeFleet의 차별점이다.
 
 > Harness는 AI 에이전트가 Task를 수행할 때 역할·범위·권한·검증·수집 규칙을 적용하는 통제된 실행 껍질이다.
 
+더 직접적인 정의:
+
+> CodeFleet Harness는 사용자의 의도를 AI가 실행 가능한 작업으로 바꾸되, 프로젝트 정책과 안전 조건을 씌워서 Agent에게 전달하는 통제 계층이다.
+
+사용자의 자연어 요청은 바로 Agent에게 전달되지 않는다.
+
+예를 들어 사용자가 다음과 같이 말해도:
+
+```text
+"이 프로젝트 고쳐줘"
+```
+
+CodeFleet은 이 요청을 그대로 Codex나 다른 AI Agent에게 넘기지 않는다. 먼저 현재 Workspace의 Project Profile을 읽고, Harness 정책을 적용해 통제된 Task Draft 또는 실행 Prompt로 변환한다.
+
+Agent에게 전달되는 지시는 다음처럼 조건을 가진 형태가 되어야 한다.
+
+```text
+너는 BACKEND_REVIEWER 역할이다.
+
+이 작업은 SUGGEST_ONLY 모드다.
+파일을 수정하지 마라.
+
+분석 허용 범위:
+- src/main/java/**
+- src/test/java/**
+
+제외 범위:
+- **/.env
+- **/application-prod.yml
+- **/target/**
+- **/build/**
+
+금지 조건:
+- 운영 설정을 수정하지 마라.
+- JWT 토큰 원문을 로그에 남기지 마라.
+- 무관한 리팩토링을 하지 마라.
+- 위험 명령을 실행하지 마라.
+
+검증 관점:
+- 테스트 실행 가능 여부를 판단하라.
+- 필요한 경우 실행할 테스트 명령을 제안하라.
+
+응답 형식:
+- 요약
+- 분석한 파일
+- 발견한 문제
+- 수정 제안
+- 테스트/검증 방법
+- 위험 요소
+- 다음 단계
+```
+
+핵심 원칙:
+
+```text
+사용자 자연어 요청은 바로 Agent에게 가지 않는다.
+Harness가 Project Profile과 결합해 통제된 Task/Prompt로 바꾼다.
+Agent는 그 통제된 지시 안에서만 일한다.
+```
+
 Agent Adapter와 Harness의 차이:
 
 ```text
@@ -850,4 +910,3 @@ v0.1 구현 내용:
 4. 테스트
 5. push
 ```
-
