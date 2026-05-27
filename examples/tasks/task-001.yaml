@@ -1,0 +1,22 @@
+id: task-001
+title: "API response structure standardization"
+projectPath: "."
+goal: "Make successful controller responses use a common ApiResponse<T> shape."
+scope:
+  include:
+    - "src/main/java/**"
+  exclude:
+    - "src/main/resources/application*.yml"
+constraints:
+  - "Do not change the database schema."
+  - "Do not modify files unrelated to the task scope."
+  - "Avoid formatting-only changes."
+doneCriteria:
+  - "Successful controller responses return ApiResponse<T>."
+  - "Existing tests pass when they can be run."
+  - "Changed files and reasons are summarized."
+workflow:
+  - PLAN
+  - IMPLEMENT
+  - REVIEW
+status: READY

@@ -1,0 +1,17 @@
+{
+  "name": "codefleet",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CodeFleet v0.1 CLI for orchestrating Codex-based development tasks.",
+  "bin": {
+    "codefleet": "./src/cli.ts"
+  },
+  "scripts": {
+    "codefleet": "node ./src/cli.ts",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
