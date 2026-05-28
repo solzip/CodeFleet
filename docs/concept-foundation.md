@@ -506,6 +506,86 @@ Task Drafting은 보수적으로 동작해야 한다.
 - doneCriteria는 검토 가능한 문장으로 작성
 ```
 
+### 7.3 Task Review / Edit
+
+CodeFleet의 최종 사용자 흐름은 사용자가 YAML을 처음부터 직접 작성하는 방식이 아니다. 사용자는 자연어 Intent를 입력하고, CodeFleet은 DRAFT Task를 생성하며, 사용자는 보조 명령을 통해 그 Task를 검토·수정·승인한다.
+
+초기부터 YAML 직접 편집만을 1차 UX로 두지 않는다. YAML은 저장 형식일 수 있지만, 사용자의 기본 흐름은 Task Review 중심이어야 한다.
+
+권장 최소 흐름:
+
+```text
+codefleet draft "<user intent>"
+codefleet task review <task-id>
+codefleet task approve <task-id>
+codefleet run <task-id>
+```
+
+`task review`의 책임:
+
+```text
+- 사람이 읽기 좋은 Task 요약을 보여준다.
+- intent, scope, guardrails, verification, doneCriteria, needsReview를 강조한다.
+- 위험하거나 불확실한 항목을 눈에 띄게 보여준다.
+- 필요한 경우 안전한 수정 흐름으로 연결한다.
+```
+
+`task edit` 또는 review 안의 수정 기능은 Task Spec만 수정한다.
+
+금지 사항:
+
+```text
+- 프로젝트 소스 파일 수정 금지
+- shell command 실행 금지
+- 테스트 실행 금지
+- Agent에게 코드 수정 지시 금지
+```
+
+즉 Task 수정 명령은 실행 명령이 아니라 계약 수정 명령이다.
+
+핵심 안전 원칙:
+
+```text
+Approval is bound to a task revision.
+```
+
+한국어:
+
+```text
+승인은 특정 Task revision에만 유효하다.
+```
+
+따라서 승인된 Task를 수정하면 기존 승인은 무효화되어야 한다.
+
+상태 흐름:
+
+```text
+DRAFT
+  -> review/edit
+  -> validate
+  -> approve
+  -> READY
+
+READY
+  -> edit
+  -> new revision
+  -> DRAFT
+  -> approval cleared
+```
+
+Task Review / Edit 안전 규칙:
+
+```text
+- READY / RUNNING / DONE Task는 같은 revision에서 직접 수정하지 않는다.
+- 승인 후 수정은 새 revision을 만들고 status를 DRAFT로 되돌린다.
+- approval 정보는 수정된 revision에 승계되지 않는다.
+- Project Profile 정책을 완화하는 변경은 저장하지 못한다.
+- More restrictive wins 원칙을 따른다.
+- 저장 전/후 Task diff를 보여준다.
+```
+
+이 흐름의 목적은 YAML 작성 능력을 사용자에게 요구하는 것이 아니라, AI가 만든 작업 계약을 사람이 안전하게 검토하고 승인할 수 있게 하는 것이다.
+
 ## 8. Harness
 
 Harness는 CodeFleet의 차별점이다.
@@ -1101,8 +1181,9 @@ v0.1 구현 내용:
 1. 이 문서 전체를 읽는다.
 2. docs/architecture.md는 현재 구현 구조 참고용으로 본다.
 3. README는 사용자용 현재 사용법 참고용으로 본다.
-4. 구현을 바로 하지 말고 Harness / Task Spec / Project Profile 중 무엇을 먼저 확정할지 정한다.
-5. 개념 합의 후 v0.2 구현 범위를 작게 자른다.
+4. 구현을 바로 하지 말고 최종 사용자 흐름을 먼저 검토한다.
+5. 최종 사용자 흐름에서 Task Spec / Project Profile / Harness 책임을 역으로 확정한다.
+6. 개념 합의 후 v0.2 구현 범위를 작게 자른다.
 ```
 
 우선순위:
