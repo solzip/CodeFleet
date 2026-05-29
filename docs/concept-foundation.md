@@ -1702,7 +1702,8 @@ finding 최소 필드:
 - expected
 - actual
 - evidence path / object id
-- suggestedRepair kind
+- suggestedRepair.kind
+- suggestedRepair.mode
 ```
 
 예:
@@ -1732,7 +1733,8 @@ findings:
       ledgerPath: .codefleet/objectives/auth-error-response/ledger.jsonl
       missingSeq: [3]
     suggestedRepair:
-      kind: MANUAL_REPAIR_REQUIRED
+      kind: RESTORE_SOURCE
+      mode: MANUAL
       reason: "Missing ledger event cannot be reconstructed safely."
 ```
 
@@ -1817,7 +1819,8 @@ Extensible Layer:
 - Project-specific checks
 - checkId 목록
 - condition type
-- suggestedRepairKind
+- suggestedRepair.kind
+- suggestedRepair.mode
 - Project Profile별 policy rule
 - repair option catalog
 - category taxonomy addition through taxonomy review
@@ -1848,7 +1851,8 @@ Validation Rule 최소 schema:
 - expectedType
 - actualType
 - evidenceType
-- suggestedRepairKind
+- suggestedRepair.kind
+- suggestedRepair.mode
 ```
 
 프로젝트별 rule 예:
@@ -1869,7 +1873,9 @@ actualType:
 evidenceType:
   commandLogPath: path
   projectProfilePath: path
-suggestedRepairKind: EVENT_REPAIR_REQUIRED
+suggestedRepair:
+  kind: APPEND_CORRECTIVE_EVENT
+  mode: ASSISTED
 ```
 
 불변성과 확장성의 경계:
@@ -1935,7 +1941,8 @@ Validation Rule은 최소한 다음을 가져야 한다.
 - expectedType
 - actualType
 - evidenceType
-- suggestedRepairKind
+- suggestedRepair.kind
+- suggestedRepair.mode
 ```
 
 예:
@@ -1955,7 +1962,9 @@ actualType:
 evidenceType:
   runId: string
   resultPath: path
-suggestedRepairKind: EVENT_REPAIR_REQUIRED
+suggestedRepair:
+  kind: RESTORE_SOURCE
+  mode: MANUAL
 ```
 
 하나의 checkId는 정확히 하나의 primary category를 가진다.
@@ -2465,6 +2474,273 @@ denied:
 - MUTATE_CARRY_FORWARD
 - EXECUTE
 - RISK_LOWER
+```
+
+RepairKind / RepairMode:
+
+```text
+category
+= 무엇이 깨졌는가
+
+severity
+= 무엇을 막는가
+
+repairKind
+= 무엇을 변경하는가
+
+repairMode
+= 누가 / 어떤 승인 수준으로 수행하는가
+```
+
+RepairKind 정의:
+
+```text
+RepairKind
+= finding을 해소하기 위해 CodeFleet이 어떤 대상을 어떤 방식으로 다룰 수 있는지 나타내는 deterministic repair class
+```
+
+RepairKind는 실제 변경 대상 기준으로 나눈다.
+
+```text
+REBUILD_DERIVED
+RESTORE_SOURCE
+APPEND_CORRECTIVE_EVENT
+INVALIDATE_EVIDENCE
+EXPIRE_CONTEXT
+UPDATE_POLICY
+```
+
+REBUILD_DERIVED:
+
+```text
+target:
+- objective.json
+- snapshot
+- cache
+- index
+- derived cursor
+- generated context cache
+
+changes:
+- derived artifact 재생성
+
+does not change:
+- ledger
+- Task Revision
+- Run Trace
+- review record
+- CarryForward event
+- Project Profile
+
+preconditions:
+- source of truth validation clean
+- category is SNAPSHOT_CONSISTENCY or READ_MODEL_CONSISTENCY
+- severity is REBUILD_REQUIRED
+
+records:
+- repair log required
+- ledger correction event not required
+```
+
+RESTORE_SOURCE:
+
+```text
+target:
+- missing Task Revision file
+- missing Run Trace file
+- missing review record
+- missing ledger file
+- missing policy file
+
+changes:
+- restore original file from VCS / backup / user-provided source
+
+does not change:
+- do not infer missing content
+- do not synthesize missing ledger event
+- do not fabricate run result
+
+preconditions:
+- restore source specified
+- restored file hash recorded
+- validate before and after restore
+
+records:
+- repair log required
+- ledger event usually not required
+- if domain state changes after restore, separate correction event required
+```
+
+APPEND_CORRECTIVE_EVENT:
+
+```text
+target:
+- Objective ledger
+- queue relation
+- task relation
+- carry-forward state
+- objective state
+
+changes:
+- append-only correction event 추가
+
+does not change:
+- do not edit / delete past ledger event
+- do not edit Task Revision
+- do not edit Run Trace
+
+preconditions:
+- correction event type defined
+- reason required
+- actor required
+- affected findingId required
+
+records:
+- ledger correction event required
+- repair log required
+```
+
+INVALIDATE_EVIDENCE:
+
+```text
+target:
+- Run evidence
+- review evidence
+- summary evidence
+- verification evidence
+
+changes:
+- mark evidence as unusable for derived state / carry-forward / review computation
+
+does not change:
+- do not delete evidence file
+- do not edit run result
+- do not edit review record
+
+preconditions:
+- invalidation reason required
+- affected evidence id required
+- replacement evidence linked if present
+
+records:
+- invalidation record or correction event required
+- repair log required
+```
+
+EXPIRE_CONTEXT:
+
+```text
+target:
+- CarryForwardItem
+- Run Summary
+- Decision applicability
+
+changes:
+- mark context EXPIRED so it cannot be included in the next Harness prompt
+
+does not change:
+- do not delete source Run Trace
+- do not edit summary text silently
+- do not delete Decision silently
+
+preconditions:
+- drift evidence required
+- sourceRunId / changedFiles / hash mismatch or equivalent structured evidence required
+- reason required
+
+records:
+- CARRY_FORWARD_EXPIRED event required
+- repair log required
+```
+
+UPDATE_POLICY:
+
+```text
+target:
+- Project Profile
+- validation rule table
+- command policy
+- risk policy
+- guardrail policy
+
+changes:
+- update policy definition
+- add / update validation rule
+
+does not change:
+- do not silently suppress existing finding
+- do not resolve marker by policy change alone
+
+preconditions:
+- policy diff required
+- reason required
+- revalidate required
+- relationship to existing finding recorded
+
+records:
+- policy change record required
+- repair log required
+- revalidation result required
+```
+
+RepairMode 정의:
+
+```text
+RepairMode
+= repair option을 CodeFleet이 어떤 자동화 / 승인 수준으로 수행할 수 있는지 나타내는 deterministic execution class
+```
+
+RepairMode:
+
+```text
+AUTOMATED
+- CodeFleet이 deterministic하게 실행 가능
+- 사람의 선택 없이도 안전한 경우
+- 예: REBUILD_DERIVED on clean source of truth
+
+ASSISTED
+- CodeFleet이 repair option을 제안
+- 사람이 승인해야 실행
+- 예: APPEND_CORRECTIVE_EVENT, EXPIRE_CONTEXT
+
+MANUAL
+- CodeFleet은 finding과 요구조건만 제공
+- 사람의 외부 조치 필요
+- 예: RESTORE_SOURCE from external backup
+```
+
+금지:
+
+```text
+LLM picks no RepairKind.
+LLM picks no RepairMode.
+Human invents no RepairKind at runtime.
+Human invents no RepairMode at runtime.
+```
+
+한국어:
+
+```text
+LLM은 RepairKind / RepairMode를 고르지 않는다.
+사람은 runtime에서 새로운 RepairKind / RepairMode를 만들지 않는다.
+CodeFleet은 finding을 기준으로 가능한 repair options를 제시하고, 사람은 승인 / 거절 / 수동 처리만 한다.
+```
+
+RepairKind / RepairMode 예:
+
+```yaml
+repairKind: REBUILD_DERIVED
+repairMode: AUTOMATED
+```
+
+```yaml
+repairKind: APPEND_CORRECTIVE_EVENT
+repairMode: ASSISTED
+```
+
+```yaml
+repairKind: RESTORE_SOURCE
+repairMode: MANUAL
 ```
 
 Scope:
@@ -4967,6 +5243,7 @@ v0.1 구현 내용:
 - Invariant Core / Extensible Layer 원칙
 - Finding category taxonomy
 - Severity capability gating 원칙
+- RepairKind / RepairMode taxonomy
 - 단일 CorruptionMarker + scope / target 모델
 - Task와 Task Revision 분리
 - Task revision lineage와 revision-bound approval / relation / run / summary 원칙
