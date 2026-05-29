@@ -136,6 +136,126 @@ Command
   -> Release Lock
 ```
 
+Mutation 후 rebuild / validate 흐름:
+
+```text
+1. workspace lock 획득
+2. 현재 상태 읽기
+3. 현재 상태 validate
+4. transition 가능 여부 확인
+5. ledger event append
+6. 필요한 경우 Task Spec 갱신
+7. ledger + Task Spec + Run Trace + Summary를 기준으로 objective.json rebuild
+8. 결과 validate
+9. lock 해제
+```
+
+핵심 원칙:
+
+```text
+Rebuild over patch.
+```
+
+한국어:
+
+```text
+부분 수정보다 전체 재생성을 우선한다.
+```
+
+Mutation Engine은 objective.json을 부분 수정하지 않는다. 상태 변경 후에는 ledger, Task Spec, Run Trace, Summary를 기준으로 objective.json snapshot을 다시 만든다.
+
+`rebuild`의 책임:
+
+```text
+- ledger.jsonl을 seq 순서로 읽는다.
+- OBJECTIVE_CREATED로 기본 Objective를 만든다.
+- TASK_ATTACHED로 queue item을 추가한다.
+- QUEUE_* 이벤트로 storedState를 적용한다.
+- QUEUE_REORDERED로 future segment 순서를 적용한다.
+- Task Spec을 읽어 taskRevision, approval, relation을 검증한다.
+- Run Trace를 읽어 DONE / ACTIVE 같은 derivedState를 계산한다.
+- Summary / Decision 연결을 반영한다.
+- objective.json snapshot을 생성한다.
+```
+
+`validate`의 책임:
+
+```text
+- ledger seq가 끊기지 않는지 확인한다.
+- event schema가 맞는지 확인한다.
+- TASK_ATTACHED 없이 relation event가 나오지 않는지 확인한다.
+- taskId가 실제 tasks/*.yaml에 존재하는지 확인한다.
+- taskRevision이 실제 Task revision과 맞는지 확인한다.
+- proposed relation이 실행에 쓰이지 않았는지 확인한다.
+- accepted/approved relation 없이 READY/RUNNING Task가 없는지 확인한다.
+- objective.json이 rebuild 결과와 같은지 확인한다.
+- raw log/diff가 Objective context에 들어가지 않았는지 확인한다.
+- CLOSED Objective에 NEXT가 남아 있지 않은지 확인한다.
+```
+
+실패 처리 원칙:
+
+```text
+No silent rollback.
+No ledger rewrite.
+Explicit repair only.
+```
+
+한국어:
+
+```text
+조용한 rollback은 하지 않는다.
+ledger 중간 수정은 하지 않는다.
+명시적 repair만 허용한다.
+```
+
+Mutation Engine은 이벤트 append 전에 강한 validation을 수행한다. Append 후 rebuild / validate가 실패하면 ledger를 자동 수정하거나 rollback하지 않고 corruption 상태로 보고 명령을 실패시킨다. 복구는 별도 validate / rebuild / repair 명령으로 수행한다.
+
+최종 모델에서도 이 원칙은 유지한다. 최종 모델은 자동 rollback을 추가하는 것이 아니라 진단과 복구 도구를 강화한다.
+
+```text
+v0.2
+- append 전 강한 validation
+- append 후 rebuild / validate 실패 시 command fail
+- 수동 rebuild / repair 안내
+
+최종 모델
+- append 전 강한 validation
+- atomic append / atomic file replace
+- append 후 rebuild / validate
+- 실패 시 corruption marker 기록
+- objective validate가 문제 위치를 설명
+- objective repair가 명시적 보정 이벤트를 만들거나 snapshot을 재생성
+- ledger 중간 줄 직접 수정 금지
+```
+
+Corruption marker 예시:
+
+```json
+{
+  "objectiveId": "auth-error-response",
+  "detectedAt": "2026-05-29T11:00:00+09:00",
+  "failedCommand": "task relation accept task-001",
+  "lastLedgerSeq": 12,
+  "validationErrors": [
+    "taskRevision mismatch: task-001 expected 1 but found 2"
+  ],
+  "recommendedActions": [
+    "codefleet objective validate auth-error-response",
+    "codefleet objective repair auth-error-response"
+  ]
+}
+```
+
+Repair 원칙:
+
+```text
+- snapshot만 깨졌으면 ledger / task / run을 기준으로 objective.json을 rebuild한다.
+- ledger 이벤트가 잘못됐으면 중간 줄을 수정하지 않고 보정 이벤트를 append한다.
+- Task relation이 꼬였으면 relation invalidation 같은 명시적 이벤트를 append한다.
+- repair는 사람이 실행한 명시적 명령이어야 한다.
+```
+
 원칙:
 
 ```text
