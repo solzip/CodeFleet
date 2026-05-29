@@ -398,6 +398,152 @@ Corruption / Repair State
 
 Objective와 Queue부터 확정해야 Task relation, approval, run-derived state가 자연스럽게 이어진다.
 
+### 0.3 Objective State 규칙
+
+Objective State는 Objective 자체의 생명주기 상태를 관리한다.
+
+상태:
+
+```text
+OPEN
+- 진행 가능한 Objective
+- Task attach 가능
+- Task review / run 가능
+
+BLOCKED
+- 외부 결정, 정보, 선행 조건 때문에 멈춘 Objective
+- Task attach / review / relation accept / approve는 가능
+- run은 기본 금지
+- close / cancel / unblock 가능
+
+CLOSED
+- 정상적으로 완료된 Objective
+- 기본적으로 Task attach / run 금지
+- 명시적 reopen 가능
+
+CANCELED
+- 의도적으로 폐기한 Objective
+- terminal
+- reopen 불가
+- 다시 하려면 새 Objective 생성
+
+CORRUPTED
+- ledger / task / run / snapshot 불일치로 신뢰할 수 없는 Objective
+- 일반 mutation 금지
+- validate / rebuild / repair만 허용
+```
+
+전이:
+
+```text
+OBJECTIVE_CREATED -> OPEN
+
+OPEN
+-> BLOCKED
+-> CLOSED
+-> CANCELED
+-> CORRUPTED
+
+BLOCKED
+-> OPEN
+-> CLOSED
+-> CANCELED
+-> CORRUPTED
+
+CLOSED
+-> OPEN       via OBJECTIVE_REOPENED
+-> CORRUPTED
+
+CANCELED
+-> CORRUPTED  diagnostic only
+
+CORRUPTED
+-> previous valid status only via explicit repair
+```
+
+금지 전이:
+
+```text
+CANCELED -> OPEN 금지
+CANCELED -> CLOSED 금지
+CANCELED -> REOPENED 금지
+CORRUPTED 상태에서 일반 mutation 금지
+```
+
+BLOCKED 처리 원칙:
+
+```text
+BLOCKED는 Objective가 폐기됐다는 뜻이 아니다.
+BLOCKED는 실행을 멈추고 추가 정보, 외부 결정, 선행 조건을 기다린다는 뜻이다.
+```
+
+따라서 BLOCKED Objective에서도 다음은 허용한다.
+
+```text
+- Task attach
+- Task review
+- relation accept / approve / reject
+- close
+- cancel
+- unblock
+```
+
+하지만 run은 기본 금지한다.
+
+이유:
+
+```text
+BLOCKED 상태에서 실행을 허용하면 왜 blocked인지 흐려진다.
+막힌 이유를 해결하기 위한 조사/정리 Task는 만들 수 있지만,
+실제 실행은 Objective가 OPEN으로 돌아온 뒤 수행하는 것이 기본이다.
+```
+
+OBJECTIVE_CLOSED 가능 조건:
+
+```text
+- ACTIVE Run 없음
+- CORRUPTED 아님
+- close reason 있음
+- 필요한 summary / decision 정책 충족
+- 남은 NEXT / WAITING Task가 있으면 close reason에 남은 Task 처리 방침 기록
+```
+
+OBJECTIVE_CANCELED 가능 조건:
+
+```text
+- ACTIVE Run 없음
+- CORRUPTED 아님
+- cancel reason 필수
+```
+
+OBJECTIVE_REOPENED 가능 조건:
+
+```text
+- 현재 상태가 CLOSED
+- reopen reason 필수
+- CORRUPTED 아님
+```
+
+Objective State 최종 원칙:
+
+```text
+CLOSED can reopen.
+CANCELED cannot reopen.
+CORRUPTED requires repair.
+ACTIVE work blocks close / cancel / reorder.
+BLOCKED allows planning, but blocks execution by default.
+```
+
+한국어:
+
+```text
+CLOSED는 다시 열 수 있다.
+CANCELED는 다시 열 수 없다.
+CORRUPTED는 repair가 필요하다.
+실행 중인 작업이 있으면 close / cancel / reorder를 막는다.
+BLOCKED는 계획은 허용하지만 실행은 기본적으로 막는다.
+```
+
 원칙:
 
 ```text
