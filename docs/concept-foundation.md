@@ -144,6 +144,84 @@ Objective 상태 변경은 파일 수정이 아니라 event transition이다.
 
 따라서 `task review`, `objective skip`, `objective close`, `summary attach` 같은 상태 변경 명령은 최종적으로 Mutation Engine을 거쳐야 한다. 반면 `objective show`, `task show`, `run show` 같은 조회 명령은 상태를 바꾸지 않으므로 Mutation Engine을 거치지 않아도 된다.
 
+Mutation Engine을 반드시 거치는 변경:
+
+```text
+Objective 생성/변경
+- objective create
+- objective close
+- objective reopen
+- objective cancel
+
+Task와 Objective 연결
+- task attach
+- task relation accept
+- task relation approve
+- task relation reject
+- task relation invalidate
+
+Queue 상태 변경
+- objective block <task>
+- objective unblock <task>
+- objective skip <task>
+- objective unskip <task>
+- objective cancel-item <task>
+
+Carry-forward context 변경
+- decision record
+- decision revoke
+- summary attach
+- summary revoke
+
+Task approval 관련
+- task approve
+- task edit after approval
+- task invalidate approval
+```
+
+Mutation Engine을 거치지 않아도 되는 조회:
+
+```text
+- objective show
+- objective list
+- task show
+- run show
+- summary show
+```
+
+조회 명령은 상태를 변경하지 않으므로 Mutation Engine을 거치지 않아도 된다. 단, 조회 중 objective.json snapshot이 rebuild 결과와 다르다는 것을 감지하면 warning을 출력할 수 있다.
+
+Lock 원칙:
+
+```text
+One writer at a time.
+Many readers allowed.
+```
+
+한국어:
+
+```text
+상태 변경 writer는 한 번에 하나만 허용한다.
+조회 reader는 여러 개가 동시에 가능하다.
+```
+
+최종형에서도 기본 lock은 workspace-level mutation lock이다.
+
+```text
+.codefleet/locks/workspace.lock
+```
+
+이유는 Task relation 변경이 여러 Objective에 동시에 영향을 줄 수 있기 때문이다. 예를 들어 같은 Task를 두 Objective에 동시에 attach하면 안 된다. Objective-level lock만으로는 이런 충돌을 막기 어렵다.
+
+따라서 기본 원칙은 다음과 같다.
+
+```text
+- 모든 상태 변경은 workspace-level mutation lock을 잡고 수행한다.
+- 조회는 lock 없이 가능하다.
+- 나중에 성능 필요가 명확해지면 objective-level lock을 보조로 도입할 수 있다.
+- 초기 설계에서는 병렬 mutation 최적화보다 일관성을 우선한다.
+```
+
 ## 1. 최종 지향 정의
 
 위 고정 목표를 오케스트레이션 흐름으로 풀면 다음과 같다.
