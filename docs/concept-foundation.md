@@ -341,7 +341,7 @@ Rollback 대신 명시적 보정 이벤트를 사용한다.
 
 잘못 summary attach함
 -> summary 파일 직접 삭제로 해결하지 않음
--> SUMMARY_REVOKED append
+-> CARRY_FORWARD_REVOKED append
 ```
 
 최종 안전장치:
@@ -1362,6 +1362,191 @@ Project Profile과 Task / Run 증거를 기준으로
 CodeFleet이 계산하는 정책 결과다.
 ```
 
+### 0.9 Context Carry-forward State 규칙
+
+Context Carry-forward State는 이전 Task의 어떤 맥락을 다음 Task에 넘길 수 있는지 관리한다.
+
+최종 원칙:
+
+```text
+Run Trace = evidence truth
+Run Summary = sanitized pointer / hint
+Decision = human-approved intent
+Current workspace = execution ground truth
+```
+
+따라서 raw Run Trace를 다음 prompt에 직접 넣지 않는다. Carry-forward에 포함 가능한 것은 사람이 승인한 Decision과 정제된 Summary뿐이다.
+
+Decision과 Summary는 의미가 다르지만, 다음 Task에 포함 가능한지 판단하는 상태 흐름은 같다. 따라서 하나의 Carry-forward state machine을 공유하고, type만 나눈다.
+
+```text
+CarryForwardItem
+- type: DECISION | SUMMARY
+- state: PROPOSED | ATTACHED | REVOKED | EXPIRED
+```
+
+구분:
+
+```text
+type
+= 이 항목의 성격
+
+state
+= 이 항목을 다음 Task context에 포함할 수 있는지
+```
+
+type 의미:
+
+```text
+DECISION
+= 사람이 승인한 의도 / 방향 / 제약
+
+SUMMARY
+= Run Trace에서 만든 정제된 전달 맥락
+= retained evidence를 가리키는 pointer / hint
+```
+
+state 의미:
+
+```text
+PROPOSED
+- Agent 또는 CodeFleet이 제안한 후보
+- 자동 포함 불가
+- review 대상
+
+ATTACHED
+- 사람이 승인해 Objective context에 붙인 상태
+- 다음 Draft Harness / Execution Harness에 포함 가능
+
+REVOKED
+- 이전에 붙였지만 더 이상 사용하지 않기로 한 상태
+- 기록은 보존
+- prompt / context 포함 금지
+
+EXPIRED
+- sourceRun / sourceRevision / workspace 상태와 맞지 않을 수 있는 상태
+- 자동 포함 금지
+- recheck 또는 review 필요
+```
+
+상태 전이:
+
+```text
+PROPOSED -> ATTACHED
+PROPOSED -> REJECTED or discarded
+
+ATTACHED -> REVOKED
+ATTACHED -> EXPIRED
+
+EXPIRED -> ATTACHED   only after recheck / review
+
+REVOKED -> terminal
+```
+
+`REJECTED`는 장기 보존 상태로 두지 않아도 된다. 사람이 후보를 채택하지 않은 것은 audit 필요성이 낮으면 discard해도 된다. 단, 사용자 결정을 감사해야 하는 모드에서는 `CARRY_FORWARD_REJECTED` 이벤트로 남길 수 있다.
+
+핵심 규칙:
+
+```text
+Only ATTACHED context can be forwarded.
+```
+
+포함 가능:
+
+```text
+- state == ATTACHED
+- policy / risk check 통과
+- expired 아님
+```
+
+포함 금지:
+
+```text
+- PROPOSED
+- REVOKED
+- EXPIRED
+```
+
+상태 머신은 공유하되, ATTACHED validation은 type별로 다르게 둔다.
+
+DECISION이 ATTACHED 되기 위한 조건:
+
+```text
+- 사람이 명시적으로 승인
+- actor 있음
+- reason 또는 근거 있음
+- sourceObjectiveId 또는 sourceTaskId 있음
+- 충돌하는 기존 ATTACHED Decision이 없거나 supersedes / revoke 처리됨
+```
+
+SUMMARY가 ATTACHED 되기 위한 조건:
+
+```text
+- sourceRunId 있음
+- sourceTaskId 있음
+- sourceTaskRevision 있음
+- objectiveQueueItemId 있음
+- changedFiles 있음
+- sanitization 통과
+- raw log / raw diff / agent scratchpad 직접 포함 없음
+- 필요한 경우 risk 기반 recheck 통과
+```
+
+꼬임 방지 불변식:
+
+```text
+- PROPOSED는 Harness context에 포함 금지
+- ATTACHED만 Harness context에 포함 가능
+- REVOKED / EXPIRED는 포함 금지
+- state 변경은 직접 수정이 아니라 ledger event로만 처리
+- Summary는 sourceRunId / sourceTaskId / sourceTaskRevision 필수
+- Decision은 actor / reason / source 필수
+- 충돌하는 Decision은 동시에 ATTACHED 불가
+- EXPIRED Summary는 recheck 없이 다시 ATTACHED 불가
+- raw log / raw diff / agent scratchpad는 carry-forward 금지
+```
+
+처리 흐름 예:
+
+```text
+run-002 끝남
+-> CARRY_FORWARD_PROPOSED
+   type: SUMMARY
+   text: "AuthController 에러 응답을 ErrorResponse로 변경함"
+
+user review
+-> CARRY_FORWARD_ATTACHED
+   reason: "다음 login API 작업에서도 같은 응답 포맷을 써야 함"
+
+다음 Task 생성
+-> ATTACHED Summary 포함
+
+나중에 AuthController가 수동 수정됨
+-> CARRY_FORWARD_EXPIRED
+   reason: "changedFiles hash mismatch"
+```
+
+Decision 흐름 예:
+
+```text
+user decision record
+-> CARRY_FORWARD_ATTACHED
+   type: DECISION
+   text: "DB schema 변경은 이번 Objective에서 제외"
+
+나중에 범위 변경
+-> CARRY_FORWARD_REVOKED
+   reason: "Objective scope expanded to include migration"
+```
+
+최종 구조:
+
+```text
+CarryForwardItem은 내용이다.
+CarryForwardState는 ledger event로 변한다.
+Snapshot은 ledger replay로 계산된다.
+```
+
 원칙:
 
 ```text
@@ -2335,10 +2520,10 @@ Relation events
 - TASK_RELATION_INVALIDATED
 
 Context events
-- DECISION_RECORDED
-- DECISION_REVOKED
-- SUMMARY_ATTACHED
-- SUMMARY_REVOKED
+- CARRY_FORWARD_PROPOSED
+- CARRY_FORWARD_ATTACHED
+- CARRY_FORWARD_REVOKED
+- CARRY_FORWARD_EXPIRED
 ```
 
 Ledger는 제안 로그가 아니라 결정 로그다.
@@ -2430,14 +2615,17 @@ QUEUE_ITEM_BLOCKED / UNBLOCKED / SKIPPED / UNSKIPPED / CANCELED
 QUEUE_REORDERED
 - futureOrder
 
-DECISION_RECORDED / REVOKED
-- decisionId
-- text 또는 targetDecisionId
+CARRY_FORWARD_PROPOSED / ATTACHED / REVOKED / EXPIRED
+- carryForwardId
+- type: DECISION | SUMMARY
+- state
+- text 또는 targetCarryForwardId
+- sourceObjectiveId optional
 - sourceTaskId
-
-SUMMARY_ATTACHED / REVOKED
-- taskId
-- summaryPath
+- sourceTaskRevision optional
+- sourceRunId optional
+- objectiveQueueItemId optional
+- changedFiles optional
 ```
 
 `reason`이 필수인 이벤트:
@@ -2449,8 +2637,9 @@ SUMMARY_ATTACHED / REVOKED
 - QUEUE_REORDERED
 - OBJECTIVE_CLOSED
 - OBJECTIVE_CANCELED
-- DECISION_REVOKED
-- SUMMARY_REVOKED
+- CARRY_FORWARD_ATTACHED
+- CARRY_FORWARD_REVOKED
+- CARRY_FORWARD_EXPIRED
 ```
 
 이 설계의 목적은 OMX의 durable workflow 장점을 가져오되, CodeFleet의 핵심인 승인 가능한 Task 계약과 검증 가능한 실행 증거를 흐리지 않는 것이다.
@@ -3604,6 +3793,7 @@ v0.1 구현 내용:
 - Task Draft / Revision State 규칙
 - Run-derived State 규칙
 - Risk 판단 원칙
+- Context Carry-forward State 규칙
 - Task와 Task Revision 분리
 - Task revision lineage와 revision-bound approval / relation / run / summary 원칙
 - QUEUE_REORDERED의 보수적 future order semantics
@@ -3613,34 +3803,29 @@ v0.1 구현 내용:
 다음으로 논의할 항목:
 
 ```text
-1. Context Carry-forward State 세부 규칙
-   - Decision 기록 / revoke 규칙
-   - Summary attach / revoke 규칙
-   - sanitized context 조건
-
-2. Corruption / Repair State 세부 규칙
+1. Corruption / Repair State 세부 규칙
    - corruption marker 생성 조건
    - rebuild만으로 복구 가능한 경우
    - 보정 이벤트가 필요한 repair 경우
 
-3. Harness 상세 정의
+2. Harness 상세 정의
    - Draft Harness
    - Execution Harness
    - Guardrail 단계
    - Policy 병합 방식
 
-4. Project Profile 최종 스키마
+3. Project Profile 최종 스키마
    - policies
    - defaults
    - references
    - local-only 설정 분리
 
-5. Workspace discovery
+4. Workspace discovery
    - 현재 cwd 기준
    - 부모 디렉터리 탐색
    - 명시적 --workspace 옵션
 
-6. Run Summary 설계
+5. Run Summary 설계
    - summary.md 자동 생성
    - sanitization 규칙
    - Notion export adapter
