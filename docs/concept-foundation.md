@@ -1894,6 +1894,133 @@ SUMMARY_ATTACHED / REVOKED
 
 Task Spec은 이번에 AI에게 맡길 작업을 정의하는 파일이다.
 
+Task와 Task Revision은 구분한다.
+
+```text
+Task
+= 논리적 작업 단위
+= 사용자가 맡기려는 하나의 작업 흐름
+= 안정적인 taskId를 가진다.
+
+Task Revision
+= 실행 가능한 계약 단위
+= 특정 시점의 Task Spec 내용
+= approval, objective relation, run, summary가 묶이는 단위
+```
+
+최종 파일 구조:
+
+```text
+.codefleet/tasks/
+  <task-id>/
+    task.json
+    revisions/
+      1.yaml
+      2.yaml
+      3.yaml
+```
+
+역할:
+
+```text
+task.json
+= Task head / index
+= 현재 revision
+= revision lineage
+= 전체 Task 흐름 요약
+
+revisions/<n>.yaml
+= 특정 revision의 실행 계약
+= intent, objective, scope, guardrails, verification, doneCriteria
+= approval과 objective relation 상태
+```
+
+연결 규칙:
+
+```text
+Objective queue item
+-> taskId + taskRevision + relationState
+
+Run Trace
+-> taskId + taskRevision
+
+Approval
+-> taskId + taskRevision
+
+Run Summary
+-> taskId + taskRevision + runId
+```
+
+revision 없이 taskId만으로 승인, 실행, summary를 연결하지 않는다. revision이 빠지면 어떤 계약을 승인했는지, 어떤 계약을 실행했는지 알 수 없다.
+
+처리 흐름 예시:
+
+```text
+task signup-error-response 생성
+-> revision 1 DRAFT
+-> relation accepted
+-> revision 1 approved READY
+-> run-001 실행
+-> run-001 FAILED
+-> task edit
+-> revision 2 DRAFT 생성
+-> revision 1 approval invalidated
+-> revision 1 relation invalidated
+-> revision 2 relation proposed
+-> revision 2 approved READY
+-> run-002 실행
+-> run-002 DONE
+```
+
+이 흐름은 다음 자료구조로 재구성 가능해야 한다.
+
+```text
+task.json
+- 현재 revision
+- revision lineage
+- superseded 관계
+
+revisions/<n>.yaml
+- revision별 계약과 approval / relation 상태
+
+objective ledger
+- 어떤 revision이 Objective에 붙었는지
+- 어떤 relation이 accepted / approved / invalidated 됐는지
+
+runs/<run-id>/result.json
+- 어떤 taskId / taskRevision을 실행했는지
+- 실행 결과가 무엇인지
+```
+
+꼬임 방지 규칙:
+
+```text
+- Task ID는 논리적 작업 단위로 유지한다.
+- Task Revision은 실행 계약 단위다.
+- 승인, relation, run, summary는 모두 revision에 묶인다.
+- Task 내용이 바뀌면 새 revision을 만든다.
+- approval은 revision을 넘어 승계되지 않는다.
+- relation도 revision을 넘어 승계되지 않는다.
+- run result도 revision을 넘어 승계되지 않는다.
+- objective queue는 taskId만 가리키지 않고 taskId + taskRevision을 가리킨다.
+- 이전 revision은 직접 수정하지 않고 invalidation / superseded 기록만 남긴다.
+- 처리 흐름은 task lineage + objective ledger + run trace로 재구성 가능해야 한다.
+```
+
+최종 원칙:
+
+```text
+Stable identity, immutable contracts, traceable transitions.
+```
+
+한국어:
+
+```text
+식별자는 안정적으로 유지한다.
+계약은 revision으로 불변화한다.
+변경은 추적 가능한 전이로 남긴다.
+```
+
 Project Profile이 프로젝트별 정책이라면:
 
 ```text
