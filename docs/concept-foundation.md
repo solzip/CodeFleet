@@ -1766,6 +1766,407 @@ evidence
 
 severity와 category는 사람이 고르지 않는다. LLM도 고르지 않는다. Validation Rule이 결정한다.
 
+Category 정의:
+
+```text
+Category
+= failed check가 어떤 source-of-truth boundary 또는 invariant family를 위반했는지 나타내는 deterministic classification value
+```
+
+한국어:
+
+```text
+Category는 실패한 check가 어떤 원본 진실 경계 또는 불변식 계열을 위반했는지 나타내는 결정론적 분류값이다.
+```
+
+Category는 선택되는 값이 아니다.
+
+```text
+Category is not selected.
+Category is declared by checkId.
+```
+
+한국어:
+
+```text
+Category는 사람이 선택하는 값이 아니다.
+Category는 checkId의 규칙 정의에 선언된 값이다.
+```
+
+Validation Rule은 최소한 다음을 가져야 한다.
+
+```text
+- checkId
+- category
+- severity
+- scope
+- condition
+- expectedType
+- actualType
+- evidenceType
+- suggestedRepairKind
+```
+
+예:
+
+```yaml
+checkId: RUN_REVISION_EXISTS
+category: REFERENCE_INTEGRITY
+severity: CORRUPTION
+scope: RUN
+condition:
+  type: file_exists
+  path: ".codefleet/tasks/{taskId}/revisions/{taskRevision}.yaml"
+expectedType:
+  exists: boolean
+actualType:
+  exists: boolean
+evidenceType:
+  runId: string
+  resultPath: path
+suggestedRepairKind: EVENT_REPAIR_REQUIRED
+```
+
+하나의 checkId는 정확히 하나의 primary category를 가진다.
+
+```text
+One checkId has exactly one primary category.
+```
+
+부가 설명이 필요하면 `relatedCategories`를 둘 수 있다. 하지만 gating과 기본 repair 방향은 primary category를 따른다.
+
+```yaml
+checkId: VERIFIED_REVIEW_EXISTS
+category: REVIEW_INTEGRITY
+relatedCategories:
+  - EVIDENCE_CONFLICT
+severity: CORRUPTION
+```
+
+최종 category:
+
+```text
+SNAPSHOT_CONSISTENCY
+READ_MODEL_CONSISTENCY
+LEDGER_INTEGRITY
+REFERENCE_INTEGRITY
+STATE_TRANSITION_INTEGRITY
+EXECUTION_EVIDENCE_INTEGRITY
+REVIEW_INTEGRITY
+CARRY_FORWARD_INTEGRITY
+POLICY_ENFORCEMENT_INTEGRITY
+WORKSPACE_GROUNDING
+```
+
+SNAPSHOT_CONSISTENCY:
+
+```text
+check target:
+- rebuildable snapshot
+- objective.json 같은 공식 snapshot
+
+expected:
+- ledger / task / run / review replay 결과
+
+actual:
+- snapshot 파일 내용
+
+source of truth:
+- 깨지지 않음
+
+default repair:
+- rebuild snapshot
+```
+
+READ_MODEL_CONSISTENCY:
+
+```text
+check target:
+- cache
+- derived index
+- cursor cache
+- risk cache
+- search index
+
+expected:
+- source-of-truth 재계산 결과
+
+actual:
+- cached / indexed value
+
+source of truth:
+- 깨지지 않음
+
+default repair:
+- rebuild index / cache
+```
+
+LEDGER_INTEGRITY:
+
+```text
+check target:
+- ledger file itself
+
+expected:
+- ledger structural rules
+- contiguous seq
+- unique eventId
+- valid event schema
+- append-only integrity
+- mutationId idempotency
+
+actual:
+- parsed ledger structure
+
+source of truth:
+- ledger 자체가 의심됨
+
+default repair:
+- manual repair 또는 event repair
+```
+
+REFERENCE_INTEGRITY:
+
+```text
+check target:
+- id / reference edge
+
+expected:
+- referenced object exists
+- referenced object type matches
+- referenced revision / run / carryForwardId is valid
+
+actual:
+- reference resolution result
+
+source of truth:
+- 참조 관계가 깨짐
+
+default repair:
+- restore missing source
+- or invalidate / expire referencing item
+```
+
+STATE_TRANSITION_INTEGRITY:
+
+```text
+check target:
+- event sequence
+- state machine replay
+
+expected:
+- allowed transition table
+
+actual:
+- replayed transition
+
+source of truth:
+- event sequence가 허용 전이를 위반
+
+default repair:
+- corrective event append
+- affected item block / cancel / invalidate
+```
+
+EXECUTION_EVIDENCE_INTEGRITY:
+
+```text
+check target:
+- Run Trace
+
+expected:
+- run evidence schema
+- run hash / immutability
+- command log / result consistency
+- changedFiles / diff consistency
+- approved revision reference
+
+actual:
+- run evidence files
+
+source of truth:
+- 실행 증거가 의심됨
+
+default repair:
+- run evidence invalidation
+- restore evidence from backup
+- rerun only after explicit approval
+```
+
+REVIEW_INTEGRITY:
+
+```text
+check target:
+- review record
+
+expected:
+- review schema
+- review reference validity
+- actor present
+- timestamp present
+- review result consistency
+
+actual:
+- review record
+
+source of truth:
+- 리뷰 증거가 의심됨
+
+default repair:
+- review invalidation
+- review re-record
+```
+
+CARRY_FORWARD_INTEGRITY:
+
+```text
+check target:
+- CarryForwardItem
+- harness context inclusion
+
+expected:
+- state/type/source rules
+- sanitization rules
+- conflict rules
+- only ATTACHED items included
+
+actual:
+- carry-forward item
+- generated context
+
+source of truth:
+- 전달 맥락이 오염됨
+
+default repair:
+- carry-forward revoke / expire
+- conflicting decision resolution
+```
+
+POLICY_ENFORCEMENT_INTEGRITY:
+
+```text
+check target:
+- Project Profile
+- guardrail
+- risk policy
+- command policy
+- harness policy application
+
+expected:
+- policy-required result
+
+actual:
+- task / run / harness evidence
+
+source of truth:
+- policy 적용 결과가 실행 증거와 충돌
+
+default repair:
+- policy violation review
+- run invalidation
+- stricter gate required
+```
+
+WORKSPACE_GROUNDING:
+
+```text
+check target:
+- current workspace grounding edge
+
+expected:
+- referenced file / hash / path still matches
+- task scope still matches current file tree
+- sourceRun changedFiles can be rechecked
+
+actual:
+- current workspace filesystem state
+
+source of truth:
+- 현재 workspace 기준 실행 근거가 drift됨
+
+default repair:
+- mark carry-forward EXPIRED
+- rerun bounded discovery
+- require review
+```
+
+Category 우선순위:
+
+```text
+1. LEDGER_INTEGRITY
+2. REFERENCE_INTEGRITY
+3. STATE_TRANSITION_INTEGRITY
+4. EXECUTION_EVIDENCE_INTEGRITY
+5. REVIEW_INTEGRITY
+6. CARRY_FORWARD_INTEGRITY
+7. POLICY_ENFORCEMENT_INTEGRITY
+8. WORKSPACE_GROUNDING
+9. SNAPSHOT_CONSISTENCY
+10. READ_MODEL_CONSISTENCY
+```
+
+우선순위 원칙:
+
+```text
+먼저 source-of-truth 자체가 깨졌는지 본다.
+그 다음 관계 / 전이 / 증거 / 리뷰 / 전달맥락을 본다.
+마지막으로 재생성 가능한 snapshot / read model drift를 본다.
+```
+
+경계 규칙:
+
+```text
+SNAPSHOT_CONSISTENCY vs READ_MODEL_CONSISTENCY
+- objective.json 같은 공식 snapshot이면 SNAPSHOT_CONSISTENCY
+- 검색 index, cache, cursor cache, risk cache면 READ_MODEL_CONSISTENCY
+
+REFERENCE_INTEGRITY vs EXECUTION_EVIDENCE_INTEGRITY
+- Run이 없는 revision을 참조하면 REFERENCE_INTEGRITY
+- Run Trace 내부 파일 / result / command log가 깨지면 EXECUTION_EVIDENCE_INTEGRITY
+
+REVIEW_INTEGRITY vs EXECUTION_EVIDENCE_INTEGRITY
+- run result 자체가 이상하면 EXECUTION_EVIDENCE_INTEGRITY
+- VERIFIED / review record가 이상하면 REVIEW_INTEGRITY
+
+CARRY_FORWARD_INTEGRITY vs WORKSPACE_GROUNDING
+- CarryForwardItem 자체의 상태 / 내용 / sanitization 위반이면 CARRY_FORWARD_INTEGRITY
+- Summary가 가리키는 changedFiles가 현재 workspace와 달라졌으면 WORKSPACE_GROUNDING
+```
+
+Validation Rule 생성 규칙:
+
+```text
+1. validation engine loads rule table
+2. executes check condition
+3. if failed:
+   - emits finding
+   - category = rule.category
+   - severity = rule.severity
+   - scope = rule.scope
+   - expected / actual / evidence = computed by rule
+4. no human / LLM classification step exists
+```
+
+금지:
+
+```text
+UNKNOWN category 금지.
+UNCLASSIFIED finding 금지.
+No inferred category.
+No guessed severity.
+No unclassified finding.
+```
+
+한국어:
+
+```text
+category를 추론하지 않는다.
+severity를 추측하지 않는다.
+분류되지 않은 finding을 허용하지 않는다.
+```
+
+새 check가 필요한데 category가 없다면 finding을 생성하지 않는다. 그 경우 validation rule definition 자체가 invalid이며, category taxonomy review가 필요하다.
+
 Severity 정의:
 
 ```text
