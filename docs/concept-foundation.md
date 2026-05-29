@@ -1689,7 +1689,9 @@ finding 최소 필드:
 ```text
 - checkId
 - severity
+- category
 - scope
+- target
 - message
 - expected
 - actual
@@ -1711,6 +1713,10 @@ ruleSetVersion: 1
 findings:
   - checkId: LEDGER_SEQ_CONTIGUOUS
     severity: CORRUPTION
+    category: LEDGER_INTEGRITY
+    scope: OBJECTIVE
+    target:
+      objectiveId: auth-error-response
     message: "Objective ledger seq is not contiguous."
     expected:
       seq: [1, 2, 3, 4]
@@ -1725,6 +1731,307 @@ findings:
 ```
 
 LLM이 reason을 만들어내면 안 된다. reason은 validate engine이 만든 expected / actual / evidence를 기반으로 생성되어야 한다.
+
+Finding 구조:
+
+```text
+Finding
+= checkId + severity + category + scope + target + expected + actual + evidence
+```
+
+역할:
+
+```text
+checkId
+= 어떤 정량 규칙이 실패했는가
+
+severity
+= CodeFleet이 지금 무엇을 허용 / 차단할 것인가
+
+category
+= 무엇이 깨졌는가, 어떤 repair 방향인가
+
+scope
+= finding이 직접 발생한 위치
+
+target
+= finding이 직접 가리키는 객체
+
+expected / actual
+= 기준값과 실제값
+
+evidence
+= 판단 근거 파일 / 객체 / ID
+```
+
+severity와 category는 사람이 고르지 않는다. LLM도 고르지 않는다. Validation Rule이 결정한다.
+
+Severity 정의:
+
+```text
+Severity
+= finding의 직접 scope와 그 scope impact set 안에서
+  CodeFleet capability를 제한하는 deterministic policy value
+```
+
+한국어:
+
+```text
+Severity는 validation finding의 직접 scope와 그 의존 대상 전체에 대해
+어떤 CodeFleet capability를 제한할지 결정하는 정책값이다.
+```
+
+Severity는 문제의 심각도 설명이 아니라 capability restriction policy다.
+
+최종 구성:
+
+```text
+1. severity
+   어떤 capability를 제한하는가
+
+2. scope
+   finding이 직접 발생한 위치
+
+3. scope impact set
+   그 finding이 영향을 미치는 상위 / 하위 / 의존 대상
+
+4. capability
+   command가 수행하려는 행위 유형
+```
+
+Capability Set:
+
+```text
+READ
+= 상태 조회
+
+INSPECT
+= 상세 증거 조회
+
+VALIDATE
+= invariant check 실행
+
+REBUILD
+= snapshot / index / cache 재생성
+= source of truth 변경 없음
+
+REPAIR
+= 명시적 repair 수행
+= correction event append 가능
+
+EXPORT
+= evidence / report / backup export
+
+DRAFT_STANDALONE
+= 특정 corrupted Objective에 붙지 않는 독립 Draft 생성
+
+REVIEW_READ
+= review 대상 조회
+= 상태 변경 없음
+
+REVIEW_WRITE
+= review 결과 기록
+
+MUTATE_OBJECTIVE
+= Objective state 변경
+
+MUTATE_QUEUE
+= queue item 변경
+
+MUTATE_TASK_CONTRACT
+= Task 계약 변경
+
+MUTATE_CARRY_FORWARD
+= carry-forward attach / revoke / expire
+
+EXECUTE
+= Agent 실행 / task run / command execution / verification execution
+
+POLICY_UPDATE
+= Project Profile / policy 변경
+
+RISK_RAISE
+= risk를 더 높게 override
+
+RISK_LOWER
+= risk를 낮추는 변경
+```
+
+Severity별 capability policy:
+
+```text
+INFO
+allowed:
+- ALL
+denied:
+- none
+```
+
+```text
+WARNING
+allowed:
+- ALL
+required:
+- warning display
+denied:
+- none
+```
+
+```text
+REBUILD_REQUIRED
+allowed:
+- READ
+- INSPECT
+- VALIDATE
+- REBUILD
+- EXPORT
+- REVIEW_READ
+- POLICY_UPDATE
+- RISK_RAISE
+
+conditional:
+- DRAFT_STANDALONE
+  only if it does not attach to affected scope
+
+denied:
+- REVIEW_WRITE
+- REPAIR
+- MUTATE_OBJECTIVE
+- MUTATE_QUEUE
+- MUTATE_TASK_CONTRACT
+- MUTATE_CARRY_FORWARD
+- EXECUTE
+- RISK_LOWER
+```
+
+`REBUILD_REQUIRED`는 원본 진실이 정상이라는 뜻이므로 repair가 아니라 rebuild로 해결해야 한다. rebuild 실패 후에는 finding이 `CORRUPTION`으로 승격될 수 있다.
+
+```text
+CORRUPTION
+allowed:
+- READ
+- INSPECT
+- VALIDATE
+- REPAIR
+- EXPORT
+- REVIEW_READ
+- RISK_RAISE
+
+conditional:
+- REBUILD
+  only if finding.suggestedRepair.kind == REBUILD_ALLOWED
+- POLICY_UPDATE
+  only if changing validation rules / profile does not suppress existing finding without revalidation
+- DRAFT_STANDALONE
+  only if outside affected scope
+
+denied:
+- REVIEW_WRITE
+- MUTATE_OBJECTIVE
+- MUTATE_QUEUE
+- MUTATE_TASK_CONTRACT
+- MUTATE_CARRY_FORWARD
+- EXECUTE
+- RISK_LOWER
+```
+
+Scope:
+
+```text
+WORKSPACE
+OBJECTIVE
+TASK
+QUEUE_ITEM
+TASK_REVISION
+RUN
+CARRY_FORWARD
+SNAPSHOT
+POLICY
+```
+
+Scope impact set:
+
+```text
+WORKSPACE
+-> 모든 것에 영향
+
+OBJECTIVE
+-> 해당 Objective, queue items, attached task relations, carry-forward, runs에 영향
+
+QUEUE_ITEM
+-> 해당 queue item, 연결된 taskRevision, runs, carry-forward에 영향
+
+TASK
+-> 해당 task의 drafts / revisions / runs에 영향
+
+TASK_REVISION
+-> 해당 revision, 그 revision을 참조하는 queue items / runs / carry-forward에 영향
+
+RUN
+-> 해당 run, 그 run을 근거로 한 review / summary / carry-forward에 영향
+
+CARRY_FORWARD
+-> 해당 carry-forward item, 그 item을 포함하려는 draft / execution context에 영향
+
+SNAPSHOT
+-> snapshot / read model에 영향
+-> source of truth에는 영향 없음
+
+POLICY
+-> policy를 참조하는 task / run / harness decision에 영향
+```
+
+명령 허용 공식:
+
+```text
+A command is allowed only if
+no applicable finding in its scope impact set
+denies the command capability.
+```
+
+한국어:
+
+```text
+명령은 그 명령의 대상에 영향을 미치는 어떤 finding도
+해당 capability를 거부하지 않을 때만 허용된다.
+```
+
+더 정확히:
+
+```text
+For target T and command capability C:
+
+applicableFindings =
+  findings where affects(finding.scope, finding.target, T)
+
+allowed(T, C) =
+  C is allowed by every applicable finding severity policy
+  AND C is not denied by any applicable finding severity policy
+  AND all conditional requirements are satisfied
+```
+
+불변 규칙:
+
+```text
+deny wins.
+most restrictive applicable finding wins.
+```
+
+예:
+
+```text
+Objective A = CORRUPTION
+-> Objective A run / approve / attach / close 차단
+-> Objective B는 영향 없음
+
+Run run-002 = CORRUPTION
+-> run-002 review write 차단
+-> run-002를 source로 한 carry-forward attach 차단
+-> 같은 Objective의 무관한 다른 queue item은 영향 없을 수 있음
+
+Workspace = CORRUPTION
+-> 전체 mutation / execution 차단
+```
 
 원칙:
 
