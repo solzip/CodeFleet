@@ -407,11 +407,11 @@ Project Profile은 `.codefleet/config.json`에 저장되는 개념이다.
 .codefleet/context/ops-rules.md
 ```
 
-## 6. Task Spec
+## 6. Objective와 Task Spec
 
-Task Spec은 이번에 AI에게 맡길 작업을 정의하는 파일이다.
+Objective와 Task Spec은 CodeFleet의 작업 계약을 이루는 핵심 자료구조다.
 
-## 6.0 Objective
+### 6.1 Objective
 
 Objective는 Task보다 상위에 있는 작업 맥락 단위다.
 
@@ -425,7 +425,7 @@ Objective가 책임지는 것:
 
 ```text
 - 이 작업이 일회성인지 연속 작업인지 장기 workstream인지 구분
-- 관련 Task 목록과 순서
+- 관련 Task Queue와 순서
 - 승인된 결정사항
 - 다음 Task에 전달할 sanitized context
 - 완료/보류/취소 상태
@@ -507,15 +507,27 @@ continuity:
     rawLogs: false
     rawDiffs: false
 
-tasks:
-  - task-review-minimal-flow
-  - task-review-edit-approval
-  - task-review-interactive-session
+queue:
+  policy: SEQUENTIAL
+  cursor: task-review-interactive-session
+  items:
+    - taskId: task-review-minimal-flow
+      position: 1
+      relation: START
+      storedState: null
+    - taskId: task-review-edit-approval
+      position: 2
+      relation: CONTINUATION
+      storedState: null
+    - taskId: task-review-interactive-session
+      position: 3
+      relation: CONTINUATION
+      storedState: WAITING
 ```
 
 Objective의 핵심은 LLM에게 "기억하라"고 요구하는 것이 아니라, CodeFleet이 로컬 자료구조로 연속성을 명시하고 Harness가 승인된 맥락만 전달하게 만드는 것이다.
 
-### 6.0.1 OMX 레퍼런스와 CodeFleet의 차이
+### 6.1.1 OMX 레퍼런스와 CodeFleet의 차이
 
 CodeFleet의 Objective 모델은 `oh-my-codex`의 durable workflow 아이디어에서 힌트를 얻을 수 있다.
 
@@ -648,6 +660,10 @@ Queue 상태 원칙:
 
 이 설계의 목적은 OMX의 durable workflow 장점을 가져오되, CodeFleet의 핵심인 승인 가능한 Task 계약과 검증 가능한 실행 증거를 흐리지 않는 것이다.
 
+### 6.2 Task Spec
+
+Task Spec은 이번에 AI에게 맡길 작업을 정의하는 파일이다.
+
 Project Profile이 프로젝트별 정책이라면:
 
 ```text
@@ -693,6 +709,7 @@ Task Spec의 1차 필드에는 다음 항목을 포함한다.
 
 ```text
 intent
+objective
 scope
 guardrails
 verification
@@ -701,6 +718,8 @@ needsReview
 ```
 
 이 필드는 v0.2 편의를 위한 임시 구조가 아니라 최종 모델의 핵심 필드다.
+
+`objective` 필드는 Task가 어떤 Objective queue item에 속하는지 표현한다. Draft 단계에서는 proposed relation일 수 있고, Task Review / Approval 단계에서 사람이 approved relation으로 확정한다.
 
 최종 모델에서는 여기에 다음 실행 계약 필드가 더해질 수 있다.
 
@@ -1123,7 +1142,7 @@ CodeFleet이 말하는 "안전한 오케스트레이션"은 AI가 실수하지 �
 
 최종 정의:
 
-> 안전한 오케스트레이션이란 사용자의 의도를 명시적 Task로 구조화하고, 사람이 승인한 뒤, Workspace 정책과 Harness가 허용한 권한 안에서만 AI Agent가 작업하게 하며, 모든 실행 결과를 검증 가능하고 되돌릴 수 있고 감사 가능한 기록으로 남기는 것이다.
+> 안전한 오케스트레이션이란 사용자의 의도를 명시적 Objective와 Task로 구조화하고, 사람이 Task revision과 Objective relation을 승인한 뒤, Workspace 정책과 Harness가 허용한 권한 안에서만 AI Agent가 작업하게 하며, 모든 실행 결과를 검증 가능하고 되돌릴 수 있고 감사 가능한 기록으로 남기는 것이다.
 
 짧게 표현하면:
 
@@ -1133,10 +1152,13 @@ CodeFleet이 말하는 "안전한 오케스트레이션"은 AI가 실수하지 �
 
 ```text
 User Intent
+  -> Objective Selection / Creation
   -> Draft Harness
   -> DRAFT Task
-  -> Human Approval
+  -> Task Review
+  -> Human Approval of Task Revision + Objective Relation
   -> READY Task
+  -> Objective Queue Update
   -> Execution Harness
   -> Isolated / Controlled Agent Run
   -> Diff + Logs + Verification
@@ -1147,11 +1169,11 @@ User Intent
 최종 안전 조건:
 
 ```text
-1. Explicit Task
-   모든 AI 작업은 명시적 Task에서 시작한다.
+1. Explicit Objective and Task
+   모든 AI 작업은 명시적 Objective와 Task에서 시작한다.
 
 2. Human Approval
-   AI가 만든 Task Draft는 사람이 승인해야 실행 가능하다.
+   AI가 만든 Task Draft와 Objective relation은 사람이 승인해야 실행 가능하다.
 
 3. Non-relaxable Workspace Policy
    Project Profile 정책은 Task가 완화할 수 없다.
@@ -1172,7 +1194,7 @@ User Intent
 
 최종 안전 모델:
 
-> CodeFleet에서 안전한 오케스트레이션은 AI Agent에게 작업을 직접 맡기는 것이 아니라, 승인된 Task와 비완화 Workspace Policy를 바탕으로 Harness가 최소 권한·격리·검증·추적 조건을 적용해 실행하고, 그 결과를 사람이 검토 가능한 Run Trace로 남기는 것이다.
+> CodeFleet에서 안전한 오케스트레이션은 AI Agent에게 작업을 직접 맡기는 것이 아니라, 승인된 Objective relation, 승인된 Task revision, 비완화 Workspace Policy를 바탕으로 Harness가 최소 권한·격리·검증·추적 조건을 적용해 실행하고, 그 결과를 사람이 검토 가능한 Run Trace로 남기는 것이다.
 
 안전 철학:
 
@@ -1444,7 +1466,7 @@ v0.1 구현 내용:
 
 중요:
 
-> 현재 v0.1 구현은 최종 아키텍처가 아니라 seed implementation이다. 앞으로의 설계는 이 문서의 Core / Workspace / Profile / Task Draft / Harness / Run Trace 개념을 기준으로 재정렬한다.
+> 현재 v0.1 구현은 최종 아키텍처가 아니라 seed implementation이다. 앞으로의 설계는 이 문서의 Core / Workspace / Profile / Objective / Task Queue / Task Draft / Harness / Run Trace / Run Summary 개념을 기준으로 재정렬한다.
 
 ## 15. 아직 논의할 항목
 
@@ -1457,33 +1479,40 @@ v0.1 구현 내용:
    - Guardrail 단계
    - Policy 병합 방식
 
-2. Task Spec 최종 모델
+2. Objective / Task Queue 최종 모델
+   - objective.json snapshot 구조
+   - ledger.jsonl 이벤트 종류
+   - queue policy와 cursor 규칙
+   - rebuild / validate 규칙
+
+3. Task Spec 최종 모델
    - Intent에서 Draft로 바뀔 때 필요한 필드
+   - objective proposed/approved relation 표현 방식
    - DRAFT/READY 승인 플로우
    - needsReview 표현 방식
 
-3. Project Profile 최종 스키마
+4. Project Profile 최종 스키마
    - policies
    - defaults
    - references
    - local-only 설정 분리
 
-4. Workspace discovery
+5. Workspace discovery
    - 현재 cwd 기준
    - 부모 디렉터리 탐색
    - 명시적 --workspace 옵션
 
-5. Run Summary 설계
+6. Run Summary 설계
    - summary.md 자동 생성
    - sanitization 규칙
    - Notion export adapter
 
-6. Verification 실행 정책
+7. Verification 실행 정책
    - prompt-only
    - manual command suggestion
    - allowlist 기반 자동 실행
 
-7. Review 모델
+8. Review 모델
    - AI review.md
    - human review note
    - approval 기록
