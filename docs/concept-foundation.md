@@ -30,7 +30,7 @@ Implement in small versions.
 
 CodeFleet의 현재 기준 정의는 다음과 같다.
 
-> CodeFleet은 사용자의 개발/운영 의도를 AI-generated Task Draft로 구조화하고, 사람이 승인한 Task를 Harness를 통해 역할·범위·가드레일·검증 조건 안에서 실행하며, 결과를 로그·diff·테스트·리뷰 기준으로 추적하는 AI-native 개발 오케스트레이션 CLI다.
+> CodeFleet은 사용자의 개발/운영 Objective를 하나 이상의 AI-generated Task Draft로 구조화하고, 사람이 승인한 Task를 Harness를 통해 역할·범위·가드레일·검증 조건 안에서 실행하며, 결과를 로그·diff·테스트·리뷰 기준으로 추적하는 AI-native 개발 오케스트레이션 CLI다.
 
 이 정의에서 중요한 점은 CodeFleet이 단순한 AI CLI 래퍼가 아니라는 것이다.
 
@@ -38,6 +38,7 @@ CodeFleet의 중심은 AI 모델 호출이 아니라 다음 구조다.
 
 ```text
 Intent
+  -> Objective
   -> Task Draft
   -> Human Approval
   -> Harness Execution
@@ -49,7 +50,8 @@ Intent
 핵심 문장:
 
 ```text
-AI drafts the work.
+Objective frames the work.
+AI drafts executable tasks.
 Human approves the work.
 Harness controls the work.
 Agent executes the work.
@@ -60,13 +62,60 @@ Summary communicates the work.
 한국어로는 다음과 같다.
 
 ```text
-AI는 작업 초안을 만든다.
+Objective는 작업의 맥락과 연속성을 정의한다.
+AI는 실행 가능한 작업 초안을 만든다.
 사람은 실행 가능한 작업으로 승인한다.
 Harness는 작업 조건을 통제한다.
 Agent는 작업을 수행한다.
 Trace는 실행을 기록한다.
 Summary는 사람이 읽을 수 있게 전달한다.
 ```
+
+CodeFleet의 가장 작은 실행 단위는 Task지만, 최종 사용자 흐름의 기준 단위는 Objective다.
+
+```text
+Objective
+  -> Task
+     -> Run
+```
+
+의미:
+
+```text
+Objective
+= 사용자가 달성하려는 상위 목적
+= 일회성인지, 연속 작업인지, 장기 workstream인지 정의하는 단위
+
+Task
+= AI에게 위임 가능한 실행 계약
+= 역할, 범위, 가드레일, 검증, 완료 기준을 명시하는 단위
+
+Run
+= 특정 Task를 실제로 실행한 시도와 증거
+= 로그, diff, 검증 결과, 리뷰 결과가 남는 단위
+```
+
+LLM은 현재 요청이 일회성인지, 이전 작업의 연속인지, 장기 workstream의 일부인지 스스로 단정하면 안 된다. CodeFleet은 이 연속성을 Objective 자료구조에 기록하고, 사람은 review 단계에서 그 연속성을 승인한다.
+
+핵심 원칙:
+
+```text
+LLM decides nothing about continuity.
+CodeFleet records continuity.
+Human approves continuity.
+Harness supplies approved context.
+```
+
+한국어:
+
+```text
+LLM이 작업의 연속성을 단정하지 않는다.
+CodeFleet이 연속성을 기록한다.
+사람이 연속성을 승인한다.
+Harness가 승인된 맥락만 전달한다.
+```
+
+연속성 처리의 목적은 LLM 기억에 의존하지 않고, 승인된 요약과 결정사항만 다음 Task의 컨텍스트로 전달하는 것이다.
 
 ## 2. CodeFleet이 아닌 것
 
@@ -362,6 +411,110 @@ Project Profile은 `.codefleet/config.json`에 저장되는 개념이다.
 
 Task Spec은 이번에 AI에게 맡길 작업을 정의하는 파일이다.
 
+## 6.0 Objective
+
+Objective는 Task보다 상위에 있는 작업 맥락 단위다.
+
+정의:
+
+> Objective는 사용자가 달성하려는 상위 목적과 그 목적에 속한 Task들의 연속성을 기록하는 로컬 자료구조다.
+
+Task가 실행 가능한 계약이라면, Objective는 여러 Task가 왜 이어지는지 설명하는 목적 계약이다.
+
+Objective가 책임지는 것:
+
+```text
+- 이 작업이 일회성인지 연속 작업인지 장기 workstream인지 구분
+- 관련 Task 목록과 순서
+- 승인된 결정사항
+- 다음 Task에 전달할 sanitized context
+- 완료/보류/취소 상태
+```
+
+Objective가 책임지면 안 되는 것:
+
+```text
+- 원본 stdout/stderr 전체
+- 원본 git diff 전체
+- secret, token, env 값
+- Agent 실행 prompt 원문 전체
+- Task별 실제 실행 증거
+```
+
+이런 실행 증거는 Run Trace에 남긴다.
+
+초기 Objective 종류:
+
+```text
+ONE_OFF
+- 한 번 실행하고 닫는 작업
+- 이전 Run Summary를 다음 작업에 자동 연결하지 않는다.
+
+SEQUENCE
+- 정해진 목표를 여러 Task로 나눠 순차 진행하는 작업
+- 이전 Task의 승인된 Summary와 결정사항을 다음 Task에 전달할 수 있다.
+
+WORKSTREAM
+- 장기간 이어지는 열린 주제
+- 매 Task마다 어떤 context를 이어받을지 review 단계에서 확인한다.
+```
+
+중요한 점은 모든 Task가 Objective 없이 떠다니면 안 된다는 것이다.
+
+최종 모델에서는 Task가 항상 다음 중 하나에 속한다.
+
+```text
+- 명시적인 ONE_OFF Objective
+- 순차적인 SEQUENCE Objective
+- 장기적인 WORKSTREAM Objective
+```
+
+Task Review 화면은 Objective 연결을 확인해야 한다.
+
+예시:
+
+```text
+Work Context
+Objective: CodeFleet Task Review UX
+Kind: SEQUENCE
+Relation: CONTINUATION
+
+Carry Forward:
+- approved decisions
+- sanitized summaries
+- no raw logs
+- no raw diffs
+
+Actions:
+- Treat as one-off
+- Attach to existing objective
+- Start new sequence
+- Convert to workstream
+```
+
+최소 Objective 예시:
+
+```yaml
+id: codefleet-task-review-ux
+title: Task Review 인터랙티브 UX 설계
+kind: SEQUENCE
+status: OPEN
+
+continuity:
+  carryForward:
+    decisions: true
+    summaries: true
+    rawLogs: false
+    rawDiffs: false
+
+tasks:
+  - task-review-minimal-flow
+  - task-review-edit-approval
+  - task-review-interactive-session
+```
+
+Objective의 핵심은 LLM에게 "기억하라"고 요구하는 것이 아니라, CodeFleet이 로컬 자료구조로 연속성을 명시하고 Harness가 승인된 맥락만 전달하게 만드는 것이다.
+
 Project Profile이 프로젝트별 정책이라면:
 
 ```text
@@ -446,6 +599,7 @@ CodeFleet의 목표에 더 부합하는 Task 작성 흐름은 사람이 YAML을 
 
 ```text
 User Intent
+  -> Objective Selection / Creation
   -> Draft Harness
   -> AI-generated Task Draft
   -> Human Review / Approval
@@ -462,6 +616,14 @@ User Intent
 한국어:
 
 > AI는 Task 초안을 작성할 수 있지만, 실행 가능한 Task로 승인하는 권한은 사람에게만 있다.
+
+Objective 연결도 마찬가지다.
+
+> AI may suggest continuity, but only humans can approve task continuity.
+
+한국어:
+
+> AI는 작업의 연속성을 제안할 수 있지만, 어떤 Objective에 속하는지 승인하는 권한은 사람에게 있다.
 
 ### 7.1 상태 흐름
 
@@ -521,11 +683,32 @@ codefleet task approve <task-id>
 codefleet run <task-id>
 ```
 
+최종 흐름에서 `task review`는 Task 내용뿐 아니라 Objective 연결도 검토한다.
+
+```text
+codefleet draft "<user intent>"
+  -> Objective 후보 제안
+  -> DRAFT Task 생성
+
+codefleet task review <task-id>
+  -> Task 계약 검토
+  -> Objective 연결 검토
+  -> continuity 승인 또는 수정
+
+codefleet task approve <task-id>
+  -> Task revision 승인
+  -> Objective relation 승인
+
+codefleet run <task-id>
+  -> 승인된 Objective context만 Harness prompt에 포함
+```
+
 `task review`의 책임:
 
 ```text
 - 사람이 읽기 좋은 Task 요약을 보여준다.
 - intent, scope, guardrails, verification, doneCriteria, needsReview를 강조한다.
+- Objective 연결과 carry-forward context를 보여준다.
 - 위험하거나 불확실한 항목을 눈에 띄게 보여준다.
 - 필요한 경우 안전한 수정 흐름으로 연결한다.
 ```
