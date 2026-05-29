@@ -26,11 +26,67 @@ Implement in small versions.
 
 따라서 CodeFleet의 개념, 스키마, 명령어, 파일 구조는 v0.2에서 모두 구현되지 않더라도 최종 모델과 충돌하지 않아야 한다. 초기 구현이 최종 개념의 이름, 책임 경계, 안전 모델을 왜곡하면 안 된다.
 
+### 0.1 목표 경계
+
+CodeFleet의 최종 목표는 현재 정의에서 더 넓히지 않는다.
+
+앞으로의 설계 확장은 최종 목표를 구현하기 위한 내부 구조, 안전 장치, 사용자 흐름을 구체화하는 방향으로만 진행한다. CodeFleet을 프로젝트 관리 도구나 범용 에이전트 플랫폼으로 확장하지 않는다.
+
+고정된 최종 목표:
+
+```text
+CodeFleet은 사용자의 개발/운영 Objective를 하나 이상의 Task로 구조화하고,
+백엔드/인프라 작업을 역할·범위·가드레일·검증 조건이 포함된 Task로 정의하며,
+사람이 승인한 Task를 AI 에이전트에게 역할 기반으로 위임하고,
+실행 결과를 로그·diff·테스트·리뷰 기준으로 추적하는
+AI-native 개발 오케스트레이션 CLI다.
+```
+
+이 목표 안에 포함되는 축:
+
+```text
+Objective
+= 왜/어떤 맥락의 작업인가
+
+Task
+= 무엇을 어떤 조건으로 시킬 것인가
+
+Human Approval
+= 사람이 실행 계약을 확정했는가
+
+Harness
+= 범위/권한/검증을 어떻게 통제할 것인가
+
+Agent Adapter
+= 어떤 AI 도구에 위임할 것인가
+
+Run Trace
+= 실제 실행 증거는 무엇인가
+
+Run Summary
+= 사람이 어떻게 결과를 이어받을 것인가
+```
+
+확장하지 않을 범위:
+
+```text
+- Jira/Notion 같은 프로젝트 관리 도구
+- 중앙 작업 DB
+- 웹 대시보드
+- CI/CD 대체재
+- 배포 자동화 플랫폼
+- Secret manager
+- 완전한 샌드박스
+- 일반 목적 에이전트 OS
+```
+
+Objective / Task Queue / ledger / Mutation Engine 같은 논의는 목표 확장이 아니라, 이 최종 목표를 안정적으로 구현하기 위한 내부 구조 논의다.
+
 ## 1. 최종 지향 정의
 
-CodeFleet의 현재 기준 정의는 다음과 같다.
+위 고정 목표를 오케스트레이션 흐름으로 풀면 다음과 같다.
 
-> CodeFleet은 사용자의 개발/운영 Objective를 하나 이상의 AI-generated Task Draft로 구조화하고, 사람이 승인한 Task를 Harness를 통해 역할·범위·가드레일·검증 조건 안에서 실행하며, 결과를 로그·diff·테스트·리뷰 기준으로 추적하는 AI-native 개발 오케스트레이션 CLI다.
+> CodeFleet은 사용자의 개발/운영 Objective를 하나 이상의 AI-generated Task Draft로 구조화하고, 사람이 승인한 Task를 Harness를 통해 역할·범위·가드레일·검증 조건 안에서 AI Agent에게 위임하며, 결과를 로그·diff·테스트·리뷰 기준으로 추적하는 AI-native 개발 오케스트레이션 CLI다.
 
 이 정의에서 중요한 점은 CodeFleet이 단순한 AI CLI 래퍼가 아니라는 것이다.
 
