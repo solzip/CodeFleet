@@ -456,7 +456,7 @@ Objective State
 Queue Item State
 - WAITING -> BLOCKED 가능 조건
 - SKIPPED -> WAITING 허용 여부
-- ACTIVE / DONE item의 skip, cancel, reorder 금지 조건
+- ACTIVE / completed item의 skip, cancel, reorder 금지 조건
 
 Task Relation State
 - proposed -> accepted
@@ -730,7 +730,7 @@ v0.2 같은 초기 구현에서는 `QUEUE_ITEM_UNSKIPPED`를 제외하고 SKIPPE
 ```text
 - CANCELED item은 일반 전이 금지
 - ACTIVE item은 block / skip / cancel / reorder 금지
-- DONE item은 block / skip / cancel / reorder 금지
+- DONE / VERIFIED item은 block / skip / cancel / reorder 금지
 - SKIPPED item은 run 금지
 - BLOCKED item은 run 금지
 - CANCELED item은 run 금지
@@ -740,7 +740,7 @@ v0.2 같은 초기 구현에서는 `QUEUE_ITEM_UNSKIPPED`를 제외하고 SKIPPE
 
 ```text
 ACTIVE item을 skip / cancel하면 실행 중인 Agent 결과와 queue 결정이 충돌한다.
-DONE item을 skip / cancel하면 과거 실행 이력을 왜곡한다.
+DONE / VERIFIED item을 skip / cancel하면 과거 실행 이력을 왜곡한다.
 BLOCKED / SKIPPED / CANCELED item을 run하면 사람이 내린 흐름 결정과 실행이 충돌한다.
 ```
 
@@ -1112,6 +1112,58 @@ DONE
 VERIFIED
 - 성공한 Run을 사람이 리뷰하고 받아들임
 - queue completion의 가장 강한 근거
+```
+
+DONE과 VERIFIED의 Queue 진행 의미:
+
+```text
+DONE
+= 실행 성공 증거
+= review 대기
+= 기본적으로 Queue를 자동 진행시키지 않음
+
+VERIFIED
+= 사람이 결과를 받아들임
+= Queue progression을 만족시키는 상태
+= SEQUENCE Objective에서 다음 item을 NEXT로 계산할 수 있는 기본 근거
+```
+
+Objective 전체 완료는 Run-derived State로 표현하지 않는다.
+
+```text
+DONE
+= objectiveQueueItemId + taskId + taskRevision 단위의 실행 성공
+
+VERIFIED
+= 해당 queue item 결과를 사람이 받아들인 상태
+
+CLOSED
+= Objective 전체를 사람이 명시적으로 닫은 상태
+```
+
+따라서 `DONE`이나 `VERIFIED`는 Objective State가 아니다. Objective 완료 상태는 `CLOSED`이며, 모든 queue item이 VERIFIED여도 Objective는 자동으로 CLOSED가 되지 않는다. `OBJECTIVE_CLOSED` 이벤트가 필요하다.
+
+기본 Queue 진행 정책:
+
+```text
+SEQUENCE Objective:
+- previous item VERIFIED -> next item can become NEXT
+- previous item DONE only -> stop and wait for review
+- previous item FAILED -> stop
+- previous item NO_RUN / ACTIVE -> stop
+```
+
+정책 예외:
+
+```text
+LOW risk + Project Profile explicitly allows autoAdvanceOnDone
+-> DONE만으로 다음 item 진행 가능
+
+MEDIUM / HIGH risk
+-> VERIFIED 필요
+
+unknown risk
+-> VERIFIED 필요
 ```
 
 `BLOCKED`는 Run-derived State에 넣지 않는다.
@@ -2021,7 +2073,7 @@ Queue:
 1번이 끝났고 2번을 봐야 한다면 cursor는 2번 Task를 가리킨다.
 ```
 
-하지만 cursor는 단독 권위 상태가 되면 안 된다. 예를 들어 cursor는 2번을 가리키는데 2번 queue item의 Run-derived State가 이미 DONE이고 3번이 NEXT여야 한다면 상태가 꼬인다.
+하지만 cursor는 단독 권위 상태가 되면 안 된다. 예를 들어 cursor는 2번을 가리키는데 2번 queue item의 Run-derived State가 이미 VERIFIED이고 3번이 NEXT여야 한다면 상태가 꼬인다.
 
 따라서 CodeFleet은 cursor를 다음처럼 취급한다.
 
@@ -2038,7 +2090,9 @@ Objective kind에 따른 cursor 원칙:
 SEQUENCE
 - 순서가 엄격하다.
 - cursor는 앞에서부터 queue items를 스캔해 계산할 수 있어야 한다.
-- DONE / SKIPPED는 지나간다.
+- VERIFIED / SKIPPED는 지나간다.
+- DONE은 기본적으로 review 대기이므로 멈춘다.
+- Project Profile이 LOW risk autoAdvanceOnDone을 명시적으로 허용한 경우에만 DONE을 지나갈 수 있다.
 - BLOCKED를 만나면 멈춘다.
 - 처음 만나는 실행 후보가 NEXT가 된다.
 - snapshot의 cursor가 계산 결과와 다르면 계산 결과가 우선한다.
@@ -2066,9 +2120,10 @@ Queue 상태 원칙:
 - NEXT
 - ACTIVE
 - DONE
+- VERIFIED
 ```
 
-`NEXT`, `ACTIVE`, `DONE`은 approved Revision, Run Trace, Queue policy에서 계산할 수 있으므로 원본 진실로 저장하지 않는다. snapshot에는 표시할 수 있지만, 불일치가 생기면 재계산 결과가 우선한다.
+`NEXT`, `ACTIVE`, `DONE`, `VERIFIED`는 approved Revision, Run Trace, review result, Queue policy에서 계산할 수 있으므로 원본 진실로 저장하지 않는다. snapshot에는 표시할 수 있지만, 불일치가 생기면 재계산 결과가 우선한다.
 
 여기서 "저장 가능한 상태"와 "계산해야 하는 상태"의 차이는 다음과 같다.
 
@@ -2092,12 +2147,16 @@ Do not store the same truth twice.
 같은 사실을 두 군데에 원본 진실로 저장하지 않는다.
 ```
 
-예를 들어 `DONE`은 Objective Queue에 원본 상태로 저장하지 않는다.
+예를 들어 `DONE`과 `VERIFIED`는 Objective Queue에 원본 상태로 저장하지 않는다.
 
 ```text
 DONE
 = Run Trace의 result를 보고 판단할 수 있음
 = 이미 존재하는 실행 증거에서 계산 가능
+
+VERIFIED
+= Run review result를 보고 판단할 수 있음
+= 사람이 해당 queue item 결과를 받아들였다는 증거에서 계산 가능
 ```
 
 반대로 `SKIPPED`는 저장해야 한다.
@@ -2139,6 +2198,10 @@ ACTIVE
 DONE
 - Run Trace의 result를 보면 계산 가능
 - 저장하지 않음
+
+VERIFIED
+- Run review result를 보면 계산 가능
+- 저장하지 않음
 ```
 
 나쁜 상태 예시:
@@ -2149,7 +2212,7 @@ task revision:  task-001 revision 1 is APPROVED
 run/result:     task-001 failed
 ```
 
-이런 상태가 생기면 무엇을 믿어야 할지 애매해진다. 따라서 Objective Queue에는 `DONE`을 원본 진실로 저장하지 않고, approved Revision과 Run Trace를 기준으로 계산한다.
+이런 상태가 생기면 무엇을 믿어야 할지 애매해진다. 따라서 Objective Queue에는 `DONE`이나 `VERIFIED`를 원본 진실로 저장하지 않고, approved Revision, Run Trace, review result를 기준으로 계산한다.
 
 좋은 상태 예시:
 
@@ -2164,8 +2227,11 @@ task revision:
 run/result:
 - run-002 for task-001 revision 1: success
 
+review/result:
+- run-002 accepted by human
+
 derived queue state:
-- task-001 = DONE
+- task-001 = VERIFIED
 - task-002 = SKIPPED
 - task-003 = NEXT
 ```
@@ -2179,7 +2245,7 @@ derived queue state:
 - SEQUENCE Objective는 derived NEXT가 최대 1개다.
 - 기본 정책에서 ACTIVE Run은 Objective당 최대 1개다.
 - Queue position은 직접 수정하지 않고 reorder 이벤트로만 바꾼다.
-- Objective snapshot은 ledger, Task Revision, Run Trace에서 재생성 가능해야 한다.
+- Objective snapshot은 ledger, Task Revision, Run Trace, review result에서 재생성 가능해야 한다.
 - raw stdout/stderr/diff는 Objective나 carry-forward context에 들어가지 않는다.
 ```
 
