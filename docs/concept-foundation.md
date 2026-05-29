@@ -674,6 +674,145 @@ Queue item state controls flow, not execution result.
 Queue Item State는 흐름을 제어하지, 실행 결과를 표현하지 않는다.
 ```
 
+### 0.5 Task Relation State 규칙
+
+Task Relation State는 Task가 어떤 Objective에 어떤 관계로 연결되어 있는지를 관리한다.
+
+상태는 5개로 고정한다.
+
+```text
+proposed
+accepted
+approved
+rejected
+invalidated
+```
+
+5개보다 줄이면 UX와 audit 의미가 섞이고, 5개보다 늘리면 상태 관리가 과해진다.
+
+상태 의미:
+
+```text
+proposed
+- Draft Harness가 제안한 Objective relation
+- Task Draft 안에만 존재
+- ledger에는 기록하지 않음
+- 실행 불가
+
+accepted
+- 낮은 위험의 명확한 제안을 사용자가 review에서 그대로 수락
+- 실행 가능
+
+approved
+- 모호하거나 위험한 relation을 사용자가 명시적으로 선택 / 확정
+- 실행 가능
+
+rejected
+- 사용자가 relation 제안을 거절
+- 같은 Task revision에서는 terminal
+
+invalidated
+- 이전에는 accepted / approved였지만 Task revision 변경 등으로 무효화됨
+- terminal
+```
+
+`accepted`와 `approved`는 둘 다 실행 가능하지만 audit 의미가 다르다.
+
+```text
+accepted
+= 사용자가 낮은 위험 제안을 수락했다.
+
+approved
+= 사용자가 명시적으로 판단해 확정했다.
+```
+
+`rejected`와 `invalidated`도 분리한다.
+
+```text
+rejected
+= 사용자가 의도적으로 거절했다.
+
+invalidated
+= 원래는 유효했지만 Task revision 변경 등으로 조건이 바뀌어 무효화됐다.
+```
+
+전이:
+
+```text
+proposed -> accepted
+proposed -> approved
+proposed -> rejected
+
+accepted -> invalidated
+approved -> invalidated
+
+rejected -> terminal
+invalidated -> terminal
+```
+
+금지 전이:
+
+```text
+rejected -> accepted 금지
+rejected -> approved 금지
+invalidated -> accepted 금지
+invalidated -> approved 금지
+```
+
+다시 연결하고 싶으면 새 Task revision을 만들거나 새 proposed relation을 생성해야 한다.
+
+실행 가능 조건:
+
+```text
+- relationState가 accepted 또는 approved
+- relation의 taskRevision이 현재 Task revision과 일치
+- Objective 상태가 OPEN
+- Queue item이 BLOCKED / SKIPPED / CANCELED 아님
+- Task approval 상태가 READY
+- Project Profile과 guardrails 통과
+```
+
+Task revision과 relation의 핵심 규칙:
+
+```text
+Task revision이 바뀌면 기존 accepted / approved relation은 invalidated 된다.
+```
+
+이유:
+
+```text
+사람이 수락 / 승인한 것은 특정 Task revision이다.
+Task 내용이 바뀌면 Objective 연결의 의미도 달라질 수 있다.
+```
+
+예시:
+
+```text
+task-001 revision 1
+-> relation accepted
+
+task edit
+-> task-001 revision 2
+-> revision 1 relation invalidated
+-> revision 2는 다시 proposed / accepted / approved 필요
+```
+
+최종 원칙:
+
+```text
+Proposed relation cannot drive execution.
+Accepted or approved relation can drive execution.
+Rejected and invalidated relations are terminal for the same task revision.
+```
+
+한국어:
+
+```text
+proposed relation만으로는 실행할 수 없다.
+accepted 또는 approved relation만 실행에 사용할 수 있다.
+rejected와 invalidated relation은 같은 Task revision에서는 terminal이다.
+```
+
 원칙:
 
 ```text
@@ -2616,7 +2755,7 @@ v0.1 구현 내용:
 
 4. Task Spec 최종 모델
    - Intent에서 Draft로 바뀔 때 필요한 필드
-   - objective proposed/accepted/approved/rejected relation 표현 방식
+   - objective proposed/accepted/approved/rejected/invalidated relation 표현 방식
    - DRAFT/READY 승인 플로우
    - needsReview 표현 방식
 
