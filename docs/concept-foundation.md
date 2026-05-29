@@ -1009,6 +1009,64 @@ derived queue state:
 - raw stdout/stderr/diff는 Objective나 carry-forward context에 들어가지 않는다.
 ```
 
+최종 모델의 `QUEUE_REORDERED`는 보수적으로 처리한다.
+
+원칙:
+
+```text
+QUEUE_REORDERED는 queue item의 position을 직접 수정하지 않는다.
+QUEUE_REORDERED는 ledger에 새로운 future order를 선언하는 이벤트다.
+이미 완료, 스킵, 취소된 history segment는 재정렬하지 않는다.
+아직 실행되지 않은 future segment만 reason과 함께 재정렬할 수 있다.
+Snapshot은 ledger를 재생할 때 이 이벤트를 적용해 objective.json의 queue order를 재생성한다.
+```
+
+즉 reorder는 과거 실행 순서를 고치는 기능이 아니라, 앞으로 진행할 queue item의 순서를 바꾸는 기능이다.
+
+구분:
+
+```text
+History segment
+- DONE
+- SKIPPED
+- CANCELED
+
+Future segment
+- WAITING
+- BLOCKED
+- NEXT 후보
+- 아직 실행되지 않은 DRAFT / READY Task
+```
+
+`QUEUE_REORDERED` 검증 규칙:
+
+```text
+- CLOSED / CANCELED Objective에서는 reorder할 수 없다.
+- ACTIVE Task가 있으면 reorder할 수 없다.
+- history segment item은 위치를 바꿀 수 없다.
+- futureOrder에는 재정렬 대상 future item이 정확히 한 번씩 포함되어야 한다.
+- 존재하지 않는 taskId를 포함할 수 없다.
+- 다른 Objective의 taskId를 포함할 수 없다.
+- reason은 필수다.
+```
+
+예시:
+
+```json
+{
+  "seq": 12,
+  "type": "QUEUE_REORDERED",
+  "objectiveId": "auth-error-response",
+  "futureOrder": [
+    "task-common-error-design",
+    "task-signup-error-implementation"
+  ],
+  "reason": "공통 응답 포맷 설계를 먼저 확정해야 구현 Task를 안전하게 진행할 수 있음",
+  "actor": "user",
+  "at": "2026-05-29T10:30:00+09:00"
+}
+```
+
 이 설계의 목적은 OMX의 durable workflow 장점을 가져오되, CodeFleet의 핵심인 승인 가능한 Task 계약과 검증 가능한 실행 증거를 흐리지 않는 것이다.
 
 ### 6.2 Task Spec
