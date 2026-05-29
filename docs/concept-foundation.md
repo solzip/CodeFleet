@@ -95,15 +95,15 @@ Run
 = 로그, diff, 검증 결과, 리뷰 결과가 남는 단위
 ```
 
-LLM은 현재 요청이 일회성인지, 이전 작업의 연속인지, 장기 workstream의 일부인지 스스로 단정하면 안 된다. CodeFleet은 이 연속성을 Objective 자료구조에 기록하고, 사람은 review 단계에서 그 연속성을 승인한다.
+LLM은 현재 요청이 일회성인지, 이전 작업의 연속인지, 장기 workstream의 일부인지 스스로 단정하면 안 된다. CodeFleet은 이 연속성을 Objective 자료구조에 기록하고, 사람은 review 단계에서 그 연속성 제안을 수락하거나 수정한다.
 
 핵심 원칙:
 
 ```text
 LLM decides nothing about continuity.
 CodeFleet records continuity.
-Human approves continuity.
-Harness supplies approved context.
+Human accepts or approves continuity.
+Harness supplies accepted or approved context.
 ```
 
 한국어:
@@ -111,8 +111,8 @@ Harness supplies approved context.
 ```text
 LLM이 작업의 연속성을 단정하지 않는다.
 CodeFleet이 연속성을 기록한다.
-사람이 연속성을 승인한다.
-Harness가 승인된 맥락만 전달한다.
+사람이 연속성 제안을 수락하거나 수정한다.
+Harness가 수락된 맥락만 전달한다.
 ```
 
 연속성 처리의 목적은 LLM 기억에 의존하지 않고, 승인된 요약과 결정사항만 다음 Task의 컨텍스트로 전달하는 것이다.
@@ -525,7 +525,7 @@ queue:
       storedState: WAITING
 ```
 
-Objective의 핵심은 LLM에게 "기억하라"고 요구하는 것이 아니라, CodeFleet이 로컬 자료구조로 연속성을 명시하고 Harness가 승인된 맥락만 전달하게 만드는 것이다.
+Objective의 핵심은 LLM에게 "기억하라"고 요구하는 것이 아니라, CodeFleet이 로컬 자료구조로 연속성을 명시하고 Harness가 accepted 또는 approved 맥락만 전달하게 만드는 것이다.
 
 ### 6.1.1 OMX 레퍼런스와 CodeFleet의 차이
 
@@ -719,7 +719,7 @@ needsReview
 
 이 필드는 v0.2 편의를 위한 임시 구조가 아니라 최종 모델의 핵심 필드다.
 
-`objective` 필드는 Task가 어떤 Objective queue item에 속하는지 표현한다. Draft 단계에서는 proposed relation일 수 있고, Task Review / Approval 단계에서 사람이 approved relation으로 확정한다.
+`objective` 필드는 Task가 어떤 Objective queue item에 속하는지 표현한다. Draft 단계에서는 proposed relation일 수 있고, Task Review 단계에서 사람이 이를 accepted / approved / rejected 중 하나로 확정하거나 수정한다.
 
 최종 모델에서는 여기에 다음 실행 계약 필드가 더해질 수 있다.
 
@@ -771,11 +771,41 @@ User Intent
 
 Objective 연결도 마찬가지다.
 
-> AI may suggest continuity, but only humans can approve task continuity.
+> AI may suggest continuity, but proposed continuity cannot drive execution until it is accepted or approved during review.
 
 한국어:
 
-> AI는 작업의 연속성을 제안할 수 있지만, 어떤 Objective에 속하는지 승인하는 권한은 사람에게 있다.
+> AI는 작업의 연속성을 제안할 수 있지만, proposed relation만으로는 실행할 수 없다. Task Review 단계에서 사용자가 제안을 수락하거나 수정해야 한다.
+
+Objective relation 상태:
+
+```text
+proposed
+- Draft Harness가 제안한 Objective 연결
+- 실행에는 사용할 수 없음
+
+accepted
+- 사용자가 review 화면에서 낮은 위험의 제안을 그대로 수락한 연결
+- 실행에 사용할 수 있음
+
+approved
+- 사용자가 명시적으로 선택/확정한 연결
+- 모호하거나 위험한 경우 필요
+- 실행에 사용할 수 있음
+
+rejected
+- 사용자가 거절한 연결
+- 실행에 사용할 수 없음
+```
+
+UX 원칙:
+
+```text
+- 낮은 위험의 명확한 relation은 사용자가 빠르게 accept할 수 있어야 한다.
+- Objective 후보가 여러 개이거나 위험한 carry-forward가 있으면 explicit approval이 필요하다.
+- proposed relation은 Harness prompt에 포함하지 않는다.
+- Execution Harness는 accepted 또는 approved relation만 사용한다.
+```
 
 ### 7.1 상태 흐름
 
@@ -845,14 +875,14 @@ codefleet draft "<user intent>"
 codefleet task review <task-id>
   -> Task 계약 검토
   -> Objective 연결 검토
-  -> continuity 승인 또는 수정
+  -> continuity accept / approve / reject / 수정
 
 codefleet task approve <task-id>
   -> Task revision 승인
-  -> Objective relation 승인
+  -> accepted 또는 approved Objective relation 확인
 
 codefleet run <task-id>
-  -> 승인된 Objective context만 Harness prompt에 포함
+  -> accepted 또는 approved Objective context만 Harness prompt에 포함
 ```
 
 `task review`의 책임:
@@ -1142,7 +1172,7 @@ CodeFleet이 말하는 "안전한 오케스트레이션"은 AI가 실수하지 �
 
 최종 정의:
 
-> 안전한 오케스트레이션이란 사용자의 의도를 명시적 Objective와 Task로 구조화하고, 사람이 Task revision과 Objective relation을 승인한 뒤, Workspace 정책과 Harness가 허용한 권한 안에서만 AI Agent가 작업하게 하며, 모든 실행 결과를 검증 가능하고 되돌릴 수 있고 감사 가능한 기록으로 남기는 것이다.
+> 안전한 오케스트레이션이란 사용자의 의도를 명시적 Objective와 Task로 구조화하고, 사람이 Task revision을 승인하고 Objective relation을 수락 또는 승인한 뒤, Workspace 정책과 Harness가 허용한 권한 안에서만 AI Agent가 작업하게 하며, 모든 실행 결과를 검증 가능하고 되돌릴 수 있고 감사 가능한 기록으로 남기는 것이다.
 
 짧게 표현하면:
 
@@ -1156,7 +1186,8 @@ User Intent
   -> Draft Harness
   -> DRAFT Task
   -> Task Review
-  -> Human Approval of Task Revision + Objective Relation
+  -> Human Approval of Task Revision
+  -> Accept / Approve Objective Relation
   -> READY Task
   -> Objective Queue Update
   -> Execution Harness
@@ -1173,7 +1204,8 @@ User Intent
    모든 AI 작업은 명시적 Objective와 Task에서 시작한다.
 
 2. Human Approval
-   AI가 만든 Task Draft와 Objective relation은 사람이 승인해야 실행 가능하다.
+   AI가 만든 Task Draft는 사람이 승인해야 실행 가능하다.
+   Objective relation은 review에서 accepted 또는 approved 상태여야 실행 가능하다.
 
 3. Non-relaxable Workspace Policy
    Project Profile 정책은 Task가 완화할 수 없다.
@@ -1194,7 +1226,7 @@ User Intent
 
 최종 안전 모델:
 
-> CodeFleet에서 안전한 오케스트레이션은 AI Agent에게 작업을 직접 맡기는 것이 아니라, 승인된 Objective relation, 승인된 Task revision, 비완화 Workspace Policy를 바탕으로 Harness가 최소 권한·격리·검증·추적 조건을 적용해 실행하고, 그 결과를 사람이 검토 가능한 Run Trace로 남기는 것이다.
+> CodeFleet에서 안전한 오케스트레이션은 AI Agent에게 작업을 직접 맡기는 것이 아니라, accepted 또는 approved Objective relation, 승인된 Task revision, 비완화 Workspace Policy를 바탕으로 Harness가 최소 권한·격리·검증·추적 조건을 적용해 실행하고, 그 결과를 사람이 검토 가능한 Run Trace로 남기는 것이다.
 
 안전 철학:
 
