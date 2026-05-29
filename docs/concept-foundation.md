@@ -700,6 +700,106 @@ Queue 상태 원칙:
 
 `NEXT`, `ACTIVE`, `DONE`은 Task status와 Run Trace에서 계산할 수 있으므로 원본 진실로 저장하지 않는다. snapshot에는 표시할 수 있지만, 불일치가 생기면 재계산 결과가 우선한다.
 
+여기서 "저장 가능한 상태"와 "계산해야 하는 상태"의 차이는 다음과 같다.
+
+```text
+저장 가능한 상태
+= 사람이 명시적으로 결정하거나 외부 근거가 필요해서 파일/ledger에 기록해야 알 수 있는 상태
+
+계산해야 하는 상태
+= 이미 존재하는 Task Spec, Run Trace, Queue 순서를 보면 자동으로 판단할 수 있는 상태
+```
+
+핵심 원칙:
+
+```text
+Do not store the same truth twice.
+```
+
+한국어:
+
+```text
+같은 사실을 두 군데에 원본 진실로 저장하지 않는다.
+```
+
+예를 들어 `DONE`은 Objective Queue에 원본 상태로 저장하지 않는다.
+
+```text
+DONE
+= Task status와 Run result를 보고 판단할 수 있음
+= 이미 존재하는 실행 증거에서 계산 가능
+```
+
+반대로 `SKIPPED`는 저장해야 한다.
+
+```text
+SKIPPED
+= 사람이 이 queue item을 건너뛰기로 결정한 상태
+= Task/Run 기록만 봐서는 자동으로 알 수 없음
+= ledger event로 남겨야 함
+```
+
+상태별 기준:
+
+```text
+WAITING
+- queue에 들어왔지만 아직 진행 대상이 아님
+- queue item의 기본 저장 상태로 둘 수 있음
+
+BLOCKED
+- 외부 정보, 사람 결정, 선행 작업 문제 등으로 막힌 상태
+- 막힌 이유를 사람이 기록해야 하므로 저장
+
+SKIPPED
+- 이 Objective 안에서는 해당 Task를 건너뛰기로 한 상태
+- 명시적 결정이므로 저장
+
+CANCELED
+- queue item을 취소한 상태
+- 명시적 결정이므로 저장
+
+NEXT
+- queue policy와 앞 item 상태를 보면 계산 가능
+- 저장하지 않음
+
+ACTIVE
+- 현재 RUNNING run이 있는지 보면 계산 가능
+- 저장하지 않음
+
+DONE
+- Task status와 Run result를 보면 계산 가능
+- 저장하지 않음
+```
+
+나쁜 상태 예시:
+
+```text
+objective.json: task-001 is DONE
+task.yaml:      task-001 is READY
+run/result:     task-001 failed
+```
+
+이런 상태가 생기면 무엇을 믿어야 할지 애매해진다. 따라서 Objective Queue에는 `DONE`을 원본 진실로 저장하지 않고, Task와 Run을 기준으로 계산한다.
+
+좋은 상태 예시:
+
+```text
+objective ledger:
+- task-001 attached
+- task-002 skipped by human
+
+task.yaml:
+- task-001 status: DONE
+
+run/result:
+- task-001 result: success
+
+derived queue state:
+- task-001 = DONE
+- task-002 = SKIPPED
+- task-003 = NEXT
+```
+
 꼬임을 막기 위한 불변식:
 
 ```text
