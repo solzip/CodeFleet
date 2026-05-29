@@ -82,6 +82,68 @@ Run Summary
 
 Objective / Task Queue / ledger / Mutation Engine 같은 논의는 목표 확장이 아니라, 이 최종 목표를 안정적으로 구현하기 위한 내부 구조 논의다.
 
+### 0.2 Mutation Engine의 위치
+
+Mutation Engine은 CodeFleet의 사용자-facing 목표를 넓히는 기능이 아니다.
+
+Mutation Engine은 CodeFleet의 Objective, Task Queue, Task relation 상태를 직접 파일 수정이 아니라 검증 가능한 상태 전이로 바꾸는 내부 계층이다.
+
+정의:
+
+```text
+Mutation Engine
+= CodeFleet 상태 변경 창구
+= Objective / Queue / Task relation 변경을 lock, validation, ledger, rebuild를 통해 안전하게 처리하는 내부 처리기
+```
+
+Mutation Engine이 필요한 이유:
+
+```text
+- Task가 승인되지 않았는데 run되는 것을 막는다.
+- Task revision이 바뀌었는데 예전 approval로 실행되는 것을 막는다.
+- proposed Objective relation이 Harness prompt에 들어가는 것을 막는다.
+- CLOSED Objective에 새 Task가 붙는 것을 막는다.
+- Run result와 Objective snapshot이 충돌하는 것을 validate/rebuild로 감지한다.
+```
+
+최종 목표와의 대응:
+
+```text
+사용자의 개발/운영 Objective를 하나 이상의 Task로 구조화
+-> Objective 생성, Task attach, queue 상태 변경을 안전하게 처리
+
+Task를 역할·범위·가드레일·검증 조건이 포함된 계약으로 정의
+-> Task revision과 approval 상태가 깨지지 않게 관리
+
+사람이 승인한 Task를 AI 에이전트에게 위임
+-> accepted/approved Objective relation과 approved Task revision 없이는 run을 막음
+
+실행 결과를 로그·diff·테스트·리뷰 기준으로 추적
+-> 실행 결과는 Run Trace에 남기고, Mutation Engine은 Objective snapshot과의 일관성을 검증
+```
+
+상태 변경 흐름:
+
+```text
+Command
+  -> Mutation Engine
+  -> Lock
+  -> Validate Current State
+  -> Append Ledger Event
+  -> Update Related Contract
+  -> Rebuild Snapshot
+  -> Validate Result
+  -> Release Lock
+```
+
+원칙:
+
+```text
+Objective 상태 변경은 파일 수정이 아니라 event transition이다.
+```
+
+따라서 `task review`, `objective skip`, `objective close`, `summary attach` 같은 상태 변경 명령은 최종적으로 Mutation Engine을 거쳐야 한다. 반면 `objective show`, `task show`, `run show` 같은 조회 명령은 상태를 바꾸지 않으므로 Mutation Engine을 거치지 않아도 된다.
+
 ## 1. 최종 지향 정의
 
 위 고정 목표를 오케스트레이션 흐름으로 풀면 다음과 같다.
