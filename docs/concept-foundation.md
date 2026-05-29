@@ -2857,57 +2857,78 @@ v0.1 구현 내용:
 
 > 현재 v0.1 구현은 최종 아키텍처가 아니라 seed implementation이다. 앞으로의 설계는 이 문서의 Core / Workspace / Profile / Objective / Task Queue / Mutation Engine / Task Draft / Harness / Run Trace / Run Summary 개념을 기준으로 재정렬한다.
 
-## 15. 아직 논의할 항목
+## 15. 논의 상태와 남은 항목
 
-다음 항목은 아직 더 논의해야 한다.
+현재까지 고정한 항목:
 
 ```text
-1. Harness 상세 정의
+- 최종 목표와 목표 경계
+- Objective / Task / Run 계층
+- Objective / Task Queue / ledger / Mutation Engine이 목표 확장이 아니라 내부 구조라는 점
+- Mutation Engine의 역할, command 범위, workspace-level lock 원칙
+- Mutation 후 rebuild / validate / explicit repair 원칙
+- Transition validation 상위 도메인 7개
+- Objective State 규칙
+- Queue Item State 규칙
+- Task Relation State 규칙
+- Task와 Task Revision 분리
+- Task revision lineage와 revision-bound approval / relation / run / summary 원칙
+- QUEUE_REORDERED의 보수적 future order semantics
+- ledger event 최소 세트와 "ledger는 결정 로그" 원칙
+```
+
+다음으로 논의할 항목:
+
+```text
+1. Task Revision / Approval State 세부 규칙
+   - DRAFT / READY / RUNNING / DONE / FAILED / BLOCKED / CANCELED 의미
+   - DRAFT -> READY 승인 조건
+   - FAILED / BLOCKED retry 또는 resume 조건
+   - approval invalidation 이벤트와 revision lineage 연결
+
+2. Run-derived State 세부 규칙
+   - ACTIVE 계산 기준
+   - DONE / FAILED / VERIFIED 계산 기준
+   - Run result와 Task status 충돌 처리
+
+3. Context Carry-forward State 세부 규칙
+   - Decision 기록 / revoke 규칙
+   - Summary attach / revoke 규칙
+   - sanitized context 조건
+
+4. Corruption / Repair State 세부 규칙
+   - corruption marker 생성 조건
+   - rebuild만으로 복구 가능한 경우
+   - 보정 이벤트가 필요한 repair 경우
+
+5. Harness 상세 정의
    - Draft Harness
    - Execution Harness
    - Guardrail 단계
    - Policy 병합 방식
 
-2. Objective / Task Queue 최종 모델
-   - objective.json snapshot 구조
-   - ledger.jsonl 이벤트 종류
-   - queue policy와 cursor 규칙
-   - rebuild / validate 규칙
-
-3. Mutation Engine 최종 모델
-   - 상태 변경 command 범위
-   - lock 범위와 atomic write 원칙
-   - transition validation 규칙
-   - mutation 후 rebuild / validate 흐름
-
-4. Task Spec 최종 모델
-   - Intent에서 Draft로 바뀔 때 필요한 필드
-   - objective proposed/accepted/approved/rejected/invalidated relation 표현 방식
-   - DRAFT/READY 승인 플로우
-   - needsReview 표현 방식
-
-5. Project Profile 최종 스키마
+6. Project Profile 최종 스키마
    - policies
    - defaults
    - references
    - local-only 설정 분리
 
-6. Workspace discovery
+7. Workspace discovery
    - 현재 cwd 기준
    - 부모 디렉터리 탐색
    - 명시적 --workspace 옵션
 
-7. Run Summary 설계
+8. Run Summary 설계
    - summary.md 자동 생성
    - sanitization 규칙
    - Notion export adapter
 
-8. Verification 실행 정책
+9. Verification 실행 정책
    - prompt-only
    - manual command suggestion
    - allowlist 기반 자동 실행
 
-9. Review 모델
+10. Review 모델
    - AI review.md
    - human review note
    - approval 기록
@@ -2921,8 +2942,8 @@ v0.1 구현 내용:
 1. 이 문서 전체를 읽는다.
 2. docs/architecture.md는 현재 구현 구조 참고용으로 본다.
 3. README는 사용자용 현재 사용법 참고용으로 본다.
-4. 구현을 바로 하지 말고 최종 사용자 흐름을 먼저 검토한다.
-5. 최종 사용자 흐름에서 Objective / Task Queue / Mutation Engine / Task Spec / Project Profile / Harness 책임을 역으로 확정한다.
+4. 구현을 바로 하지 말고 최종 목표와 목표 경계를 먼저 확인한다.
+5. 현재 논의 상태를 보고 다음 미해결 항목부터 이어간다.
 6. 개념 합의 후 v0.2 구현 범위를 작게 자른다.
 ```
 
