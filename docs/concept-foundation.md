@@ -515,6 +515,139 @@ tasks:
 
 Objective의 핵심은 LLM에게 "기억하라"고 요구하는 것이 아니라, CodeFleet이 로컬 자료구조로 연속성을 명시하고 Harness가 승인된 맥락만 전달하게 만드는 것이다.
 
+### 6.0.1 OMX 레퍼런스와 CodeFleet의 차이
+
+CodeFleet의 Objective 모델은 `oh-my-codex`의 durable workflow 아이디어에서 힌트를 얻을 수 있다.
+
+OMX의 `$ultragoal` 흐름은 approved plan을 durable goals로 만들고, `.omx/ultragoal` 아래에 계획과 ledger checkpoint를 남기는 방식이다.
+
+개념적으로는 다음 구조에 가깝다.
+
+```text
+brief
+  -> ordered goals
+  -> active goal cursor
+  -> ledger checkpoints
+```
+
+OMX에서 CodeFleet이 참고할 점:
+
+```text
+- 대화 안의 계획을 휘발성으로 두지 않고 repo-native artifact로 남긴다.
+- 여러 goal/task를 순서 있는 durable plan으로 관리한다.
+- 현재 진행 중인 항목을 cursor로 표시한다.
+- 각 진행/완료/실패/차단 이벤트를 ledger에 남긴다.
+- 재시작/재개를 고려한 상태 파일을 둔다.
+- HUD나 표시용 상태와 판단용 authoritative state를 구분한다.
+- mutation lock과 atomic write 같은 상태 갱신 안전장치를 둔다.
+```
+
+하지만 CodeFleet은 OMX를 그대로 복제하지 않는다.
+
+OMX의 goal은 Codex goal mode에 넘길 실행 목표에 가깝지만, CodeFleet의 Task는 역할, 범위, 가드레일, 검증, 승인 revision을 포함하는 실행 계약이다.
+
+따라서 CodeFleet은 다음처럼 더 보수적으로 분리한다.
+
+```text
+Objective
+= 상위 목적과 Task Queue의 연속성
+
+Task Spec
+= AI에게 위임 가능한 승인 대상 실행 계약
+
+Run Trace
+= 실제 실행 증거
+
+Run Summary
+= sanitized carry-forward 대상
+```
+
+OMX에서 가져오지 않을 것:
+
+```text
+- Codex goal mode 중심 모델
+- goals.json 하나에 계약/실행/진행 상태를 과도하게 모으는 구조
+- LLM이나 active thread가 completion의 최종 근거가 되는 구조
+- 원본 로그/diff를 다음 작업 맥락으로 넘기는 흐름
+- Objective 간 자유 graph / parent-child graph
+- 실행 중 steering으로 승인된 Task 계약을 우회하는 방식
+```
+
+CodeFleet의 보수적 원칙:
+
+```text
+Use durable queue ideas.
+Do not collapse contracts, execution evidence, and summaries into one file.
+```
+
+한국어:
+
+```text
+durable queue 아이디어는 가져온다.
+계약, 실행 증거, 요약을 한 파일에 합치지 않는다.
+```
+
+권위 상태는 다음처럼 나눈다.
+
+```text
+.codefleet/tasks/<task-id>.yaml
+= Task 계약의 진실
+
+.codefleet/runs/<run-id>/*
+= 실행 결과의 진실
+
+.codefleet/objectives/<objective-id>/ledger.jsonl
+= Objective / Queue 변경 이력의 진실
+
+.codefleet/objectives/<objective-id>/objective.json
+= ledger, task, run에서 재생성 가능한 snapshot
+```
+
+즉 `objective.json`은 빠른 조회를 위한 현재 상태 파일이지, 단독 권위 상태가 아니다. 손상되거나 불일치가 생기면 ledger, Task Spec, Run Trace를 기준으로 재생성할 수 있어야 한다.
+
+Objective 안의 Task Queue는 다음 구조를 따른다.
+
+```text
+Objective
+  -> Task Queue
+     -> Task
+        -> Run
+```
+
+Queue는 Task의 순서, 현재 cursor, block/skip 같은 진행 상태를 관리한다. 다만 Task의 계약 상태와 Run의 실행 결과를 대신 소유하지 않는다.
+
+Queue 상태 원칙:
+
+```text
+저장 가능한 상태:
+- WAITING
+- BLOCKED
+- SKIPPED
+- CANCELED
+
+계산해야 하는 상태:
+- NEXT
+- ACTIVE
+- DONE
+```
+
+`NEXT`, `ACTIVE`, `DONE`은 Task status와 Run Trace에서 계산할 수 있으므로 원본 진실로 저장하지 않는다. snapshot에는 표시할 수 있지만, 불일치가 생기면 재계산 결과가 우선한다.
+
+꼬임을 막기 위한 불변식:
+
+```text
+- 승인 시점의 Task는 정확히 하나의 Objective queue item에 속한다.
+- queue item은 taskId와 approvedRevision을 함께 가리킨다.
+- Task revision이 바뀌면 기존 approval과 queue relation은 무효화되거나 새 item으로 기록된다.
+- SEQUENCE Objective는 derived NEXT가 최대 1개다.
+- 기본 정책에서 ACTIVE Task는 Objective당 최대 1개다.
+- Queue position은 직접 수정하지 않고 reorder 이벤트로만 바꾼다.
+- Objective snapshot은 ledger, Task Spec, Run Trace에서 재생성 가능해야 한다.
+- raw stdout/stderr/diff는 Objective나 carry-forward context에 들어가지 않는다.
+```
+
+이 설계의 목적은 OMX의 durable workflow 장점을 가져오되, CodeFleet의 핵심인 승인 가능한 Task 계약과 검증 가능한 실행 증거를 흐리지 않는 것이다.
+
 Project Profile이 프로젝트별 정책이라면:
 
 ```text
