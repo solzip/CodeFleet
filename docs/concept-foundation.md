@@ -666,7 +666,7 @@ OMX에서 CodeFleet이 참고할 점:
 - 대화 안의 계획을 휘발성으로 두지 않고 repo-native artifact로 남긴다.
 - 여러 goal/task를 순서 있는 durable plan으로 관리한다.
 - 현재 진행 중인 항목을 cursor로 표시한다.
-- 각 진행/완료/실패/차단 이벤트를 ledger에 남긴다.
+- 각 진행 checkpoint와 상태 변경을 ledger에 남기는 아이디어를 참고한다.
 - 재시작/재개를 고려한 상태 파일을 둔다.
 - HUD나 표시용 상태와 판단용 authoritative state를 구분한다.
 - mutation lock과 atomic write 같은 상태 갱신 안전장치를 둔다.
@@ -922,7 +922,7 @@ derived queue state:
 
 ```text
 - 승인 시점의 Task는 정확히 하나의 Objective queue item에 속한다.
-- queue item은 taskId와 approvedRevision을 함께 가리킨다.
+- queue item은 taskId, taskRevision, relationState(accepted 또는 approved)를 함께 가리킨다.
 - Task revision이 바뀌면 기존 approval과 queue relation은 무효화되거나 새 item으로 기록된다.
 - SEQUENCE Objective는 derived NEXT가 최대 1개다.
 - 기본 정책에서 ACTIVE Task는 Objective당 최대 1개다.
@@ -1771,7 +1771,7 @@ v0.1 구현 내용:
 
 중요:
 
-> 현재 v0.1 구현은 최종 아키텍처가 아니라 seed implementation이다. 앞으로의 설계는 이 문서의 Core / Workspace / Profile / Objective / Task Queue / Task Draft / Harness / Run Trace / Run Summary 개념을 기준으로 재정렬한다.
+> 현재 v0.1 구현은 최종 아키텍처가 아니라 seed implementation이다. 앞으로의 설계는 이 문서의 Core / Workspace / Profile / Objective / Task Queue / Mutation Engine / Task Draft / Harness / Run Trace / Run Summary 개념을 기준으로 재정렬한다.
 
 ## 15. 아직 논의할 항목
 
@@ -1790,34 +1790,40 @@ v0.1 구현 내용:
    - queue policy와 cursor 규칙
    - rebuild / validate 규칙
 
-3. Task Spec 최종 모델
+3. Mutation Engine 최종 모델
+   - 상태 변경 command 범위
+   - lock 범위와 atomic write 원칙
+   - transition validation 규칙
+   - mutation 후 rebuild / validate 흐름
+
+4. Task Spec 최종 모델
    - Intent에서 Draft로 바뀔 때 필요한 필드
-   - objective proposed/approved relation 표현 방식
+   - objective proposed/accepted/approved/rejected relation 표현 방식
    - DRAFT/READY 승인 플로우
    - needsReview 표현 방식
 
-4. Project Profile 최종 스키마
+5. Project Profile 최종 스키마
    - policies
    - defaults
    - references
    - local-only 설정 분리
 
-5. Workspace discovery
+6. Workspace discovery
    - 현재 cwd 기준
    - 부모 디렉터리 탐색
    - 명시적 --workspace 옵션
 
-6. Run Summary 설계
+7. Run Summary 설계
    - summary.md 자동 생성
    - sanitization 규칙
    - Notion export adapter
 
-7. Verification 실행 정책
+8. Verification 실행 정책
    - prompt-only
    - manual command suggestion
    - allowlist 기반 자동 실행
 
-8. Review 모델
+9. Review 모델
    - AI review.md
    - human review note
    - approval 기록
@@ -1832,7 +1838,7 @@ v0.1 구현 내용:
 2. docs/architecture.md는 현재 구현 구조 참고용으로 본다.
 3. README는 사용자용 현재 사용법 참고용으로 본다.
 4. 구현을 바로 하지 말고 최종 사용자 흐름을 먼저 검토한다.
-5. 최종 사용자 흐름에서 Task Spec / Project Profile / Harness 책임을 역으로 확정한다.
+5. 최종 사용자 흐름에서 Objective / Task Queue / Mutation Engine / Task Spec / Project Profile / Harness 책임을 역으로 확정한다.
 6. 개념 합의 후 v0.2 구현 범위를 작게 자른다.
 ```
 
