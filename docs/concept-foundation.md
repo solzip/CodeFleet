@@ -340,6 +340,64 @@ Keep rules precise inside each domain.
 세부 규칙은 각 도메인 안에서 정확히 정의한다.
 ```
 
+현재 단계에서는 상위 상태 도메인 7개만 고정한다. 세부 전이 규칙은 각 도메인을 설계할 때 별도로 확정한다.
+
+도메인별로 앞으로 정할 항목:
+
+```text
+Objective State
+- OPEN -> CLOSED 가능 조건
+- CLOSED -> REOPENED 가능 조건
+- CANCELED terminal 여부
+- CORRUPTED 상태에서 허용되는 명령
+
+Queue Item State
+- WAITING -> BLOCKED 가능 조건
+- SKIPPED -> WAITING 허용 여부
+- ACTIVE / DONE item의 skip, cancel, reorder 금지 조건
+
+Task Relation State
+- proposed -> accepted
+- proposed -> approved
+- proposed -> rejected
+- rejected / invalidated terminal 여부
+- revision 변경 시 invalidation 처리
+
+Task Revision / Approval State
+- READY가 되기 위한 조건
+- 승인 후 edit 시 revision 처리
+- RUNNING 중 edit 금지
+
+Context Carry-forward State
+- Summary sanitized 조건
+- Decision revoke 조건
+- carry-forward 포함 가능 조건
+
+Run-derived State
+- DONE 계산 기준
+- ACTIVE 계산 기준
+- Run result와 Task status 충돌 처리
+
+Corruption / Repair State
+- corruption marker 생성 조건
+- rebuild만으로 복구 가능한 경우
+- repair가 보정 이벤트를 append해야 하는 경우
+```
+
+세부 규칙 논의 순서:
+
+```text
+1. Objective State
+2. Queue Item State
+3. Task Relation State
+4. Task Revision / Approval State
+5. Run-derived State
+6. Context Carry-forward State
+7. Corruption / Repair State
+```
+
+Objective와 Queue부터 확정해야 Task relation, approval, run-derived state가 자연스럽게 이어진다.
+
 원칙:
 
 ```text
