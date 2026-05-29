@@ -1768,6 +1768,131 @@ evidence
 
 severity와 category는 사람이 고르지 않는다. LLM도 고르지 않는다. Validation Rule이 결정한다.
 
+### 0.11 Invariant Core / Extensible Layer 원칙
+
+불변성을 유지하는 것은 맞다. 다만 불변 대상은 모든 규칙 내용이 아니라 판정 구조와 안전 원칙이다.
+
+최종 원칙:
+
+```text
+Core semantics are invariant.
+Rule catalog is extensible.
+```
+
+한국어:
+
+```text
+핵심 의미론은 불변이어야 한다.
+규칙 목록은 확장 가능해야 한다.
+```
+
+Invariant Core:
+
+```text
+- Corruption은 failed invariant check다.
+- Finding structure는 고정된다.
+- Finding은 expected / actual / evidence를 가져야 한다.
+- Severity semantics는 capability gating을 결정한다.
+- Category assignment는 checkId의 rule definition이 결정한다.
+- Scope impact gating은 deterministic해야 한다.
+- LLM / 사람은 severity나 category를 임의로 고르지 않는다.
+- LLM / 사람은 corruption 원인을 추론하거나 추측하지 않는다.
+- deny wins.
+- most restrictive applicable finding wins.
+- UNKNOWN category 금지.
+- UNCLASSIFIED finding 금지.
+- No inferred category.
+- No guessed severity.
+- No unclassified finding.
+```
+
+Extensible Layer:
+
+```text
+- Validation rule catalog
+- Project-specific checks
+- checkId 목록
+- condition type
+- suggestedRepairKind
+- Project Profile별 policy rule
+- repair option catalog
+- category taxonomy addition through taxonomy review
+```
+
+확장 가능한 규칙도 schema-bound여야 한다. rule을 추가하려면 반드시 Validation Rule schema를 따라야 한다.
+
+```text
+Extensible does not mean arbitrary.
+Extensible means schema-bound.
+```
+
+한국어:
+
+```text
+확장 가능하다는 것은 임의로 추가할 수 있다는 뜻이 아니다.
+정해진 schema 안에서 확장할 수 있다는 뜻이다.
+```
+
+Validation Rule 최소 schema:
+
+```text
+- checkId
+- category
+- severity
+- scope
+- condition
+- expectedType
+- actualType
+- evidenceType
+- suggestedRepairKind
+```
+
+프로젝트별 rule 예:
+
+```yaml
+checkId: DJANGO_MIGRATION_APPLIED_WITHOUT_PLAN
+category: POLICY_ENFORCEMENT_INTEGRITY
+severity: CORRUPTION
+scope: WORKSPACE
+condition:
+  type: command_requires_prior_evidence
+  commandPattern: "python manage.py migrate"
+  requiredEvidence: "migration plan reviewed"
+expectedType:
+  requiredEvidencePresent: boolean
+actualType:
+  requiredEvidencePresent: boolean
+evidenceType:
+  commandLogPath: path
+  projectProfilePath: path
+suggestedRepairKind: EVENT_REPAIR_REQUIRED
+```
+
+불변성과 확장성의 경계:
+
+```text
+불변:
+- 판정 방식
+- finding 구조
+- severity/category/scope의 의미
+- evidence requirement
+- no inference / no guessing
+- gating 원칙
+
+확장:
+- 어떤 check를 추가할지
+- 어떤 project-specific policy를 둘지
+- 어떤 condition type을 지원할지
+- 어떤 repair option을 제공할지
+```
+
+최종 결론:
+
+```text
+불변성을 유지한다.
+하지만 불변 대상은 모든 rule 내용이 아니라 판정 구조와 안전 원칙이다.
+```
+
 Category 정의:
 
 ```text
@@ -4684,6 +4809,7 @@ v0.1 구현 내용:
 - Risk 판단 원칙
 - Context Carry-forward State 규칙
 - Corruption 판정 원칙
+- Invariant Core / Extensible Layer 원칙
 - Task와 Task Revision 분리
 - Task revision lineage와 revision-bound approval / relation / run / summary 원칙
 - QUEUE_REORDERED의 보수적 future order semantics
