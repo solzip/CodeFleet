@@ -628,6 +628,61 @@ Objective
 
 Queue는 Task의 순서, 현재 cursor, block/skip 같은 진행 상태를 관리한다. 다만 Task의 계약 상태와 Run의 실행 결과를 대신 소유하지 않는다.
 
+Cursor 정의:
+
+```text
+cursor
+= Objective의 Task Queue 안에서 현재 주목해야 하는 Task 위치
+= "이 Objective에서 지금 다음으로 봐야 할 Task가 무엇인가"를 가리키는 포인터
+```
+
+예시:
+
+```text
+Objective: 회원가입/로그인 API 에러 응답 통일
+
+Queue:
+1. 현재 에러 응답 구조 조사
+2. 공통 응답 포맷 설계
+3. 회원가입 API 수정
+4. 로그인 API 수정
+5. 테스트 추가
+
+1번이 끝났고 2번을 봐야 한다면 cursor는 2번 Task를 가리킨다.
+```
+
+하지만 cursor는 단독 권위 상태가 되면 안 된다. 예를 들어 cursor는 2번을 가리키는데 2번 Task가 이미 DONE이고 3번이 NEXT여야 한다면 상태가 꼬인다.
+
+따라서 CodeFleet은 cursor를 다음처럼 취급한다.
+
+```text
+- cursor는 objective.json snapshot에 표시할 수 있다.
+- cursor는 빠른 조회와 UX focus를 위한 값이다.
+- cursor만으로 실행 가능 Task를 판단하지 않는다.
+- 실행 가능 여부는 Task status, Run Trace, Queue policy를 기준으로 계산한다.
+```
+
+Objective kind에 따른 cursor 원칙:
+
+```text
+SEQUENCE
+- 순서가 엄격하다.
+- cursor는 앞에서부터 queue items를 스캔해 계산할 수 있어야 한다.
+- DONE / SKIPPED는 지나간다.
+- BLOCKED를 만나면 멈춘다.
+- 처음 만나는 실행 후보가 NEXT가 된다.
+- snapshot의 cursor가 계산 결과와 다르면 계산 결과가 우선한다.
+
+WORKSTREAM
+- 순서가 엄격하지 않은 장기 작업 흐름이다.
+- cursor는 사람이 선택한 현재 focus에 가깝다.
+- focus 변경은 ledger event로 남긴다.
+- 그래도 실행 가능 여부는 Task approval과 guardrail을 기준으로 다시 검증한다.
+
+ONE_OFF
+- queue item이 하나이므로 cursor가 사실상 그 Task를 가리킨다.
+```
+
 Queue 상태 원칙:
 
 ```text
