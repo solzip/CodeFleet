@@ -256,6 +256,107 @@ Repair 원칙:
 - repair는 사람이 실행한 명시적 명령이어야 한다.
 ```
 
+중복 mutation과 rollback 방지 원칙:
+
+```text
+No overwrite of truth.
+No silent rollback.
+No duplicate mutation.
+All correction is explicit.
+```
+
+한국어:
+
+```text
+진실을 덮어쓰지 않는다.
+조용한 rollback은 하지 않는다.
+중복 mutation을 막는다.
+모든 보정은 명시적 이벤트로 남긴다.
+```
+
+완전히 충돌 가능성을 0으로 만들 수는 없다. 파일 기반 로컬 시스템에서는 수동 파일 수정, 명령 실패, 도구 버그, 동시 실행으로 불일치가 생길 수 있다. 대신 CodeFleet은 충돌과 중복을 구조적으로 만들기 어렵게 하고, 생기면 반드시 감지하도록 설계한다.
+
+중복 mutation 방지:
+
+```text
+- 모든 mutation command는 mutationId를 가진다.
+- Mutation Engine은 ledger에 같은 mutationId가 이미 있는지 먼저 확인한다.
+- 같은 mutationId가 이미 적용되어 있으면 새 이벤트를 append하지 않고 no-op으로 끝낸다.
+- 사용자에게는 already applied / already approved 같은 결과를 보여준다.
+```
+
+예시:
+
+```json
+{
+  "mutationId": "mut_task-001_rev2_approve_20260529_001",
+  "eventId": "evt_20260529_103000_001",
+  "seq": 12,
+  "type": "TASK_APPROVED",
+  "taskId": "task-001",
+  "taskRevision": 2,
+  "actor": "user",
+  "at": "2026-05-29T10:30:00+09:00"
+}
+```
+
+같은 명령이 반복 실행되면 두 번째 실행은 다음처럼 처리한다.
+
+```text
+already approved for task-001 revision 2
+no new ledger event appended
+```
+
+Immutable 기록 원칙:
+
+```text
+- ledger는 append-only다.
+- Task revision file은 생성 후 직접 수정하지 않는다.
+- Run Trace directory는 생성 후 덮어쓰지 않는다.
+- 새로운 실행은 새 runId를 만든다.
+- Task 내용이 바뀌면 새 revision을 만든다.
+- 기존 approval / relation / summary는 새 revision에 자동 승계하지 않는다.
+```
+
+Retry는 rollback이 아니다.
+
+```text
+revision 1 READY
+-> run-001 FAILED
+-> run-002 DONE
+```
+
+위 흐름에서 revision 1의 계약은 그대로 유지된다. 실패와 성공은 각각 별도 Run Trace에 남는다. 현재 실행 상태는 run history를 기준으로 계산하고, 과거 실패 기록은 덮어쓰지 않는다.
+
+Rollback 대신 명시적 보정 이벤트를 사용한다.
+
+```text
+잘못 승인함
+-> approval record 삭제 금지
+-> TASK_APPROVAL_INVALIDATED 같은 명시적 이벤트 append
+
+잘못 relation accept함
+-> relation record 삭제 금지
+-> TASK_RELATION_INVALIDATED append
+
+잘못 summary attach함
+-> summary 파일 직접 삭제로 해결하지 않음
+-> SUMMARY_REVOKED append
+```
+
+최종 안전장치:
+
+```text
+- mutationId로 중복 mutation 방지
+- eventId / seq 중복 방지
+- immutable Task revision files
+- immutable Run Trace directories
+- append-only ledger
+- terminal state는 일반 명령으로 되살리지 않음
+- rollback 대신 explicit invalidation / reopen / repair 이벤트 사용
+- validate가 cross-file 충돌 감지
+```
+
 Transition validation은 상위 상태 도메인을 7개로 구분한다.
 
 ```text
