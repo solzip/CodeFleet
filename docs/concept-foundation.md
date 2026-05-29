@@ -339,8 +339,8 @@ Rollback 대신 명시적 보정 이벤트를 사용한다.
 -> relation record 삭제 금지
 -> TASK_RELATION_INVALIDATED append
 
-잘못 summary attach함
--> summary 파일 직접 삭제로 해결하지 않음
+잘못 carry-forward attach함
+-> summary / decision 파일 직접 삭제로 해결하지 않음
 -> CARRY_FORWARD_REVOKED append
 ```
 
@@ -1547,13 +1547,192 @@ CarryForwardState는 ledger event로 변한다.
 Snapshot은 ledger replay로 계산된다.
 ```
 
+### 0.10 Corruption 판정 원칙
+
+Corruption은 사람이나 LLM의 감으로 판정하지 않는다. Corruption은 정의된 invariant check의 기계적 결과다.
+
+최종 정의:
+
+```text
+Corruption
+= CodeFleet의 원본 진실들 사이에서 발생한 invariant violation
+= deterministic rebuild, validation, safe state transition을 수행할 수 없는 상태
+= failed invariant check의 결과
+```
+
+한국어:
+
+```text
+Corruption은 CodeFleet의 원본 진실들 사이에서 발생한 불변식 위반이며,
+그 결과 rebuild, validate, 안전한 상태 전이를 결정론적으로 수행할 수 없는 상태다.
+```
+
+Corruption은 작업 실패가 아니다.
+
+```text
+FAILED
+= 작업 실행 결과가 실패함
+= 상태 시스템은 정상
+
+BLOCKED
+= 사람이 흐름을 멈추기로 결정함
+= 상태 시스템은 정상
+
+CORRUPTED
+= 상태 시스템의 불변식이 깨짐
+= 새 실행 / 결정 누적 금지
+```
+
+예:
+
+```text
+테스트 실패
+-> FAILED
+-> corruption 아님
+
+Task가 guardrail 때문에 실행 거절
+-> FAILED 또는 policy block
+-> corruption 아님
+
+ledger가 없는 taskRevision을 참조
+-> reference invariant 위반
+-> corruption
+
+VERIFIED인데 review evidence가 없음
+-> evidence invariant 위반
+-> corruption
+```
+
+판정 원칙:
+
+```text
+Corruption is machine-determined.
+Not LLM-determined.
+Not human-opinion-determined.
+```
+
+한국어:
+
+```text
+Corruption은 기계적으로 판정된다.
+LLM의 감으로 판정하지 않는다.
+사람의 느낌으로 판정하지 않는다.
+```
+
+최종 원칙:
+
+```text
+Corruption is not a judgment.
+Corruption is a failed invariant check.
+```
+
+한국어:
+
+```text
+Corruption은 판단이 아니다.
+Corruption은 실패한 불변식 검사 결과다.
+```
+
+같은 파일과 같은 validation rule set이 주어지면 같은 corruption 결과가 나와야 한다.
+
+```text
+same files
++ same validation rules
+= same corruption result
+```
+
+LLM과 사람의 역할:
+
+```text
+LLM
+- finding을 사람이 이해하기 쉽게 요약 가능
+- repair option을 설명 가능
+- corruption 여부 결정 불가
+- 원인 추론 / 추측 금지
+
+Human
+- repair option 선택 가능
+- repair reason 작성 가능
+- corruption 여부를 낮출 수 없음
+- invariant 위반을 무시하고 run 강행 불가
+```
+
+추론 / 추측 금지:
+
+```text
+No inferred corruption reason.
+No guessed missing event.
+No guessed user intent.
+No guessed repair cause.
+```
+
+한국어:
+
+```text
+Corruption 원인은 추론하거나 추측하지 않는다.
+누락된 이벤트를 추측하지 않는다.
+사용자의 의도를 추측하지 않는다.
+복구 원인을 추측하지 않는다.
+```
+
+Corruption이 나타났다면 반드시 구조화된 finding을 남긴다.
+
+```text
+corruption finding
+= 실패한 invariant check의 structured finding
+= expected / actual / evidence를 포함
+= 사람이 쓴 감상이 아님
+```
+
+finding 최소 필드:
+
+```text
+- checkId
+- severity
+- scope
+- message
+- expected
+- actual
+- evidence path / object id
+- suggestedRepair kind
+```
+
+예:
+
+```yaml
+corruptionId: corr-20260529-001
+scope: objective
+objectiveId: auth-error-response
+status: ACTIVE
+createdAt: 2026-05-29T14:20:00+09:00
+detectedBy: codefleet-validate
+ruleSetVersion: 1
+
+findings:
+  - checkId: LEDGER_SEQ_CONTIGUOUS
+    severity: CORRUPTION
+    message: "Objective ledger seq is not contiguous."
+    expected:
+      seq: [1, 2, 3, 4]
+    actual:
+      seq: [1, 2, 4]
+    evidence:
+      ledgerPath: .codefleet/objectives/auth-error-response/ledger.jsonl
+      missingSeq: [3]
+    suggestedRepair:
+      kind: MANUAL_REPAIR_REQUIRED
+      reason: "Missing ledger event cannot be reconstructed safely."
+```
+
+LLM이 reason을 만들어내면 안 된다. reason은 validate engine이 만든 expected / actual / evidence를 기반으로 생성되어야 한다.
+
 원칙:
 
 ```text
 Objective 상태 변경은 파일 수정이 아니라 event transition이다.
 ```
 
-따라서 `task review`, `objective skip`, `objective close`, `summary attach` 같은 상태 변경 명령은 최종적으로 Mutation Engine을 거쳐야 한다. 반면 `objective show`, `task show`, `run show` 같은 조회 명령은 상태를 바꾸지 않으므로 Mutation Engine을 거치지 않아도 된다.
+따라서 `task review`, `objective skip`, `objective close`, `carry-forward attach` 같은 상태 변경 명령은 최종적으로 Mutation Engine을 거쳐야 한다. 반면 `objective show`, `task show`, `run show` 같은 조회 명령은 상태를 바꾸지 않으므로 Mutation Engine을 거치지 않아도 된다.
 
 Mutation Engine을 반드시 거치는 변경:
 
@@ -1579,10 +1758,10 @@ Queue 상태 변경
 - objective cancel-item <task>
 
 Carry-forward context 변경
-- decision record
-- decision revoke
-- summary attach
-- summary revoke
+- carry-forward propose
+- carry-forward attach
+- carry-forward revoke
+- carry-forward expire
 
 Task Draft / Revision approval 관련
 - task approve
@@ -3794,6 +3973,7 @@ v0.1 구현 내용:
 - Run-derived State 규칙
 - Risk 판단 원칙
 - Context Carry-forward State 규칙
+- Corruption 판정 원칙
 - Task와 Task Revision 분리
 - Task revision lineage와 revision-bound approval / relation / run / summary 원칙
 - QUEUE_REORDERED의 보수적 future order semantics
