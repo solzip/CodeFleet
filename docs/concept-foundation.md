@@ -256,6 +256,90 @@ Repair 원칙:
 - repair는 사람이 실행한 명시적 명령이어야 한다.
 ```
 
+Transition validation은 상위 상태 도메인을 7개로 구분한다.
+
+```text
+1. Objective State
+2. Queue Item State
+3. Task Relation State
+4. Task Revision / Approval State
+5. Context Carry-forward State
+6. Run-derived State
+7. Corruption / Repair State
+```
+
+이 7개는 CodeFleet 상태 검증의 책임 경계다. 최종 모델에서도 상위 상태 도메인은 이 범위를 넘겨 더 잘게 쪼개지 않는다. 더 자세한 규칙이 필요하면 각 도메인 내부의 세부 규칙으로 확장한다.
+
+이유:
+
+```text
+- 상태 도메인이 더 많아지면 전이 조합이 폭증한다.
+- validate 규칙이 여러 곳에 흩어진다.
+- 하나의 command가 너무 많은 상태 머신을 동시에 건드리게 된다.
+- 사용자가 상태를 이해하기 어려워진다.
+- CodeFleet의 범위가 프로젝트 관리 시스템 쪽으로 넓어질 위험이 있다.
+```
+
+상위 도메인은 7개로 유지하고, 세부 규칙만 내부에서 나눈다.
+
+예시:
+
+```text
+Context Carry-forward State
+- Decision
+- Summary
+
+Run-derived State
+- ACTIVE
+- DONE
+- FAILED
+- VERIFIED
+
+Corruption / Repair State
+- Snapshot corruption
+- Ledger correction
+- Task relation fix
+```
+
+도메인별 책임:
+
+```text
+Objective State
+= Objective 자체가 열려 있는가, 닫혔는가, 취소됐는가
+
+Queue Item State
+= Objective 안에서 이 Task를 대기, 차단, 스킵, 취소 중 무엇으로 취급하는가
+
+Task Relation State
+= 이 Task가 이 Objective에 proposed / accepted / approved / rejected / invalidated 중 어떤 관계로 연결됐는가
+
+Task Revision / Approval State
+= 이 Task revision이 실행 가능한 승인 상태인가
+
+Context Carry-forward State
+= 어떤 Decision / Summary를 다음 Task에 넘겨도 되는가
+
+Run-derived State
+= 실제 실행 기록을 기준으로 ACTIVE / DONE / FAILED / VERIFIED를 어떻게 계산하는가
+
+Corruption / Repair State
+= 현재 상태를 신뢰할 수 있는가, 어떤 명시적 repair가 필요한가
+```
+
+최종 원칙:
+
+```text
+Keep state domains few.
+Keep rules precise inside each domain.
+```
+
+한국어:
+
+```text
+상태 도메인은 적게 유지한다.
+세부 규칙은 각 도메인 안에서 정확히 정의한다.
+```
+
 원칙:
 
 ```text
