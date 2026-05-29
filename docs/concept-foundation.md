@@ -113,7 +113,7 @@ Mutation Engine이 필요한 이유:
 -> Objective 생성, Task attach, queue 상태 변경을 안전하게 처리
 
 Task를 역할·범위·가드레일·검증 조건이 포함된 계약으로 정의
--> Task revision과 approval 상태가 깨지지 않게 관리
+-> Task Draft / Revision과 approval 상태가 깨지지 않게 관리
 
 사람이 승인한 Task를 AI 에이전트에게 위임
 -> accepted/approved Objective relation과 approved Task revision 없이는 run을 막음
@@ -187,7 +187,7 @@ Mutation Engine은 objective.json을 부분 수정하지 않는다. 상태 변�
 - taskId가 실제 tasks/*.yaml에 존재하는지 확인한다.
 - taskRevision이 실제 Task revision과 맞는지 확인한다.
 - proposed relation이 실행에 쓰이지 않았는지 확인한다.
-- accepted/approved relation 없이 READY/RUNNING Task가 없는지 확인한다.
+- accepted/approved relation 없이 approved Revision 또는 Run이 없는지 확인한다.
 - objective.json이 rebuild 결과와 같은지 확인한다.
 - raw log/diff가 Objective context에 들어가지 않았는지 확인한다.
 - CLOSED Objective에 NEXT가 남아 있지 않은지 확인한다.
@@ -321,7 +321,7 @@ Immutable 기록 원칙:
 Retry는 rollback이 아니다.
 
 ```text
-revision 1 READY
+revision 1 APPROVED
 -> run-001 FAILED
 -> run-002 DONE
 ```
@@ -363,7 +363,7 @@ Transition validation은 상위 상태 도메인을 7개로 구분한다.
 1. Objective State
 2. Queue Item State
 3. Task Relation State
-4. Task Revision / Approval State
+4. Task Draft / Revision State
 5. Context Carry-forward State
 6. Run-derived State
 7. Corruption / Repair State
@@ -414,8 +414,8 @@ Queue Item State
 Task Relation State
 = 이 Task가 이 Objective에 proposed / accepted / approved / rejected / invalidated 중 어떤 관계로 연결됐는가
 
-Task Revision / Approval State
-= 이 Task revision이 실행 가능한 승인 상태인가
+Task Draft / Revision State
+= Draft가 승인 가능한 상태인지, Revision이 실행 가능한 계약 상태인지
 
 Context Carry-forward State
 = 어떤 Decision / Summary를 다음 Task에 넘겨도 되는가
@@ -464,10 +464,11 @@ Task Relation State
 - rejected / invalidated terminal 여부
 - revision 변경 시 invalidation 처리
 
-Task Revision / Approval State
-- READY가 되기 위한 조건
-- 승인 후 edit 시 revision 처리
-- RUNNING 중 edit 금지
+Task Draft / Revision State
+- Draft가 READY_FOR_APPROVAL이 되기 위한 조건
+- Draft approve 시 Revision 생성 조건
+- 승인 후 edit 시 새 Draft / 새 Revision 처리
+- 실행 중인 Run이 있을 때 edit / revision 생성 제한
 
 Context Carry-forward State
 - Summary sanitized 조건
@@ -477,7 +478,7 @@ Context Carry-forward State
 Run-derived State
 - DONE 계산 기준
 - ACTIVE 계산 기준
-- Run result와 Task status 충돌 처리
+- Run Trace와 derived state 불일치 처리
 
 Corruption / Repair State
 - corruption marker 생성 조건
@@ -491,9 +492,9 @@ Corruption / Repair State
 1. Objective State
 2. Queue Item State
 3. Task Relation State
-4. Task Revision / Approval State
-5. Run-derived State
-6. Context Carry-forward State
+4. Task Draft / Revision State
+5. Context Carry-forward State
+6. Run-derived State
 7. Corruption / Repair State
 ```
 
@@ -681,10 +682,10 @@ NEXT
 = queue policy와 앞 item 상태로 계산
 
 ACTIVE
-= 현재 RUNNING Run이 있는지로 계산
+= 현재 실행 중인 Run이 있는지로 계산
 
 DONE / FAILED
-= Task status와 Run Trace로 계산
+= Run Trace와 Queue policy로 계산
 ```
 
 전이:
@@ -869,7 +870,7 @@ invalidated -> approved 금지
 - relation의 taskRevision이 현재 Task revision과 일치
 - Objective 상태가 OPEN
 - Queue item이 BLOCKED / SKIPPED / CANCELED 아님
-- Task approval 상태가 READY
+- approved Revision이 존재하고 실행 가능한 상태
 - Project Profile과 guardrails 통과
 ```
 
@@ -914,6 +915,158 @@ accepted 또는 approved relation만 실행에 사용할 수 있다.
 rejected와 invalidated relation은 같은 Task revision에서는 terminal이다.
 ```
 
+### 0.6 Task Draft / Revision State 규칙
+
+Task Draft와 Task Revision은 상태 모델도 분리한다.
+
+```text
+Draft State
+= 검토 / 승인 준비 여부를 관리
+
+Revision State
+= 불변 실행 계약의 유효성을 관리
+
+Run-derived State
+= 실제 실행 결과를 관리
+```
+
+Draft State:
+
+```text
+EDITING
+- Draft 생성 / 수정 중
+- review / edit 가능
+- validate 통과 전 approve 불가
+
+READY_FOR_APPROVAL
+- review와 validate를 통과한 승인 후보
+- approve 가능
+- approve하면 immutable Revision 생성
+
+REJECTED
+- 사용자가 이 draft를 폐기
+- run 불가
+- approve 불가
+- 필요하면 새 draft 생성
+```
+
+Draft 전이:
+
+```text
+draft created -> EDITING
+
+EDITING
+-> READY_FOR_APPROVAL
+-> REJECTED
+
+READY_FOR_APPROVAL
+-> EDITING       if edited again
+-> approved      creates Revision
+-> REJECTED
+
+REJECTED
+-> terminal
+```
+
+`approved`는 Draft State가 아니다. `approved`는 Draft를 immutable Revision으로 만드는 이벤트다.
+
+Revision State:
+
+```text
+APPROVED
+- 사람이 승인한 immutable contract
+- 실행 가능
+- accepted / approved Objective relation 필요
+
+SUPERSEDED
+- 새 revision이 생겨 대체됨
+- 실행 불가
+- 기록 보존
+
+CANCELED
+- 이 revision을 폐기함
+- 실행 불가
+- terminal
+```
+
+Revision 전이:
+
+```text
+approve draft -> APPROVED
+
+APPROVED
+-> SUPERSEDED   when newer revision approved
+-> CANCELED     if explicitly canceled
+
+SUPERSEDED
+-> terminal
+
+CANCELED
+-> terminal
+```
+
+Draft를 approve해서 Revision을 만들기 위한 조건:
+
+```text
+- Draft schema valid
+- intent 있음
+- objective relation이 accepted 또는 approved로 확정되어 있음
+- scope 있음
+- guardrails 있음
+- verification 있음
+- doneCriteria 있음
+- blocking needsReview 없음
+- Project Profile보다 권한 완화 없음
+- draft content hash 계산됨
+```
+
+생성되는 Revision은 다음을 포함한다.
+
+```text
+- immutable Task contract
+- approval
+- relationState accepted 또는 approved
+- contentHash
+```
+
+Revision State에 실행 결과를 넣지 않는다.
+
+```text
+Revision State에 넣지 않음:
+- RUNNING
+- DONE
+- FAILED
+- BLOCKED
+```
+
+실행 결과는 Run-derived State에서 계산한다.
+
+예:
+
+```text
+revision 1 APPROVED
+run-001 FAILED
+run-002 DONE
+```
+
+이 경우 Revision은 계속 APPROVED다. 실패와 성공은 각각 Run Trace에 남고, 현재 실행 상태는 Run history를 기준으로 계산한다.
+
+최종 원칙:
+
+```text
+Draft state controls review readiness.
+Revision state controls contract validity.
+Run-derived state controls execution result.
+```
+
+한국어:
+
+```text
+Draft 상태는 검토 / 승인 준비 여부를 관리한다.
+Revision 상태는 계약의 유효성을 관리한다.
+Run-derived 상태는 실행 결과를 관리한다.
+```
+
 원칙:
 
 ```text
@@ -951,7 +1104,7 @@ Carry-forward context 변경
 - summary attach
 - summary revoke
 
-Task approval 관련
+Task Draft / Revision approval 관련
 - task approve
 - task edit after approval
 - task invalidate approval
@@ -1633,7 +1786,7 @@ Queue:
 - cursor는 objective.json snapshot에 표시할 수 있다.
 - cursor는 빠른 조회와 UX focus를 위한 값이다.
 - cursor만으로 실행 가능 Task를 판단하지 않는다.
-- 실행 가능 여부는 Task status, Run Trace, Queue policy를 기준으로 계산한다.
+- 실행 가능 여부는 approved Revision, Run Trace, Queue policy를 기준으로 계산한다.
 ```
 
 Objective kind에 따른 cursor 원칙:
@@ -1651,7 +1804,7 @@ WORKSTREAM
 - 순서가 엄격하지 않은 장기 작업 흐름이다.
 - cursor는 사람이 선택한 현재 focus에 가깝다.
 - focus 변경은 ledger event로 남긴다.
-- 그래도 실행 가능 여부는 Task approval과 guardrail을 기준으로 다시 검증한다.
+- 그래도 실행 가능 여부는 approved Revision과 guardrail을 기준으로 다시 검증한다.
 
 ONE_OFF
 - queue item이 하나이므로 cursor가 사실상 그 Task를 가리킨다.
@@ -1672,7 +1825,7 @@ Queue 상태 원칙:
 - DONE
 ```
 
-`NEXT`, `ACTIVE`, `DONE`은 Task status와 Run Trace에서 계산할 수 있으므로 원본 진실로 저장하지 않는다. snapshot에는 표시할 수 있지만, 불일치가 생기면 재계산 결과가 우선한다.
+`NEXT`, `ACTIVE`, `DONE`은 approved Revision, Run Trace, Queue policy에서 계산할 수 있으므로 원본 진실로 저장하지 않는다. snapshot에는 표시할 수 있지만, 불일치가 생기면 재계산 결과가 우선한다.
 
 여기서 "저장 가능한 상태"와 "계산해야 하는 상태"의 차이는 다음과 같다.
 
@@ -1681,7 +1834,7 @@ Queue 상태 원칙:
 = 사람이 명시적으로 결정하거나 외부 근거가 필요해서 파일/ledger에 기록해야 알 수 있는 상태
 
 계산해야 하는 상태
-= 이미 존재하는 Task Spec, Run Trace, Queue 순서를 보면 자동으로 판단할 수 있는 상태
+= 이미 존재하는 Task Revision, Run Trace, Queue 순서를 보면 자동으로 판단할 수 있는 상태
 ```
 
 핵심 원칙:
@@ -1700,7 +1853,7 @@ Do not store the same truth twice.
 
 ```text
 DONE
-= Task status와 Run result를 보고 판단할 수 있음
+= Run Trace의 result를 보고 판단할 수 있음
 = 이미 존재하는 실행 증거에서 계산 가능
 ```
 
@@ -1737,11 +1890,11 @@ NEXT
 - 저장하지 않음
 
 ACTIVE
-- 현재 RUNNING run이 있는지 보면 계산 가능
+- 현재 실행 중인 run이 있는지 보면 계산 가능
 - 저장하지 않음
 
 DONE
-- Task status와 Run result를 보면 계산 가능
+- Run Trace의 result를 보면 계산 가능
 - 저장하지 않음
 ```
 
@@ -1749,7 +1902,7 @@ DONE
 
 ```text
 objective.json: task-001 is DONE
-task.yaml:      task-001 is READY
+task revision:  task-001 revision 1 is APPROVED
 run/result:     task-001 failed
 ```
 
@@ -1762,11 +1915,11 @@ objective ledger:
 - task-001 attached
 - task-002 skipped by human
 
-task.yaml:
-- task-001 status: DONE
+task revision:
+- task-001 revision 1: APPROVED
 
 run/result:
-- task-001 result: success
+- run-002 for task-001 revision 1: success
 
 derived queue state:
 - task-001 = DONE
@@ -1781,9 +1934,9 @@ derived queue state:
 - queue item은 taskId, taskRevision, relationState(accepted 또는 approved)를 함께 가리킨다.
 - Task revision이 바뀌면 기존 approval과 queue relation은 무효화되거나 새 item으로 기록된다.
 - SEQUENCE Objective는 derived NEXT가 최대 1개다.
-- 기본 정책에서 ACTIVE Task는 Objective당 최대 1개다.
+- 기본 정책에서 ACTIVE Run은 Objective당 최대 1개다.
 - Queue position은 직접 수정하지 않고 reorder 이벤트로만 바꾼다.
-- Objective snapshot은 ledger, Task Spec, Run Trace에서 재생성 가능해야 한다.
+- Objective snapshot은 ledger, Task Revision, Run Trace에서 재생성 가능해야 한다.
 - raw stdout/stderr/diff는 Objective나 carry-forward context에 들어가지 않는다.
 ```
 
@@ -1813,14 +1966,16 @@ Future segment
 - WAITING
 - BLOCKED
 - NEXT 후보
-- 아직 실행되지 않은 DRAFT / READY Task
+- 아직 실행되지 않은 approved Revision이 연결된 queue item
 ```
+
+Task Draft는 아직 승인된 실행 계약이 아니므로 queue history를 재정렬하는 기준으로 사용하지 않는다.
 
 `QUEUE_REORDERED` 검증 규칙:
 
 ```text
 - CLOSED / CANCELED Objective에서는 reorder할 수 없다.
-- ACTIVE Task가 있으면 reorder할 수 없다.
+- ACTIVE Run이 있으면 reorder할 수 없다.
 - history segment item은 위치를 바꿀 수 없다.
 - futureOrder에는 재정렬 대상 future item이 정확히 한 번씩 포함되어야 한다.
 - 존재하지 않는 taskId를 포함할 수 없다.
@@ -2416,29 +2571,40 @@ UX 원칙:
 ### 7.1 상태 흐름
 
 ```text
-DRAFT
-  -> READY
-  -> RUNNING
-  -> DONE / FAILED / BLOCKED / CANCELED
+Task Draft
+  -> review / edit
+  -> READY_FOR_APPROVAL
+  -> approve
+  -> Task Revision
+  -> Run
+  -> Run-derived State
 ```
 
 상태 의미:
 
 ```text
-DRAFT
-- AI가 만든 초안
+Task Draft
+- AI가 만든 작업 계약 후보
+- 수정 가능
 - 실행 불가
 - 사람이 검토해야 함
 
-READY
-- 사람이 승인한 작업
+READY_FOR_APPROVAL
+- Draft가 review와 validate를 통과한 상태
+- approve 가능
+- 아직 실행 불가
+
+Task Revision
+- 승인된 불변 실행 계약
 - 실행 가능
+- approval / relation / run / summary가 묶이는 단위
 
-RUNNING
-- 실행 중
+Run
+- 특정 Revision을 실행한 시도와 증거
 
-DONE / FAILED / BLOCKED / CANCELED
-- 실행 결과 상태
+Run-derived State
+- Run Trace를 기준으로 계산한 실행 상태
+- ACTIVE / DONE / FAILED / BLOCKED / VERIFIED 등
 ```
 
 ### 7.2 Drafting 규칙
@@ -2446,7 +2612,7 @@ DONE / FAILED / BLOCKED / CANCELED
 Task Drafting은 보수적으로 동작해야 한다.
 
 ```text
-- 생성 Task는 항상 DRAFT
+- 생성 Task는 항상 Task Draft로 시작
 - 기본 guardrails.mode는 SUGGEST_ONLY
 - allowFileEdit 기본 false
 - allowCommandExecution 기본 false
@@ -2458,7 +2624,7 @@ Task Drafting은 보수적으로 동작해야 한다.
 
 ### 7.3 Task Review / Edit
 
-CodeFleet의 최종 사용자 흐름은 사용자가 YAML을 처음부터 직접 작성하는 방식이 아니다. 사용자는 자연어 Intent를 입력하고, CodeFleet은 DRAFT Task를 생성하며, 사용자는 보조 명령을 통해 그 Task를 검토·수정·승인한다.
+CodeFleet의 최종 사용자 흐름은 사용자가 YAML을 처음부터 직접 작성하는 방식이 아니다. 사용자는 자연어 Intent를 입력하고, CodeFleet은 Task Draft를 생성하며, 사용자는 보조 명령을 통해 그 Draft를 검토·수정·승인한다.
 
 초기부터 YAML 직접 편집만을 1차 UX로 두지 않는다. YAML은 저장 형식일 수 있지만, 사용자의 기본 흐름은 Task Review 중심이어야 한다.
 
@@ -2476,19 +2642,21 @@ codefleet run <task-id>
 ```text
 codefleet draft "<user intent>"
   -> Objective 후보 제안
-  -> DRAFT Task 생성
+  -> Task Draft 생성
 
 codefleet task review <task-id>
-  -> Task 계약 검토
+  -> Draft 계약 검토
   -> Objective 연결 검토
   -> continuity accept / approve / reject / 수정
 
 codefleet task approve <task-id>
-  -> Task revision 승인
+  -> Draft를 immutable Task Revision으로 생성
+  -> Revision approval 기록
   -> accepted 또는 approved Objective relation 확인
 
 codefleet run <task-id>
   -> accepted 또는 approved Objective context만 Harness prompt에 포함
+  -> approved Revision만 실행
 ```
 
 `task review`의 책임:
@@ -2501,7 +2669,7 @@ codefleet run <task-id>
 - 필요한 경우 안전한 수정 흐름으로 연결한다.
 ```
 
-`task edit` 또는 review 안의 수정 기능은 Task Spec만 수정한다.
+`task edit` 또는 review 안의 수정 기능은 Task Draft만 수정한다.
 
 금지 사항:
 
@@ -2512,7 +2680,7 @@ codefleet run <task-id>
 - Agent에게 코드 수정 지시 금지
 ```
 
-즉 Task 수정 명령은 실행 명령이 아니라 계약 수정 명령이다.
+즉 Task Draft 수정 명령은 실행 명령이 아니라 계약 후보 수정 명령이다.
 
 핵심 안전 원칙:
 
@@ -2526,33 +2694,36 @@ Approval is bound to a task revision.
 승인은 특정 Task revision에만 유효하다.
 ```
 
-따라서 승인된 Task를 수정하면 기존 승인은 무효화되어야 한다.
+따라서 승인된 Revision을 직접 수정하지 않는다. 승인 후 Task 내용을 바꾸려면 기존 Revision을 기반으로 새 Draft를 만들고, 다시 approve하여 새 Revision을 생성한다.
 
 상태 흐름:
 
 ```text
-DRAFT
+Task Draft
   -> review/edit
   -> validate
+  -> READY_FOR_APPROVAL
   -> approve
-  -> READY
+  -> immutable Revision
 
-READY
+approved Revision
   -> edit
-  -> new revision
-  -> DRAFT
-  -> approval cleared
+  -> new Draft from Revision
+  -> approve
+  -> new immutable Revision
+  -> previous approval/relation invalidated or superseded
 ```
 
 Task Review / Edit 안전 규칙:
 
 ```text
-- READY / RUNNING / DONE Task는 같은 revision에서 직접 수정하지 않는다.
-- 승인 후 수정은 새 revision을 만들고 status를 DRAFT로 되돌린다.
-- approval 정보는 수정된 revision에 승계되지 않는다.
+- Task Draft는 수정 가능하지만 draft-ledger에 변경 이력을 남긴다.
+- approved Revision은 직접 수정하지 않는다.
+- 승인 후 수정은 새 Draft를 만들고 새 Revision을 생성한다.
+- approval 정보는 새 Revision에 자동 승계되지 않는다.
 - Project Profile 정책을 완화하는 변경은 저장하지 못한다.
 - More restrictive wins 원칙을 따른다.
-- 저장 전/후 Task diff를 보여준다.
+- 저장 전/후 Draft diff를 보여준다.
 ```
 
 이 흐름의 목적은 YAML 작성 능력을 사용자에게 요구하는 것이 아니라, AI가 만든 작업 계약을 사람이 안전하게 검토하고 승인할 수 있게 하는 것이다.
@@ -2648,7 +2819,7 @@ Task
 
 ### 8.1 Draft Harness
 
-Draft Harness는 사용자의 자연어 Intent를 DRAFT Task Spec으로 구조화한다.
+Draft Harness는 사용자의 자연어 Intent를 Task Draft로 구조화한다.
 
 Task는 단순한 작업 메모가 아니다.
 
@@ -2678,7 +2849,7 @@ bounded discovery는 Task를 정의하는 데 필요한 범위 안에서만 제�
 - Intent + Project Profile을 읽음
 - AI Task Drafter에게 초안 생성을 위임
 - 보수적인 guardrail 기본값 적용
-- status: DRAFT로 저장
+- Draft State: EDITING으로 저장
 - 실행하지 않음
 ```
 
@@ -2712,22 +2883,22 @@ Draft Harness가 하면 안 되는 것:
 User Intent
   -> Draft Harness
      - read-only bounded discovery
-     - DRAFT Task 생성
+     - Task Draft 생성
   -> Human Approval
   -> Execution Harness
-     - READY Task 실행
+     - approved Revision 실행
      - 수정/검증/로그 수집
   -> Run Trace
 ```
 
 ### 8.2 Execution Harness
 
-Execution Harness는 승인된 READY Task만 실행한다.
+Execution Harness는 사람이 승인한 Task Revision만 실행한다.
 
 책임:
 
 ```text
-- READY Task만 실행
+- approved Revision만 실행
 - Project Profile 정책과 Task를 병합
 - 역할/범위/가드레일/검증 조건을 prompt에 반영
 - Agent Adapter 호출
@@ -2790,11 +2961,12 @@ CodeFleet이 말하는 "안전한 오케스트레이션"은 AI가 실수하지 �
 User Intent
   -> Objective Selection / Creation
   -> Draft Harness
-  -> DRAFT Task
-  -> Task Review
-  -> Human Approval of Task Revision
+  -> Task Draft
+  -> Task Review / Edit
+  -> Draft READY_FOR_APPROVAL
+  -> Human Approval creates Task Revision
   -> Accept / Approve Objective Relation
-  -> READY Task
+  -> Approved Task Revision
   -> Objective Queue Update
   -> Execution Harness
   -> Isolated / Controlled Agent Run
@@ -3120,6 +3292,7 @@ v0.1 구현 내용:
 - Objective State 규칙
 - Queue Item State 규칙
 - Task Relation State 규칙
+- Task Draft / Revision State 규칙
 - Task와 Task Revision 분리
 - Task revision lineage와 revision-bound approval / relation / run / summary 원칙
 - QUEUE_REORDERED의 보수적 future order semantics
@@ -3129,45 +3302,40 @@ v0.1 구현 내용:
 다음으로 논의할 항목:
 
 ```text
-1. Task Revision / Approval State 세부 규칙
-   - DRAFT / READY / RUNNING / DONE / FAILED / BLOCKED / CANCELED 의미
-   - DRAFT -> READY 승인 조건
-   - FAILED / BLOCKED retry 또는 resume 조건
-   - approval invalidation 이벤트와 revision lineage 연결
-
-2. Run-derived State 세부 규칙
+1. Run-derived State 세부 규칙
    - ACTIVE 계산 기준
    - DONE / FAILED / VERIFIED 계산 기준
-   - Run result와 Task status 충돌 처리
+   - Run Trace와 derived state 불일치 처리
+   - retry 또는 resume 조건
 
-3. Context Carry-forward State 세부 규칙
+2. Context Carry-forward State 세부 규칙
    - Decision 기록 / revoke 규칙
    - Summary attach / revoke 규칙
    - sanitized context 조건
 
-4. Corruption / Repair State 세부 규칙
+3. Corruption / Repair State 세부 규칙
    - corruption marker 생성 조건
    - rebuild만으로 복구 가능한 경우
    - 보정 이벤트가 필요한 repair 경우
 
-5. Harness 상세 정의
+4. Harness 상세 정의
    - Draft Harness
    - Execution Harness
    - Guardrail 단계
    - Policy 병합 방식
 
-6. Project Profile 최종 스키마
+5. Project Profile 최종 스키마
    - policies
    - defaults
    - references
    - local-only 설정 분리
 
-7. Workspace discovery
+6. Workspace discovery
    - 현재 cwd 기준
    - 부모 디렉터리 탐색
    - 명시적 --workspace 옵션
 
-8. Run Summary 설계
+7. Run Summary 설계
    - summary.md 자동 생성
    - sanitization 규칙
    - Notion export adapter
