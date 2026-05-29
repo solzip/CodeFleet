@@ -533,7 +533,8 @@ CANCELED
 CORRUPTED
 - ledger / task / run / snapshot 불일치로 신뢰할 수 없는 Objective
 - 일반 mutation 금지
-- validate / rebuild / repair만 허용
+- investigation / recovery capability만 허용
+- 정확한 허용 범위는 finding severity, scope impact set, capability gating으로 결정
 ```
 
 전이:
@@ -762,7 +763,8 @@ CANCELED
 
 CORRUPTED
 - queue item mutation 금지
-- validate / rebuild / repair만 허용
+- investigation / recovery capability만 허용
+- 정확한 허용 범위는 finding severity, scope impact set, capability gating으로 결정
 ```
 
 최종 원칙:
