@@ -391,6 +391,7 @@ Context Carry-forward State
 - Summary
 
 Run-derived State
+- NO_RUN
 - ACTIVE
 - DONE
 - FAILED
@@ -1066,6 +1067,116 @@ Draft 상태는 검토 / 승인 준비 여부를 관리한다.
 Revision 상태는 계약의 유효성을 관리한다.
 Run-derived 상태는 실행 결과를 관리한다.
 ```
+
+### 0.7 Run-derived State 규칙
+
+Run-derived State는 저장 원본이 아니다. 특정 `objectiveQueueItemId + taskId + taskRevision`에 연결된 Run Trace들을 읽어 계산한다.
+
+정의:
+
+```text
+Run-derived State
+= approved Revision에 대한 실행 시도들의 현재 해석
+= Run Trace에서 계산되는 상태
+= Queue State를 자동 변경하지 않는 상태
+```
+
+계산 단위:
+
+```text
+objectiveQueueItemId
++ taskId
++ taskRevision
+```
+
+`taskId`만으로 계산하지 않는다. 같은 Task라도 Revision이 다르면 실행 계약이 다르고, 같은 Revision이라도 Objective queue item이 다르면 실행 맥락이 다를 수 있다.
+
+상태:
+
+```text
+NO_RUN
+- 해당 approved Revision에 대한 Run이 아직 없음
+
+ACTIVE
+- 시작된 Run이 있고 아직 terminal result가 없음
+
+FAILED
+- 최신 유효 terminal Run이 실패함
+- agent error, command error, verification fail, guardrail violation, review rejected 포함
+
+DONE
+- 최신 유효 terminal Run이 성공함
+- 필요한 자동 검증이 통과함
+- human review가 아직 최종 승인되지 않았을 수 있음
+
+VERIFIED
+- 성공한 Run을 사람이 리뷰하고 받아들임
+- queue completion의 가장 강한 근거
+```
+
+`BLOCKED`는 Run-derived State에 넣지 않는다.
+
+이유:
+
+```text
+BLOCKED는 Objective / Queue 흐름에 대한 명시적 사람 결정이다.
+Run은 막힌 이유를 증거로 남길 수 있지만, Queue item을 BLOCKED로 바꾸지는 않는다.
+Queue item을 BLOCKED로 바꾸려면 QUEUE_ITEM_BLOCKED 이벤트가 필요하다.
+```
+
+분리 원칙:
+
+```text
+Run Trace records execution evidence.
+Run-derived State interprets that evidence.
+Queue State decides workflow control.
+```
+
+한국어:
+
+```text
+Run Trace는 실행 증거를 남긴다.
+Run-derived State는 그 증거를 해석한다.
+Queue State는 Objective 흐름 제어를 담당한다.
+```
+
+불변식:
+
+```text
+- Run-derived State는 Queue State를 자동 변경하지 않는다.
+- Queue State는 Run-derived State를 원본 진실로 저장하지 않는다.
+- Run은 objectiveQueueItemId + taskId + taskRevision에 묶인다.
+- Revision이 바뀌면 Run-derived State는 새로 계산한다.
+- 이전 Revision의 Run 결과는 새 Revision에 승계되지 않는다.
+- terminal Run은 수정하지 않고 새 Run을 만든다.
+- ACTIVE Run이 있으면 같은 Revision의 새 Run을 기본적으로 막는다.
+- VERIFIED 이후 재실행은 명시적 reason이 필요하다.
+```
+
+자동 전파 금지:
+
+```text
+Run 실패 -> Queue BLOCKED 자동 변경 금지
+Run 성공 -> Objective CLOSED 자동 변경 금지
+새 Revision 생성 -> 이전 Run 결과 자동 승계 금지
+최신 Run 존재 -> 기존 VERIFIED 자동 무효화 금지
+```
+
+예:
+
+```text
+task-001 revision 1
+run-001 FAILED
+run-002 DONE
+run-002 VERIFIED
+
+task-001 revision 2
+run-003 FAILED
+```
+
+이 경우 revision 1의 VERIFIED와 revision 2의 FAILED는 서로 다른 계산 단위에 속한다. revision 2의 실패가 revision 1의 검증된 성공을 덮어쓰지 않는다.
+
+VERIFIED 이후 같은 Revision을 다시 실행하려면 기존 VERIFIED를 조용히 덮어쓰지 않는다. 새 Run을 만들고, retry / reopen reason을 남기며, 필요하면 별도 review로 다시 판단한다.
 
 원칙:
 
@@ -1778,7 +1889,7 @@ Queue:
 1번이 끝났고 2번을 봐야 한다면 cursor는 2번 Task를 가리킨다.
 ```
 
-하지만 cursor는 단독 권위 상태가 되면 안 된다. 예를 들어 cursor는 2번을 가리키는데 2번 Task가 이미 DONE이고 3번이 NEXT여야 한다면 상태가 꼬인다.
+하지만 cursor는 단독 권위 상태가 되면 안 된다. 예를 들어 cursor는 2번을 가리키는데 2번 queue item의 Run-derived State가 이미 DONE이고 3번이 NEXT여야 한다면 상태가 꼬인다.
 
 따라서 CodeFleet은 cursor를 다음처럼 취급한다.
 
@@ -1906,7 +2017,7 @@ task revision:  task-001 revision 1 is APPROVED
 run/result:     task-001 failed
 ```
 
-이런 상태가 생기면 무엇을 믿어야 할지 애매해진다. 따라서 Objective Queue에는 `DONE`을 원본 진실로 저장하지 않고, Task와 Run을 기준으로 계산한다.
+이런 상태가 생기면 무엇을 믿어야 할지 애매해진다. 따라서 Objective Queue에는 `DONE`을 원본 진실로 저장하지 않고, approved Revision과 Run Trace를 기준으로 계산한다.
 
 좋은 상태 예시:
 
@@ -2604,7 +2715,7 @@ Run
 
 Run-derived State
 - Run Trace를 기준으로 계산한 실행 상태
-- ACTIVE / DONE / FAILED / BLOCKED / VERIFIED 등
+- NO_RUN / ACTIVE / FAILED / DONE / VERIFIED
 ```
 
 ### 7.2 Drafting 규칙
@@ -3293,6 +3404,7 @@ v0.1 구현 내용:
 - Queue Item State 규칙
 - Task Relation State 규칙
 - Task Draft / Revision State 규칙
+- Run-derived State 규칙
 - Task와 Task Revision 분리
 - Task revision lineage와 revision-bound approval / relation / run / summary 원칙
 - QUEUE_REORDERED의 보수적 future order semantics
@@ -3302,40 +3414,34 @@ v0.1 구현 내용:
 다음으로 논의할 항목:
 
 ```text
-1. Run-derived State 세부 규칙
-   - ACTIVE 계산 기준
-   - DONE / FAILED / VERIFIED 계산 기준
-   - Run Trace와 derived state 불일치 처리
-   - retry 또는 resume 조건
-
-2. Context Carry-forward State 세부 규칙
+1. Context Carry-forward State 세부 규칙
    - Decision 기록 / revoke 규칙
    - Summary attach / revoke 규칙
    - sanitized context 조건
 
-3. Corruption / Repair State 세부 규칙
+2. Corruption / Repair State 세부 규칙
    - corruption marker 생성 조건
    - rebuild만으로 복구 가능한 경우
    - 보정 이벤트가 필요한 repair 경우
 
-4. Harness 상세 정의
+3. Harness 상세 정의
    - Draft Harness
    - Execution Harness
    - Guardrail 단계
    - Policy 병합 방식
 
-5. Project Profile 최종 스키마
+4. Project Profile 최종 스키마
    - policies
    - defaults
    - references
    - local-only 설정 분리
 
-6. Workspace discovery
+5. Workspace discovery
    - 현재 cwd 기준
    - 부모 디렉터리 탐색
    - 명시적 --workspace 옵션
 
-7. Run Summary 설계
+6. Run Summary 설계
    - summary.md 자동 생성
    - sanitization 규칙
    - Notion export adapter
