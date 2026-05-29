@@ -3217,6 +3217,143 @@ Many readers allowed.
 - 초기 설계에서는 병렬 mutation 최적화보다 일관성을 우선한다.
 ```
 
+### 0.12 확정 규칙 작성 기준
+
+CodeFleet 문서의 모든 내용이 같은 성격은 아니다. 최종 모델의 실행 규칙, 불변식, 상태 전이, policy gate, repair rule은 확정 규칙이어야 한다. 반면 예시, 후보 목록, 버전별 구현 계획, 장기 발전 방향은 확정 규칙이 아니다.
+
+따라서 문서의 내용을 다음 4가지로 구분한다.
+
+```text
+FINAL RULE
+= 최종 모델에서 흔들리면 안 되는 실행 / 검증 / 차단 규칙
+
+DESIGN CANDIDATE
+= 아직 확정 전인 설계 후보
+
+EXAMPLE
+= 규칙을 설명하기 위한 예시이며, 그 자체가 판정 기준은 아님
+
+VERSION PLAN
+= FINAL RULE을 어떤 버전에서 얼마나 구현할지 나눈 구현 계획
+```
+
+확정 규칙은 구체적이어야 한다.
+
+```text
+구체적
+= 적용 대상, 입력, 출력, 상태 변화, 금지 동작이 명시되어 있음
+```
+
+확정 규칙은 정량적이어야 한다.
+
+```text
+정량적
+= 사람이나 LLM의 감이 아니라, 같은 입력과 같은 rule set에서 같은 결과가 나오는 deterministic / machine-checkable condition을 가짐
+```
+
+확정 규칙은 전제를 가져야 한다.
+
+```text
+전제
+= 해당 규칙이나 action을 적용하기 전에 반드시 참이어야 하는 조건
+```
+
+확정 규칙 최소 필드:
+
+```text
+ruleId
+= 규칙을 식별하는 stable id
+
+status
+= FINAL | CANDIDATE | EXAMPLE | VERSION_PLAN
+
+scope
+= WORKSPACE | OBJECTIVE | TASK | QUEUE_ITEM | TASK_REVISION | RUN | CARRY_FORWARD | SNAPSHOT | POLICY
+
+sourceOfTruth
+= 판정에 사용하는 원본 진실
+
+inputs
+= 판정에 필요한 구조화 입력
+
+preconditions
+= 실행 / 판정 전에 만족해야 하는 조건
+
+condition
+= deterministic 판정식
+
+allowedEffect
+= 통과 시 허용되는 상태 변화나 capability
+
+deniedEffect
+= 실패 시 차단되는 상태 변화나 capability
+
+failureFinding
+= 실패 시 생성할 finding category / severity / evidence
+
+repairBehavior
+= repair / rebuild / corrective event / manual action 중 어떤 흐름으로 연결되는지
+```
+
+규칙 확정 기준:
+
+```text
+1. sourceOfTruth가 없으면 FINAL RULE이 될 수 없다.
+2. preconditions가 없으면 action rule이 될 수 없다.
+3. condition이 deterministic하지 않으면 validation rule이 될 수 없다.
+4. failureFinding이 없으면 corruption / policy / validation rule이 될 수 없다.
+5. allowedEffect와 deniedEffect가 없으면 capability gating rule이 될 수 없다.
+6. repairBehavior가 없으면 repair rule이 될 수 없다.
+```
+
+문서 작성 규칙:
+
+```text
+- "후보", "예시", "초기에는", "장기적으로", "가능하면", "필요하면"은 FINAL RULE 문장에 쓰지 않는다.
+- 이런 표현이 필요한 내용은 DESIGN CANDIDATE, EXAMPLE, VERSION_PLAN으로 명시한다.
+- FINAL RULE은 사람이 읽는 설명과 별개로 machine-checkable form으로 옮길 수 있어야 한다.
+- LLM이 해석해야만 판정 가능한 규칙은 FINAL RULE이 아니다.
+- 사람이 감으로 승인해야만 판정 가능한 규칙은 FINAL RULE이 아니다.
+```
+
+검증 기준:
+
+```text
+same workspace state
++ same CodeFleet version
++ same Project Profile
++ same validation rule set
+= same validation result
+```
+
+최종 원칙:
+
+```text
+Final rules must be concrete.
+Final rules must be deterministic.
+Final rules must declare preconditions.
+Examples and candidates must not masquerade as rules.
+```
+
+한국어:
+
+```text
+확정 규칙은 구체적이어야 한다.
+확정 규칙은 결정론적이어야 한다.
+확정 규칙은 전제를 명시해야 한다.
+예시와 후보가 규칙처럼 보이면 안 된다.
+```
+
+현재 문서에 대한 적용:
+
+```text
+0.x의 Objective / Queue / Task relation / Draft-Revision / Run-derived / Risk / Carry-forward / Corruption-Repair 모델은 FINAL RULE로 정리해 간다.
+
+Harness, Project Profile, Run Summary, AgentRole, Guardrail, Verification 섹션은 아직 일부가 DESIGN CANDIDATE 또는 EXAMPLE 수준이다.
+
+따라서 다음 논의에서는 이 후반 섹션들을 위 확정 규칙 작성 기준에 맞춰 하나씩 FINAL RULE로 승격한다.
+```
+
 ## 1. 최종 지향 정의
 
 위 고정 목표를 오케스트레이션 흐름으로 풀면 다음과 같다.
@@ -5389,6 +5526,7 @@ v0.1 구현 내용:
 - Task revision lineage와 revision-bound approval / relation / run / summary 원칙
 - QUEUE_REORDERED의 보수적 future order semantics
 - ledger event 최소 세트와 "ledger는 결정 로그" 원칙
+- 확정 규칙은 구체적 / 결정론적 / 전제 명시 기준을 만족해야 한다는 문서 작성 기준
 ```
 
 다음으로 논의할 항목:
