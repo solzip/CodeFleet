@@ -1067,6 +1067,150 @@ Future segment
 }
 ```
 
+Ledger event 최소 세트:
+
+```text
+Objective events
+- OBJECTIVE_CREATED
+- OBJECTIVE_UPDATED
+- OBJECTIVE_CLOSED
+- OBJECTIVE_REOPENED
+- OBJECTIVE_CANCELED
+
+Queue events
+- TASK_ATTACHED
+- QUEUE_ITEM_BLOCKED
+- QUEUE_ITEM_UNBLOCKED
+- QUEUE_ITEM_SKIPPED
+- QUEUE_ITEM_UNSKIPPED
+- QUEUE_ITEM_CANCELED
+- QUEUE_REORDERED
+
+Relation events
+- TASK_RELATION_ACCEPTED
+- TASK_RELATION_APPROVED
+- TASK_RELATION_REJECTED
+- TASK_RELATION_INVALIDATED
+
+Context events
+- DECISION_RECORDED
+- DECISION_REVOKED
+- SUMMARY_ATTACHED
+- SUMMARY_REVOKED
+```
+
+Ledger는 제안 로그가 아니라 결정 로그다.
+
+따라서 `TASK_RELATION_PROPOSED`는 ledger에 남기지 않는다. Proposed relation은 Draft Task 안의 제안일 뿐이며, 실행에는 사용할 수 없다. 사람이 review 단계에서 accept / approve / reject한 순간부터 ledger에 기록한다.
+
+예시:
+
+```yaml
+objective:
+  proposed:
+    objectiveId: auth-error-response
+    relation: CONTINUATION
+    confidence: 0.82
+    reason: "사용자가 이어서 에러 응답 통일 작업을 요청했고 열린 Objective가 일치함"
+```
+
+위 proposed relation은 Task Draft에만 존재한다. 사람이 수락하면 ledger에는 다음처럼 결정 이벤트가 남는다.
+
+```json
+{
+  "eventId": "evt_20260529_103000_001",
+  "seq": 12,
+  "type": "TASK_RELATION_ACCEPTED",
+  "objectiveId": "auth-error-response",
+  "taskId": "task-signup-error-implementation",
+  "taskRevision": 1,
+  "relation": "CONTINUATION",
+  "actor": "user",
+  "at": "2026-05-29T10:30:00+09:00"
+}
+```
+
+Ledger event 공통 필드:
+
+```text
+eventId
+seq
+type
+objectiveId
+actor
+at
+reason optional
+```
+
+공통 규칙:
+
+```text
+- eventId는 중복되면 안 된다.
+- seq는 1부터 시작하고 끊기면 안 된다.
+- ledger는 append-only다.
+- 중간 줄은 수정하지 않는다.
+- 잘못된 이벤트는 보정 이벤트로 처리한다.
+- Task 실행 시작/성공/실패는 ledger에 기록하지 않는다.
+```
+
+실행 이벤트는 Objective ledger에 넣지 않는다.
+
+```text
+넣지 않음:
+- TASK_STARTED
+- TASK_DONE
+- TASK_FAILED
+- TEST_PASSED
+- TEST_FAILED
+```
+
+이 이벤트들은 Objective / Queue 결정이 아니라 실행 결과에 속한다. 실행 결과의 진실은 Run Trace에 남긴다.
+
+이벤트별 주요 추가 필드:
+
+```text
+TASK_ATTACHED
+- taskId
+- taskRevision
+- relation
+- position
+
+TASK_RELATION_ACCEPTED / APPROVED / REJECTED / INVALIDATED
+- taskId
+- taskRevision
+- relation
+- relationState
+
+QUEUE_ITEM_BLOCKED / UNBLOCKED / SKIPPED / UNSKIPPED / CANCELED
+- taskId
+- taskRevision
+
+QUEUE_REORDERED
+- futureOrder
+
+DECISION_RECORDED / REVOKED
+- decisionId
+- text 또는 targetDecisionId
+- sourceTaskId
+
+SUMMARY_ATTACHED / REVOKED
+- taskId
+- summaryPath
+```
+
+`reason`이 필수인 이벤트:
+
+```text
+- QUEUE_ITEM_BLOCKED
+- QUEUE_ITEM_SKIPPED
+- QUEUE_ITEM_CANCELED
+- QUEUE_REORDERED
+- OBJECTIVE_CLOSED
+- OBJECTIVE_CANCELED
+- DECISION_REVOKED
+- SUMMARY_REVOKED
+```
+
 이 설계의 목적은 OMX의 durable workflow 장점을 가져오되, CodeFleet의 핵심인 승인 가능한 Task 계약과 검증 가능한 실행 증거를 흐리지 않는 것이다.
 
 ### 6.2 Task Spec
