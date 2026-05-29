@@ -2003,10 +2003,17 @@ Task
 = 사용자가 맡기려는 하나의 작업 흐름
 = 안정적인 taskId를 가진다.
 
+Task Draft
+= 승인 전 수정 가능한 계약 후보
+= draft.yaml에 저장된다.
+= draft-ledger.jsonl로 변경 이력을 남긴다.
+= 실행 불가
+
 Task Revision
 = 실행 가능한 계약 단위
 = 특정 시점의 Task Spec 내용
 = approval, objective relation, run, summary가 묶이는 단위
+= immutable
 ```
 
 최종 파일 구조:
@@ -2015,6 +2022,8 @@ Task Revision
 .codefleet/tasks/
   <task-id>/
     task.json
+    draft.yaml
+    draft-ledger.jsonl
     revisions/
       1.yaml
       2.yaml
@@ -2029,6 +2038,14 @@ task.json
 = 현재 revision
 = revision lineage
 = 전체 Task 흐름 요약
+
+draft.yaml
+= 현재 편집 중인 Task 계약 후보
+= 승인 전이므로 수정 가능
+= proposed relation만 가질 수 있음
+
+draft-ledger.jsonl
+= draft가 언제, 왜, 어떻게 바뀌었는지 기록
 
 revisions/<n>.yaml
 = 특정 revision의 실행 계약
@@ -2054,21 +2071,63 @@ Run Summary
 
 revision 없이 taskId만으로 승인, 실행, summary를 연결하지 않는다. revision이 빠지면 어떤 계약을 승인했는지, 어떤 계약을 실행했는지 알 수 없다.
 
+하위로 내려가는 실행 경로:
+
+```text
+Objective
+-> queue item
+-> taskId + taskRevision
+-> revisions/<n>.yaml
+-> approved contract
+-> Run
+```
+
+상위로 올라가는 추적 경로:
+
+```text
+Run
+-> taskId + taskRevision
+-> revisions/<n>.yaml
+-> objective relation
+-> objective ledger / queue item
+-> Objective
+```
+
+Run Trace는 실행 당시의 연결 snapshot을 가진다.
+
+```json
+{
+  "runId": "run-002",
+  "taskId": "signup-error-response",
+  "taskRevision": 2,
+  "objectiveId": "auth-error-response",
+  "objectiveQueueItemId": "qitem-003"
+}
+```
+
+`objectiveId`와 `objectiveQueueItemId`는 Run Trace 안에서는 실행 당시 snapshot이다. 권위는 Objective ledger와 Task Revision의 relation에 있으며, validate는 Run Trace의 snapshot이 이 권위 상태와 충돌하지 않는지 확인한다.
+
 처리 흐름 예시:
 
 ```text
 task signup-error-response 생성
--> revision 1 DRAFT
+-> draft.yaml 생성
+-> draft edit
+-> approve draft
+-> revision 1 생성
 -> relation accepted
--> revision 1 approved READY
+-> revision 1 approved
 -> run-001 실행
 -> run-001 FAILED
 -> task edit
--> revision 2 DRAFT 생성
+-> revision 1 기반 새 draft 생성
+-> draft edit
+-> approve draft
+-> revision 2 생성
 -> revision 1 approval invalidated
 -> revision 1 relation invalidated
--> revision 2 relation proposed
--> revision 2 approved READY
+-> revision 2 relation proposed / accepted / approved
+-> revision 2 approved
 -> run-002 실행
 -> run-002 DONE
 ```
@@ -2097,9 +2156,12 @@ runs/<run-id>/result.json
 
 ```text
 - Task ID는 논리적 작업 단위로 유지한다.
+- Task Draft는 수정 가능하지만 draft-ledger로 변경 이력을 남긴다.
 - Task Revision은 실행 계약 단위다.
+- Task Revision은 생성 후 직접 수정하지 않는다.
 - 승인, relation, run, summary는 모두 revision에 묶인다.
-- Task 내용이 바뀌면 새 revision을 만든다.
+- 승인 전 변경은 draft를 수정한다.
+- 승인 후 Task 내용이 바뀌면 새 draft를 만들고 새 revision을 생성한다.
 - approval은 revision을 넘어 승계되지 않는다.
 - relation도 revision을 넘어 승계되지 않는다.
 - run result도 revision을 넘어 승계되지 않는다.
@@ -2111,15 +2173,21 @@ runs/<run-id>/result.json
 최종 원칙:
 
 ```text
-Stable identity, immutable contracts, traceable transitions.
+Drafts are editable and audited.
+Revisions are immutable and executable.
+Approvals bind only to revisions.
+Runs bind only to revisions.
+Objective queue items point to revisions.
 ```
 
 한국어:
 
 ```text
-식별자는 안정적으로 유지한다.
-계약은 revision으로 불변화한다.
-변경은 추적 가능한 전이로 남긴다.
+Draft는 수정 가능하지만 변경 이력을 남긴다.
+Revision은 불변 실행 계약이다.
+승인은 revision에만 묶인다.
+Run은 revision에만 묶인다.
+Objective queue item은 revision을 가리킨다.
 ```
 
 Project Profile이 프로젝트별 정책이라면:
