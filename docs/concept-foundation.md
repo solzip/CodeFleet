@@ -233,19 +233,23 @@ Corruption marker 예시:
 
 ```json
 {
-  "objectiveId": "auth-error-response",
-  "detectedAt": "2026-05-29T11:00:00+09:00",
-  "failedCommand": "task relation accept task-001",
-  "lastLedgerSeq": 12,
-  "validationErrors": [
-    "taskRevision mismatch: task-001 expected 1 but found 2"
+  "markerId": "corr-20260529-001",
+  "status": "ACTIVE",
+  "scope": "OBJECTIVE",
+  "target": {
+    "objectiveId": "auth-error-response"
+  },
+  "findings": [
+    "finding-20260529-001"
   ],
-  "recommendedActions": [
-    "codefleet objective validate auth-error-response",
-    "codefleet objective repair auth-error-response"
-  ]
+  "createdAt": "2026-05-29T11:00:00+09:00",
+  "updatedAt": "2026-05-29T11:00:00+09:00",
+  "detectedBy": "codefleet-validate",
+  "ruleSetVersion": 1
 }
 ```
+
+CorruptionMarker는 원인을 복사하지 않는다. 원인은 expected / actual / evidence를 가진 finding에 남기고, marker는 active finding bundle로 동작한다.
 
 Repair 원칙:
 
@@ -442,9 +446,9 @@ Keep rules precise inside each domain.
 세부 규칙은 각 도메인 안에서 정확히 정의한다.
 ```
 
-현재 단계에서는 상위 상태 도메인 7개만 고정한다. 세부 전이 규칙은 각 도메인을 설계할 때 별도로 확정한다.
+상위 상태 도메인은 7개로 고정한다. 세부 전이 규칙은 각 도메인 내부에서 확정하고 확장한다.
 
-도메인별로 앞으로 정할 항목:
+도메인별 세부 규칙 범위:
 
 ```text
 Objective State
@@ -482,7 +486,7 @@ Run-derived State
 - Run Trace와 derived state 불일치 처리
 
 Corruption / Repair State
-- corruption marker 생성 조건
+- Finding / Severity / Category / Marker 판정 조건
 - rebuild만으로 복구 가능한 경우
 - repair가 보정 이벤트를 append해야 하는 경우
 ```
@@ -2559,6 +2563,157 @@ Run run-002 = CORRUPTION
 
 Workspace = CORRUPTION
 -> 전체 mutation / execution 차단
+```
+
+CorruptionMarker:
+
+```text
+CorruptionMarker
+= active corruption findings를 scope / target 단위로 묶는 operational index
+= gating truth가 아님
+= 원인 truth가 아님
+```
+
+CorruptionMarker는 하나의 자료구조다. Workspace / Objective / Run / CarryForward별로 다른 marker 모델을 만들지 않는다. 구분은 `scope`와 `target`으로 한다.
+
+```text
+single CorruptionMarker model + scoped target
+```
+
+Finding과 Marker의 차이:
+
+```text
+Finding
+= 무엇이 왜 깨졌는가
+= expected / actual / evidence를 가진다
+= capability gating의 입력이다
+
+Marker
+= 어디가 active corrupted 상태인가
+= findingId 목록을 가진다
+= 운영상 상태 추적과 resolve 관리를 위한 index다
+```
+
+중요:
+
+```text
+Marker가 capability를 직접 결정하지 않는다.
+Capability gating은 active finding의 severity / scope impact set으로 계산한다.
+Marker는 active finding bundle이다.
+```
+
+생성 규칙:
+
+```text
+if finding.severity == CORRUPTION:
+    markerKey = finding.scope + stableTargetKey(finding.target)
+    upsert CorruptionMarker(markerKey)
+    add findingId
+```
+
+동일성 규칙:
+
+```text
+same scope + same stableTargetKey
+-> same marker
+
+same markerKey
+-> active marker 최대 1개
+```
+
+marker 최소 필드:
+
+```yaml
+markerId: corr-20260529-001
+status: ACTIVE
+scope: OBJECTIVE
+target:
+  objectiveId: auth-error-response
+findings:
+  - finding-001
+  - finding-002
+createdAt: 2026-05-29T14:20:00+09:00
+updatedAt: 2026-05-29T14:25:00+09:00
+detectedBy: codefleet-validate
+ruleSetVersion: 1
+```
+
+marker에는 expected / actual / evidence를 복사하지 않는다. 원인은 finding에 있으며, marker는 findingId를 참조한다.
+
+상태:
+
+```text
+ACTIVE
+- 해당 scope / target에 active CORRUPTION finding이 있음
+
+RESOLVED
+- repair / rebuild / validation으로 active CORRUPTION finding이 없어짐
+- repair log 또는 validate clean 근거 필요
+
+ARCHIVED
+- resolved marker를 장기 보존 상태로 이동
+```
+
+resolve 규칙:
+
+```text
+- validate clean 없이 marker resolve 금지
+- repair log 없이 marker resolve 금지
+- linked active finding이 남아 있으면 marker resolve 금지
+- marker 삭제로 corruption을 해결한 것처럼 처리 금지
+```
+
+AI 오케스트레이션 관점의 목적:
+
+```text
+1. 오염된 context가 다음 Agent prompt에 들어가지 못하게 막는다.
+2. 깨진 Task / Run / CarryForward만 실행 / 승인 흐름에서 제외한다.
+3. 무관한 Objective나 Task는 계속 진행 가능하게 한다.
+4. repair 후 어떤 맥락을 다시 사용할 수 있는지 명확히 한다.
+```
+
+예:
+
+```text
+scope: RUN
+target: run-002
+
+차단:
+- run-002 review write
+- run-002를 source로 한 carry-forward attach
+- run-002 기반 VERIFIED 계산
+
+허용 가능:
+- 같은 Objective의 다른 독립 queue item inspect
+- 무관한 run show
+- 다른 Objective 진행
+```
+
+Carry-forward 오염 예:
+
+```text
+scope: CARRY_FORWARD
+target: cf-007
+
+차단:
+- cf-007 포함 prompt 생성
+- cf-007 attach / re-attach
+
+허용 가능:
+- cf-008 사용
+- 다른 Decision 사용
+- 해당 Objective의 unrelated Task review
+```
+
+Execution Harness의 사전 gating 흐름:
+
+```text
+1. Task Revision 확인
+2. Objective relation 확인
+3. CarryForward context 구성 후보 확인
+4. 관련 active finding / marker 조회
+5. scope impact set이 execution target에 닿는지 계산
+6. EXECUTE capability가 deny되면 실행 중단
 ```
 
 원칙:
@@ -4810,6 +4965,9 @@ v0.1 구현 내용:
 - Context Carry-forward State 규칙
 - Corruption 판정 원칙
 - Invariant Core / Extensible Layer 원칙
+- Finding category taxonomy
+- Severity capability gating 원칙
+- 단일 CorruptionMarker + scope / target 모델
 - Task와 Task Revision 분리
 - Task revision lineage와 revision-bound approval / relation / run / summary 원칙
 - QUEUE_REORDERED의 보수적 future order semantics
@@ -4820,9 +4978,9 @@ v0.1 구현 내용:
 
 ```text
 1. Corruption / Repair State 세부 규칙
-   - corruption marker 생성 조건
    - rebuild만으로 복구 가능한 경우
    - 보정 이벤트가 필요한 repair 경우
+   - repair log와 ledger correction event의 관계
 
 2. Harness 상세 정의
    - Draft Harness
