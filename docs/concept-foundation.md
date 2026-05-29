@@ -2445,7 +2445,7 @@ denied:
 - RISK_LOWER
 ```
 
-`REBUILD_REQUIRED`는 원본 진실이 정상이라는 뜻이므로 repair가 아니라 rebuild로 해결해야 한다. rebuild 실패 후에는 finding이 `CORRUPTION`으로 승격될 수 있다.
+`REBUILD_REQUIRED`로 분류되려면 원본 진실이 정상이어야 한다. 따라서 repair가 아니라 rebuild로 해결해야 한다. rebuild 전 source-of-truth validation이 실패하면 finding은 `CORRUPTION`으로 승격될 수 있다.
 
 ```text
 CORRUPTION
@@ -2510,6 +2510,41 @@ EXPIRE_CONTEXT
 UPDATE_POLICY
 ```
 
+공통 실행 원칙:
+
+```text
+No precondition, no action.
+```
+
+한국어:
+
+```text
+전제가 없으면 실행도 없다.
+```
+
+모든 repair / rebuild action은 전제를 명시해야 한다. 전제가 검증되지 않으면 실행하지 않는다.
+
+```text
+Preconditions must be explicit.
+Preconditions must be checked.
+Failed precondition blocks the action.
+```
+
+`rebuild`는 상태를 한번 고쳐보는 명령이 아니다.
+
+```text
+rebuild
+= 원본 진실이 정상임을 확인한 뒤 파생물을 재생성하는 명령
+```
+
+원본이 잘못된 경우에는 rebuild를 실행하지 않는다. repair planner로 전환한다.
+
+```text
+source-of-truth invariant violation
+-> rebuild denied
+-> repair planner
+```
+
 REBUILD_DERIVED:
 
 ```text
@@ -2540,6 +2575,45 @@ preconditions:
 records:
 - repair log required
 - ledger correction event not required
+```
+
+REBUILD_DERIVED allowed iff:
+
+```text
+1. finding.category in {SNAPSHOT_CONSISTENCY, READ_MODEL_CONSISTENCY}
+2. finding.severity == REBUILD_REQUIRED
+3. all source-of-truth validation checks pass
+4. target artifact is derived
+5. rebuild can deterministically regenerate the artifact
+6. rebuilt output can be validated against source of truth
+```
+
+REBUILD_DERIVED flow:
+
+```text
+1. validate source-of-truth checks
+2. if source-of-truth finding exists:
+     stop rebuild
+     emit / keep source-of-truth finding
+     hand off to repair planner
+3. rebuild derived artifact
+4. validate rebuilt artifact
+5. write repair log
+6. resolve REBUILD_REQUIRED finding / marker only if validation is clean
+```
+
+최종 원칙:
+
+```text
+Rebuild repairs derived artifacts only.
+Rebuild never repairs source-of-truth inconsistency.
+```
+
+한국어:
+
+```text
+rebuild는 파생물만 고친다.
+rebuild는 원본 진실 간 불일치를 고치지 않는다.
 ```
 
 RESTORE_SOURCE:
