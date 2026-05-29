@@ -544,6 +544,136 @@ CORRUPTED는 repair가 필요하다.
 BLOCKED는 계획은 허용하지만 실행은 기본적으로 막는다.
 ```
 
+### 0.4 Queue Item State 규칙
+
+Queue Item State는 Objective 안에서 특정 Task를 어떻게 취급하는지를 관리한다.
+
+Queue Item State는 실행 결과를 표현하지 않는다. 실행 중인지, 완료됐는지, 실패했는지는 Run-derived State에서 계산한다.
+
+저장 상태:
+
+```text
+WAITING
+- Objective queue에 들어왔지만 아직 진행 대상이 아닌 상태
+- 기본 상태
+
+BLOCKED
+- 이 queue item을 진행하려면 추가 정보, 결정, 선행 조건이 필요한 상태
+- reason 필수
+
+SKIPPED
+- 이 Objective에서는 해당 Task를 건너뛰기로 결정한 상태
+- reason 필수
+- 기본적으로 run 불가
+
+CANCELED
+- 이 queue item을 취소한 상태
+- terminal
+- reason 필수
+- run 불가
+```
+
+저장하지 않는 계산 상태:
+
+```text
+NEXT
+= queue policy와 앞 item 상태로 계산
+
+ACTIVE
+= 현재 RUNNING Run이 있는지로 계산
+
+DONE / FAILED
+= Task status와 Run Trace로 계산
+```
+
+전이:
+
+```text
+TASK_ATTACHED -> WAITING
+
+WAITING
+-> BLOCKED
+-> SKIPPED
+-> CANCELED
+
+BLOCKED
+-> WAITING      via QUEUE_ITEM_UNBLOCKED
+-> SKIPPED
+-> CANCELED
+
+SKIPPED
+-> WAITING      via QUEUE_ITEM_UNSKIPPED
+-> CANCELED
+
+CANCELED
+-> terminal
+```
+
+`SKIPPED -> WAITING`은 최종 모델에서 허용한다. 다만 명시적 unskip 이벤트와 reason이 필요하다.
+
+```text
+SKIPPED -> WAITING 가능 조건:
+- QUEUE_ITEM_UNSKIPPED 이벤트 사용
+- reason 필수
+- ACTIVE Run 없음
+- Objective 상태가 OPEN 또는 BLOCKED
+- Task revision 변동 없음
+```
+
+v0.2 같은 초기 구현에서는 `QUEUE_ITEM_UNSKIPPED`를 제외하고 SKIPPED를 사실상 terminal에 가깝게 처리해도 된다. 최종 모델에서는 사람이 실수로 skip했거나 상황이 바뀐 경우를 위해 명시적 unskip을 허용한다.
+
+금지 규칙:
+
+```text
+- CANCELED item은 일반 전이 금지
+- ACTIVE item은 block / skip / cancel / reorder 금지
+- DONE item은 block / skip / cancel / reorder 금지
+- SKIPPED item은 run 금지
+- BLOCKED item은 run 금지
+- CANCELED item은 run 금지
+```
+
+이유:
+
+```text
+ACTIVE item을 skip / cancel하면 실행 중인 Agent 결과와 queue 결정이 충돌한다.
+DONE item을 skip / cancel하면 과거 실행 이력을 왜곡한다.
+BLOCKED / SKIPPED / CANCELED item을 run하면 사람이 내린 흐름 결정과 실행이 충돌한다.
+```
+
+Objective State와의 관계:
+
+```text
+OPEN
+- queue item mutation 가능
+
+BLOCKED
+- queue item mutation 가능
+- run은 기본 금지
+
+CLOSED
+- queue item mutation 금지
+
+CANCELED
+- queue item mutation 금지
+
+CORRUPTED
+- queue item mutation 금지
+- validate / rebuild / repair만 허용
+```
+
+최종 원칙:
+
+```text
+Queue item state controls flow, not execution result.
+```
+
+한국어:
+
+```text
+Queue Item State는 흐름을 제어하지, 실행 결과를 표현하지 않는다.
+```
+
 원칙:
 
 ```text
