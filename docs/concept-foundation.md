@@ -1178,6 +1178,138 @@ run-003 FAILED
 
 VERIFIED 이후 같은 Revision을 다시 실행하려면 기존 VERIFIED를 조용히 덮어쓰지 않는다. 새 Run을 만들고, retry / reopen reason을 남기며, 필요하면 별도 review로 다시 판단한다.
 
+### 0.8 Risk 판단 원칙
+
+Risk는 LLM의 감이 아니다. Risk는 Project Profile과 Task / Run 증거를 기준으로 CodeFleet이 계산하는 정책 결과다.
+
+정의:
+
+```text
+Risk
+= CodeFleet policy가 계산한 작업 위험도
+= required gate를 결정하는 입력
+= LLM의 자유 판단이 아님
+```
+
+역할 분리:
+
+```text
+LLM
+= risk signal을 제안할 수 있음
+
+CodeFleet
+= Project Profile + Task Spec + Run evidence를 기준으로 riskLevel 계산
+
+Human
+= review에서 risk를 높일 수 있음
+
+Policy
+= riskLevel에 따라 recheck / approval / verification gate 결정
+```
+
+핵심 원칙:
+
+```text
+LLM proposes risk signals.
+CodeFleet computes riskLevel.
+Human can raise risk.
+Policy decides required gates.
+```
+
+한국어:
+
+```text
+LLM은 위험 신호를 제안한다.
+CodeFleet은 riskLevel을 계산한다.
+사람은 위험도를 높일 수 있다.
+정책은 필요한 gate를 결정한다.
+```
+
+보수적 규칙:
+
+```text
+Risk can be raised by LLM or human.
+Risk can only be lowered by explicit policy, not by LLM.
+```
+
+한국어:
+
+```text
+위험도는 LLM이나 사람이 올릴 수 있다.
+위험도는 LLM이 낮출 수 없다.
+낮추려면 Project Profile의 명시 정책이 필요하다.
+```
+
+판단 근거 우선순위:
+
+```text
+1. Project Profile 정책
+   repo별 high-risk path / command / domain 선언
+
+2. Task Spec
+   agentRole, scope, guardrails, verification, declared riskSignals
+
+3. File path rules
+   예: terraform/**, migrations/**, auth/**, security/**, .github/workflows/**
+
+4. Command rules
+   예: terraform apply, kubectl, docker push, destructive command
+
+5. Diff / changedFiles
+   실제 변경된 파일이 고위험 경로에 걸리는지
+
+6. Human override
+   사용자는 risk를 낮추지 않고 높일 수만 있음
+```
+
+riskLevel은 최소 3단계로 둔다.
+
+```text
+LOW
+- 일반 코드 수정
+- 문서 / 테스트 / 내부 리팩토링
+
+MEDIUM
+- 여러 모듈 영향
+- public API 변경
+- config 변경
+- shared library 변경
+- 에러 처리 흐름 변경
+
+HIGH
+- auth / security
+- payment / billing
+- DB migration
+- infra / terraform / k8s / nginx
+- deployment / CI/CD
+- secret / credential
+- data deletion / destructive command
+```
+
+예:
+
+```yaml
+risk:
+  level: HIGH
+  computedBy: codefleet-policy
+  reasons:
+    - path: terraform/**
+    - command: terraform plan required
+  llmSignals:
+    - infra-related change
+  humanOverride:
+    raisedBy: user
+    reason: production 영향 가능
+```
+
+최종 원칙:
+
+```text
+risk는 LLM의 감이 아니라,
+Project Profile과 Task / Run 증거를 기준으로
+CodeFleet이 계산하는 정책 결과다.
+```
+
 원칙:
 
 ```text
@@ -3405,6 +3537,7 @@ v0.1 구현 내용:
 - Task Relation State 규칙
 - Task Draft / Revision State 규칙
 - Run-derived State 규칙
+- Risk 판단 원칙
 - Task와 Task Revision 분리
 - Task revision lineage와 revision-bound approval / relation / run / summary 원칙
 - QUEUE_REORDERED의 보수적 future order semantics
