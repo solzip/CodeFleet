@@ -373,7 +373,7 @@ Transition validation은 상위 상태 도메인을 7개로 구분한다.
 7. Corruption / Repair State
 ```
 
-이 7개는 CodeFleet 상태 검증의 책임 경계다. 최종 모델에서도 상위 상태 도메인은 이 범위를 넘겨 더 잘게 쪼개지 않는다. 더 자세한 규칙이 필요하면 각 도메인 내부의 세부 규칙으로 확장한다.
+이 7개는 CodeFleet 상태 검증의 책임 경계다. 최종 모델에서도 상위 상태 도메인은 이 범위를 넘겨 더 잘게 쪼개지 않는다. 더 자세한 규칙은 각 도메인 내부의 세부 규칙으로 확장한다.
 
 이유:
 
@@ -954,7 +954,7 @@ REJECTED
 - 사용자가 이 draft를 폐기
 - run 불가
 - approve 불가
-- 필요하면 새 draft 생성
+- 다시 작업하려면 새 draft id 생성
 ```
 
 Draft 전이:
@@ -1234,7 +1234,7 @@ run-003 FAILED
 
 이 경우 revision 1의 VERIFIED와 revision 2의 FAILED는 서로 다른 계산 단위에 속한다. revision 2의 실패가 revision 1의 검증된 성공을 덮어쓰지 않는다.
 
-VERIFIED 이후 같은 Revision을 다시 실행하려면 기존 VERIFIED를 조용히 덮어쓰지 않는다. 새 Run을 만들고, retry / reopen reason을 남기며, 필요하면 별도 review로 다시 판단한다.
+VERIFIED 이후 같은 Revision을 다시 실행하려면 기존 VERIFIED를 조용히 덮어쓰지 않는다. 새 Run을 만들고, retry / reopen reason을 남긴다. 새 Run은 `reviewRequired = true`로 시작하며, 사람이 다시 VERIFIED 처리하기 전까지 Queue progression 근거가 되지 않는다.
 
 ### 0.8 Risk 판단 원칙
 
@@ -1298,7 +1298,7 @@ Risk can only be lowered by explicit policy, not by LLM.
 낮추려면 Project Profile의 명시 정책이 필요하다.
 ```
 
-판단 근거 우선순위:
+판단 근거 입력:
 
 ```text
 1. Project Profile 정책
@@ -1342,6 +1342,69 @@ HIGH
 - deployment / CI/CD
 - secret / credential
 - data deletion / destructive command
+```
+
+Risk level 계산은 max-severity 방식이다.
+
+```text
+riskOrder:
+LOW < MEDIUM < HIGH
+
+baseRisk:
+LOW
+
+computedRisk:
+max(
+  Project Profile rule matches,
+  Task Spec declared riskSignals,
+  File path rule matches,
+  Command rule matches,
+  Diff / changedFiles rule matches,
+  LLM-proposed riskSignals,
+  Human-raised risk
+)
+```
+
+Risk rule 최소 필드:
+
+```text
+ruleId
+= stable risk rule id
+
+matchTarget
+= PATH | COMMAND | AGENT_ROLE | TASK_SCOPE | DIFF | FILE_CONTENT | RUN_EVIDENCE | HUMAN_OVERRIDE | LLM_SIGNAL
+
+matchCondition
+= glob / exact command / structured field predicate
+
+riskLevel
+= LOW | MEDIUM | HIGH
+
+requiredGate
+= NONE | HUMAN_REVIEW | EXPLICIT_APPROVAL | VERIFICATION_REQUIRED | BLOCKED_UNTIL_POLICY
+
+evidence
+= matched path / command / field / run evidence id
+```
+
+Risk lowering 규칙:
+
+```text
+- LLM signal은 risk를 낮출 수 없다.
+- Human review는 risk를 낮출 수 없다.
+- Project Profile의 explicit risk exemption만 risk를 낮출 수 있다.
+- exemption은 ruleId, matchCondition, maxAllowedRisk, reason, approver를 가져야 한다.
+- exemption도 matched evidence가 없으면 적용되지 않는다.
+- HIGH destructive command는 exemption으로 LOW가 될 수 없다. 최소 MEDIUM이다.
+```
+
+Risk 계산 불변식:
+
+```text
+- 같은 Project Profile, Task Spec, Run evidence, rule set이면 같은 riskLevel이 계산된다.
+- riskLevel이 unknown이면 MEDIUM이 아니라 HIGH로 취급한다.
+- risk rule 충돌 시 더 높은 riskLevel이 이긴다.
+- requiredGate 충돌 시 더 엄격한 gate가 이긴다.
 ```
 
 예:
@@ -1439,7 +1502,8 @@ EXPIRED
 
 ```text
 PROPOSED -> ATTACHED
-PROPOSED -> REJECTED or discarded
+PROPOSED -> discarded
+PROPOSED -> rejection event recorded
 
 ATTACHED -> REVOKED
 ATTACHED -> EXPIRED
@@ -1449,7 +1513,47 @@ EXPIRED -> ATTACHED   only after recheck / review
 REVOKED -> terminal
 ```
 
-`REJECTED`는 장기 보존 상태로 두지 않아도 된다. 사람이 후보를 채택하지 않은 것은 audit 필요성이 낮으면 discard해도 된다. 단, 사용자 결정을 감사해야 하는 모드에서는 `CARRY_FORWARD_REJECTED` 이벤트로 남길 수 있다.
+CarryForwardItem의 장기 상태에는 `REJECTED`를 두지 않는다. 거절은 상태가 아니라 처리 결과다.
+
+거절 처리 방식:
+
+```text
+discarded
+= 장기 상태 / ledger event 없이 후보를 폐기
+
+rejection event recorded
+= CARRY_FORWARD_REJECTED 이벤트를 기록하고 후보를 context에 포함하지 않음
+```
+
+discard 가능 조건:
+
+```text
+1. item.state == PROPOSED
+2. item이 Harness prompt에 포함된 적 없음
+3. item이 ATTACHED 된 적 없음
+4. item이 사람이 명시적으로 승인 / 거절한 review 대상이 아니었음
+5. Project Profile carryForwardAuditMode == MINIMAL
+```
+
+`CARRY_FORWARD_REJECTED` event가 필요한 조건:
+
+```text
+다음 중 하나라도 참이면 CARRY_FORWARD_REJECTED event가 필요하다.
+
+1. item이 Task Review 화면에 표시됨
+2. 사람이 명시적으로 reject를 선택함
+3. item이 Objective decision과 충돌한다고 판정됨
+4. Project Profile carryForwardAuditMode == STRICT
+5. item.sourceRunId가 존재하고 이후 Summary / Decision 판단 근거로 사용될 수 있음
+```
+
+discard와 rejected event의 공통 효과:
+
+```text
+- Harness context 포함 금지
+- ATTACHED 전이 금지
+- 같은 sourceRunId / sourceTaskRevision에서 다시 제안하려면 새 CarryForwardItem id 필요
+```
 
 핵심 규칙:
 
@@ -1495,7 +1599,28 @@ SUMMARY가 ATTACHED 되기 위한 조건:
 - changedFiles 있음
 - sanitization 통과
 - raw log / raw diff / agent scratchpad 직접 포함 없음
-- 필요한 경우 risk 기반 recheck 통과
+- riskRecheckRequired == false 또는 risk recheck 통과
+```
+
+risk recheck 필요 조건:
+
+```text
+riskRecheckRequired == true if
+  any sourceRun.changedFiles path has current hash != recorded postRun hash
+  OR sourceTaskRevision file hash != recorded sourceTaskRevision hash
+  OR sourceRiskLevel in {MEDIUM, HIGH}
+  OR Project Profile carryForwardRecheck == ALWAYS
+```
+
+risk recheck 통과 조건:
+
+```text
+1. sourceRunId가 존재한다.
+2. sourceRun의 retained evidence를 읽을 수 있다.
+3. sourceRun.changedFiles의 현재 hash가 Run Summary에 기록된 postRun hash와 일치한다.
+4. sourceTaskRevision file hash가 CarryForwardItem에 기록된 revision hash와 일치한다.
+5. current riskLevel이 source riskLevel보다 낮아지지 않았다.
+6. recheck result가 Run Summary에 기록된다.
 ```
 
 꼬임 방지 불변식:
@@ -1527,7 +1652,7 @@ user review
 다음 Task 생성
 -> ATTACHED Summary 포함
 
-나중에 AuthController가 수동 수정됨
+이후 AuthController가 수동 수정됨
 -> CARRY_FORWARD_EXPIRED
    reason: "changedFiles hash mismatch"
 ```
@@ -1540,7 +1665,7 @@ user decision record
    type: DECISION
    text: "DB schema 변경은 이번 Objective에서 제외"
 
-나중에 범위 변경
+이후 범위 변경
 -> CARRY_FORWARD_REVOKED
    reason: "Objective scope expanded to include migration"
 ```
@@ -1973,7 +2098,7 @@ suggestedRepair:
 One checkId has exactly one primary category.
 ```
 
-부가 설명이 필요하면 `relatedCategories`를 둘 수 있다. 하지만 gating과 기본 repair 방향은 primary category를 따른다.
+`relatedCategories`는 부가 설명용 optional field다. 하지만 gating과 기본 repair 방향은 primary category를 따른다.
 
 ```yaml
 checkId: VERIFIED_REVIEW_EXISTS
@@ -3213,8 +3338,17 @@ Many readers allowed.
 ```text
 - 모든 상태 변경은 workspace-level mutation lock을 잡고 수행한다.
 - 조회는 lock 없이 가능하다.
-- 나중에 성능 필요가 명확해지면 objective-level lock을 보조로 도입할 수 있다.
 - 초기 설계에서는 병렬 mutation 최적화보다 일관성을 우선한다.
+```
+
+Lock 확장 계획은 VERSION_PLAN이다.
+
+```text
+final default:
+- workspace-level mutation lock
+
+future optimization:
+- objective-level lock은 성능 병목이 측정되고, cross-objective mutation conflict rule이 먼저 정의된 뒤에만 보조로 도입할 수 있다.
 ```
 
 ### 0.12 확정 규칙 작성 기준
@@ -3347,12 +3481,65 @@ Examples and candidates must not masquerade as rules.
 현재 문서에 대한 적용:
 
 ```text
-0.x의 Objective / Queue / Task relation / Draft-Revision / Run-derived / Risk / Carry-forward / Corruption-Repair 모델은 FINAL RULE로 정리해 간다.
+0.x의 Objective / Queue / Task relation / Draft-Revision / Run-derived / Risk / Carry-forward / Corruption-Repair 모델은 FINAL RULE 기준으로 정리한다.
 
-Harness, Project Profile, Run Summary, AgentRole, Guardrail, Verification 섹션은 아직 일부가 DESIGN CANDIDATE 또는 EXAMPLE 수준이다.
+Risk는 Project Profile + Task Spec + Run evidence + rule set 기반 max-severity 계산으로 정리한다.
 
-따라서 다음 논의에서는 이 후반 섹션들을 위 확정 규칙 작성 기준에 맞춰 하나씩 FINAL RULE로 승격한다.
+Carry-forward는 ATTACHED만 전달 가능하며, discard / rejected event / recheck 조건을 deterministic하게 분리한다.
+
+Policy merge는 More restrictive wins를 deterministic meet operation으로 정리한다.
+
+Harness, Project Profile, Run Summary, AgentRole, Guardrail, Verification 섹션은 FINAL RULE과 DESIGN CANDIDATE / VERSION_PLAN을 명시적으로 분리한다.
 ```
+
+### 0.13 현재 고정 항목 기준 적용 상태
+
+현재까지 고정한 항목은 다음 상태로 본다.
+
+```text
+PASS:
+- 최종 목표와 목표 경계
+- Objective / Task / Run 계층
+- Objective / Task Queue / ledger / Mutation Engine이 내부 구조라는 점
+- Mutation Engine 역할, command 범위, workspace-level lock 원칙
+- Mutation 후 rebuild / validate / explicit repair 원칙
+- Transition validation 상위 도메인 7개
+- Objective State 규칙
+- Queue Item State 규칙
+- Task Relation State 규칙
+- Task Draft / Revision State 규칙
+- Run-derived State 규칙
+- Context Carry-forward State 규칙
+- Corruption 판정 원칙
+- Invariant Core / Extensible Layer 원칙
+- Finding category taxonomy
+- Severity capability gating 원칙
+- RepairKind / RepairMode taxonomy
+- Corrective Event effective state 원칙
+- 단일 CorruptionMarker + scope / target 모델
+- Task와 Task Revision 분리
+- Task revision lineage와 revision-bound approval / relation / run / summary 원칙
+- QUEUE_REORDERED의 보수적 future order semantics
+- ledger event 최소 세트와 "ledger는 결정 로그" 원칙
+- 확정 규칙 작성 기준
+
+PASS_AFTER_REINFORCEMENT:
+- Risk 판단 원칙
+- Policy 병합 원칙
+- Safe Orchestration isolation 조건
+- Run Summary sanitization boundary
+
+NOT_FINAL_YET:
+- Project Profile 최종 JSON schema
+- Harness enforcement 구현 방식
+- AgentRole taxonomy
+- Guardrail taxonomy
+- Verification command allowlist
+- Run Summary export adapter별 schema
+- Workspace discovery 버전별 구현 범위
+```
+
+`NOT_FINAL_YET` 항목은 확정 규칙이 아니다. 이 항목들은 다음 논의에서 같은 기준으로 하나씩 FINAL RULE로 승격하거나 VERSION_PLAN으로 남긴다.
 
 ## 1. 최종 지향 정의
 
@@ -3560,7 +3747,17 @@ Scope 기준:     hunik-msa 기준 상대 경로
 Run 저장:       hunik-msa/.codefleet/runs/*
 ```
 
-장기적으로는 Git처럼 하위 디렉터리에서 명령을 실행해도 부모 방향으로 올라가며 `.codefleet`을 찾는 workspace discovery를 지원할 수 있다. 단, 초기 구현에서는 현재 cwd에 `.codefleet`이 있다고 가정해도 된다.
+Workspace discovery는 VERSION_PLAN이다.
+
+```text
+v0.x:
+- 현재 cwd에 .codefleet이 있어야 workspace로 인정한다.
+
+final:
+- 하위 디렉터리에서 명령을 실행해도 부모 방향으로 올라가며 .codefleet을 찾을 수 있다.
+- --workspace 옵션이 주어지면 해당 경로를 우선한다.
+- 여러 .codefleet이 발견되면 가장 가까운 부모를 기본값으로 선택하되, 명령 출력에 선택 경로를 표시한다.
+```
 
 ## 4. Metadata
 
@@ -3619,6 +3816,22 @@ Project Profile은 `.codefleet/config.json`에 저장되는 개념이다.
 정의:
 
 > Project Profile은 프로젝트별 Harness 정책을 선언하는 Workspace Contract다.
+
+현재 상태:
+
+```text
+FINAL RULE:
+- Project Profile은 Workspace Contract다.
+- Project Profile은 Core default보다 권한을 완화할 수 없다.
+- Risk / Harness / Policy merge는 Project Profile을 sourceOfTruth 중 하나로 사용한다.
+
+DESIGN CANDIDATE:
+- 최종 JSON schema
+- profile rule id 체계
+- redaction policy schema
+- command policy schema
+- carryForwardAuditMode / carryForwardRecheck 세부 기본값
+```
 
 즉 단순 기본값 파일이 아니라, 해당 프로젝트에서 AI 에이전트가 어떤 조건 안에서 일해야 하는지를 선언하는 정책 파일이다.
 
@@ -4468,7 +4681,7 @@ Revision은 승인과 실행을 위한 것이다.
 Run은 실행 증거를 남기기 위한 것이다.
 ```
 
-이 정의는 나중에 README 사용자 설명에도 짧게 반영한다.
+이 정의는 README 사용자 설명 반영 대상이다.
 
 최종 파일 구조:
 
@@ -4727,6 +4940,8 @@ Run Summary
 
 CodeFleet의 목표에 더 부합하는 Task 작성 흐름은 사람이 YAML을 처음부터 쓰는 방식이 아니다.
 
+Task Review 흐름은 VERSION_PLAN이다.
+
 권장 흐름:
 
 ```text
@@ -4955,6 +5170,21 @@ Harness는 CodeFleet의 차별점이다.
 
 > Harness는 AI 에이전트가 Task를 수행할 때 역할·범위·권한·검증·수집 규칙을 적용하는 통제된 실행 껍질이다.
 
+현재 상태:
+
+```text
+FINAL RULE:
+- 사용자 자연어 요청은 바로 Agent에게 전달하지 않는다.
+- Draft Harness는 read-only bounded discovery만 수행한다.
+- Execution Harness는 approved Revision만 실행한다.
+- Harness는 effectivePolicy를 기준으로 Agent에게 전달할 권한을 제한한다.
+
+DESIGN CANDIDATE:
+- Sandbox-level Harness 구현 방식
+- Command-policy Harness 구현 방식
+- agent adapter별 호출 프로토콜
+```
+
 더 직접적인 정의:
 
 > CodeFleet Harness는 사용자의 의도를 AI가 실행 가능한 작업으로 바꾸되, 프로젝트 정책과 안전 조건을 씌워서 Agent에게 전달하는 통제 계층이다.
@@ -5062,6 +5292,51 @@ Draft Harness는 제한된 사전 조사를 수행하지만, 작업 실행은 �
 
 bounded discovery는 Task를 정의하는 데 필요한 범위 안에서만 제한적으로 프로젝트를 탐색하고 읽는 것을 의미한다.
 
+Bounded discovery budget:
+
+```text
+discoveryBudget:
+- maxFilesListed
+- maxFilesRead
+- maxBytesRead
+- allowedPathGlobs
+- deniedPathGlobs
+- allowedFileKinds
+- deniedFileKinds
+- maxDepth
+```
+
+Draft Harness read 허용 조건:
+
+```text
+1. path가 Workspace Root 내부에 있음
+2. path가 deniedPathGlobs와 매칭되지 않음
+3. path가 allowedPathGlobs 중 하나와 매칭됨
+4. fileKind가 deniedFileKinds에 포함되지 않음
+5. filesRead + 1 <= maxFilesRead
+6. bytesRead + fileSize <= maxBytesRead
+7. discovery reason이 Task Draft에 기록됨
+```
+
+Draft Harness read 금지 조건:
+
+```text
+- .env, secret, key, credential pattern match
+- Workspace Root 밖의 파일
+- Project Profile deniedPathGlobs
+- binary file unless allowedFileKinds에 명시
+- maxFilesRead / maxBytesRead / maxDepth 초과
+```
+
+Budget 초과 효과:
+
+```text
+- 추가 read 중단
+- Task Draft needsReview에 DISCOVERY_BUDGET_EXCEEDED 기록
+- scope를 확정하지 않고 후보로 표시
+- Execution Harness로 전환하지 않음
+```
+
 책임:
 
 ```text
@@ -5127,6 +5402,8 @@ Execution Harness는 사람이 승인한 Task Revision만 실행한다.
 
 ### 8.3 Harness 단계별 발전
 
+이 절은 VERSION_PLAN이다. Harness의 최종 책임은 고정하지만, enforcement 수준은 버전별로 나눠 구현한다.
+
 초기 Harness는 실행을 완전히 막는 샌드박스가 아니다.
 
 Guardrail 단계:
@@ -5142,7 +5419,7 @@ Guardrail 단계:
    실행 중 실제로 막음
 ```
 
-초기에는 Prompt-level Harness와 Trace-level Harness가 현실적이다.
+v0.x Harness:
 
 ```text
 Prompt-level Harness
@@ -5160,7 +5437,14 @@ Trace-level Harness
 - result.json 저장
 ```
 
-장기적으로는 Sandbox-level Harness와 Command-policy Harness로 확장할 수 있다.
+final Harness:
+
+```text
+- Sandbox-level Harness
+- Command-policy Harness
+- Profile 기반 command allowlist
+- 실행 중 command deny enforcement
+```
 
 ## 8.4 Safe Orchestration
 
@@ -5212,7 +5496,9 @@ User Intent
    Agent는 필요한 최소 read/write/command 권한만 가진다.
 
 5. Isolation
-   가능하면 git worktree, temp workspace, container 등 격리된 실행 환경에서 작업한다.
+   Execution Harness는 isolationMode를 기록한다.
+   isolationMode는 NONE / GIT_WORKTREE / TEMP_WORKSPACE / CONTAINER 중 하나다.
+   파일 수정 또는 명령 실행이 있는 Run에서 isolationMode == NONE이면 reason이 필수이며 riskLevel은 LOW가 될 수 없다.
 
 6. Verification Gate
    테스트, lint, build, terraform plan, nginx -t 같은 검증 결과 없이는 성공으로 닫지 않는다.
@@ -5254,6 +5540,58 @@ Core defaults
 
 ```text
 More restrictive wins.
+```
+
+정책 병합은 deterministic meet operation이다.
+
+```text
+effectivePolicy =
+  meet(Core defaults, Project Profile policies, Task guardrails, Run options)
+```
+
+권한 수준은 순서를 가진다.
+
+```text
+modeOrder:
+DRY_RUN < SUGGEST_ONLY < WORKSPACE_EDIT < COMMAND_EXEC
+
+boolean permission:
+false < true
+
+gateOrder:
+NONE < HUMAN_REVIEW < EXPLICIT_APPROVAL < VERIFICATION_REQUIRED < BLOCKED_UNTIL_POLICY
+```
+
+병합 규칙:
+
+```text
+- mode는 더 제한적인 값을 선택한다.
+- allowFileEdit / allowCommandExecution 같은 boolean permission은 false가 이긴다.
+- allowedPaths는 교집합을 선택한다.
+- deniedPaths는 합집합을 선택한다.
+- allowedCommands는 교집합을 선택한다.
+- deniedCommands는 합집합을 선택한다.
+- verificationCommands는 profile required commands + task required commands의 합집합이다.
+- requiredGate는 더 엄격한 값을 선택한다.
+```
+
+병합 실패 조건:
+
+```text
+- allowedPaths 교집합이 비어 있는데 파일 수정이 필요한 Task
+- allowedCommands 교집합이 비어 있는데 명령 실행이 필요한 Task
+- Task가 Profile deniedPaths 안의 파일 수정을 요구
+- Task가 Profile deniedCommands 안의 명령 실행을 요구
+- Run option이 Project Profile보다 권한을 넓힘
+```
+
+병합 실패 효과:
+
+```text
+- Execution Harness 실행 금지
+- Task Review에서 policy conflict로 표시
+- finding.category = POLICY_ENFORCEMENT_INTEGRITY
+- finding.severity = WARNING 또는 CORRUPTION 중 rule definition이 선언한 값
 ```
 
 예:
@@ -5348,6 +5686,83 @@ Notion에 올려도 되는 것:
 - 로컬 run path
 ```
 
+Sanitized Run Summary 최소 필드:
+
+```text
+summaryId
+runId
+taskId
+taskRevision
+objectiveId
+objectiveQueueItemId
+agentRole
+harnessMode
+riskLevel
+resultStatus
+changedFiles
+verificationResults
+reviewStatus
+decisions
+nextActions
+redactionReport
+sourceTracePath
+sourceTraceHash
+```
+
+Sanitization rule:
+
+```text
+input:
+- Run Trace files
+- Project Profile redaction policy
+- Core secret patterns
+
+output:
+- Sanitized Run Summary
+- redactionReport
+```
+
+금지 규칙:
+
+```text
+- stdout.log / stderr.log 원문 전체 포함 금지
+- git-diff.patch 원문 전체 포함 금지
+- env dump 포함 금지
+- secret pattern match 원문 포함 금지
+- token / password / private key / session cookie 포함 금지
+- 내부 운영 URL은 Profile allowPublicUrlExport == true가 아니면 포함 금지
+- 로컬 절대 경로는 Profile allowLocalPathExport == true가 아니면 상대 경로로 변환
+```
+
+redactionReport 최소 필드:
+
+```text
+- ruleId
+- sourceFile
+- matchKind
+- action: REDACTED | DROPPED | RELATIVIZED | HASHED
+- count
+```
+
+Sanitization 통과 조건:
+
+```text
+1. 모든 forbidden pattern match가 redactionReport에 기록됨
+2. summary body에 forbidden pattern이 남아 있지 않음
+3. sourceTraceHash가 기록됨
+4. changedFiles는 workspace-relative path만 포함
+5. verificationResults는 command, exitCode, passed 여부만 포함하고 raw output은 포함하지 않음
+```
+
+Sanitization 실패 효과:
+
+```text
+- Run Summary export 금지
+- CarryForward SUMMARY ATTACH 금지
+- finding.category = EXECUTION_EVIDENCE_INTEGRITY
+- finding.severity = WARNING 또는 CORRUPTION은 sanitizer rule definition이 결정
+```
+
 장기 구조:
 
 ```text
@@ -5360,6 +5775,18 @@ Run Trace
 ```
 
 ## 11. AgentRole
+
+현재 상태:
+
+```text
+DESIGN CANDIDATE:
+- 아래 AgentRole 목록은 초기 후보이며 FINAL RULE이 아니다.
+
+FINAL RULE:
+- Task Revision은 agentRole을 명시해야 한다.
+- agentRole은 Project Profile의 allowedAgentRoles 안에 있어야 한다.
+- agentRole별 권한은 Project Profile과 Task guardrails 병합 결과를 넘을 수 없다.
+```
 
 초기 AgentRole 후보:
 
@@ -5404,6 +5831,18 @@ DOCS_WRITER
 
 Guardrail은 백엔드/인프라 특화 CodeFleet에서 핵심이다.
 
+현재 상태:
+
+```text
+FINAL RULE:
+- Guardrail은 effectivePolicy보다 권한을 넓힐 수 없다.
+- deniedPaths / deniedCommands는 allow 규칙보다 우선한다.
+- destructive command는 기본 차단이며 explicit approval 없이 실행할 수 없다.
+
+DESIGN CANDIDATE:
+- 아래 위험 요소와 작업 모드 목록은 초기 후보이며 최종 taxonomy는 Project Profile schema 논의에서 확정한다.
+```
+
 위험 요소:
 
 ```text
@@ -5433,16 +5872,40 @@ WORKSPACE_EDIT
 
 COMMAND_EXEC
 - 허용된 명령만 실행 가능
+```
 
+Approval gate 후보:
+
+```text
 APPROVAL_REQUIRED
 - 위험 명령은 사람 승인 필요
 ```
 
-초기에는 `DRY_RUN`과 `SUGGEST_ONLY`가 가장 안전하다.
+VERSION_PLAN:
+
+```text
+v0.x:
+- DRY_RUN과 SUGGEST_ONLY만 기본 실행 모드로 둔다.
+
+final:
+- WORKSPACE_EDIT / COMMAND_EXEC는 Project Profile policy와 approval gate를 통과한 경우에만 허용한다.
+```
 
 ## 13. Verification
 
 Verification은 "AI가 했다"가 아니라 "검증까지 추적했다"를 만들기 위한 개념이다.
+
+현재 상태:
+
+```text
+FINAL RULE:
+- Verification result는 Run Trace에 남는다.
+- required verification이 실패하면 Run-derived State는 DONE 또는 VERIFIED가 될 수 없다.
+- command를 실제로 실행하지 않은 경우 result는 PASSED가 아니라 NOT_RUN이다.
+
+DESIGN CANDIDATE:
+- 아래 command 목록은 도메인별 기본 후보이며 최종 allowlist는 Project Profile schema 논의에서 확정한다.
+```
 
 예시:
 
@@ -5472,7 +5935,15 @@ Terraform:
 
 `terraform apply`는 기본 금지다.
 
-Verification은 처음에는 prompt에 포함되는 검증 지시로 시작할 수 있다. 나중에는 Harness가 직접 실행하고 로그를 남길 수 있다.
+Verification 실행 방식은 VERSION_PLAN이다.
+
+```text
+v0.x:
+- prompt에 검증 지시를 포함하고, 실행 여부는 Run Trace에 NOT_RUN / PASSED / FAILED로 기록한다.
+
+final:
+- Harness가 Project Profile allowlist 안의 verification command를 직접 실행하고, command / exitCode / passed / log path를 Run Trace에 기록한다.
+```
 
 ## 14. 현재 구현과의 관계
 
@@ -5527,44 +5998,51 @@ v0.1 구현 내용:
 - QUEUE_REORDERED의 보수적 future order semantics
 - ledger event 최소 세트와 "ledger는 결정 로그" 원칙
 - 확정 규칙은 구체적 / 결정론적 / 전제 명시 기준을 만족해야 한다는 문서 작성 기준
+- Risk max-severity 계산과 risk lowering 제한 규칙
+- Carry-forward discard / rejected event / risk recheck 조건
+- Policy 병합의 deterministic meet operation 원칙
+- Safe Orchestration isolationMode 기록과 NONE일 때 risk 제한
+- Run Summary sanitization boundary와 export 차단 규칙
 ```
 
 다음으로 논의할 항목:
 
 ```text
-1. Corruption / Repair State 세부 규칙
-   - rebuild만으로 복구 가능한 경우
-   - 보정 이벤트가 필요한 repair 경우
-   - repair log와 ledger correction event의 관계
-
-2. Harness 상세 정의
-   - Draft Harness
-   - Execution Harness
-   - Guardrail 단계
-   - Policy 병합 방식
-
-3. Project Profile 최종 스키마
+1. Project Profile 최종 스키마
    - policies
    - defaults
    - references
    - local-only 설정 분리
+   - risk / redaction / command / carry-forward policy 기본값
 
-4. Workspace discovery
+2. Harness enforcement 상세 정의
+   - Draft Harness discovery budget 기본값
+   - Execution Harness isolationMode
+   - Command-policy Harness
+   - Sandbox-level Harness
+
+3. AgentRole / Guardrail taxonomy
+   - allowedAgentRoles
+   - role별 기본 권한
+   - destructive command taxonomy
+
+4. Verification 실행 정책
+   - prompt-only
+   - manual command suggestion
+   - allowlist 기반 자동 실행
+   - NOT_RUN / PASSED / FAILED 기록 형식
+
+5. Run Summary export adapter
+   - summary.md 자동 생성
+   - adapter별 필드 제한
+   - redactionReport 출력 형식
+
+6. Workspace discovery
    - 현재 cwd 기준
    - 부모 디렉터리 탐색
    - 명시적 --workspace 옵션
 
-5. Run Summary 설계
-   - summary.md 자동 생성
-   - sanitization 규칙
-   - Notion export adapter
-
-9. Verification 실행 정책
-   - prompt-only
-   - manual command suggestion
-   - allowlist 기반 자동 실행
-
-10. Review 모델
+7. Review 모델
    - AI review.md
    - human review note
    - approval 기록
