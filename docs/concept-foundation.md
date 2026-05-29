@@ -2674,6 +2674,71 @@ records:
 - repair log required
 ```
 
+Corrective Event 정의:
+
+```text
+Corrective Event
+= append-only event that changes the effective state
+  of a domain object from the corrective event's sequence onward,
+  without rewriting or reinterpreting prior events
+```
+
+한국어:
+
+```text
+Corrective Event는 해당 이벤트의 seq 이후부터
+도메인 객체의 유효 상태를 변경하는 append-only 이벤트다.
+과거 이벤트를 수정하거나 재해석하지 않는다.
+```
+
+핵심 구분:
+
+```text
+historical event
+= 과거에 무엇이 기록되었는가
+
+effective state
+= 특정 seq 시점에서 무엇이 유효한가
+```
+
+Replay 규칙:
+
+```text
+Replay does not reinterpret history.
+Replay applies events in order to compute effective state at a target sequence.
+```
+
+한국어:
+
+```text
+Replay는 과거를 재해석하지 않는다.
+Replay는 이벤트를 순서대로 적용해 특정 seq의 유효 상태를 계산한다.
+```
+
+예:
+
+```text
+seq 10: CARRY_FORWARD_ATTACHED cf-001
+seq 18: CARRY_FORWARD_REVOKED cf-001
+```
+
+의미:
+
+```text
+seq 10 ~ 17:
+- cf-001 effective state = ATTACHED
+
+seq 18 이후:
+- cf-001 effective state = REVOKED
+```
+
+이 뜻이 아니다:
+
+```text
+cf-001은 처음부터 ATTACHED가 아니었다.
+seq 10 event를 없는 것으로 본다.
+```
+
 INVALIDATE_EVIDENCE:
 
 ```text
@@ -5318,6 +5383,7 @@ v0.1 구현 내용:
 - Finding category taxonomy
 - Severity capability gating 원칙
 - RepairKind / RepairMode taxonomy
+- Corrective Event effective state 원칙
 - 단일 CorruptionMarker + scope / target 모델
 - Task와 Task Revision 분리
 - Task revision lineage와 revision-bound approval / relation / run / summary 원칙
