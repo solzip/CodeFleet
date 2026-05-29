@@ -2016,6 +2016,86 @@ Task Revision
 = immutable
 ```
 
+Draft / Revision / Run 정의:
+
+```text
+Draft
+= 승인 전 작업 계약 후보
+= 수정 가능
+= 실행 불가
+
+Revision
+= 승인된 불변 실행 계약
+= 사람이 승인한 Task 계약의 특정 버전
+= 실행 가능
+
+Run
+= 특정 Revision을 실제로 실행한 시도와 증거
+```
+
+각 책임:
+
+```text
+Draft
+- intent
+- proposed objective relation
+- scope 후보
+- guardrails 후보
+- verification 후보
+- doneCriteria 후보
+- needsReview
+
+Revision
+- intent
+- accepted / approved objective relation
+- scope
+- guardrails
+- verification
+- doneCriteria
+- approval
+- content hash
+
+Run
+- taskId
+- taskRevision
+- objectiveId snapshot
+- queueItemId snapshot
+- prompt
+- stdout / stderr
+- command log
+- changed files
+- git diff
+- verification result
+- review
+- result.json
+```
+
+핵심 분리:
+
+```text
+Draft는 수정 가능하지만 실행 불가하다.
+Revision은 불변이며 실행 가능하다.
+Run은 실행 결과의 진실이다.
+```
+
+최종 원칙:
+
+```text
+Draft is for shaping.
+Revision is for approval and execution.
+Run is for evidence.
+```
+
+한국어:
+
+```text
+Draft는 작업 계약을 다듬기 위한 것이다.
+Revision은 승인과 실행을 위한 것이다.
+Run은 실행 증거를 남기기 위한 것이다.
+```
+
+이 정의는 나중에 README 사용자 설명에도 짧게 반영한다.
+
 최종 파일 구조:
 
 ```text
