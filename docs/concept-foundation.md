@@ -3886,11 +3886,10 @@ project
   stackTags
 
 workspace
-  rootPolicy
-  pathNormalization
-  allowedWorkspaceMarkers
-  forbiddenWorkspaceMarkers
-  discovery
+  id
+  name
+  components
+  sharedPaths
 
 defaults
   agent
@@ -3956,8 +3955,9 @@ project
 = 권한 판정의 직접 규칙이 아니라, domain / risk / role preset 선택의 입력이 될 수 있다.
 
 workspace
-= workspace 경계와 path 판정 기준이다.
-= workspace 밖 접근, path normalize, discovery 범위를 결정한다.
+= 현재 Project Profile이 통제하는 하나의 로컬 repo/root 경계다.
+= workspace 내부 component 분류와 공유 path 분류를 결정한다.
+= workspaceRoot 계산과 path normalization은 config 필드가 아니라 CodeFleet Core invariant다.
 
 defaults
 = Task가 생략했을 때 적용되는 기본 실행값이다.
@@ -3974,6 +3974,105 @@ references
 localPolicy
 = .codefleet/local.json 같은 local-only overlay의 허용 범위만 선언한다.
 = local overlay는 Project Profile보다 권한을 넓힐 수 없다.
+```
+
+### 5.1.1 schemaVersion / project / workspace 확정
+
+`schemaVersion`은 Project Profile schema version이다. CodeFleet 앱 버전, 프로젝트 앱 버전, 기능 플래그, migration 상태가 아니다.
+
+```json
+{
+  "schemaVersion": "1.0.0"
+}
+```
+
+`project`는 논리적 제품 / 시스템 identity다. Project Profile 하나에는 `project` block이 정확히 하나만 존재한다. `project`는 배열이 될 수 없다.
+
+```json
+{
+  "project": {
+    "id": "hunik-platform",
+    "name": "Hunik Platform",
+    "domains": ["backend-platform"],
+    "stackTags": ["java", "spring", "maven"]
+  }
+}
+```
+
+`workspace`는 현재 Project Profile이 실제로 통제하는 하나의 로컬 repo/root 경계다. Project Profile 하나는 하나의 `workspaceRoot`만 책임진다.
+
+```json
+{
+  "workspace": {
+    "id": "gateway",
+    "name": "Gateway Workspace",
+    "components": [
+      {
+        "id": "gateway-service",
+        "name": "Gateway Service",
+        "kind": "SERVICE",
+        "ownedPaths": {
+          "include": ["src/**"],
+          "exclude": ["target/**"]
+        },
+        "relatedPaths": {
+          "include": ["pom.xml", "README.md", "docs/**"],
+          "exclude": []
+        },
+        "stackTags": ["java", "spring", "gateway"]
+      }
+    ],
+    "sharedPaths": {
+      "include": ["README.md", ".github/**", "docker-compose.yml"],
+      "exclude": []
+    }
+  }
+}
+```
+
+Core invariant:
+
+```text
+- workspaceRoot는 <workspaceRoot>/.codefleet/config.json의 부모 디렉터리다.
+- Project Profile의 모든 path는 workspaceRoot 기준 POSIX relative path다.
+- Project Profile은 workspaceRoot 밖 path를 참조하거나 소유할 수 없다.
+- absolute path, drive path, `..` segment는 Project Profile path에 사용할 수 없다.
+```
+
+Project / Workspace / Component 경계:
+
+```text
+project
+= 논리적 제품 / 시스템 identity
+
+workspace
+= 현재 Project Profile이 통제하는 하나의 로컬 repo/root
+
+component
+= workspace 내부의 소유 / 분류 단위
+
+sharedPaths
+= 특정 component가 소유하지 않는 workspace 공용 path
+```
+
+Monorepo / multirepo 처리:
+
+```text
+- Monorepo는 하나의 Project Profile과 여러 components로 표현한다.
+- Multirepo는 repo마다 하나의 Project Profile을 가진다.
+- Multirepo의 각 repo는 같은 project.id를 공유할 수 있고, 서로 다른 workspace.id를 가진다.
+- Project Profile은 sibling repo 목록, sibling repo path, local clone path를 저장하지 않는다.
+- Cross-workspace 작업은 Project Profile이 아니라 상위 Objective / Orchestration layer가 여러 workspace Task로 분해한다.
+```
+
+권한 금지 원칙:
+
+```text
+- project 값은 파일 수정, 명령 실행, risk lowering, approval skip을 직접 발생시킬 수 없다.
+- workspace와 component는 권한 정책이 아니다.
+- ownedPaths / relatedPaths / sharedPaths는 read 또는 write 권한을 부여하지 않는다.
+- component.kind와 stackTags는 command 권한을 부여하지 않는다.
+- 권한과 risk는 policies.files, policies.commands, policies.risk에서만 판정한다.
 ```
 
 ### 5.2 Project Profile 구조 FINAL RULE
@@ -4215,8 +4314,6 @@ repairBehavior:
 
 ```text
 DESIGN CANDIDATE:
-- project block 내부 필드의 필수/선택 여부
-- workspace.discovery 내부 schema
 - defaults 내부 enum 전체
 - harness policy 내부 schema
 - files policy 내부 glob schema
@@ -6319,13 +6416,26 @@ v0.1 구현 내용:
 - Safe Orchestration isolationMode 기록과 NONE일 때 risk 제한
 - Run Summary sanitization boundary와 export 차단 규칙
 - Project Profile top-level 구조와 policy block 구조
+- Project Profile에는 project block이 정확히 하나만 존재한다는 원칙
+- project는 논리적 제품 / 시스템 identity이고 직접 권한을 부여하지 않는다는 원칙
+- workspace는 하나의 로컬 repo/root 경계이며 workspace.id / components / sharedPaths로 표현한다는 원칙
+- workspaceRoot와 path normalization은 config 필드가 아니라 Core invariant라는 원칙
+- monorepo는 components로, multirepo는 같은 project.id를 공유하는 여러 Project Profile로 표현한다는 원칙
 - Local Overlay는 .codefleet/local.json이며 RESTRICT_ONLY로만 병합된다는 원칙
 ```
 
 다음으로 논의할 항목:
 
 ```text
-1. Project Profile policy block 세부 스키마
+1. Project Profile defaults block 세부 스키마
+   - agent 기본값
+   - agentRole 기본값
+   - harnessMode 기본값
+   - requiredGate 기본값
+   - workflow 기본값
+   - isolationMode 기본값
+
+2. Project Profile policy block 세부 스키마
    - harness policy
    - files policy
    - commands policy
@@ -6335,34 +6445,34 @@ v0.1 구현 내용:
    - carryForward policy
    - agentRoles policy
 
-2. Harness enforcement 상세 정의
+3. Harness enforcement 상세 정의
    - Draft Harness discovery budget 기본값
    - Execution Harness isolationMode
    - Command-policy Harness
    - Sandbox-level Harness
 
-3. AgentRole / Guardrail taxonomy
+4. AgentRole / Guardrail taxonomy
    - allowedAgentRoles
    - role별 기본 권한
    - destructive command taxonomy
 
-4. Verification 실행 정책
+5. Verification 실행 정책
    - prompt-only
    - manual command suggestion
    - allowlist 기반 자동 실행
    - NOT_RUN / PASSED / FAILED 기록 형식
 
-5. Run Summary export adapter
+6. Run Summary export adapter
    - summary.md 자동 생성
    - adapter별 필드 제한
    - redactionReport 출력 형식
 
-6. Workspace discovery
+7. Workspace discovery
    - 현재 cwd 기준
    - 부모 디렉터리 탐색
    - 명시적 --workspace 옵션
 
-7. Review 모델
+8. Review 모델
    - AI review.md
    - human review note
    - approval 기록

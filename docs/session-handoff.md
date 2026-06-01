@@ -103,6 +103,14 @@ AI-native 개발 오케스트레이션 CLI다.
 - Project Profile은 `.codefleet/config.json`에 저장되는 공유 가능한 Workspace Policy Contract로 정리했다.
 - Project Profile 주변 구조는 `config.json`, `local.json`, `context/`, `templates/`로 분리했다.
 - Project Profile top-level keys와 policies block keys를 FINAL RULE로 고정했다.
+- Project Profile에는 project block이 정확히 하나만 존재한다.
+- project는 논리적 제품 / 시스템 identity이며 권한을 직접 부여하지 않는다.
+- workspace는 현재 Project Profile이 통제하는 하나의 로컬 repo/root 경계다.
+- workspace는 `id`, `name`, `components`, `sharedPaths`를 가진다.
+- workspaceRoot 계산과 path normalization은 config 필드가 아니라 CodeFleet Core invariant다.
+- monorepo는 하나의 Project Profile과 여러 components로 표현한다.
+- multirepo는 같은 project.id를 공유하는 여러 Project Profile로 표현한다.
+- Project Profile은 sibling repo 목록, sibling repo path, local clone path를 저장하지 않는다.
 - Local Overlay는 `.codefleet/local.json`이며 `RESTRICT_ONLY`로만 병합된다.
 ```
 
@@ -153,23 +161,21 @@ same workspace state
 다음 논의 주제:
 
 ```text
-Project Profile policy block 세부 스키마
+Project Profile defaults block 세부 스키마
 ```
 
 이유:
 
 ```text
-Project Profile의 최상위 구조는 확정했다.
-다음은 policies 내부 block을 같은 FINAL RULE 기준으로 확정해야 한다.
+Project Profile의 schemaVersion, project, workspace 경계는 확정했다.
+다음은 Task가 생략했을 때 적용되는 defaults block을 FINAL MODEL 기준으로 확정해야 한다.
 
-- harness policy
-- risk rules
-- file allow / deny policy
-- command allow / deny policy
-- verification allowlist
-- redaction / sanitization policy
-- carry-forward audit / recheck policy
-- AgentRole allowlist
+- agent 기본값
+- agentRole 기본값
+- harnessMode 기본값
+- requiredGate 기본값
+- workflow 기본값
+- isolationMode 기본값
 ```
 
 현재 확정한 Project Profile 구조:
@@ -180,6 +186,10 @@ Project Profile의 최상위 구조는 확정했다.
 schemaVersion
 project
 workspace
+  id
+  name
+  components
+  sharedPaths
 defaults
 policies
   harness
@@ -222,15 +232,16 @@ repairBehavior
 ## 남은 설계 항목
 
 ```text
-1. Project Profile policy block internal schema
-2. Harness enforcement details
-3. AgentRole taxonomy
-4. Guardrail taxonomy
-5. Verification execution policy
-6. Run Summary export adapter schema
-7. Workspace discovery
-8. Review model
-9. v0.1 / v0.2 / final implementation slicing
+1. Project Profile defaults block internal schema
+2. Project Profile policy block internal schema
+3. Harness enforcement details
+4. AgentRole taxonomy
+5. Guardrail taxonomy
+6. Verification execution policy
+7. Run Summary export adapter schema
+8. Workspace discovery
+9. Review model
+10. v0.1 / v0.2 / final implementation slicing
 ```
 
 ## 저장소 메모
@@ -243,8 +254,8 @@ repairBehavior
 docs/concept-foundation.md
 ```
 
-이 handoff 작성 직전 기준 커밋:
+이 handoff의 기준 커밋:
 
 ```text
-890af3a docs: reinforce final rule criteria across concept model
+이 문서를 갱신한 최신 커밋
 ```
