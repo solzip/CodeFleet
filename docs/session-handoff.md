@@ -1,6 +1,6 @@
 # CodeFleet Session Handoff
 
-마지막 업데이트: 2026-05-29
+마지막 업데이트: 2026-06-01
 
 이 문서는 다른 PC나 새 세션에서 CodeFleet 설계 논의를 이어가기 위한 압축 인계 문서다. 원본 기준 문서는 항상 `docs/concept-foundation.md`다.
 
@@ -99,6 +99,11 @@ AI-native 개발 오케스트레이션 CLI다.
 - Bounded discovery는 budget과 read allow / deny 조건을 가진다.
 - Run Summary sanitization은 최소 필드, 금지 내용, redactionReport, 실패 효과를 가진다.
 - FINAL RULE / DESIGN CANDIDATE / EXAMPLE / VERSION_PLAN을 분리했다.
+- FINAL RULE 최소 필드에 evidence를 명시했다.
+- Project Profile은 `.codefleet/config.json`에 저장되는 공유 가능한 Workspace Policy Contract로 정리했다.
+- Project Profile 주변 구조는 `config.json`, `local.json`, `context/`, `templates/`로 분리했다.
+- Project Profile top-level keys와 policies block keys를 FINAL RULE로 고정했다.
+- Local Overlay는 `.codefleet/local.json`이며 `RESTRICT_ONLY`로만 병합된다.
 ```
 
 ## 현재 규칙 기준
@@ -115,6 +120,7 @@ preconditions
 condition
 allowedEffect
 deniedEffect
+evidence
 failureFinding
 repairBehavior
 ```
@@ -147,33 +153,26 @@ same workspace state
 다음 논의 주제:
 
 ```text
-Project Profile 최종 스키마
+Project Profile policy block 세부 스키마
 ```
 
 이유:
 
 ```text
-Project Profile은 다음 정책들의 source of truth 중 하나다.
+Project Profile의 최상위 구조는 확정했다.
+다음은 policies 내부 block을 같은 FINAL RULE 기준으로 확정해야 한다.
 
+- harness policy
 - risk rules
 - file allow / deny policy
 - command allow / deny policy
-- Harness mode defaults
-- AgentRole allowlist
 - verification allowlist
 - redaction / sanitization policy
 - carry-forward audit / recheck policy
+- AgentRole allowlist
 ```
 
-먼저 확정할 규칙:
-
-```text
-FINAL RULE:
-Project Profile is the source of truth for workspace policy.
-Project Profile must not store runtime state, execution evidence, or user decision history.
-```
-
-그다음 top-level schema를 확정한다.
+현재 확정한 Project Profile 구조:
 
 ```text
 .codefleet/config.json
@@ -183,9 +182,10 @@ project
 workspace
 defaults
 policies
-  risk
+  harness
   files
   commands
+  risk
   verification
   redaction
   carryForward
@@ -194,7 +194,18 @@ references
 localPolicy
 ```
 
-각 block은 같은 기준으로 확정한다.
+확정한 Project Profile 구조 규칙:
+
+```text
+- PROFILE_CONFIG_IS_WORKSPACE_CONTRACT
+- PROFILE_TOP_LEVEL_KEYS_FIXED
+- PROFILE_POLICY_BLOCK_KEYS_FIXED
+- PROFILE_DOES_NOT_STORE_RUNTIME_OR_LOCAL_STATE
+- PROFILE_LOCAL_OVERLAY_RESTRICT_ONLY
+- PROFILE_EFFECTIVE_POLICY_IS_DERIVED
+```
+
+각 policy block은 같은 기준으로 확정한다.
 
 ```text
 sourceOfTruth
@@ -205,12 +216,13 @@ allowedEffect
 deniedEffect
 evidence
 failureFinding
+repairBehavior
 ```
 
 ## 남은 설계 항목
 
 ```text
-1. Project Profile final JSON schema
+1. Project Profile policy block internal schema
 2. Harness enforcement details
 3. AgentRole taxonomy
 4. Guardrail taxonomy

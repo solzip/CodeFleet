@@ -3422,6 +3422,9 @@ allowedEffect
 deniedEffect
 = 실패 시 차단되는 상태 변화나 capability
 
+evidence
+= 판정 결과를 재현하고 설명하기 위해 남기는 구조화 증거
+
 failureFinding
 = 실패 시 생성할 finding category / severity / evidence
 
@@ -3438,6 +3441,7 @@ repairBehavior
 4. failureFinding이 없으면 corruption / policy / validation rule이 될 수 없다.
 5. allowedEffect와 deniedEffect가 없으면 capability gating rule이 될 수 없다.
 6. repairBehavior가 없으면 repair rule이 될 수 없다.
+7. evidence가 없으면 machine-checkable FINAL RULE이 될 수 없다.
 ```
 
 문서 작성 규칙:
@@ -3811,29 +3815,54 @@ Metadata 원칙:
 
 ## 5. Project Profile
 
-Project Profile은 `.codefleet/config.json`에 저장되는 개념이다.
+Project Profile은 `.codefleet/config.json`에 저장되는 공유 가능한 Workspace Policy Contract다.
 
 정의:
 
 > Project Profile은 프로젝트별 Harness 정책을 선언하는 Workspace Contract다.
 
-현재 상태:
+최종 모델에서 Project Profile 주변 파일 구조:
 
 ```text
-FINAL RULE:
-- Project Profile은 Workspace Contract다.
-- Project Profile은 Core default보다 권한을 완화할 수 없다.
-- Risk / Harness / Policy merge는 Project Profile을 sourceOfTruth 중 하나로 사용한다.
-
-DESIGN CANDIDATE:
-- 최종 JSON schema
-- profile rule id 체계
-- redaction policy schema
-- command policy schema
-- carryForwardAuditMode / carryForwardRecheck 세부 기본값
+.codefleet/
+  config.json          # Project Profile / shared workspace policy contract
+  local.json           # local-only overlay, git 제외, 권한 완화 불가
+  context/             # 사람이 작성한 프로젝트 맥락 문서
+  templates/           # prompt / review / summary template
 ```
 
-즉 단순 기본값 파일이 아니라, 해당 프로젝트에서 AI 에이전트가 어떤 조건 안에서 일해야 하는지를 선언하는 정책 파일이다.
+Project Profile은 단순 기본값 파일이 아니다. 해당 workspace에서 AI 에이전트가 어떤 조건 안에서 일해야 하는지를 선언하는 공유 정책 계약이다.
+
+분리 원칙:
+
+```text
+Project Profile
+= 공유 정책 계약
+
+Local Overlay
+= 개인 환경 보정, 권한 완화 불가
+
+Effective Policy
+= Core Defaults + Project Profile + Local Overlay + Task Guardrails + Run Options의 병합 결과
+
+Task Spec
+= 개별 작업 계약
+
+Run Trace
+= 실행 증거
+```
+
+정책 계층:
+
+```text
+Core Defaults
+  -> Project Profile
+     -> Local Overlay
+        -> Task Guardrails / Run Options
+           -> Effective Policy
+```
+
+Project Profile은 원본 정책이고, Effective Policy는 계산 결과다. Run Trace는 실행 증거이고, Task Spec은 개별 작업 계약이다. 이 네 가지를 한 파일에 섞지 않는다.
 
 우선순위:
 
@@ -3843,93 +3872,379 @@ DESIGN CANDIDATE:
 3. Context/template references
 ```
 
-### 5.1 Profile의 책임
-
-1차 책임: Policy Declaration
+### 5.1 최종 Top-level 구조
 
 ```text
-- 이 프로젝트에서 금지되는 파일/명령은 무엇인가
-- 어떤 작업 모드는 기본인가
-- 어떤 명령은 승인 없이 실행하면 안 되는가
-- 어떤 검증 절차를 따라야 하는가
-- secret이나 운영 설정을 어떻게 다뤄야 하는가
+.codefleet/config.json
+
+schemaVersion
+
+project
+  id
+  name
+  domains
+  stackTags
+
+workspace
+  rootPolicy
+  pathNormalization
+  allowedWorkspaceMarkers
+  forbiddenWorkspaceMarkers
+  discovery
+
+defaults
+  agent
+  agentRole
+  harnessMode
+  requiredGate
+  workflow
+  isolationMode
+
+policies
+  harness
+  files
+  commands
+  risk
+  verification
+  redaction
+  carryForward
+  agentRoles
+
+references
+  contextFiles
+  promptTemplates
+  reviewTemplates
+  summaryTemplates
+
+localPolicy
+  overlayPath
+  mergeMode
+  allowedLocalKeys
 ```
 
-2차 책임: Defaults
-
-```text
-- 기본 agent
-- 기본 agentRole
-- 기본 workflow
-- 기본 harness mode
-```
-
-3차 책임: References
-
-```text
-- context 파일 참조
-- prompt template 참조
-- review/summary template 참조
-```
-
-### 5.2 장기 예시
+JSON skeleton:
 
 ```json
 {
-  "version": "1.0.0",
-  "workspace": {
-    "name": "hunik-msa",
-    "domains": ["BACKEND", "INFRA", "IAC"]
-  },
+  "schemaVersion": "1.0.0",
+  "project": {},
+  "workspace": {},
+  "defaults": {},
   "policies": {
-    "guardrails": {
-      "defaultMode": "SUGGEST_ONLY",
-      "blockedFilePatterns": [
-        "**/.env",
-        "**/application-prod.yml",
-        "**/secrets/**"
-      ],
-      "blockedCommands": [
-        "rm",
-        "terraform apply",
-        "kubectl delete",
-        "systemctl restart"
-      ],
-      "approvalRequiredCommands": [
-        "docker compose down",
-        "kubectl rollout restart"
-      ]
-    },
-    "verification": {
-      "presets": {
-        "backend:maven": ["mvn test"],
-        "terraform:plan": [
-          "terraform fmt -check",
-          "terraform validate",
-          "terraform plan"
-        ]
-      }
-    }
+    "harness": {},
+    "files": {},
+    "commands": {},
+    "risk": {},
+    "verification": {},
+    "redaction": {},
+    "carryForward": {},
+    "agentRoles": {}
   },
-  "defaults": {
-    "agent": "codex",
-    "agentRole": "BACKEND_REVIEWER",
-    "workflow": ["PLAN", "REVIEW"]
-  },
-  "references": {
-    "contextFiles": [
-      ".codefleet/context/architecture.md",
-      ".codefleet/context/ops-rules.md"
-    ],
-    "templates": {
-      "review": ".codefleet/templates/review.md",
-      "summary": ".codefleet/templates/summary.md"
-    }
-  }
+  "references": {},
+  "localPolicy": {}
 }
 ```
 
-### 5.3 Profile이 담으면 안 되는 것
+각 블록의 책임:
+
+```text
+schemaVersion
+= 이 config.json을 어떤 Project Profile schema와 validation rule set으로 해석할지 결정한다.
+
+project
+= 프로젝트 식별용 메타데이터다.
+= 권한 판정의 직접 규칙이 아니라, domain / risk / role preset 선택의 입력이 될 수 있다.
+
+workspace
+= workspace 경계와 path 판정 기준이다.
+= workspace 밖 접근, path normalize, discovery 범위를 결정한다.
+
+defaults
+= Task가 생략했을 때 적용되는 기본 실행값이다.
+= policies보다 우선하지 못한다.
+
+policies
+= Project Profile의 핵심이다.
+= 파일, 명령, risk, 검증, redaction, carry-forward, role 권한을 판정한다.
+
+references
+= context / template 파일 경로만 가진다.
+= 긴 지식 문서 본문을 config.json 안에 넣지 않는다.
+
+localPolicy
+= .codefleet/local.json 같은 local-only overlay의 허용 범위만 선언한다.
+= local overlay는 Project Profile보다 권한을 넓힐 수 없다.
+```
+
+### 5.2 Project Profile 구조 FINAL RULE
+
+```text
+ruleId: PROFILE_CONFIG_IS_WORKSPACE_CONTRACT
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+- <workspaceRoot>/.codefleet/config.json
+inputs:
+- resolved workspaceRoot
+- parsed .codefleet/config.json
+- CodeFleet Project Profile schemaVersion
+preconditions:
+- workspaceRoot is resolved
+- .codefleet/config.json exists
+- .codefleet/config.json is valid JSON
+condition:
+- config file path equals <workspaceRoot>/.codefleet/config.json
+- parsed document contains schemaVersion
+- schemaVersion is supported by the running CodeFleet validation rule set
+allowedEffect:
+- Project Profile may participate in policy merge
+- Task review, validation, draft, and run planning may read Project Profile as workspace policy
+deniedEffect:
+- Project Profile validation fails
+- Task review, approval, Execution Harness, and policy merge are blocked
+evidence:
+- profilePath
+- schemaVersion
+- workspaceRoot
+- validationRuleSetVersion
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = CORRUPTION
+repairBehavior:
+- manual edit of .codefleet/config.json or CodeFleet version/schema migration is required
+```
+
+```text
+ruleId: PROFILE_TOP_LEVEL_KEYS_FIXED
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+- <workspaceRoot>/.codefleet/config.json
+inputs:
+- parsed Project Profile top-level object
+- Project Profile schemaVersion
+preconditions:
+- PROFILE_CONFIG_IS_WORKSPACE_CONTRACT passed
+condition:
+- top-level keys are exactly:
+  schemaVersion, project, workspace, defaults, policies, references, localPolicy
+allowedEffect:
+- Project Profile block-level validation may continue
+- policy merge may read declared top-level blocks
+deniedEffect:
+- Project Profile validation fails
+- policy merge is blocked
+evidence:
+- actualTopLevelKeys
+- expectedTopLevelKeys
+- missingKeys
+- unexpectedKeys
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = CORRUPTION
+repairBehavior:
+- manual Project Profile schema correction is required
+```
+
+```text
+ruleId: PROFILE_POLICY_BLOCK_KEYS_FIXED
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+- <workspaceRoot>/.codefleet/config.json policies
+inputs:
+- parsed Project Profile policies object
+- Project Profile schemaVersion
+preconditions:
+- PROFILE_TOP_LEVEL_KEYS_FIXED passed
+- policies is an object
+condition:
+- policies keys are exactly:
+  harness, files, commands, risk, verification, redaction, carryForward, agentRoles
+allowedEffect:
+- policy block validators may run
+- Core Defaults, Project Profile, Local Overlay, Task Guardrails, and Run Options may be merged by block
+deniedEffect:
+- Project Profile validation fails
+- policy merge is blocked
+evidence:
+- actualPolicyKeys
+- expectedPolicyKeys
+- missingPolicyKeys
+- unexpectedPolicyKeys
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = CORRUPTION
+repairBehavior:
+- manual Project Profile policy block correction is required
+```
+
+```text
+ruleId: PROFILE_DOES_NOT_STORE_RUNTIME_OR_LOCAL_STATE
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+- <workspaceRoot>/.codefleet/config.json
+- Core secret pattern rule set
+- Core forbidden Project Profile key rule set
+inputs:
+- parsed Project Profile
+- all JSON pointers and string values in Project Profile
+- normalized path-valued fields in Project Profile
+preconditions:
+- PROFILE_CONFIG_IS_WORKSPACE_CONTRACT passed
+- Core secret pattern rule set is loaded
+- Core forbidden Project Profile key rule set is loaded
+condition:
+- no JSON pointer or key name matches the forbidden runtime-state key set
+- no string value matches the Core secret pattern rule set
+- all path-valued fields are workspace-relative paths
+- config.json does not contain raw stdout, stderr, diff, run result, approval history, execution evidence, secret, token, password, private key, session cookie, operating server connection detail, or personal local absolute path
+allowedEffect:
+- Project Profile may be committed and shared as workspace policy
+- references may point to context/template files
+deniedEffect:
+- Project Profile validation fails
+- Run Summary export, policy merge, and Execution Harness are blocked until corrected
+evidence:
+- matchedJsonPointer
+- matchedKey
+- matchedPatternId
+- matchedValueKind
+- pathValue
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = CORRUPTION
+repairBehavior:
+- move runtime evidence to Run Trace
+- move execution summary to Run Summary
+- move local-only values to .codefleet/local.json
+- remove secrets and rotate exposed credentials outside CodeFleet
+```
+
+```text
+ruleId: PROFILE_LOCAL_OVERLAY_RESTRICT_ONLY
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+- <workspaceRoot>/.codefleet/config.json localPolicy
+- <workspaceRoot>/.codefleet/local.json when present
+- Core Defaults
+inputs:
+- Project Profile localPolicy
+- parsed Local Overlay when present
+- policy order tables
+- permission merge result before and after Local Overlay
+preconditions:
+- PROFILE_CONFIG_IS_WORKSPACE_CONTRACT passed
+- localPolicy is an object
+- if localPolicy.overlayPath exists, it is workspace-relative
+condition:
+- localPolicy.mergeMode == RESTRICT_ONLY
+- localPolicy.overlayPath == ".codefleet/local.json"
+- Local Overlay modifies only keys listed in localPolicy.allowedLocalKeys
+- effective policy after applying Local Overlay is not less restrictive than effective policy before applying Local Overlay
+allowedEffect:
+- Local Overlay may participate in effectivePolicy calculation
+- personal environment differences may be represented outside config.json
+deniedEffect:
+- Local Overlay is ignored for execution
+- policy merge fails for runs that require invalid Local Overlay values
+- Project Profile validation fails if localPolicy itself is invalid
+evidence:
+- overlayPath
+- mergeMode
+- changedLocalKeys
+- violatingLocalKeys
+- beforeEffectivePolicyHash
+- afterEffectivePolicyHash
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- remove relaxing Local Overlay keys
+- move unsupported local values outside CodeFleet
+- update localPolicy.allowedLocalKeys only through Project Profile review
+```
+
+```text
+ruleId: PROFILE_EFFECTIVE_POLICY_IS_DERIVED
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+- Core Defaults
+- Project Profile
+- Local Overlay
+- Task Guardrails
+- Run Options
+inputs:
+- Core Defaults
+- parsed Project Profile
+- parsed Local Overlay when present
+- Task Guardrails
+- Run Options
+- policy order tables
+preconditions:
+- Project Profile validation passed
+- Task Guardrails are parsed
+- Run Options are parsed
+condition:
+- effectivePolicy is computed by meet(Core Defaults, Project Profile, Local Overlay, Task Guardrails, Run Options)
+- effectivePolicy is not stored as an authoritative block inside .codefleet/config.json
+- Project Profile values are not overwritten during effectivePolicy calculation
+allowedEffect:
+- Execution Harness may use effectivePolicy for capability gating
+- Run Trace may record effectivePolicy hash or snapshot for evidence
+deniedEffect:
+- direct execution using unmerged Project Profile is blocked
+- persisting effectivePolicy as Project Profile source of truth is blocked
+evidence:
+- inputPolicyHashes
+- effectivePolicyHash
+- mergeOrder
+- policyOrderTablesVersion
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = CORRUPTION
+repairBehavior:
+- rebuild effectivePolicy from source policies
+- remove derived policy state from config.json if present
+```
+
+### 5.3 DESIGN CANDIDATE / VERSION_PLAN 분리
+
+```text
+DESIGN CANDIDATE:
+- project block 내부 필드의 필수/선택 여부
+- workspace.discovery 내부 schema
+- defaults 내부 enum 전체
+- harness policy 내부 schema
+- files policy 내부 glob schema
+- commands policy 내부 command matcher schema
+- risk policy 내부 rule schema
+- verification policy 내부 preset schema
+- redaction policy 내부 pattern/action schema
+- carryForward policy 내부 audit/recheck 세부 기본값
+- agentRoles 내부 role taxonomy
+- profile rule id 세부 네이밍 체계
+```
+
+```text
+VERSION_PLAN:
+v0.1:
+- 기존 config.json의 version / defaultAgent / mode / agents 형식을 유지한다.
+- Project Profile 최종 schema와 직접 호환되지 않는다.
+
+v0.2:
+- schemaVersion, defaults, policies.harness, policies.files, policies.commands의 최소 subset을 도입한다.
+- 기존 version / defaultAgent / mode / agents는 migration 대상으로 읽는다.
+
+final:
+- .codefleet/config.json은 Project Profile schemaVersion 기반 Workspace Policy Contract다.
+- v0.1 legacy config 형식은 migration 없이 FINAL schema validation을 통과할 수 없다.
+```
+
+### 5.4 Profile이 담으면 안 되는 것
 
 ```text
 - 비밀 정보
@@ -3941,7 +4256,7 @@ DESIGN CANDIDATE:
 - 개인별 local path 강결합
 ```
 
-긴 설명과 프로젝트 지식은 `config.json`에 몰아넣지 않고 context 파일로 분리한다.
+긴 설명과 프로젝트 지식은 `config.json`에 몰아넣지 않고 context 파일로 분리한다. 이 항목은 `PROFILE_DOES_NOT_STORE_RUNTIME_OR_LOCAL_STATE`의 사람이 읽기 쉬운 요약이다.
 
 ```text
 .codefleet/context/architecture.md
@@ -5997,23 +6312,28 @@ v0.1 구현 내용:
 - Task revision lineage와 revision-bound approval / relation / run / summary 원칙
 - QUEUE_REORDERED의 보수적 future order semantics
 - ledger event 최소 세트와 "ledger는 결정 로그" 원칙
-- 확정 규칙은 구체적 / 결정론적 / 전제 명시 기준을 만족해야 한다는 문서 작성 기준
+- 확정 규칙은 구체적 / 결정론적 / 전제 / 증거 기준을 만족해야 한다는 문서 작성 기준
 - Risk max-severity 계산과 risk lowering 제한 규칙
 - Carry-forward discard / rejected event / risk recheck 조건
 - Policy 병합의 deterministic meet operation 원칙
 - Safe Orchestration isolationMode 기록과 NONE일 때 risk 제한
 - Run Summary sanitization boundary와 export 차단 규칙
+- Project Profile top-level 구조와 policy block 구조
+- Local Overlay는 .codefleet/local.json이며 RESTRICT_ONLY로만 병합된다는 원칙
 ```
 
 다음으로 논의할 항목:
 
 ```text
-1. Project Profile 최종 스키마
-   - policies
-   - defaults
-   - references
-   - local-only 설정 분리
-   - risk / redaction / command / carry-forward policy 기본값
+1. Project Profile policy block 세부 스키마
+   - harness policy
+   - files policy
+   - commands policy
+   - risk policy
+   - verification policy
+   - redaction policy
+   - carryForward policy
+   - agentRoles policy
 
 2. Harness enforcement 상세 정의
    - Draft Harness discovery budget 기본값
