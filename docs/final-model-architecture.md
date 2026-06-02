@@ -18,8 +18,9 @@ Current progress:
 - `defaults.task.harnessMode` is defined.
 - `defaults.task.requiredGates` is defined as `runApproval`, `resultReview`, and `verification`.
 - `defaults.task.workflow` is defined as `PLAN`, `INSPECT`, `APPLY`, `VERIFY`, and `REVIEW` procedural stages.
+- `defaults.run.agentAdapter` is defined with project policy allowlist, local availability, and Run Plan resolution evidence.
+- `policies.agentAdapters` is defined as a first-class policy block.
 
 Remaining defaults topics:
 
-- `defaults.run.agentAdapter`
 - `defaults.run.isolationMode`

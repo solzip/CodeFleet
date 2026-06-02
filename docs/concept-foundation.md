@@ -3919,6 +3919,7 @@ defaults
 
 policies
   harness
+  agentAdapters
   files
   commands
   risk
@@ -3949,6 +3950,7 @@ JSON skeleton:
   "defaults": {},
   "policies": {
     "harness": {},
+    "agentAdapters": {},
     "files": {},
     "commands": {},
     "risk": {},
@@ -3984,7 +3986,7 @@ defaults
 
 policies
 = Project Profile의 핵심이다.
-= 파일, 명령, risk, 검증, redaction, carry-forward, role 권한을 판정한다.
+= adapter 허용, 파일, 명령, risk, 검증, redaction, carry-forward, role 권한을 판정한다.
 
 references
 = context / template 파일 경로만 가진다.
@@ -4091,7 +4093,8 @@ Monorepo / multirepo 처리:
 - workspace와 component는 권한 정책이 아니다.
 - ownedPaths / relatedPaths / sharedPaths는 read 또는 write 권한을 부여하지 않는다.
 - component.kind와 stackTags는 command 권한을 부여하지 않는다.
-- 권한과 risk는 policies.files, policies.commands, policies.risk에서만 판정한다.
+- 파일 / 명령 권한과 risk는 policies.files, policies.commands, policies.risk에서만 판정한다.
+- AgentAdapter 허용 여부는 policies.agentAdapters에서 판정한다.
 ```
 
 ### 5.1.2 최종 모델 계층과 실행 단계
@@ -4832,6 +4835,248 @@ repairBehavior:
 - move permission or gate behavior to policies, requiredGates, or Run Planning rules
 ```
 
+#### defaults.run.agentAdapter
+
+`defaults.run.agentAdapter`는 Run Planning에서 사용할 기본 AgentAdapter 선택값이다.
+
+AgentAdapter는 CodeFleet Core와 AI 실행 도구를 연결하는 provider-agnostic adapter id다.
+
+```text
+agentRole
+= 어떤 역할로 일할 것인가
+
+agentAdapter
+= 어떤 AI 실행 도구 / provider adapter를 통해 일할 것인가
+
+model
+= adapter 또는 provider 내부에서 사용할 모델 선택값
+
+harnessMode
+= 어떤 실행 능력을 요청하는가
+
+policies
+= 실제로 무엇을 허용하는가
+```
+
+`defaults.run.agentAdapter`는 권한이 아니고, 역할이 아니고, 모델명이 아니며, provider-specific 실행 설정이 아니다. `defaults.run.agentAdapter`는 Run Plan 선택값을 채우는 기본값일 뿐이다.
+
+추천 기본값:
+
+```json
+{
+  "agentAdapter": "REQUIRE_EXPLICIT"
+}
+```
+
+Project Profile의 adapter 설계는 A+ 구조를 사용한다.
+
+```text
+defaults.run.agentAdapter
+= 기본 adapter 선택값
+= concrete AdapterId 또는 REQUIRE_EXPLICIT
+
+policies.agentAdapters.allowedAdapters
+= 프로젝트 정책상 허용되는 AdapterId 목록
+= 설치됨을 의미하지 않음
+
+local adapter registry / .codefleet/local.json
+= 이 로컬 환경에서 실제 실행 가능한 adapter command / path / 개인 설정
+= 공유 Project Profile에 저장하지 않음
+
+RunPlan.selectedAgentAdapter
+= 이번 Run에서 최종 선택된 adapter snapshot
+
+RunPlan.adapterResolution
+= policy allow check, local availability check, selection source를 설명하는 Run Planning evidence
+```
+
+예:
+
+```json
+{
+  "defaults": {
+    "run": {
+      "agentAdapter": "REQUIRE_EXPLICIT"
+    }
+  },
+  "policies": {
+    "agentAdapters": {
+      "allowedAdapters": ["codex", "claude-code"]
+    }
+  }
+}
+```
+
+로컬 실행 설정 예:
+
+```json
+{
+  "agentAdapters": {
+    "codex": {
+      "command": "codex"
+    },
+    "claude-code": {
+      "command": "claude"
+    }
+  }
+}
+```
+
+위 local 설정은 `.codefleet/config.json`에 저장하지 않는다. Project Profile은 공유 정책이고, command path / token / API key / model / provider-specific CLI option / transcript parsing rule은 로컬 환경 또는 adapter layer의 책임이다.
+
+Local adapter registry는 Project Profile 정책을 넓히지 않는다. Local adapter registry는 이미 `policies.agentAdapters.allowedAdapters`로 허용된 AdapterId에 대해 이 로컬에서 실행 가능한 command / path / 개인 설정을 제공할 뿐이다. local availability는 adapter allowlist를 추가하거나 우회할 수 없다.
+
+선택 / 검증 흐름:
+
+```text
+1. Run Planning은 Run Options agentAdapter override를 먼저 확인한다.
+2. Run Options가 없으면 defaults.run.agentAdapter를 확인한다.
+3. 값이 REQUIRE_EXPLICIT이면 사용자에게 선택을 요구한다.
+4. 사용자가 선택할 수 있는 후보는 policy allow + local availability를 모두 통과한 adapter다.
+5. concrete AdapterId는 policies.agentAdapters.allowedAdapters 안에 있어야 한다.
+6. concrete AdapterId는 local adapter registry에서 실행 가능해야 한다.
+7. 최종 선택은 Project Profile을 수정하지 않고 RunPlan.selectedAgentAdapter에 기록한다.
+8. 선택 근거는 RunPlan.adapterResolution에 기록한다.
+```
+
+차단 결과:
+
+```text
+selectedAgentAdapter not in policies.agentAdapters.allowedAdapters
+-> POLICY BLOCK
+
+selectedAgentAdapter allowed but not available locally
+-> LOCAL AVAILABILITY BLOCK
+
+defaults.run.agentAdapter concrete value not in allowedAdapters
+-> Project Profile validation failure
+
+defaults.run.agentAdapter REQUIRE_EXPLICIT and no allowed+available adapter exists
+-> Run Planning blocked
+```
+
+AgentAdapter FINAL RULES:
+
+```text
+ruleId: PROFILE_POLICY_AGENT_ADAPTERS_BLOCK
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+- <workspaceRoot>/.codefleet/config.json policies.agentAdapters
+inputs:
+- parsed Project Profile policies.agentAdapters
+- CodeFleet Project Profile schemaVersion
+- AdapterId syntax rule set
+preconditions:
+- PROFILE_POLICY_BLOCK_KEYS_FIXED passed
+- policies.agentAdapters is an object
+condition:
+- policies.agentAdapters.allowedAdapters is a non-empty array
+- every allowedAdapters item is a stable provider-agnostic AdapterId
+- allowedAdapters contains no model name, command path, executable path, token, API key, CLI option, or transcript parsing rule
+allowedEffect:
+- Run Planning may use policies.agentAdapters.allowedAdapters for adapter policy allow checks
+deniedEffect:
+- Project Profile validation fails
+- Run Planning and Execution Harness are blocked
+evidence:
+- profilePath
+- policies.agentAdapters JSON pointer
+- allowedAdapters
+- invalid adapter entry when present
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- remove provider-specific execution detail from Project Profile
+- move local execution settings to .codefleet/local.json or adapter registry
+- correct allowedAdapters to stable AdapterId values
+```
+
+```text
+ruleId: PROFILE_DEFAULTS_RUN_AGENT_ADAPTER_SCHEMA
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+- <workspaceRoot>/.codefleet/config.json defaults.run.agentAdapter
+- <workspaceRoot>/.codefleet/config.json policies.agentAdapters.allowedAdapters
+inputs:
+- parsed Project Profile defaults.run.agentAdapter
+- parsed Project Profile policies.agentAdapters.allowedAdapters
+- AdapterId syntax rule set
+preconditions:
+- Project Profile validation has reached defaults.run validation
+- PROFILE_POLICY_AGENT_ADAPTERS_BLOCK passed
+condition:
+- defaults.run.agentAdapter is either REQUIRE_EXPLICIT or a stable AdapterId
+- if concrete, defaults.run.agentAdapter is in policies.agentAdapters.allowedAdapters
+- defaults.run.agentAdapter is not a model name, command path, executable path, token, API key, CLI option, or provider-specific setting
+allowedEffect:
+- Run Planning may use defaults.run.agentAdapter as the default adapter selection input
+deniedEffect:
+- Project Profile validation fails
+- Run Planning from this Project Profile is blocked
+evidence:
+- profilePath
+- defaults.run.agentAdapter JSON pointer
+- policies.agentAdapters.allowedAdapters
+- invalid default adapter value when present
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- set defaults.run.agentAdapter to REQUIRE_EXPLICIT or an allowed AdapterId
+- move provider-specific execution detail to local config or adapter layer
+```
+
+```text
+ruleId: RUN_PLAN_AGENT_ADAPTER_RESOLUTION
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- Run Options agentAdapter override
+- Project Profile defaults.run.agentAdapter
+- Project Profile policies.agentAdapters.allowedAdapters
+- local adapter registry / .codefleet/local.json
+- Run Plan
+inputs:
+- requested adapter from Run Options when present
+- defaults.run.agentAdapter
+- allowedAdapters
+- locally available adapters
+- user selection when REQUIRE_EXPLICIT is unresolved
+preconditions:
+- Project Profile validation passed
+- local adapter registry has been loaded
+- Task Revision is selected for Run Planning
+condition:
+- selectedAgentAdapter is concrete
+- selectedAgentAdapter is in policies.agentAdapters.allowedAdapters
+- selectedAgentAdapter is available in the local adapter registry
+- RunPlan.adapterResolution records selectionSource, policyAllowed, locallyAvailable, and evidence references
+- Run Planning does not modify Project Profile, Local Overlay, or Task Revision while selecting an adapter
+allowedEffect:
+- Run Plan may record selectedAgentAdapter
+- Execution Harness may instantiate the selected AgentAdapter
+deniedEffect:
+- Run Planning is blocked
+- Execution Harness is not called
+evidence:
+- runPlanId
+- selectedAgentAdapter
+- selectionSource
+- policyAllowed
+- locallyAvailable
+- adapterResolution
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- choose an allowed and locally available adapter
+- install or configure the selected adapter locally
+- update Project Profile allowedAdapters only through Project Profile review
+```
+
 ### 5.2 Project Profile 구조 FINAL RULE
 
 ```text
@@ -4916,7 +5161,7 @@ preconditions:
 - policies is an object
 condition:
 - policies keys are exactly:
-  harness, files, commands, risk, verification, redaction, carryForward, agentRoles
+  harness, agentAdapters, files, commands, risk, verification, redaction, carryForward, agentRoles
 allowedEffect:
 - policy block validators may run
 - policy merge may read the validated policies block
@@ -4955,7 +5200,7 @@ condition:
 - no JSON pointer or key name matches the forbidden runtime-state key set
 - no string value matches the Core secret pattern rule set
 - all path-valued fields are workspace-relative paths
-- config.json does not contain raw stdout, stderr, diff, run result, approval history, execution evidence, secret, token, password, private key, session cookie, operating server connection detail, or personal local absolute path
+- config.json does not contain raw stdout, stderr, diff, run result, approval history, execution evidence, secret, token, password, private key, session cookie, operating server connection detail, adapter command path, provider-specific CLI option, provider-specific model setting, transcript parsing rule, or personal local absolute path
 allowedEffect:
 - Project Profile may be committed and shared as workspace policy
 - references may point to context/template files
@@ -7202,13 +7447,11 @@ v0.1 구현 내용:
 
 ```text
 1. Project Profile defaults block 세부 스키마
-   - defaults.task.agentRole
-   - defaults.task.harnessMode
-   - defaults.run.agentAdapter
    - defaults.run.isolationMode
 
 2. Project Profile policy block 세부 스키마
    - harness policy
+   - agentAdapters policy
    - files policy
    - commands policy
    - risk policy

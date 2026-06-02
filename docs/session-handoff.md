@@ -126,6 +126,9 @@ AI-native 개발 오케스트레이션 CLI다.
 - defaults.task.workflow는 WorkflowStage 절차 템플릿이며 PLAN / INSPECT / APPLY / VERIFY / REVIEW를 사용한다.
 - defaults.task.workflow는 PROFILE_DEFAULTS_TASK_WORKFLOW_SCHEMA, TASK_WORKFLOW_IS_DRAFT_TEMPLATE_NOT_EXECUTION_POLICY FINAL RULE로 고정했다.
 - defaults.task.workflow는 권한, gate, RunSummary.type, Execution Lifecycle을 대체하지 않는다.
+- defaults.run.agentAdapter는 A+ 구조로 정리했다. 기본 선택값, 프로젝트 adapter allowlist, local availability, Run Plan selectedAgentAdapter / adapterResolution을 분리한다.
+- policies.agentAdapters를 first-class policy block으로 추가했다.
+- provider-specific command/path/token/model/CLI option/transcript parsing rule은 Project Profile에 저장하지 않는다.
 - REQUIRE_EXPLICIT은 config 수정 요구가 아니라 Task Draft / Review / Approval 흐름에서 사용자에게 concrete value를 객관식으로 선택하게 하는 요구다.
 - 하나의 설계 항목이 결정될 때마다 `docs/concept-foundation.md`에 즉시 반영하고, 다음 세션 연결 정보는 `docs/session-handoff.md`에 함께 갱신한다.
 - 큰 설계 틀이 확정될 때마다 architecture snapshot 이미지를 생성해 `docs/assets/`에 저장하고, 문서에서 참조한다.
@@ -179,7 +182,7 @@ same workspace state
 다음 논의 주제:
 
 ```text
-Project Profile defaults.run.agentAdapter 세부 스키마
+Project Profile defaults.run.isolationMode 세부 스키마
 ```
 
 이유:
@@ -191,9 +194,9 @@ defaults 논의 전에 최종 모델 계층, 실행 단계, source/derived/evide
 defaults는 flat 구조가 아니라 `defaults.task`와 `defaults.run`으로 분리하는 방향으로 정리했다.
 defaults.task.agentRole, defaults.task.harnessMode, defaults.task.requiredGates의 REQUIRE_EXPLICIT 처리 원칙은 정리했다.
 defaults.task.workflow의 절차 템플릿 원칙도 정리했다.
-다음은 Run Planning에서 어떤 AgentAdapter를 기본 선택할지 정해야 한다.
+defaults.run.agentAdapter의 A+ 구조도 정리했다.
+다음은 Run Planning에서 어떤 isolationMode를 기본 선택할지 정해야 한다.
 
-- defaults.run.agentAdapter
 - defaults.run.isolationMode
 ```
 
@@ -214,6 +217,7 @@ defaults
   run
 policies
   harness
+  agentAdapters
   files
   commands
   risk
@@ -253,7 +257,7 @@ repairBehavior
 ## 남은 설계 항목
 
 ```text
-1. Project Profile defaults block internal schema
+1. Project Profile defaults.run.isolationMode internal schema
 2. Project Profile policy block internal schema
 3. Harness enforcement details
 4. AgentRole taxonomy
