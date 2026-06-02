@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="1120" viewBox="0 0 1300 1120">
+  <defs>
+    <style>
+      .title { font: 700 30px Arial, sans-serif; fill: #111827; }
+      .sub { font: 15px Arial, sans-serif; fill: #4b5563; }
+      .zone { font: 700 17px Arial, sans-serif; }
+      .lab { font: 700 15px Arial, sans-serif; fill: #111827; }
+      .sm { font: 14px Arial, sans-serif; fill: #111827; }
+      .ti { font: 12px Arial, sans-serif; fill: #374151; }
+      .done { fill: #f0fdf4; stroke: #15803d; stroke-width: 2; }
+      .prog { fill: #fff7ed; stroke: #c2410c; stroke-width: 2; }
+      .pend { fill: #f3f4f6; stroke: #6b7280; stroke-width: 2; }
+      .crit { fill: #fef2f2; stroke: #b91c1c; stroke-width: 3.5; }
+      .actor { fill: #eff6ff; stroke: #1d4ed8; stroke-width: 2; }
+      .ext { fill: #f5f3ff; stroke: #6d28d9; stroke-width: 2; }
+      .guard { fill: #fffdf5; stroke: #b45309; stroke-width: 2; stroke-dasharray: 7 5; }
+      .ar { stroke: #111827; stroke-width: 2.5; fill: none; marker-end: url(#ah); }
+      .arc { stroke: #b91c1c; stroke-width: 3; fill: none; marker-end: url(#ahr); }
+      .dash { stroke: #6b7280; stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+      .loop { stroke: #15803d; stroke-width: 2.5; fill: none; marker-end: url(#ahg); }
+    </style>
+    <marker id="ah" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0,9 3.5,0 7" fill="#111827"/></marker>
+    <marker id="ahr" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0,9 3.5,0 7" fill="#b91c1c"/></marker>
+    <marker id="ahg" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0,9 3.5,0 7" fill="#15803d"/></marker>
+  </defs>
+
+  <rect width="1300" height="1120" fill="#ffffff"/>
+  <text x="650" y="40" text-anchor="middle" class="title">CodeFleet 목표 루프 — Spine &amp; Seams</text>
+  <text x="650" y="66" text-anchor="middle" class="sub">by Claude Code · 동적 흐름 한 장 · source of truth: docs/concept-foundation.md</text>
+
+  <!-- actors -->
+  <rect x="40" y="92" width="250" height="64" rx="8" class="actor"/>
+  <text x="165" y="122" text-anchor="middle" class="zone" fill="#1d4ed8">사람</text>
+  <text x="165" y="144" text-anchor="middle" class="ti">Intent · ◆ approve · ◆ review</text>
+
+  <rect x="1000" y="92" width="260" height="64" rx="8" class="ext"/>
+  <text x="1130" y="122" text-anchor="middle" class="zone" fill="#6d28d9">외부 AI 도구</text>
+  <text x="1130" y="144" text-anchor="middle" class="ti">Claude Code / Codex / …</text>
+
+  <!-- guards frame -->
+  <rect x="208" y="170" width="392" height="752" rx="10" class="guard"/>
+  <text x="226" y="196" class="zone" fill="#b45309">GUARDS (보호대)</text>
+  <text x="226" y="214" class="ti">Mutation · Ledger · Policy · Corruption · Gating</text>
+
+  <!-- stations x300 w210 -->
+  <rect x="300" y="228" width="210" height="52" rx="6" class="pend"/>
+  <text x="405" y="259" text-anchor="middle" class="sm">Intent</text>
+
+  <rect x="300" y="310" width="210" height="52" rx="6" class="prog"/>
+  <text x="405" y="341" text-anchor="middle" class="sm">Objective　[S]</text>
+
+  <rect x="300" y="392" width="210" height="52" rx="6" class="prog"/>
+  <text x="405" y="423" text-anchor="middle" class="sm">Task Draft　[S]</text>
+
+  <rect x="300" y="474" width="210" height="52" rx="6" class="prog"/>
+  <text x="405" y="505" text-anchor="middle" class="sm" fill="#1d4ed8">◆ Review / Approval</text>
+
+  <rect x="300" y="556" width="210" height="52" rx="6" class="done"/>
+  <text x="405" y="587" text-anchor="middle" class="sm" fill="#15803d">Task Revision　[S] ✓</text>
+
+  <rect x="300" y="638" width="210" height="52" rx="6" class="prog"/>
+  <text x="405" y="669" text-anchor="middle" class="sm">Run Planning　[D]</text>
+
+  <rect x="300" y="720" width="210" height="52" rx="6" class="crit"/>
+  <text x="405" y="751" text-anchor="middle" class="sm" fill="#b91c1c">║ Harness Execution</text>
+
+  <rect x="300" y="802" width="210" height="52" rx="6" class="prog"/>
+  <text x="405" y="833" text-anchor="middle" class="sm">Evidence / Trace　[S]</text>
+
+  <rect x="300" y="884" width="210" height="52" rx="6" class="pend"/>
+  <text x="405" y="915" text-anchor="middle" class="sm" fill="#1d4ed8">◆ Review / Close</text>
+
+  <!-- spine arrows -->
+  <g class="ar">
+    <line x1="405" y1="280" x2="405" y2="308"/>
+    <line x1="405" y1="362" x2="405" y2="390"/>
+    <line x1="405" y1="444" x2="405" y2="472"/>
+    <line x1="405" y1="526" x2="405" y2="554"/>
+    <line x1="405" y1="608" x2="405" y2="636"/>
+    <line x1="405" y1="690" x2="405" y2="718"/>
+    <line x1="405" y1="772" x2="405" y2="800"/>
+    <line x1="405" y1="854" x2="405" y2="882"/>
+  </g>
+
+  <!-- carry-forward loop back to Objective -->
+  <path d="M 300 910 L 246 910 L 246 336 L 300 336" class="loop"/>
+  <text x="240" y="630" text-anchor="middle" class="ti" fill="#15803d" transform="rotate(-90 240 630)">carry-forward (승인된 결정 / 요약)</text>
+
+  <!-- 사람 -> Intent -->
+  <path d="M 200 156 L 320 226" class="ar"/>
+  <text x="232" y="200" class="ti">CLI</text>
+
+  <!-- seam cards (right) -->
+  <rect x="650" y="386" width="430" height="64" rx="8" class="prog"/>
+  <text x="666" y="412" class="lab">S1  Drafting　<tspan class="ti">SHAPED</tspan></text>
+  <text x="666" y="436" class="ti">Intent → Task Draft · drafter 입출력 계약 빔 (우회: 수동 YAML)</text>
+  <path d="M 510 418 L 648 418" class="dash"/>
+
+  <rect x="650" y="700" width="430" height="92" rx="8" class="crit"/>
+  <text x="666" y="728" class="lab" fill="#b91c1c">S2  Adapter　★ 최대 빈칸　EMPTY</text>
+  <text x="666" y="752" class="ti">approved Revision → 외부 AI 도구 호출 · 출력 회수 · scope 적용</text>
+  <text x="666" y="774" class="ti">호출 프로토콜이 통째로 비어 있음 → 위임이 물리적으로 일어나는 유일한 지점</text>
+  <path d="M 510 746 L 648 746" class="arc"/>
+
+  <rect x="650" y="800" width="430" height="56" rx="8" class="prog"/>
+  <text x="666" y="824" class="lab">S3  Verify　<tspan class="ti">SHAPED</tspan></text>
+  <text x="666" y="845" class="ti">검증 실행 / 기록 · NOT_RUN / PASSED / FAILED</text>
+  <path d="M 510 828 L 648 828" class="dash"/>
+
+  <rect x="650" y="884" width="430" height="56" rx="8" class="pend"/>
+  <text x="666" y="908" class="lab">S4  Review　<tspan class="ti">EMPTY</tspan></text>
+  <text x="666" y="929" class="ti">결과 수용 → VERIFIED 계산이 여기 의존 · review record 실체 없음</text>
+  <path d="M 510 910 L 648 910" class="dash"/>
+
+  <!-- S2 -> external AI -->
+  <path d="M 880 700 L 1090 158" class="arc"/>
+  <path d="M 1140 158 L 950 700" class="arc"/>
+
+  <!-- export (S5) -->
+  <rect x="650" y="500" width="430" height="60" rx="8" class="ext"/>
+  <text x="666" y="526" class="lab" fill="#6d28d9">S5  Export　<tspan class="ti" fill="#374151">SHAPED</tspan></text>
+  <text x="666" y="548" class="ti">Run Trace → sanitized Run Summary → Notion / 작업일지 / PR</text>
+  <path d="M 510 828 C 600 700, 600 600, 648 545" class="dash"/>
+
+  <!-- legend -->
+  <rect x="40" y="958" width="1220" height="142" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="60" y="986" class="zone" fill="#111827">읽는 법</text>
+  <rect x="170" y="974" width="20" height="15" rx="3" class="done"/><text x="198" y="987" class="sm">RUNS</text>
+  <rect x="280" y="974" width="20" height="15" rx="3" class="prog"/><text x="308" y="987" class="sm">SHAPED</text>
+  <rect x="410" y="974" width="20" height="15" rx="3" class="pend"/><text x="438" y="987" class="sm">EMPTY</text>
+  <rect x="530" y="974" width="20" height="15" rx="3" class="crit"/><text x="558" y="987" class="sm">최대 빈칸 (S2)</text>
+  <text x="720" y="987" class="sm">[S] source · [D] derived · ◆ human gate · ║ seam</text>
+
+  <text x="60" y="1024" class="ti" fill="#475569">색을 정직하게 보면: 계약(Task Revision)까지만 초록이고, 실제 일이 일어나는 아래 절반(Execution · Review/Close)은 회색/빨강이다.</text>
+  <line x1="60" y1="1042" x2="1240" y2="1042" stroke="#e5e7eb"/>
+  <text x="60" y="1072" class="lab" fill="#b45309">한 줄 결론:</text>
+  <text x="180" y="1072" class="sm">목표 루프는 그려졌지만 실행 경계(S1~S5)가 비었다. 가장 먼저 채울 곳 = S2 Adapter 호출 프로토콜.</text>
+</svg>

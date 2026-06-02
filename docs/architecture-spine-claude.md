@@ -3,6 +3,10 @@
 이 문서는 CodeFleet 아키텍처를 **목표 루프 중심**으로 다시 그린 지도다.
 FINAL RULE의 source of truth는 `docs/concept-foundation.md`다. 이 문서는 "무엇이 핵심 축이고, 무엇이 보호대이고, 어디가 비어 있는가"를 한눈에 보기 위한 것이다.
 
+![CodeFleet 목표 루프 — Spine & Seams (by Claude Code)](assets/codefleet-spine-claude.svg)
+
+아래 ASCII 뷰들은 위 그림을 더 자세히 푼 것이다.
+
 ## 왜 다시 그리나
 
 기존 `final-model-architecture.md`는 **설정·정책·안전 축**(Project Profile / defaults / policy lifecycle)을 진행도로 측정한다. 그런데 제품의 목표는 그게 아니다.
