@@ -3843,7 +3843,8 @@ Local Overlay
 = 개인 환경 보정, 권한 완화 불가
 
 Effective Policy
-= Core Defaults + Project Profile + Local Overlay + Task Guardrails + Run Options의 병합 결과
+= Run Plan 내부의 capability / risk / gate policy snapshot
+= Core Policy Defaults + Project Profile policies + Local Overlay restrictions + Task Guardrails + policy-affecting Run Options의 병합 결과
 
 Task Spec
 = 개별 작업 계약
@@ -3855,14 +3856,14 @@ Run Trace
 정책 계층:
 
 ```text
-Core Defaults
-  -> Project Profile
+Core Policy Defaults
+  -> Project Profile policies
      -> Local Overlay
-        -> Task Guardrails / Run Options
+        -> Task Guardrails / policy-affecting Run Options
            -> Effective Policy
 ```
 
-Project Profile은 원본 정책이고, Effective Policy는 계산 결과다. Run Trace는 실행 증거이고, Task Spec은 개별 작업 계약이다. 이 네 가지를 한 파일에 섞지 않는다.
+Project Profile은 원본 정책 / 기본값 계약이고, Effective Policy는 Run Plan 내부의 계산 결과다. Run Trace는 실행 증거이고, Task Spec은 개별 작업 계약이다. 이 네 가지를 한 파일에 섞지 않는다.
 
 우선순위:
 
@@ -3892,12 +3893,14 @@ workspace
   sharedPaths
 
 defaults
-  agent
-  agentRole
-  harnessMode
-  requiredGate
-  workflow
-  isolationMode
+  task
+    agentRole
+    harnessMode
+    requiredGate
+    workflow
+  run
+    agentAdapter
+    isolationMode
 
 policies
   harness
@@ -3962,6 +3965,7 @@ workspace
 defaults
 = Task가 생략했을 때 적용되는 기본 실행값이다.
 = policies보다 우선하지 못한다.
+= Task 계약 생략값은 defaults.task에 두고, Run 계획 생략값은 defaults.run에 둔다.
 
 policies
 = Project Profile의 핵심이다.
@@ -4104,10 +4108,47 @@ Project Profile의 `defaults`, `policies`, Task 계약, Run 실행을 논의하�
 
 6. Run Plan
    = 특정 Run 직전에 생성되는 derived execution contract
-   = Task Revision, Project Profile, Local Overlay, Run Options에서 계산됨
+   = Task Revision, Project Profile defaults/policies, Local Overlay, Run Options에서 계산됨
 ```
 
-Run Plan은 source of truth가 아니다. Run Plan은 특정 Run을 위한 파생 실행 계약이며, 그 안에 `effectivePolicy`, `computedRisk`, `requiredGate`, `isolationMode`, `verificationPlan`, selected `agentAdapter`가 포함될 수 있다.
+Run Plan은 source of truth가 아니다. Run Plan은 특정 Run을 위한 파생 실행 계약이다.
+
+Run Plan includes:
+
+```text
+- selected Task Revision
+- selected agentAdapter
+- selected isolationMode
+- Run Options snapshot
+- effectivePolicy
+- computedRisk
+- requiredGate
+- verificationPlan
+```
+
+`effectivePolicy`는 Run Plan 전체가 아니다. `effectivePolicy`는 Run Plan 안에 포함되는 capability / risk / gate policy snapshot이다. selected `agentAdapter`, retry reason, run request id, selected Task Revision은 Run Plan 필드일 수 있지만 `effectivePolicy` 자체는 아니다.
+
+`Run Options`는 특정 Run 요청에 붙는 명시적 실행 입력이다. 예를 들어 사용자가 run command에서 선택한 agentAdapter override, isolation override, verification override, retry reason 같은 값이 Run Options가 될 수 있다. Run Options는 Project Profile에 저장하지 않는다. Run Options는 Run Plan 생성 입력으로만 쓰이며, Run Plan이 생성된 뒤 기존 Task Revision이나 Project Profile을 수정하지 않는다.
+
+`Core Policy Defaults`, `Project Profile defaults`, `Run Options`의 경계:
+
+```text
+Core Policy Defaults
+= CodeFleet runtime이 가진 최후의 보수적 기본값
+= Project Profile이 없거나 불완전한 권한을 보완하지 않음
+
+Project Profile defaults
+= .codefleet/config.json defaults block
+= Task Draft 또는 Run Planning 생략값
+= 권한 정책이 아니며 policies보다 우선하지 못함
+= Run Plan 선택값을 채울 수 있지만 effectivePolicy 자체가 아님
+
+Run Options
+= 특정 Run 요청의 명시적 입력
+= Project Profile에 저장하지 않음
+= Run Plan 입력이며 source input으로 기록될 수 있음
+= policy-affecting Run Options만 effectivePolicy 계산에 참여할 수 있음
+```
 
 실행 생명주기:
 
@@ -4295,7 +4336,7 @@ condition:
   harness, files, commands, risk, verification, redaction, carryForward, agentRoles
 allowedEffect:
 - policy block validators may run
-- Core Defaults, Project Profile, Local Overlay, Task Guardrails, and Run Options may be merged by block
+- policy merge may read the validated policies block
 deniedEffect:
 - Project Profile validation fails
 - policy merge is blocked
@@ -4361,7 +4402,7 @@ scope: POLICY
 sourceOfTruth:
 - <workspaceRoot>/.codefleet/config.json localPolicy
 - <workspaceRoot>/.codefleet/local.json when present
-- Core Defaults
+- Core Policy Defaults
 inputs:
 - Project Profile localPolicy
 - parsed Local Overlay when present
@@ -4404,29 +4445,31 @@ ruleId: PROFILE_EFFECTIVE_POLICY_IS_DERIVED
 status: FINAL
 scope: POLICY
 sourceOfTruth:
-- Core Defaults
-- Project Profile
+- Core Policy Defaults
+- Project Profile policies
 - Local Overlay
 - Task Guardrails
-- Run Options
+- policy-affecting Run Options
 inputs:
-- Core Defaults
-- parsed Project Profile
+- Core Policy Defaults
+- parsed Project Profile policies
 - parsed Local Overlay when present
 - Task Guardrails
-- Run Options
+- policy-affecting Run Options
 - policy order tables
 preconditions:
 - Project Profile validation passed
 - Task Guardrails are parsed
 - Run Options are parsed
 condition:
-- effectivePolicy is computed by meet(Core Defaults, Project Profile, Local Overlay, Task Guardrails, Run Options)
+- effectivePolicy is computed by meet(Core Policy Defaults, Project Profile policies, Local Overlay restrictions, Task Guardrails, policy-affecting Run Options)
+- effectivePolicy is a capability / risk / gate policy snapshot inside Run Plan
+- effectivePolicy does not contain selected agentAdapter, selected Task Revision, retry reason, run request id, or non-policy run metadata
 - effectivePolicy is not stored as an authoritative block inside .codefleet/config.json
 - Project Profile values are not overwritten during effectivePolicy calculation
 allowedEffect:
 - Execution Harness may use effectivePolicy for capability gating
-- Run Trace may record effectivePolicy hash or snapshot for evidence
+- Run Plan and Run Trace may record effectivePolicy hash or snapshot for evidence
 deniedEffect:
 - direct execution using unmerged Project Profile is blocked
 - persisting effectivePolicy as Project Profile source of truth is blocked
@@ -6073,10 +6116,11 @@ AI를 신뢰하는 것이 아니라, AI가 일하는 절차와 경계를 신뢰�
 정책 병합 방향:
 
 ```text
-Core defaults
+Core Policy Defaults
   -> Project Profile policies
+  -> Local Overlay restrictions
   -> Task guardrails
-  -> Run options
+  -> policy-affecting Run options
 ```
 
 하지만 권한은 넓어지면 안 된다.
@@ -6091,7 +6135,7 @@ More restrictive wins.
 
 ```text
 effectivePolicy =
-  meet(Core defaults, Project Profile policies, Task guardrails, Run options)
+  meet(Core Policy Defaults, Project Profile policies, Local Overlay restrictions, Task guardrails, policy-affecting Run options)
 ```
 
 권한 수준은 순서를 가진다.
@@ -6565,12 +6609,12 @@ v0.1 구현 내용:
 
 ```text
 1. Project Profile defaults block 세부 스키마
-   - agent 기본값
-   - agentRole 기본값
-   - harnessMode 기본값
-   - requiredGate 기본값
-   - workflow 기본값
-   - isolationMode 기본값
+   - defaults.task.agentRole
+   - defaults.task.harnessMode
+   - defaults.task.requiredGate
+   - defaults.task.workflow
+   - defaults.run.agentAdapter
+   - defaults.run.isolationMode
 
 2. Project Profile policy block 세부 스키마
    - harness policy
