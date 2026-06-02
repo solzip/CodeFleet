@@ -132,6 +132,7 @@ AI-native 개발 오케스트레이션 CLI다.
 - REQUIRE_EXPLICIT은 config 수정 요구가 아니라 Task Draft / Review / Approval 흐름에서 사용자에게 concrete value를 객관식으로 선택하게 하는 요구다.
 - 하나의 설계 항목이 결정될 때마다 `docs/concept-foundation.md`에 즉시 반영하고, 다음 세션 연결 정보는 `docs/session-handoff.md`에 함께 갱신한다.
 - 큰 설계 틀이 확정될 때마다 architecture snapshot 이미지를 생성해 `docs/assets/`에 저장하고, 문서에서 참조한다.
+- `docs/final-model-architecture.md`는 architecture snapshot을 읽는 방법과 각 layer의 책임을 설명한다.
 - Local Overlay는 `.codefleet/local.json`이며 `RESTRICT_ONLY`로만 병합된다.
 ```
 
