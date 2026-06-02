@@ -17,9 +17,9 @@ Current progress:
 - `defaults.task.agentRole` is defined.
 - `defaults.task.harnessMode` is defined.
 - `defaults.task.requiredGates` is defined as `runApproval`, `resultReview`, and `verification`.
+- `defaults.task.workflow` is defined as `PLAN`, `INSPECT`, `APPLY`, `VERIFY`, and `REVIEW` procedural stages.
 
 Remaining defaults topics:
 
-- `defaults.task.workflow`
 - `defaults.run.agentAdapter`
 - `defaults.run.isolationMode`

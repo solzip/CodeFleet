@@ -163,13 +163,13 @@
   <text x="85" y="875" text-anchor="middle" class="label" fill="#2563eb">defaults</text>
   <text x="85" y="905" text-anchor="middle" class="label" fill="#2563eb">progress</text>
   <line x1="140" y1="845" x2="140" y2="960" stroke="#94a3b8"/>
-  <text x="175" y="870" class="small" fill="#15803d">done: defaults.task.agentRole = concrete AgentRole | REQUIRE_EXPLICIT</text>
-  <text x="175" y="910" class="small" fill="#15803d">done: defaults.task.harnessMode = concrete HarnessMode | REQUIRE_EXPLICIT</text>
-  <text x="175" y="950" class="small" fill="#15803d">done: defaults.task.requiredGates = runApproval / resultReview / verification</text>
+  <text x="175" y="862" class="small" fill="#15803d">done: defaults.task.agentRole = concrete AgentRole | REQUIRE_EXPLICIT</text>
+  <text x="175" y="895" class="small" fill="#15803d">done: defaults.task.harnessMode = concrete HarnessMode | REQUIRE_EXPLICIT</text>
+  <text x="175" y="928" class="small" fill="#15803d">done: defaults.task.requiredGates = runApproval / resultReview / verification</text>
+  <text x="175" y="961" class="small" fill="#15803d">done: defaults.task.workflow = PLAN / INSPECT / APPLY / VERIFY / REVIEW</text>
   <line x1="900" y1="845" x2="900" y2="960" stroke="#94a3b8"/>
-  <text x="940" y="870" class="small" fill="#c2410c">remaining: defaults.task.workflow</text>
-  <text x="940" y="910" class="small" fill="#c2410c">remaining: defaults.run.agentAdapter</text>
-  <text x="940" y="950" class="small" fill="#c2410c">remaining: defaults.run.isolationMode</text>
+  <text x="940" y="890" class="small" fill="#c2410c">remaining: defaults.run.agentAdapter</text>
+  <text x="940" y="930" class="small" fill="#c2410c">remaining: defaults.run.isolationMode</text>
   <rect x="1285" y="852" width="245" height="90" rx="8" fill="#fff7ed" stroke="#c2410c" stroke-width="2" stroke-dasharray="8 6"/>
   <text x="1407" y="885" text-anchor="middle" class="small">REQUIRE_EXPLICIT asks</text>
   <text x="1407" y="910" text-anchor="middle" class="small">the user via choices;</text>

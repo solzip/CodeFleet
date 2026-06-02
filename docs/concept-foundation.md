@@ -4281,7 +4281,9 @@ Decision은 evidence에 대한 사람 / 정책의 판단이다.
         "resultReview": "HUMAN_REVIEW",
         "verification": "REQUIRE_EXPLICIT"
       },
-      "workflow": ["PLAN", "REVIEW"]
+      "workflow": {
+        "stages": ["PLAN", "INSPECT", "APPLY", "VERIFY", "REVIEW"]
+      }
     },
     "run": {
       "agentAdapter": "REQUIRE_EXPLICIT",
@@ -4680,6 +4682,154 @@ failureFinding:
 repairBehavior:
 - rebuild Run Plan from source policies and Task Revision
 - correct invalid source policy before execution
+```
+
+#### defaults.task.workflow
+
+`defaults.task.workflow`는 Task Draft 생성 시 사용하는 기본 작업 절차 템플릿이다.
+
+`workflow`는 권한이 아니고, gate가 아니고, Run Summary 통계 분류가 아니며, 최종 모델의 10단계 Execution Lifecycle을 대체하지 않는다.
+
+추천 기본값:
+
+```json
+{
+  "workflow": {
+    "stages": ["PLAN", "INSPECT", "APPLY", "VERIFY", "REVIEW"]
+  }
+}
+```
+
+WorkflowStage:
+
+```text
+PLAN
+= 작업 접근 방향 / 계획 정리
+
+INSPECT
+= 코드, 로그, 구조, 설정 분석
+
+APPLY
+= Task의 주 작업 수행
+= 코드 수정, 버그 수정, 문서 수정, 인프라 작업 등
+= 파일 수정 권한을 뜻하지 않음
+
+VERIFY
+= 테스트, 빌드, 검증 시도 또는 검증 계획 처리
+
+REVIEW
+= 결과, diff, risk, next action 검토
+```
+
+`workflow.stage`와 `RunSummary.type`은 같은 enum이 아니다.
+
+```text
+workflow.stage
+= 실행 전 절차 언어
+
+RunSummary.type
+= 실행 후 결과 분류 언어
+```
+
+관계는 있을 수 있지만 동일하지 않다.
+
+```text
+PLAN    -> RunSummary.type PLAN 가능
+INSPECT -> RunSummary.type INSPECT 가능
+APPLY   -> RunSummary.type BUILD / FIX / DOCS / OPS 가능
+VERIFY  -> RunSummary.type CHECK 가능
+REVIEW  -> RunSummary.type REVIEW 가능
+```
+
+꼬임 방지 규칙:
+
+```text
+1. workflow는 권한을 부여하지 않는다.
+2. workflow는 harnessMode를 바꾸지 않는다.
+3. workflow는 requiredGates를 우회하지 않는다.
+4. workflow는 RunSummary.type을 강제하지 않는다.
+5. workflow는 10단계 Execution Lifecycle을 대체하지 않는다.
+6. workflow 변경은 기존 Task Draft / Revision / Run Plan에 자동 반영되지 않는다.
+7. workflow에는 REQUIRE_EXPLICIT을 사용하지 않는다.
+8. Task Revision에는 concrete workflow.stages만 저장된다.
+```
+
+Workflow FINAL RULES:
+
+```text
+ruleId: PROFILE_DEFAULTS_TASK_WORKFLOW_SCHEMA
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+- <workspaceRoot>/.codefleet/config.json defaults.task.workflow
+inputs:
+- parsed Project Profile defaults.task.workflow
+- CodeFleet Project Profile schemaVersion
+- WorkflowStage allowed value set
+preconditions:
+- Project Profile validation has reached defaults.task validation
+condition:
+- defaults.task.workflow is absent or an object with a stages array
+- when present, workflow.stages is a non-empty ordered array
+- every workflow.stages item is one of PLAN, INSPECT, APPLY, VERIFY, REVIEW
+- workflow.stages contains no REQUIRE_EXPLICIT value
+- workflow.stages contains no RunSummary-only value such as BUILD, FIX, CHECK, DOCS, OPS
+allowedEffect:
+- Task Draft creation may copy workflow.stages into the Task Draft
+- when defaults.task.workflow is absent, Core default workflow.stages may be used
+deniedEffect:
+- Project Profile validation fails
+- Task Draft creation from this Project Profile is blocked
+evidence:
+- profilePath
+- defaults.task.workflow JSON pointer
+- invalid stage value when present
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- manual Project Profile defaults correction is required
+```
+
+```text
+ruleId: TASK_WORKFLOW_IS_DRAFT_TEMPLATE_NOT_EXECUTION_POLICY
+status: FINAL
+scope: TASK
+sourceOfTruth:
+- Project Profile defaults.task.workflow
+- Task Draft.workflow
+- Task Revision.workflow
+inputs:
+- defaults.task.workflow.stages
+- Task Draft.workflow.stages
+- Task Revision.workflow.stages
+- Execution Lifecycle rule set
+- RunSummary.type allowed value set
+preconditions:
+- Task Draft is being created or approved into a Task Revision
+condition:
+- workflow is used only as a Task Draft procedure template
+- workflow does not modify harnessMode
+- workflow does not modify requiredGates
+- workflow does not grant file, command, or adapter capability
+- workflow does not force RunSummary.type
+- workflow does not replace the 10-step Execution Lifecycle
+- Task Revision.workflow contains concrete workflow.stages only
+allowedEffect:
+- Task Draft and Task Revision may record workflow.stages as procedural guidance
+- Execution Harness may include workflow.stages as instruction context within policy limits
+deniedEffect:
+- using workflow as an authority for permission, gate bypass, lifecycle replacement, or summary type coercion is blocked
+evidence:
+- taskDraftId or taskRevisionId
+- workflow.stages
+- attempted policy, gate, lifecycle, or summary effect when present
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- remove policy-like workflow effect
+- move permission or gate behavior to policies, requiredGates, or Run Planning rules
 ```
 
 ### 5.2 Project Profile 구조 FINAL RULE
@@ -7045,6 +7195,7 @@ v0.1 구현 내용:
 - Source of Truth / Derived Artifact / Evidence Truth / Decision Record 경계
 - Draft만 mutable이고 Revision / Run Trace는 직접 수정하지 않는다는 꼬임 방지 원칙
 - Local Overlay는 .codefleet/local.json이며 RESTRICT_ONLY로만 병합된다는 원칙
+- defaults.task.workflow는 PLAN / INSPECT / APPLY / VERIFY / REVIEW 절차 템플릿이며 권한 / gate / RunSummary.type / Execution Lifecycle을 대체하지 않는다는 원칙
 ```
 
 다음으로 논의할 항목:
@@ -7053,7 +7204,6 @@ v0.1 구현 내용:
 1. Project Profile defaults block 세부 스키마
    - defaults.task.agentRole
    - defaults.task.harnessMode
-   - defaults.task.workflow
    - defaults.run.agentAdapter
    - defaults.run.isolationMode
 
