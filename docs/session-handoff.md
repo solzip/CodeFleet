@@ -117,6 +117,9 @@ AI-native 개발 오케스트레이션 CLI다.
 - Draft만 mutable이고 Revision / Run Trace는 직접 수정하지 않는다.
 - Run Plan은 source of truth가 아니라 derived execution contract다.
 - effectivePolicy는 Run Plan 내부의 capability / risk / gate policy snapshot이며 Run Plan 전체가 아니다.
+- defaults.task.agentRole은 concrete AgentRole 또는 REQUIRE_EXPLICIT을 허용한다.
+- defaults.task.harnessMode는 concrete HarnessMode 또는 REQUIRE_EXPLICIT을 허용한다.
+- REQUIRE_EXPLICIT은 config 수정 요구가 아니라 Task Draft / Review / Approval 흐름에서 사용자에게 concrete value를 객관식으로 선택하게 하는 요구다.
 - Local Overlay는 `.codefleet/local.json`이며 `RESTRICT_ONLY`로만 병합된다.
 ```
 
@@ -177,9 +180,8 @@ Project Profile의 schemaVersion, project, workspace 경계는 확정했다.
 defaults 논의 전에 최종 모델 계층, 실행 단계, source/derived/evidence/decision 경계도 확정했다.
 다음은 Task가 생략했을 때 적용되는 defaults block을 FINAL MODEL 기준으로 확정해야 한다.
 defaults는 flat 구조가 아니라 `defaults.task`와 `defaults.run`으로 분리하는 방향으로 정리했다.
+defaults.task.agentRole과 defaults.task.harnessMode의 REQUIRE_EXPLICIT 처리 원칙은 정리했다.
 
-- defaults.task.agentRole
-- defaults.task.harnessMode
 - defaults.task.requiredGate
 - defaults.task.workflow
 - defaults.run.agentAdapter

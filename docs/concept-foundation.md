@@ -4249,6 +4249,178 @@ Evidence는 실행 사실이며 수정하지 않는다.
 Decision은 evidence에 대한 사람 / 정책의 판단이다.
 ```
 
+### 5.1.3 Project Profile defaults 진행 결정
+
+`defaults`는 Task 또는 Run이 값을 생략했을 때 사용하는 기본값 계약이다. `defaults`는 권한 정책이 아니며 `policies`보다 우선하지 못한다.
+
+최종 모델의 `defaults`는 flat 구조가 아니라 `task`와 `run`으로 분리한다.
+
+```json
+{
+  "defaults": {
+    "task": {
+      "agentRole": "REQUIRE_EXPLICIT",
+      "harnessMode": "REQUIRE_EXPLICIT",
+      "requiredGate": "HUMAN_REVIEW",
+      "workflow": ["PLAN", "REVIEW"]
+    },
+    "run": {
+      "agentAdapter": "REQUIRE_EXPLICIT",
+      "isolationMode": "REQUIRE_EXPLICIT"
+    }
+  }
+}
+```
+
+`REQUIRE_EXPLICIT`은 config 파일을 직접 수정하라는 뜻이 아니다. `REQUIRE_EXPLICIT`은 해당 Task Draft / Review / Approval 흐름에서 사용자가 concrete value를 명시적으로 선택해야 한다는 뜻이다. 선택 결과는 Project Profile이 아니라 해당 Task Draft에 저장한다.
+
+#### defaults.task.agentRole
+
+`defaults.task.agentRole`은 Task가 `agentRole`을 명시하지 않았을 때 Draft 생성에 사용하는 기본 작업 역할이다.
+
+허용값:
+
+```text
+- concrete AgentRole ID
+- REQUIRE_EXPLICIT
+```
+
+역할별 경계:
+
+```text
+policies.agentRoles.allowedRoles
+= constraint
+= 허용 가능한 역할 목록
+
+defaults.task.agentRole
+= creation default
+= Task Draft 생성 시 생략값
+
+Task Draft.agentRole
+= mutable candidate value
+= 승인 전 사람이 수정 가능
+
+Task Revision.agentRole
+= immutable authoritative value
+= 승인된 실행 계약의 원본 역할 값
+
+Run Plan agentRole
+= derived reference / snapshot only
+= Task Revision.agentRole을 참조하거나 기록할 수 있지만 권위 원본은 아님
+```
+
+꼬임 방지 규칙:
+
+```text
+1. defaults.task.agentRole은 Draft 생성 시에만 적용된다.
+2. Profile defaults 변경은 기존 Draft / Revision에 자동 반영되지 않는다.
+3. Draft에는 REQUIRE_EXPLICIT 또는 concrete agentRole이 있을 수 있다.
+4. Revision에는 concrete agentRole만 허용된다.
+5. Revision.agentRole은 policies.agentRoles.allowedRoles 안에 있어야 한다.
+6. Run Plan은 Revision.agentRole을 수정하지 않는다.
+7. policies.agentRoles.allowedRoles는 검증 기준이지 선택값이 아니다.
+```
+
+Draft 생성 처리:
+
+```text
+- default가 concrete value면 Draft.agentRole에 복사한다.
+- default가 REQUIRE_EXPLICIT이면 Draft.agentRole은 unresolved required field로 남긴다.
+```
+
+Approval / Revision 처리:
+
+```text
+- Draft.agentRole이 unresolved이면 approval blocked.
+- 사람은 policies.agentRoles.allowedRoles 중 하나를 선택해야 한다.
+- Task Revision에는 concrete agentRole만 저장된다.
+```
+
+#### defaults.task.harnessMode
+
+`defaults.task.harnessMode`는 Task가 `harnessMode`를 명시하지 않았을 때 Draft 생성에 사용하는 requested harness mode 기본값이다.
+
+허용값:
+
+```text
+- DRY_RUN
+- SUGGEST_ONLY
+- WORKSPACE_EDIT
+- COMMAND_EXEC
+- REQUIRE_EXPLICIT
+```
+
+모드 설명:
+
+```text
+DRY_RUN
+= 실행하지 않고 계획 / 프롬프트 / Run Plan만 생성한다.
+
+SUGGEST_ONLY
+= 파일 수정 없이 분석과 수정 제안만 수행한다.
+
+WORKSPACE_EDIT
+= Project Profile과 Task scope가 허용한 파일 범위 안에서 수정할 수 있다.
+
+COMMAND_EXEC
+= 허용된 파일 수정과 허용된 명령 실행까지 수행할 수 있다.
+```
+
+`defaults.task.harnessMode = REQUIRE_EXPLICIT`이면 CodeFleet은 사용자에게 객관식 선택지를 제시해야 한다. 사용자는 config 파일을 직접 열어 Project Profile을 바꾸는 것이 아니라, 해당 Task Draft의 concrete `harnessMode`를 선택한다.
+
+사용자 선택 UX:
+
+```text
+이 작업의 harnessMode를 선택하세요.
+
+1. DRY_RUN
+   실행하지 않고 계획/프롬프트/Run Plan만 생성합니다.
+
+2. SUGGEST_ONLY
+   파일을 수정하지 않고 분석과 수정 제안만 수행합니다.
+
+3. WORKSPACE_EDIT
+   Project Profile과 Task scope가 허용한 파일만 수정할 수 있습니다.
+
+4. COMMAND_EXEC
+   허용된 파일 수정과 허용된 명령 실행까지 수행할 수 있습니다.
+```
+
+Draft unresolved field 구조:
+
+```json
+{
+  "field": "harnessMode",
+  "source": "defaults.task.harnessMode",
+  "reason": "REQUIRE_EXPLICIT",
+  "allowedValues": [
+    "DRY_RUN",
+    "SUGGEST_ONLY",
+    "WORKSPACE_EDIT",
+    "COMMAND_EXEC"
+  ],
+  "optionDescriptions": {
+    "DRY_RUN": "실행하지 않고 계획/프롬프트/Run Plan만 생성한다.",
+    "SUGGEST_ONLY": "파일 수정 없이 분석과 수정 제안만 수행한다.",
+    "WORKSPACE_EDIT": "Project Profile과 Task scope가 허용한 파일 범위 안에서 수정할 수 있다.",
+    "COMMAND_EXEC": "허용된 파일 수정과 허용된 명령 실행까지 수행할 수 있다."
+  },
+  "blockingStage": "APPROVAL"
+}
+```
+
+중요한 제한:
+
+```text
+- harnessMode는 권한이 아니다.
+- WORKSPACE_EDIT를 선택해도 파일 수정 권한이 자동으로 생기지 않는다.
+- COMMAND_EXEC를 선택해도 명령 실행 권한이 자동으로 생기지 않는다.
+- 실제 허용은 policies.harness / policies.files / policies.commands / requiredGate가 결정한다.
+- Task Revision에는 REQUIRE_EXPLICIT이 남을 수 없다.
+- Revision.harnessMode가 policies.harness보다 넓으면 Run Planning은 blocked 된다.
+- 자동 downgrade는 금지한다.
+```
+
 ### 5.2 Project Profile 구조 FINAL RULE
 
 ```text
