@@ -120,6 +120,7 @@ AI-native 개발 오케스트레이션 CLI다.
 - defaults.task.agentRole은 concrete AgentRole 또는 REQUIRE_EXPLICIT을 허용한다.
 - defaults.task.harnessMode는 concrete HarnessMode 또는 REQUIRE_EXPLICIT을 허용한다.
 - REQUIRE_EXPLICIT은 config 수정 요구가 아니라 Task Draft / Review / Approval 흐름에서 사용자에게 concrete value를 객관식으로 선택하게 하는 요구다.
+- 큰 설계 틀이 확정될 때마다 architecture snapshot 이미지를 생성해 `docs/assets/`에 저장하고, 문서에서 참조한다.
 - Local Overlay는 `.codefleet/local.json`이며 `RESTRICT_ONLY`로만 병합된다.
 ```
 
