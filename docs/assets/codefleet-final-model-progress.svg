@@ -120,22 +120,26 @@
   <text x="75" y="715" text-anchor="middle" class="label">Layer 3</text>
   <text x="75" y="755" text-anchor="middle" class="small">Execution Lifecycle</text>
 
-  <g class="small">
-    <rect x="175" y="695" width="85" height="70" rx="6" class="pending"/><text x="217" y="735" text-anchor="middle">Intent</text>
-    <line x1="265" y1="730" x2="290" y2="730" class="arrow"/>
-    <rect x="295" y="695" width="100" height="70" rx="6" class="pending"/><text x="345" y="735" text-anchor="middle">Objective</text>
-    <line x1="400" y1="730" x2="425" y2="730" class="arrow"/>
-    <rect x="430" y="695" width="95" height="70" rx="6" class="pending"/><text x="477" y="725" text-anchor="middle">Task</text><text x="477" y="747" text-anchor="middle">Draft</text>
-    <line x1="530" y1="730" x2="555" y2="730" class="arrow"/>
-    <rect x="560" y="695" width="125" height="70" rx="6" class="pending"/><text x="622" y="725" text-anchor="middle">Review /</text><text x="622" y="747" text-anchor="middle">Approval</text>
-    <line x1="690" y1="730" x2="715" y2="730" class="arrow"/>
-    <rect x="720" y="695" width="110" height="70" rx="6" class="pending"/><text x="775" y="725" text-anchor="middle">Task</text><text x="775" y="747" text-anchor="middle">Revision</text>
-    <line x1="835" y1="730" x2="860" y2="730" class="arrow"/>
-    <rect x="865" y="695" width="120" height="70" rx="6" class="pending"/><text x="925" y="725" text-anchor="middle">Queue /</text><text x="925" y="747" text-anchor="middle">Scheduling</text>
-    <line x1="990" y1="730" x2="1015" y2="730" class="arrow"/>
-    <rect x="1020" y="695" width="110" height="70" rx="6" class="pending"/><text x="1075" y="725" text-anchor="middle">Run</text><text x="1075" y="747" text-anchor="middle">Planning</text>
-    <line x1="1135" y1="730" x2="1160" y2="730" class="arrow"/>
-    <rect x="1165" y="695" width="115" height="70" rx="6" class="pending"/><text x="1222" y="725" text-anchor="middle">Harness</text><text x="1222" y="747" text-anchor="middle">Execution</text>
+  <g class="tiny">
+    <rect x="165" y="695" width="70" height="70" rx="6" class="pending"/><text x="200" y="735" text-anchor="middle">Intent</text>
+    <line x1="240" y1="730" x2="252" y2="730" class="arrow"/>
+    <rect x="257" y="695" width="80" height="70" rx="6" class="pending"/><text x="297" y="735" text-anchor="middle">Objective</text>
+    <line x1="342" y1="730" x2="354" y2="730" class="arrow"/>
+    <rect x="359" y="695" width="80" height="70" rx="6" class="pending"/><text x="399" y="725" text-anchor="middle">Task</text><text x="399" y="747" text-anchor="middle">Draft</text>
+    <line x1="444" y1="730" x2="456" y2="730" class="arrow"/>
+    <rect x="461" y="695" width="95" height="70" rx="6" class="pending"/><text x="508" y="725" text-anchor="middle">Review /</text><text x="508" y="747" text-anchor="middle">Approval</text>
+    <line x1="561" y1="730" x2="573" y2="730" class="arrow"/>
+    <rect x="578" y="695" width="90" height="70" rx="6" class="pending"/><text x="623" y="725" text-anchor="middle">Task</text><text x="623" y="747" text-anchor="middle">Revision</text>
+    <line x1="673" y1="730" x2="685" y2="730" class="arrow"/>
+    <rect x="690" y="695" width="105" height="70" rx="6" class="pending"/><text x="742" y="725" text-anchor="middle">Queue /</text><text x="742" y="747" text-anchor="middle">Scheduling</text>
+    <line x1="800" y1="730" x2="812" y2="730" class="arrow"/>
+    <rect x="817" y="695" width="90" height="70" rx="6" class="pending"/><text x="862" y="725" text-anchor="middle">Run</text><text x="862" y="747" text-anchor="middle">Planning</text>
+    <line x1="912" y1="730" x2="924" y2="730" class="arrow"/>
+    <rect x="929" y="695" width="105" height="70" rx="6" class="pending"/><text x="981" y="725" text-anchor="middle">Harness</text><text x="981" y="747" text-anchor="middle">Execution</text>
+    <line x1="1039" y1="730" x2="1051" y2="730" class="arrow"/>
+    <rect x="1056" y="695" width="120" height="70" rx="6" class="pending"/><text x="1116" y="725" text-anchor="middle">Evidence /</text><text x="1116" y="747" text-anchor="middle">Verification</text>
+    <line x1="1181" y1="730" x2="1193" y2="730" class="arrow"/>
+    <rect x="1198" y="695" width="95" height="70" rx="6" class="pending"/><text x="1245" y="725" text-anchor="middle">Review /</text><text x="1245" y="747" text-anchor="middle">Close</text>
   </g>
 
   <rect x="1330" y="110" width="250" height="650" rx="8" class="band1"/>
