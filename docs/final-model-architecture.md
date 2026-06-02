@@ -5,6 +5,8 @@ The source of truth for final-model rules is `docs/concept-foundation.md`.
 
 ![CodeFleet Final Model - Current Design Progress](assets/codefleet-final-model-progress.svg)
 
+Archived progress snapshots are kept under `docs/assets/archive/` for history only.
+
 Current progress:
 
 - Project Profile top-level structure is defined.
