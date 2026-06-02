@@ -4075,6 +4075,139 @@ Monorepo / multirepo 처리:
 - 권한과 risk는 policies.files, policies.commands, policies.risk에서만 판정한다.
 ```
 
+### 5.1.2 최종 모델 계층과 실행 단계
+
+Project Profile의 `defaults`, `policies`, Task 계약, Run 실행을 논의하기 전에 최종 모델의 계층과 실행 단계를 고정한다. 이 기준은 source, derived artifact, evidence, decision이 섞이는 것을 막기 위한 상위 규칙이다.
+
+정책 / 계약 계층:
+
+```text
+1. Core Invariants
+   = CodeFleet이 항상 적용하는 불변 규칙
+   = workspaceRoot 계산, POSIX relative path, source-of-truth 경계
+
+2. Project Profile
+   = workspace 공유 정책 계약
+   = project, workspace, defaults, policies, references, localPolicy 선언
+
+3. Local Overlay
+   = 개인 로컬 환경 보정
+   = RESTRICT_ONLY로만 병합되며 권한을 넓힐 수 없음
+
+4. Task Draft
+   = 사람이 검토 / 수정할 수 있는 작업 초안
+   = defaults.task는 Draft 생성 시 생략값으로 적용될 수 있음
+
+5. Task Revision
+   = 사람이 승인한 불변 실행 계약
+   = 승인 이후 직접 수정하지 않고 새 Revision으로 전진함
+
+6. Run Plan
+   = 특정 Run 직전에 생성되는 derived execution contract
+   = Task Revision, Project Profile, Local Overlay, Run Options에서 계산됨
+```
+
+Run Plan은 source of truth가 아니다. Run Plan은 특정 Run을 위한 파생 실행 계약이며, 그 안에 `effectivePolicy`, `computedRisk`, `requiredGate`, `isolationMode`, `verificationPlan`, selected `agentAdapter`가 포함될 수 있다.
+
+실행 생명주기:
+
+```text
+1. Intent
+   = 사용자의 자연어 의도
+
+2. Objective
+   = 상위 목적과 Task들의 연결 맥락
+
+3. Task Draft
+   = 실행 전 검토 가능한 작업 초안
+
+4. Task Review / Approval
+   = 사람이 Task 계약과 Objective relation을 검토 / 승인
+
+5. Task Revision
+   = 승인된 불변 작업 계약
+
+6. Queue / Scheduling
+   = 어떤 Revision을 어떤 순서로 실행할지 결정
+
+7. Run Planning
+   = Run Plan, effectivePolicy, risk, gate, isolation, verificationPlan 계산
+
+8. Harness Execution
+   = Project Profile과 Run Plan 경계 안에서 agentAdapter 호출
+
+9. Evidence / Verification
+   = stdout, stderr, diff, changedFiles, command log, verification result 기록
+
+10. Review / Close
+   = Evidence에 대한 review, close, retry, reject, corrective decision 기록
+```
+
+Source / Derived / Evidence / Decision 경계:
+
+```text
+Source of Truth:
+- Core Invariants
+- Project Profile
+- Local Overlay
+- Objective / Queue Ledger
+- Task Draft
+- Task Revision
+- Run Options
+
+Derived Artifact:
+- Run Plan
+- Effective Policy
+- Computed Risk
+- Verification Plan
+- Run Summary
+
+Evidence Truth:
+- Run Trace
+
+Decision Record:
+- Approval
+- Review
+- Close / Retry / Reject
+- Corrective Event
+```
+
+꼬임 방지 불변식:
+
+```text
+1. Draft만 mutable이다.
+2. Revision은 immutable이다.
+3. Run Plan은 derived artifact다.
+4. Effective Policy는 Run Plan 내부의 derived snapshot이다.
+5. Run Trace는 execution evidence truth다.
+6. Review / Close는 Run Trace를 수정하지 않고 decision event를 추가한다.
+7. 과거 객체를 고치지 않고 새 Draft, 새 Revision, 새 Run, corrective event로 전진한다.
+```
+
+주의해야 할 경계:
+
+```text
+- defaults는 생략값이며 권한 정책이 아니다.
+- Project Profile 변경은 과거 Task Revision / Run Plan / Run Trace를 재해석하지 않는다.
+- Run Plan을 수정해서 Project Profile이나 Task Revision을 바꾸지 않는다.
+- effectivePolicy를 .codefleet/config.json에 authoritative block으로 저장하지 않는다.
+- Review는 Run Trace 원본을 수정하지 않는다.
+- Risk lowering은 LLM이나 일반 human review로 수행하지 않는다.
+- Local Overlay는 권한을 넓히지 않는다.
+- component ownedPaths / relatedPaths / sharedPaths는 read/write 권한을 부여하지 않는다.
+- multirepo sibling path는 Project Profile에 저장하지 않는다.
+- validation failure, execution failure, corruption은 서로 다른 실패 범주로 다룬다.
+```
+
+최종 원칙:
+
+```text
+Source는 수정 / 승인 / 정책의 원본이다.
+Derived는 source로부터 재계산 가능해야 한다.
+Evidence는 실행 사실이며 수정하지 않는다.
+Decision은 evidence에 대한 사람 / 정책의 판단이다.
+```
+
 ### 5.2 Project Profile 구조 FINAL RULE
 
 ```text
@@ -6421,6 +6554,10 @@ v0.1 구현 내용:
 - workspace는 하나의 로컬 repo/root 경계이며 workspace.id / components / sharedPaths로 표현한다는 원칙
 - workspaceRoot와 path normalization은 config 필드가 아니라 Core invariant라는 원칙
 - monorepo는 components로, multirepo는 같은 project.id를 공유하는 여러 Project Profile로 표현한다는 원칙
+- 최종 모델의 정책 / 계약 계층 6단계
+- 최종 모델의 실행 생명주기 10단계
+- Source of Truth / Derived Artifact / Evidence Truth / Decision Record 경계
+- Draft만 mutable이고 Revision / Run Trace는 직접 수정하지 않는다는 꼬임 방지 원칙
 - Local Overlay는 .codefleet/local.json이며 RESTRICT_ONLY로만 병합된다는 원칙
 ```
 

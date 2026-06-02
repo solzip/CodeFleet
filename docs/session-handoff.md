@@ -111,6 +111,11 @@ AI-native 개발 오케스트레이션 CLI다.
 - monorepo는 하나의 Project Profile과 여러 components로 표현한다.
 - multirepo는 같은 project.id를 공유하는 여러 Project Profile로 표현한다.
 - Project Profile은 sibling repo 목록, sibling repo path, local clone path를 저장하지 않는다.
+- 최종 모델의 정책 / 계약 계층은 6단계로 정리했다.
+- 최종 모델의 실행 생명주기는 10단계로 정리했다.
+- Source of Truth / Derived Artifact / Evidence Truth / Decision Record 경계를 고정했다.
+- Draft만 mutable이고 Revision / Run Trace는 직접 수정하지 않는다.
+- Run Plan은 source of truth가 아니라 derived execution contract다.
 - Local Overlay는 `.codefleet/local.json`이며 `RESTRICT_ONLY`로만 병합된다.
 ```
 
@@ -168,6 +173,7 @@ Project Profile defaults block 세부 스키마
 
 ```text
 Project Profile의 schemaVersion, project, workspace 경계는 확정했다.
+defaults 논의 전에 최종 모델 계층, 실행 단계, source/derived/evidence/decision 경계도 확정했다.
 다음은 Task가 생략했을 때 적용되는 defaults block을 FINAL MODEL 기준으로 확정해야 한다.
 
 - agent 기본값
