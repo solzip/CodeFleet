@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="920" viewBox="0 0 1600 920">
+  <defs>
+    <style>
+      .title { font: 700 32px Arial, sans-serif; fill: #111827; }
+      .sub { font: 15px Arial, sans-serif; fill: #4b5563; }
+      .zone { font: 700 18px Arial, sans-serif; }
+      .lab { font: 700 15px Arial, sans-serif; fill: #111827; }
+      .sm { font: 13px Arial, sans-serif; fill: #111827; }
+      .ti { font: 12px Arial, sans-serif; fill: #374151; }
+      .done { fill: #f0fdf4; stroke: #15803d; stroke-width: 2; }
+      .prog { fill: #fff7ed; stroke: #c2410c; stroke-width: 2; }
+      .pend { fill: #f3f4f6; stroke: #6b7280; stroke-width: 2; }
+      .crit { fill: #fef2f2; stroke: #b91c1c; stroke-width: 3.5; }
+      .actor { fill: #eff6ff; stroke: #1d4ed8; stroke-width: 2; }
+      .ext { fill: #f5f3ff; stroke: #6d28d9; stroke-width: 2; }
+      .guard { fill: #fffdf5; stroke: #b45309; stroke-width: 2; stroke-dasharray: 7 5; }
+      .spine { fill: #ffffff; stroke: #94a3b8; stroke-width: 1.5; stroke-dasharray: 4 4; }
+      .work { fill: #f8fafc; stroke: #334155; stroke-width: 2; }
+      .ar { stroke: #111827; stroke-width: 2.5; fill: none; marker-end: url(#ah); }
+      .arc { stroke: #b91c1c; stroke-width: 3; fill: none; marker-end: url(#ahr); }
+      .arb { stroke: #6d28d9; stroke-width: 2.5; fill: none; marker-end: url(#ahb); }
+    </style>
+    <marker id="ah" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0,9 3.5,0 7" fill="#111827"/></marker>
+    <marker id="ahr" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0,9 3.5,0 7" fill="#b91c1c"/></marker>
+    <marker id="ahb" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0,9 3.5,0 7" fill="#6d28d9"/></marker>
+  </defs>
+
+  <rect width="1600" height="920" fill="#ffffff"/>
+  <text x="800" y="42" text-anchor="middle" class="title">CodeFleet 아키텍처 — Spine / Seams / Guards</text>
+  <text x="800" y="68" text-anchor="middle" class="sub">by Claude Code · 정적 구조 + 목표 루프 한 장 · source of truth: docs/concept-foundation.md</text>
+
+  <!-- ACTORS -->
+  <rect x="150" y="90" width="360" height="74" rx="8" class="actor"/>
+  <text x="330" y="122" text-anchor="middle" class="zone" fill="#1d4ed8">사람</text>
+  <text x="330" y="146" text-anchor="middle" class="sm">Intent · ◆ approve · ◆ review</text>
+  <rect x="1090" y="90" width="360" height="74" rx="8" class="ext"/>
+  <text x="1270" y="122" text-anchor="middle" class="zone" fill="#6d28d9">외부 AI 도구</text>
+  <text x="1270" y="146" text-anchor="middle" class="sm">Claude Code / Codex / …</text>
+
+  <!-- GUARDS frame -->
+  <rect x="130" y="196" width="1320" height="232" rx="10" class="guard"/>
+  <text x="148" y="222" class="zone" fill="#b45309">GUARDS (보호대)</text>
+  <text x="360" y="222" class="ti">Mutation Engine · Ledger · Policy Merge · Corruption/Repair · Capability Gating  —  여러 번 안전하게 돌리는 데 필요. 한 번 도는 데는 X.</text>
+
+  <!-- SPINE frame -->
+  <rect x="150" y="238" width="1282" height="172" rx="8" class="spine"/>
+  <text x="166" y="262" class="lab" fill="#475569">SPINE — 목표 루프</text>
+
+  <!-- spine stations (y 282 h 76) -->
+  <!-- 1 Intent -->
+  <rect x="185" y="288" width="110" height="76" rx="6" class="pend"/>
+  <text x="240" y="332" text-anchor="middle" class="sm">Intent</text>
+  <!-- 2 Objective -->
+  <rect x="323" y="288" width="110" height="76" rx="6" class="prog"/>
+  <text x="378" y="322" text-anchor="middle" class="sm">Objective</text>
+  <text x="378" y="342" text-anchor="middle" class="ti">[S]</text>
+  <!-- 3 Task Draft -->
+  <rect x="461" y="288" width="110" height="76" rx="6" class="prog"/>
+  <text x="516" y="318" text-anchor="middle" class="sm">Task Draft</text>
+  <text x="516" y="338" text-anchor="middle" class="ti">[S]  ║S1</text>
+  <!-- 4 Approval -->
+  <rect x="599" y="288" width="110" height="76" rx="6" class="prog"/>
+  <text x="654" y="282" text-anchor="middle" class="lab" fill="#1d4ed8">◆</text>
+  <text x="654" y="322" text-anchor="middle" class="sm">Approval</text>
+  <text x="654" y="342" text-anchor="middle" class="ti">human gate</text>
+  <!-- 5 Task Revision -->
+  <rect x="737" y="288" width="110" height="76" rx="6" class="done"/>
+  <text x="792" y="318" text-anchor="middle" class="sm" fill="#15803d">Task Revision</text>
+  <text x="792" y="338" text-anchor="middle" class="ti" fill="#15803d">[S] RUNS</text>
+  <!-- 6 Run Planning -->
+  <rect x="875" y="288" width="110" height="76" rx="6" class="prog"/>
+  <text x="930" y="318" text-anchor="middle" class="sm">Run Planning</text>
+  <text x="930" y="338" text-anchor="middle" class="ti">[D]</text>
+  <!-- 7 Execution (S2 crit) -->
+  <rect x="1013" y="288" width="110" height="76" rx="6" class="crit"/>
+  <text x="1068" y="316" text-anchor="middle" class="sm" fill="#b91c1c">Execution</text>
+  <text x="1068" y="336" text-anchor="middle" class="ti" fill="#b91c1c">║ S2 ★ EMPTY</text>
+  <!-- 8 Trace -->
+  <rect x="1151" y="288" width="110" height="76" rx="6" class="prog"/>
+  <text x="1206" y="322" text-anchor="middle" class="sm">Trace</text>
+  <text x="1206" y="342" text-anchor="middle" class="ti">[S]  ║S3</text>
+  <!-- 9 Review/Close -->
+  <rect x="1289" y="288" width="110" height="76" rx="6" class="pend"/>
+  <text x="1344" y="282" text-anchor="middle" class="lab" fill="#1d4ed8">◆</text>
+  <text x="1344" y="318" text-anchor="middle" class="sm">Review/Close</text>
+  <text x="1344" y="338" text-anchor="middle" class="ti">║S4 EMPTY</text>
+
+  <!-- spine arrows -->
+  <g class="ar">
+    <line x1="295" y1="326" x2="321" y2="326"/>
+    <line x1="433" y1="326" x2="459" y2="326"/>
+    <line x1="571" y1="326" x2="597" y2="326"/>
+    <line x1="709" y1="326" x2="735" y2="326"/>
+    <line x1="847" y1="326" x2="873" y2="326"/>
+    <line x1="985" y1="326" x2="1011" y2="326"/>
+    <line x1="1123" y1="326" x2="1149" y2="326"/>
+    <line x1="1261" y1="326" x2="1287" y2="326"/>
+  </g>
+
+  <!-- carry-forward loop back -->
+  <path d="M 1344 364 L 1344 392 L 378 392 L 378 366" class="ar"/>
+  <text x="850" y="408" text-anchor="middle" class="ti" fill="#475569">derived state(VERIFIED) → carry-forward(승인된 결정/요약) → 다음 Objective</text>
+
+  <!-- actor -> spine (CLI) -->
+  <path d="M 300 164 L 250 286" class="ar"/>
+  <text x="232" y="232" class="ti">CLI</text>
+
+  <!-- adapter seam (S2) spine <-> external -->
+  <path d="M 1068 286 L 1110 166" class="arc"/>
+  <path d="M 1140 166 L 1090 286" class="arc"/>
+  <text x="1128" y="240" text-anchor="middle" class="lab" fill="#b91c1c">║ S2 Adapter</text>
+
+  <!-- WORKSPACE -->
+  <rect x="130" y="470" width="1090" height="190" rx="10" class="work"/>
+  <text x="148" y="498" class="zone" fill="#334155">WORKSPACE</text>
+  <text x="148" y="520" class="ti">.codefleet/ (state)</text>
+
+  <rect x="150" y="534" width="150" height="104" rx="6" class="done"/>
+  <text x="225" y="572" text-anchor="middle" class="sm" fill="#15803d">config.json</text>
+  <text x="225" y="594" text-anchor="middle" class="ti">Project Profile</text>
+  <text x="225" y="614" text-anchor="middle" class="ti">[S]</text>
+
+  <rect x="312" y="534" width="170" height="104" rx="6" class="prog"/>
+  <text x="397" y="568" text-anchor="middle" class="sm">objectives/</text>
+  <text x="397" y="590" text-anchor="middle" class="ti">ledger.jsonl [S]</text>
+  <text x="397" y="610" text-anchor="middle" class="ti">objective.json [D]</text>
+
+  <rect x="494" y="534" width="170" height="104" rx="6" class="prog"/>
+  <text x="579" y="568" text-anchor="middle" class="sm">tasks/</text>
+  <text x="579" y="590" text-anchor="middle" class="ti">draft.yaml [S]</text>
+  <text x="579" y="610" text-anchor="middle" class="ti">revisions/ RUNS</text>
+
+  <rect x="676" y="534" width="170" height="104" rx="6" class="pend"/>
+  <text x="761" y="568" text-anchor="middle" class="sm">runs/</text>
+  <text x="761" y="590" text-anchor="middle" class="ti">result.json [evi]</text>
+  <text x="761" y="610" text-anchor="middle" class="ti">review.md EMPTY</text>
+
+  <rect x="858" y="534" width="180" height="104" rx="6" class="pend"/>
+  <text x="948" y="572" text-anchor="middle" class="sm">context / templates</text>
+  <text x="948" y="594" text-anchor="middle" class="sm">policies</text>
+  <text x="948" y="616" text-anchor="middle" class="ti">[S]</text>
+
+  <rect x="1050" y="534" width="150" height="104" rx="6" class="pend"/>
+  <text x="1125" y="580" text-anchor="middle" class="sm">locks/</text>
+  <text x="1125" y="602" text-anchor="middle" class="ti">workspace.lock</text>
+
+  <!-- EXTERNAL export -->
+  <rect x="1244" y="470" width="206" height="190" rx="10" class="ext"/>
+  <text x="1347" y="498" text-anchor="middle" class="zone" fill="#6d28d9">EXPORT 대상</text>
+  <text x="1347" y="556" text-anchor="middle" class="sm">Notion / 작업일지</text>
+  <text x="1347" y="582" text-anchor="middle" class="sm">/ PR comment</text>
+  <text x="1347" y="620" text-anchor="middle" class="ti">sanitized Summary만</text>
+
+  <!-- spine <-> workspace read/write -->
+  <path d="M 792 366 L 792 532" class="ar"/>
+  <text x="804" y="455" class="ti" fill="#475569">read / write state</text>
+
+  <!-- trace -> export (S5) -->
+  <path d="M 1240 360 L 1330 468" class="arb"/>
+  <text x="1300" y="455" text-anchor="middle" class="lab" fill="#6d28d9">║ S5 Export</text>
+
+  <!-- LEGEND -->
+  <rect x="130" y="690" width="1320" height="200" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="150" y="720" class="zone" fill="#111827">읽는 법</text>
+
+  <text x="150" y="752" class="lab">상태 (한 축):</text>
+  <rect x="290" y="740" width="22" height="16" rx="3" class="done"/><text x="320" y="753" class="sm">RUNS — 한 바퀴 돌 만큼 정의됨</text>
+  <rect x="640" y="740" width="22" height="16" rx="3" class="prog"/><text x="670" y="753" class="sm">SHAPED — 규칙만, 실행 mechanic 빔</text>
+  <rect x="1040" y="740" width="22" height="16" rx="3" class="pend"/><text x="1070" y="753" class="sm">EMPTY — 거의 비어 있음</text>
+
+  <text x="150" y="788" class="lab">역할:</text>
+  <text x="230" y="788" class="sm">[S] source   ·   [D] derived   ·   ◆ human gate   ·   ║ seam(외부/실작업 경계)</text>
+
+  <text x="150" y="822" class="lab">SEAMS:</text>
+  <text x="230" y="822" class="sm">S1 Drafting   ·   <tspan fill="#b91c1c" font-weight="700">S2 Adapter ★ (최대 빈칸)</tspan>   ·   S3 Verify   ·   S4 Review   ·   S5 Export</text>
+
+  <line x1="150" y1="840" x2="1430" y2="840" stroke="#e5e7eb"/>
+  <text x="150" y="868" class="lab" fill="#b45309">한 줄 결론:</text>
+  <text x="270" y="868" class="sm">골격(계약·파일)은 섰고, 실행 경계가 비었다.  가장 먼저 채울 곳 = S2 Adapter 호출 프로토콜.</text>
+</svg>
