@@ -1,6 +1,6 @@
 # CodeFleet Session Handoff
 
-마지막 업데이트: 2026-06-01
+마지막 업데이트: 2026-06-02
 
 이 문서는 다른 PC나 새 세션에서 CodeFleet 설계 논의를 이어가기 위한 압축 인계 문서다. 원본 기준 문서는 항상 `docs/concept-foundation.md`다.
 
@@ -60,7 +60,7 @@ AI-native 개발 오케스트레이션 CLI다.
 ## 현재 진행도
 
 ```text
-최종 모델 / 개념 설계: 약 60-65%
+최종 모델 / 개념 설계: 약 65-70%
 구현 진행도: 약 10-20%
 ```
 
@@ -119,7 +119,12 @@ AI-native 개발 오케스트레이션 CLI다.
 - effectivePolicy는 Run Plan 내부의 capability / risk / gate policy snapshot이며 Run Plan 전체가 아니다.
 - defaults.task.agentRole은 concrete AgentRole 또는 REQUIRE_EXPLICIT을 허용한다.
 - defaults.task.harnessMode는 concrete HarnessMode 또는 REQUIRE_EXPLICIT을 허용한다.
+- defaults.task.requiredGate 단일 필드는 사용하지 않고, defaults.task.requiredGates object를 사용한다.
+- defaults.task.requiredGates는 runApproval / resultReview / verification 3개 dimension으로 분리한다.
+- defaults.task.requiredGates는 PROFILE_DEFAULTS_REQUIRED_GATES_SCHEMA, TASK_REVISION_REQUIRED_GATES_ARE_CONCRETE, EFFECTIVE_REQUIRED_GATES_MERGE_BY_DIMENSION FINAL RULE로 고정했다.
+- BLOCKED_UNTIL_POLICY는 defaults 값이나 risk rule 최소 필드가 아니라 Run Planning에서 계산되는 derived planning block result다.
 - REQUIRE_EXPLICIT은 config 수정 요구가 아니라 Task Draft / Review / Approval 흐름에서 사용자에게 concrete value를 객관식으로 선택하게 하는 요구다.
+- 하나의 설계 항목이 결정될 때마다 `docs/concept-foundation.md`에 즉시 반영하고, 다음 세션 연결 정보는 `docs/session-handoff.md`에 함께 갱신한다.
 - 큰 설계 틀이 확정될 때마다 architecture snapshot 이미지를 생성해 `docs/assets/`에 저장하고, 문서에서 참조한다.
 - Local Overlay는 `.codefleet/local.json`이며 `RESTRICT_ONLY`로만 병합된다.
 ```
@@ -181,9 +186,8 @@ Project Profile의 schemaVersion, project, workspace 경계는 확정했다.
 defaults 논의 전에 최종 모델 계층, 실행 단계, source/derived/evidence/decision 경계도 확정했다.
 다음은 Task가 생략했을 때 적용되는 defaults block을 FINAL MODEL 기준으로 확정해야 한다.
 defaults는 flat 구조가 아니라 `defaults.task`와 `defaults.run`으로 분리하는 방향으로 정리했다.
-defaults.task.agentRole과 defaults.task.harnessMode의 REQUIRE_EXPLICIT 처리 원칙은 정리했다.
+defaults.task.agentRole, defaults.task.harnessMode, defaults.task.requiredGates의 REQUIRE_EXPLICIT 처리 원칙은 정리했다.
 
-- defaults.task.requiredGate
 - defaults.task.workflow
 - defaults.run.agentAdapter
 - defaults.run.isolationMode
@@ -270,5 +274,5 @@ docs/concept-foundation.md
 이 handoff의 기준 커밋:
 
 ```text
-이 문서를 갱신한 최신 커밋
+이 문서를 포함한 최신 push 커밋. 커밋 전 로컬 변경은 다른 PC에서 이어갈 기준이 아니다.
 ```

@@ -1,8 +1,9 @@
 # CodeFleet Final Model Architecture
 
 This page captures the current final-model design progress for CodeFleet.
+The source of truth for final-model rules is `docs/concept-foundation.md`.
 
-![CodeFleet Final Model - Current Design Progress](assets/codefleet-final-model-progress.png)
+![CodeFleet Final Model - Current Design Progress](assets/codefleet-final-model-progress.svg)
 
 Current progress:
 
@@ -11,11 +12,12 @@ Current progress:
 - Policy / contract lifecycle and execution lifecycle are defined.
 - `Run Plan` is separated from `effectivePolicy`.
 - `defaults` is in progress.
-- `defaults.task.agentRole` and `defaults.task.harnessMode` are defined.
+- `defaults.task.agentRole` is defined.
+- `defaults.task.harnessMode` is defined.
+- `defaults.task.requiredGates` is defined as `runApproval`, `resultReview`, and `verification`.
 
 Remaining defaults topics:
 
-- `defaults.task.requiredGate`
 - `defaults.task.workflow`
 - `defaults.run.agentAdapter`
 - `defaults.run.isolationMode`

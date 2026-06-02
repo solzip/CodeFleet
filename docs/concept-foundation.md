@@ -1380,12 +1380,15 @@ matchCondition
 riskLevel
 = LOW | MEDIUM | HIGH
 
-requiredGate
-= NONE | HUMAN_REVIEW | EXPLICIT_APPROVAL | VERIFICATION_REQUIRED | BLOCKED_UNTIL_POLICY
+requiredGates
+= optional per-dimension gate requirements
+= runApproval / resultReview / verification
 
 evidence
 = matched path / command / field / run evidence id
 ```
+
+`BLOCKED_UNTIL_POLICY`는 Risk rule 최소 필드가 아니다. `BLOCKED_UNTIL_POLICY`는 unresolved explicit field, policy conflict, invalid local overlay, denied capability 같은 Run Planning 조건에서 계산되는 derived planning block result다.
 
 Risk lowering 규칙:
 
@@ -1404,7 +1407,7 @@ Risk 계산 불변식:
 - 같은 Project Profile, Task Spec, Run evidence, rule set이면 같은 riskLevel이 계산된다.
 - riskLevel이 unknown이면 MEDIUM이 아니라 HIGH로 취급한다.
 - risk rule 충돌 시 더 높은 riskLevel이 이긴다.
-- requiredGate 충돌 시 더 엄격한 gate가 이긴다.
+- requiredGates 충돌 시 dimension별 더 엄격한 gate가 이긴다.
 ```
 
 예:
@@ -3454,6 +3457,15 @@ repairBehavior
 - 사람이 감으로 승인해야만 판정 가능한 규칙은 FINAL RULE이 아니다.
 ```
 
+설계 논의 반영 규칙:
+
+```text
+- 하나의 설계 항목이 결정되면 대화에만 남기지 않고 source of truth 문서에 즉시 반영한다.
+- CodeFleet 최종 모델의 source of truth 문서는 docs/concept-foundation.md다.
+- 다음 세션 연결에 필요한 진행 상태와 다음 논의 항목은 docs/session-handoff.md에 함께 갱신한다.
+- 미확정 항목은 FINAL RULE처럼 쓰지 않고 DESIGN CANDIDATE 또는 다음 논의 항목으로 남긴다.
+```
+
 검증 기준:
 
 ```text
@@ -3896,7 +3908,10 @@ defaults
   task
     agentRole
     harnessMode
-    requiredGate
+    requiredGates
+      runApproval
+      resultReview
+      verification
     workflow
   run
     agentAdapter
@@ -4122,7 +4137,7 @@ Run Plan includes:
 - Run Options snapshot
 - effectivePolicy
 - computedRisk
-- requiredGate
+- requiredGates
 - verificationPlan
 ```
 
@@ -4261,7 +4276,11 @@ Decision은 evidence에 대한 사람 / 정책의 판단이다.
     "task": {
       "agentRole": "REQUIRE_EXPLICIT",
       "harnessMode": "REQUIRE_EXPLICIT",
-      "requiredGate": "HUMAN_REVIEW",
+      "requiredGates": {
+        "runApproval": "NONE",
+        "resultReview": "HUMAN_REVIEW",
+        "verification": "REQUIRE_EXPLICIT"
+      },
       "workflow": ["PLAN", "REVIEW"]
     },
     "run": {
@@ -4415,10 +4434,252 @@ Draft unresolved field 구조:
 - harnessMode는 권한이 아니다.
 - WORKSPACE_EDIT를 선택해도 파일 수정 권한이 자동으로 생기지 않는다.
 - COMMAND_EXEC를 선택해도 명령 실행 권한이 자동으로 생기지 않는다.
-- 실제 허용은 policies.harness / policies.files / policies.commands / requiredGate가 결정한다.
+- 실제 허용은 policies.harness / policies.files / policies.commands / effectivePolicy.requiredGates가 결정한다.
 - Task Revision에는 REQUIRE_EXPLICIT이 남을 수 없다.
 - Revision.harnessMode가 policies.harness보다 넓으면 Run Planning은 blocked 된다.
 - 자동 downgrade는 금지한다.
+```
+
+#### defaults.task.requiredGates
+
+`defaults.task.requiredGate` 단일 필드는 사용하지 않는다. 최종 모델은 `defaults.task.requiredGates` object를 사용한다.
+
+추천 기본값:
+
+```json
+{
+  "requiredGates": {
+    "runApproval": "NONE",
+    "resultReview": "HUMAN_REVIEW",
+    "verification": "REQUIRE_EXPLICIT"
+  }
+}
+```
+
+`requiredGates`는 실행 전 승인, 실행 후 결과 리뷰, 검증 요구를 분리한다.
+
+```text
+runApproval
+= Run 실행 전에 추가 사람 승인이 필요한가
+
+resultReview
+= Run 결과를 close / advance 하기 전에 사람 리뷰가 필요한가
+
+verification
+= 테스트 / 빌드 / 검증 결과가 필요한가
+```
+
+허용값:
+
+```text
+runApproval:
+- NONE
+- HUMAN_REVIEW
+- EXPLICIT_APPROVAL
+- REQUIRE_EXPLICIT
+
+resultReview:
+- NONE
+- HUMAN_REVIEW
+- EXPLICIT_APPROVAL
+- REQUIRE_EXPLICIT
+
+verification:
+- NONE
+- REQUIRED
+- REQUIRE_EXPLICIT
+```
+
+`BLOCKED_UNTIL_POLICY`는 `defaults` 값이 아니다. `BLOCKED_UNTIL_POLICY`는 policy merge 입력값이나 gate enum 값이 아니라, unresolved explicit field, policy conflict, invalid overlay, denied capability 같은 조건을 Run Planning이 평가한 뒤 생성하는 derived blocking state다.
+
+Draft / Revision 규칙:
+
+```text
+- defaults.task.requiredGates의 각 dimension은 concrete value 또는 REQUIRE_EXPLICIT을 가질 수 있다.
+- Task Draft에는 REQUIRE_EXPLICIT이 unresolved required field로 남을 수 있다.
+- Task Revision에는 REQUIRE_EXPLICIT이 남을 수 없다.
+- Task Revision에는 concrete requiredGates만 저장된다.
+- REQUIRE_EXPLICIT 질문은 한 번의 review step에서 다른 unresolved fields와 함께 묶어서 처리한다.
+```
+
+Gate 병합 규칙:
+
+```text
+- gate 병합은 dimension별 more restrictive wins다.
+- runApproval: NONE < HUMAN_REVIEW < EXPLICIT_APPROVAL
+- resultReview: NONE < HUMAN_REVIEW < EXPLICIT_APPROVAL
+- verification: NONE < REQUIRED
+```
+
+Run Summary `Check`와의 관계:
+
+```text
+requiredGates.verification
+= 실행 전에 정한 검증 요구 정책
+
+RunSummary.check
+= 실행 후 실제 검증 결과
+```
+
+검증 gate 판정:
+
+```text
+verification REQUIRED + check PASS
+= gate satisfied
+
+verification REQUIRED + check FAIL
+= gate failed
+
+verification REQUIRED + check NONE
+= gate unsatisfied
+
+verification REQUIRED + check SKIP
+= explicit waiver가 없으면 gate unsatisfied
+```
+
+8개 꼬임 방지 규칙:
+
+```text
+1. Task Revision approval과 runApproval은 다른 단계다.
+   이유: Revision approval은 작업 계약 승인이고, runApproval은 지금 이 조건으로 실행해도 되는지에 대한 실행 시도 승인이다.
+
+2. runApproval 기본값은 NONE으로 둔다.
+   이유: Task Revision approval이 이미 기본 안전장치이므로 모든 Run마다 추가 승인을 요구하면 오케스트레이션이 과도하게 무거워진다.
+
+3. resultReview와 verification은 다른 gate다.
+   이유: 테스트 / 빌드 검증 증거와 사람이 결과를 수용 / 거절 / 재시도 판단하는 것은 다른 판단이다.
+
+4. verification REQUIRED인데 check PASS가 아니면 close / advance 불가.
+   이유: 검증이 필수인데 검증 증거가 없거나 실패했으면 성공으로 과장하면 안 된다.
+
+5. REQUIRE_EXPLICIT 질문은 한 번의 review step에서 묶어서 처리한다.
+   이유: agentRole, harnessMode, verification 같은 질문을 따로따로 물으면 오케스트레이션이 설문지처럼 무거워진다.
+
+6. BLOCKED_UNTIL_POLICY는 defaults 값이 아니라 derived planning block result다.
+   이유: 기본값은 생략값 계약이고, policy 충돌 / 차단은 Run Planning에서 계산되는 결과다.
+
+7. gate 병합은 dimension별 more restrictive wins다.
+   이유: runApproval, resultReview, verification은 서로 다른 축이므로 하나의 선형 enum으로 덮어쓰면 의미가 섞인다.
+
+8. autoAdvance는 resultReview gate를 조용히 우회할 수 없다.
+   이유: resultReview가 HUMAN_REVIEW 또는 EXPLICIT_APPROVAL이면 자동 진행이 사람 리뷰 gate를 몰래 무시하는 경로가 된다.
+```
+
+Required Gates FINAL RULES:
+
+```text
+ruleId: PROFILE_DEFAULTS_REQUIRED_GATES_SCHEMA
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+- <workspaceRoot>/.codefleet/config.json defaults.task.requiredGates
+inputs:
+- parsed Project Profile defaults.task.requiredGates
+- CodeFleet Project Profile schemaVersion
+- requiredGates allowed value set
+preconditions:
+- Project Profile validation has reached defaults.task validation
+- defaults.task.requiredGates is present or defaulted by Core Policy Defaults
+condition:
+- requiredGates has exactly runApproval, resultReview, verification keys
+- runApproval is one of NONE, HUMAN_REVIEW, EXPLICIT_APPROVAL, REQUIRE_EXPLICIT
+- resultReview is one of NONE, HUMAN_REVIEW, EXPLICIT_APPROVAL, REQUIRE_EXPLICIT
+- verification is one of NONE, REQUIRED, REQUIRE_EXPLICIT
+- BLOCKED_UNTIL_POLICY is not accepted as a defaults.task.requiredGates value
+allowedEffect:
+- Task Draft creation may use defaults.task.requiredGates as default gate values
+deniedEffect:
+- Project Profile validation fails
+- Task Draft creation from this Project Profile is blocked
+evidence:
+- profilePath
+- defaults.task.requiredGates JSON pointer
+- invalid or missing key when present
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- manual Project Profile defaults correction is required
+```
+
+```text
+ruleId: TASK_REVISION_REQUIRED_GATES_ARE_CONCRETE
+status: FINAL
+scope: TASK_REVISION
+sourceOfTruth:
+- Task Draft unresolved fields
+- Task Revision requiredGates
+inputs:
+- Task Draft.requiredGates
+- Task Draft unresolved required fields
+- selected user choices during Task Review / Approval
+- Task Revision.requiredGates
+preconditions:
+- Task Draft is being approved into a Task Revision
+condition:
+- Task Revision.requiredGates has runApproval, resultReview, verification keys
+- Task Revision.requiredGates contains no REQUIRE_EXPLICIT value
+- runApproval is one of NONE, HUMAN_REVIEW, EXPLICIT_APPROVAL
+- resultReview is one of NONE, HUMAN_REVIEW, EXPLICIT_APPROVAL
+- verification is one of NONE, REQUIRED
+allowedEffect:
+- Task Revision may be created
+- Run Planning may read Task Revision.requiredGates as an authoritative source input
+deniedEffect:
+- Task Revision creation is blocked
+- Run Planning from this Draft is blocked
+evidence:
+- taskDraftId
+- unresolved required fields
+- selected requiredGates values
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- ask the user to resolve requiredGates in the bundled review step
+```
+
+```text
+ruleId: EFFECTIVE_REQUIRED_GATES_MERGE_BY_DIMENSION
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+- Core Policy Defaults
+- Project Profile policies
+- Local Overlay restrictions
+- Task Revision.requiredGates
+- Task guardrails
+- policy-affecting Run Options
+inputs:
+- candidate runApproval values
+- candidate resultReview values
+- candidate verification values
+- requiredGates order definitions
+preconditions:
+- Project Profile validation passed
+- Task Revision.requiredGates is concrete
+- Local Overlay, if present, is valid and restrict-only
+condition:
+- effectivePolicy.requiredGates.runApproval is max(candidate runApproval values by NONE < HUMAN_REVIEW < EXPLICIT_APPROVAL)
+- effectivePolicy.requiredGates.resultReview is max(candidate resultReview values by NONE < HUMAN_REVIEW < EXPLICIT_APPROVAL)
+- effectivePolicy.requiredGates.verification is max(candidate verification values by NONE < REQUIRED)
+- no dimension is overwritten by a less restrictive value
+allowedEffect:
+- Run Plan may include effectivePolicy.requiredGates
+- Execution Harness may evaluate runApproval, resultReview, and verification gates independently
+deniedEffect:
+- Run Planning fails
+- Execution Harness is blocked
+evidence:
+- runPlanId
+- source values per requiredGates dimension
+- merged effectivePolicy.requiredGates
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- rebuild Run Plan from source policies and Task Revision
+- correct invalid source policy before execution
 ```
 
 ### 5.2 Project Profile 구조 FINAL RULE
@@ -6319,8 +6580,17 @@ DRY_RUN < SUGGEST_ONLY < WORKSPACE_EDIT < COMMAND_EXEC
 boolean permission:
 false < true
 
-gateOrder:
-NONE < HUMAN_REVIEW < EXPLICIT_APPROVAL < VERIFICATION_REQUIRED < BLOCKED_UNTIL_POLICY
+runApprovalOrder:
+NONE < HUMAN_REVIEW < EXPLICIT_APPROVAL
+
+resultReviewOrder:
+NONE < HUMAN_REVIEW < EXPLICIT_APPROVAL
+
+verificationOrder:
+NONE < REQUIRED
+
+BLOCKED_UNTIL_POLICY:
+defaults / policy merge 값이 아니라 Run Planning에서 계산되는 derived planning block result
 ```
 
 병합 규칙:
@@ -6333,7 +6603,7 @@ NONE < HUMAN_REVIEW < EXPLICIT_APPROVAL < VERIFICATION_REQUIRED < BLOCKED_UNTIL_
 - allowedCommands는 교집합을 선택한다.
 - deniedCommands는 합집합을 선택한다.
 - verificationCommands는 profile required commands + task required commands의 합집합이다.
-- requiredGate는 더 엄격한 값을 선택한다.
+- requiredGates는 dimension별 더 엄격한 값을 선택한다.
 ```
 
 병합 실패 조건:
@@ -6783,7 +7053,6 @@ v0.1 구현 내용:
 1. Project Profile defaults block 세부 스키마
    - defaults.task.agentRole
    - defaults.task.harnessMode
-   - defaults.task.requiredGate
    - defaults.task.workflow
    - defaults.run.agentAdapter
    - defaults.run.isolationMode

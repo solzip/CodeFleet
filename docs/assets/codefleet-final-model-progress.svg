@@ -1,0 +1,173 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <style>
+      .title { font: 700 38px Arial, sans-serif; fill: #111827; }
+      .subtitle { font: 16px Arial, sans-serif; fill: #4b5563; }
+      .label { font: 700 22px Arial, sans-serif; fill: #111827; }
+      .small { font: 16px Arial, sans-serif; fill: #111827; }
+      .tiny { font: 14px Arial, sans-serif; fill: #374151; }
+      .done { fill: #f0fdf4; stroke: #15803d; stroke-width: 2; }
+      .progress { fill: #fff7ed; stroke: #c2410c; stroke-width: 2; }
+      .pending { fill: #f9fafb; stroke: #6b7280; stroke-width: 2; }
+      .source { fill: #ecfdf5; stroke: #16a34a; stroke-width: 2; }
+      .derived { fill: #eff6ff; stroke: #2563eb; stroke-width: 2; }
+      .band1 { fill: #eff6ff; stroke: #1d4ed8; stroke-width: 2; }
+      .band2 { fill: #f5f3ff; stroke: #6d28d9; stroke-width: 2; }
+      .band3 { fill: #fff7ed; stroke: #ea580c; stroke-width: 2; }
+      .band4 { fill: #f8fafc; stroke: #2563eb; stroke-width: 2; }
+      .arrow { stroke: #111827; stroke-width: 3; marker-end: url(#arrowhead); }
+      .dashed { stroke-dasharray: 8 6; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#111827"/>
+    </marker>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#ffffff"/>
+  <text x="800" y="48" text-anchor="middle" class="title">CodeFleet Final Model - Current Design Progress</text>
+  <text x="800" y="76" text-anchor="middle" class="subtitle">Source of truth: docs/concept-foundation.md</text>
+
+  <rect x="18" y="95" width="1292" height="280" rx="8" class="band1"/>
+  <text x="75" y="130" text-anchor="middle" class="label" fill="#1d4ed8">1</text>
+  <text x="75" y="165" text-anchor="middle" class="label">Layer 1</text>
+  <text x="75" y="205" text-anchor="middle" class="small">Workspace</text>
+  <text x="75" y="228" text-anchor="middle" class="small">Policy Contract</text>
+  <text x="75" y="258" text-anchor="middle" class="tiny">.codefleet/config.json</text>
+
+  <rect x="165" y="122" width="140" height="180" rx="8" class="pending"/>
+  <text x="235" y="180" text-anchor="middle" class="label">schemaVersion</text>
+
+  <rect x="325" y="122" width="150" height="180" rx="8" class="done"/>
+  <text x="400" y="158" text-anchor="middle" class="label" fill="#15803d">project</text>
+  <text x="400" y="185" text-anchor="middle" class="small">(done)</text>
+  <line x1="350" y1="205" x2="450" y2="205" stroke="#15803d"/>
+  <text x="400" y="235" text-anchor="middle" class="small">logical product</text>
+  <text x="400" y="258" text-anchor="middle" class="small">/ system identity</text>
+
+  <rect x="500" y="122" width="170" height="180" rx="8" class="done"/>
+  <text x="585" y="158" text-anchor="middle" class="label" fill="#15803d">workspace</text>
+  <text x="585" y="185" text-anchor="middle" class="small">(done)</text>
+  <line x1="525" y1="205" x2="645" y2="205" stroke="#15803d"/>
+  <text x="585" y="232" text-anchor="middle" class="small">one local repo/root</text>
+  <text x="585" y="255" text-anchor="middle" class="small">components + sharedPaths</text>
+
+  <rect x="700" y="122" width="190" height="180" rx="8" class="progress"/>
+  <text x="795" y="155" text-anchor="middle" class="label" fill="#c2410c">defaults</text>
+  <text x="795" y="182" text-anchor="middle" class="small">(in progress)</text>
+  <line x1="730" y1="205" x2="860" y2="205" stroke="#c2410c"/>
+  <text x="795" y="230" text-anchor="middle" class="tiny">agentRole done</text>
+  <text x="795" y="252" text-anchor="middle" class="tiny">harnessMode done</text>
+  <text x="795" y="274" text-anchor="middle" class="tiny">requiredGates done</text>
+
+  <rect x="925" y="122" width="165" height="180" rx="8" class="pending"/>
+  <text x="1007" y="158" text-anchor="middle" class="label">policies</text>
+  <text x="1007" y="185" text-anchor="middle" class="small">(not yet detailed)</text>
+  <line x1="955" y1="205" x2="1060" y2="205" stroke="#6b7280"/>
+
+  <rect x="1120" y="122" width="150" height="180" rx="8" class="pending"/>
+  <text x="1195" y="180" text-anchor="middle" class="label">references</text>
+
+  <rect x="1300" y="122" width="150" height="180" rx="8" class="pending"/>
+  <text x="1375" y="180" text-anchor="middle" class="label">localPolicy</text>
+
+  <rect x="18" y="398" width="1292" height="220" rx="8" class="band2"/>
+  <text x="75" y="435" text-anchor="middle" class="label">2</text>
+  <text x="75" y="470" text-anchor="middle" class="label">Layer 2</text>
+  <text x="75" y="510" text-anchor="middle" class="small">Policy / Contract</text>
+  <text x="75" y="533" text-anchor="middle" class="small">Lifecycle</text>
+
+  <rect x="205" y="440" width="135" height="105" rx="8" class="pending"/>
+  <text x="272" y="485" text-anchor="middle" class="label">Core</text>
+  <text x="272" y="512" text-anchor="middle" class="label">Invariants</text>
+  <line x1="345" y1="492" x2="390" y2="492" class="arrow"/>
+
+  <rect x="395" y="425" width="145" height="135" rx="8" class="source"/>
+  <text x="467" y="465" text-anchor="middle" class="label" fill="#15803d">Project</text>
+  <text x="467" y="492" text-anchor="middle" class="label" fill="#15803d">Profile</text>
+  <line x1="425" y1="510" x2="510" y2="510" stroke="#16a34a" class="dashed"/>
+  <text x="467" y="535" text-anchor="middle" class="small" fill="#15803d">Source</text>
+  <line x1="545" y1="492" x2="590" y2="492" class="arrow"/>
+
+  <rect x="595" y="425" width="145" height="135" rx="8" class="source"/>
+  <text x="667" y="465" text-anchor="middle" class="label" fill="#15803d">Local</text>
+  <text x="667" y="492" text-anchor="middle" class="label" fill="#15803d">Overlay</text>
+  <line x1="625" y1="510" x2="710" y2="510" stroke="#16a34a" class="dashed"/>
+  <text x="667" y="535" text-anchor="middle" class="small" fill="#15803d">Source</text>
+  <line x1="745" y1="492" x2="790" y2="492" class="arrow"/>
+
+  <rect x="795" y="425" width="145" height="135" rx="8" class="source"/>
+  <text x="867" y="465" text-anchor="middle" class="label" fill="#15803d">Task</text>
+  <text x="867" y="492" text-anchor="middle" class="label" fill="#15803d">Draft</text>
+  <line x1="825" y1="510" x2="910" y2="510" stroke="#16a34a" class="dashed"/>
+  <text x="867" y="535" text-anchor="middle" class="small" fill="#15803d">Mutable Source</text>
+  <line x1="945" y1="492" x2="990" y2="492" class="arrow"/>
+
+  <rect x="995" y="425" width="145" height="135" rx="8" class="source"/>
+  <text x="1067" y="465" text-anchor="middle" class="label" fill="#15803d">Task</text>
+  <text x="1067" y="492" text-anchor="middle" class="label" fill="#15803d">Revision</text>
+  <line x1="1025" y1="510" x2="1110" y2="510" stroke="#16a34a" class="dashed"/>
+  <text x="1067" y="535" text-anchor="middle" class="small" fill="#15803d">Immutable Source</text>
+  <line x1="1145" y1="492" x2="1190" y2="492" class="arrow"/>
+
+  <rect x="1195" y="425" width="145" height="135" rx="8" class="derived"/>
+  <text x="1267" y="465" text-anchor="middle" class="label" fill="#2563eb">Run</text>
+  <text x="1267" y="492" text-anchor="middle" class="label" fill="#2563eb">Plan</text>
+  <line x1="1225" y1="510" x2="1310" y2="510" stroke="#2563eb" class="dashed"/>
+  <text x="1267" y="535" text-anchor="middle" class="small" fill="#2563eb">Derived</text>
+
+  <rect x="18" y="640" width="1292" height="165" rx="8" class="band3"/>
+  <text x="75" y="680" text-anchor="middle" class="label">3</text>
+  <text x="75" y="715" text-anchor="middle" class="label">Layer 3</text>
+  <text x="75" y="755" text-anchor="middle" class="small">Execution Lifecycle</text>
+
+  <g class="small">
+    <rect x="175" y="695" width="85" height="70" rx="6" class="pending"/><text x="217" y="735" text-anchor="middle">Intent</text>
+    <line x1="265" y1="730" x2="290" y2="730" class="arrow"/>
+    <rect x="295" y="695" width="100" height="70" rx="6" class="pending"/><text x="345" y="735" text-anchor="middle">Objective</text>
+    <line x1="400" y1="730" x2="425" y2="730" class="arrow"/>
+    <rect x="430" y="695" width="95" height="70" rx="6" class="pending"/><text x="477" y="725" text-anchor="middle">Task</text><text x="477" y="747" text-anchor="middle">Draft</text>
+    <line x1="530" y1="730" x2="555" y2="730" class="arrow"/>
+    <rect x="560" y="695" width="125" height="70" rx="6" class="pending"/><text x="622" y="725" text-anchor="middle">Review /</text><text x="622" y="747" text-anchor="middle">Approval</text>
+    <line x1="690" y1="730" x2="715" y2="730" class="arrow"/>
+    <rect x="720" y="695" width="110" height="70" rx="6" class="pending"/><text x="775" y="725" text-anchor="middle">Task</text><text x="775" y="747" text-anchor="middle">Revision</text>
+    <line x1="835" y1="730" x2="860" y2="730" class="arrow"/>
+    <rect x="865" y="695" width="120" height="70" rx="6" class="pending"/><text x="925" y="725" text-anchor="middle">Queue /</text><text x="925" y="747" text-anchor="middle">Scheduling</text>
+    <line x1="990" y1="730" x2="1015" y2="730" class="arrow"/>
+    <rect x="1020" y="695" width="110" height="70" rx="6" class="pending"/><text x="1075" y="725" text-anchor="middle">Run</text><text x="1075" y="747" text-anchor="middle">Planning</text>
+    <line x1="1135" y1="730" x2="1160" y2="730" class="arrow"/>
+    <rect x="1165" y="695" width="115" height="70" rx="6" class="pending"/><text x="1222" y="725" text-anchor="middle">Harness</text><text x="1222" y="747" text-anchor="middle">Execution</text>
+  </g>
+
+  <rect x="1330" y="110" width="250" height="650" rx="8" class="band1"/>
+  <text x="1455" y="155" text-anchor="middle" class="label" fill="#1d4ed8">Run Plan contains</text>
+  <line x1="1350" y1="175" x2="1560" y2="175" stroke="#1d4ed8"/>
+  <text x="1360" y="215" class="small">- selected Task Revision</text>
+  <text x="1360" y="255" class="small">- selected agentAdapter</text>
+  <text x="1360" y="295" class="small">- selected isolationMode</text>
+  <text x="1360" y="335" class="small">- Run Options snapshot</text>
+  <text x="1360" y="375" class="small">- effectivePolicy</text>
+  <text x="1360" y="415" class="small">- computedRisk</text>
+  <text x="1360" y="455" class="small">- requiredGates</text>
+  <text x="1360" y="495" class="small">- verificationPlan</text>
+  <rect x="1350" y="548" width="210" height="155" rx="8" fill="#ffffff" stroke="#2563eb" stroke-width="2" stroke-dasharray="8 6"/>
+  <text x="1455" y="590" text-anchor="middle" class="label" fill="#2563eb">effectivePolicy</text>
+  <text x="1455" y="625" text-anchor="middle" class="small">capability / risk / gate</text>
+  <text x="1455" y="650" text-anchor="middle" class="small">policy snapshot,</text>
+  <text x="1455" y="675" text-anchor="middle" class="small">not the whole Run Plan</text>
+
+  <rect x="18" y="828" width="1562" height="150" rx="8" class="band4"/>
+  <text x="85" y="875" text-anchor="middle" class="label" fill="#2563eb">defaults</text>
+  <text x="85" y="905" text-anchor="middle" class="label" fill="#2563eb">progress</text>
+  <line x1="140" y1="845" x2="140" y2="960" stroke="#94a3b8"/>
+  <text x="175" y="870" class="small" fill="#15803d">done: defaults.task.agentRole = concrete AgentRole | REQUIRE_EXPLICIT</text>
+  <text x="175" y="910" class="small" fill="#15803d">done: defaults.task.harnessMode = concrete HarnessMode | REQUIRE_EXPLICIT</text>
+  <text x="175" y="950" class="small" fill="#15803d">done: defaults.task.requiredGates = runApproval / resultReview / verification</text>
+  <line x1="900" y1="845" x2="900" y2="960" stroke="#94a3b8"/>
+  <text x="940" y="870" class="small" fill="#c2410c">remaining: defaults.task.workflow</text>
+  <text x="940" y="910" class="small" fill="#c2410c">remaining: defaults.run.agentAdapter</text>
+  <text x="940" y="950" class="small" fill="#c2410c">remaining: defaults.run.isolationMode</text>
+  <rect x="1285" y="852" width="245" height="90" rx="8" fill="#fff7ed" stroke="#c2410c" stroke-width="2" stroke-dasharray="8 6"/>
+  <text x="1407" y="885" text-anchor="middle" class="small">REQUIRE_EXPLICIT asks</text>
+  <text x="1407" y="910" text-anchor="middle" class="small">the user via choices;</text>
+  <text x="1407" y="935" text-anchor="middle" class="small">it does not edit config.</text>
+</svg>
