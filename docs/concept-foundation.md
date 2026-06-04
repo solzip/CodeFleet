@@ -299,7 +299,10 @@ All correction is explicit.
   "type": "TASK_APPROVED",
   "taskId": "task-001",
   "taskRevision": 2,
+  "revisionHash": "sha256:revision-2",
+  "approvalTargetHash": "sha256:revision-2",
   "actor": "user",
+  "reason": "Reviewed and approved revision 2 contract.",
   "at": "2026-05-29T10:30:00+09:00"
 }
 ```
@@ -1012,12 +1015,100 @@ CANCELED
 -> terminal
 ```
 
+승인 취소 / 무효화 / 대체 처리 원칙:
+
+```text
+No rewrite.
+No delete.
+No hidden rollback.
+Append corrective decision event.
+```
+
+승인이나 승인 취소는 Revision 파일을 직접 수정해서 표현하지 않는다. 기존 approval event는 삭제하거나 수정하지 않고, 취소 / 무효화 / 대체가 필요하면 새 corrective decision event를 append한다.
+
+예:
+
+```text
+seq 10 TASK_APPROVED revision 1
+seq 14 TASK_APPROVAL_INVALIDATED revision 1
+seq 20 TASK_APPROVED revision 2
+```
+
+replay 결과:
+
+```text
+revision 1
+= 승인된 적 있음
+= seq 14에서 무효화됨
+= 현재 실행 불가
+
+revision 2
+= 현재 승인됨
+= 실행 가능
+```
+
+approval decision / correction event 공통 필드:
+
+```text
+taskId
+taskRevision
+revisionHash
+actor
+reason
+at
+```
+
+event별 추가 필드:
+
+```text
+TASK_APPROVED
+- approvalTargetHash
+
+TASK_APPROVAL_INVALIDATED
+- targetApprovalEventId
+
+TASK_REVISION_SUPERSEDED
+- supersededByTaskRevision
+- supersededByRevisionHash
+```
+
+권위 원칙:
+
+```text
+TASK_APPROVED
+-> 해당 revision이 실행 가능한 승인 상태가 됨
+
+TASK_APPROVAL_INVALIDATED
+-> 기존 approval을 무효화함
+-> 과거 TASK_APPROVED event를 삭제하지 않음
+
+TASK_REVISION_SUPERSEDED
+-> 새 revision이 기존 revision을 대체함
+-> 기존 revision 파일을 수정하지 않음
+```
+
+현재 approval state는 Revision 파일 안의 mutable field가 아니라 Task ledger의 approval decision event replay로 계산한다.
+
+Task approval event 소유권:
+
+```text
+Task ledger
+= .codefleet/tasks/<task-id>/task-ledger.jsonl
+= draft edit, revision creation, approval, invalidation, supersede decision을 소유
+
+Objective ledger
+= .codefleet/objectives/<objective-id>/ledger.jsonl
+= Objective relation, queue, review, carry-forward decision을 소유
+```
+
+승인 취소 / 무효화 / 대체는 반드시 Task ledger의 append-only event로 기록한다.
+
 Draft를 approve해서 Revision을 만들기 위한 조건:
 
 ```text
 - Draft schema valid
 - intent 있음
-- objective relation이 accepted 또는 approved로 확정되어 있음
+- objectiveContext가 review에서 concrete objective target과 relation intent로 resolved 됨
 - scope 있음
 - guardrails 있음
 - verification 있음
@@ -1027,14 +1118,18 @@ Draft를 approve해서 Revision을 만들기 위한 조건:
 - draft content hash 계산됨
 ```
 
+Draft approval은 Objective relation 권위 상태를 Revision 파일에 쓰지 않는다. Revision 생성 후 해당 Revision을 Objective 흐름에 붙이는 relation / queue decision은 Objective ledger에 append한다. Revision이 실행 가능하려면 Task ledger의 유효한 `TASK_APPROVED`와 Objective ledger의 유효한 relation / queue decision을 모두 만족해야 한다.
+
 생성되는 Revision은 다음을 포함한다.
 
 ```text
 - immutable Task contract
-- approval
-- relationState accepted 또는 approved
 - contentHash
+- approval target hash / approval decision reference
+- objective relation snapshot / reference
 ```
+
+Revision 파일의 `approval decision reference`와 `objective relation snapshot / reference`는 권위 상태가 아니다. Approval의 현재 상태와 Objective relation의 현재 상태는 durable ledger event replay로 계산한다. Revision 파일은 어떤 계약 내용이 승인 대상이었는지 고정하기 위한 source이고, 승인 취소 / 무효화 / 대체 같은 decision 흐름을 직접 수정해서 표현하지 않는다.
 
 Revision State에 실행 결과를 넣지 않는다.
 
@@ -1076,14 +1171,24 @@ Run-derived 상태는 실행 결과를 관리한다.
 
 ### 0.7 Run-derived State 규칙
 
-Run-derived State는 저장 원본이 아니다. 특정 `objectiveQueueItemId + taskId + taskRevision`에 연결된 Run Trace들을 읽어 계산한다.
+Run-derived State는 저장 원본이 아니다. 특정 `objectiveQueueItemId + taskId + taskRevision`에 연결된 Run Trace, normalized Run result, durable Review Decision을 읽어 계산한다.
+
+중요한 분리:
+
+```text
+DONE / FAILED
+= 실행 증거와 normalized Run result를 해석한 상태
+
+VERIFIED
+= durable Review Decision과 verification gate를 해석한 queue progression state
+```
 
 정의:
 
 ```text
 Run-derived State
-= approved Revision에 대한 실행 시도들의 현재 해석
-= Run Trace에서 계산되는 상태
+= approved Revision에 대한 실행 시도와 review decision의 현재 해석
+= Run Trace 단독이 아니라 Run Trace + Objective ledger decision에서 계산되는 상태
 = Queue State를 자동 변경하지 않는 상태
 ```
 
@@ -1108,7 +1213,8 @@ ACTIVE
 
 FAILED
 - 최신 유효 terminal Run이 실패함
-- agent error, command error, verification fail, guardrail violation, review rejected 포함
+- agent error, command error, verification fail, guardrail violation 포함
+- 최신 effective Review Decision이 REJECTED 또는 NEEDS_CHANGES이면 VERIFIED가 아니며 FAILED로 해석
 
 DONE
 - 최신 유효 terminal Run이 성공함
@@ -1116,7 +1222,8 @@ DONE
 - human review가 아직 최종 승인되지 않았을 수 있음
 
 VERIFIED
-- 성공한 Run을 사람이 리뷰하고 받아들임
+- 최신 effective RUN_REVIEW_DECIDED가 ACCEPTED임
+- verification gate가 만족됨
 - queue completion의 가장 강한 근거
 ```
 
@@ -1186,7 +1293,8 @@ Queue item을 BLOCKED로 바꾸려면 QUEUE_ITEM_BLOCKED 이벤트가 필요하�
 
 ```text
 Run Trace records execution evidence.
-Run-derived State interprets that evidence.
+Review Decision records durable acceptance / rejection.
+Run-derived State interprets evidence and durable decisions.
 Queue State decides workflow control.
 ```
 
@@ -1194,7 +1302,8 @@ Queue State decides workflow control.
 
 ```text
 Run Trace는 실행 증거를 남긴다.
-Run-derived State는 그 증거를 해석한다.
+Review Decision은 사람이 결과를 받아들였는지에 대한 durable decision을 남긴다.
+Run-derived State는 실행 증거와 durable decision을 해석한다.
 Queue State는 Objective 흐름 제어를 담당한다.
 ```
 
@@ -1209,6 +1318,8 @@ Queue State는 Objective 흐름 제어를 담당한다.
 - terminal Run은 수정하지 않고 새 Run을 만든다.
 - ACTIVE Run이 있으면 같은 Revision의 새 Run을 기본적으로 막는다.
 - VERIFIED 이후 재실행은 명시적 reason이 필요하다.
+- VERIFIED는 runId 단위가 아니라 objectiveQueueItemId + taskId + taskRevision 단위로 계산한다.
+- runId는 VERIFIED의 identity가 아니라 Review Decision이 참조한 evidence link다.
 ```
 
 자동 전파 금지:
@@ -1234,7 +1345,164 @@ run-003 FAILED
 
 이 경우 revision 1의 VERIFIED와 revision 2의 FAILED는 서로 다른 계산 단위에 속한다. revision 2의 실패가 revision 1의 검증된 성공을 덮어쓰지 않는다.
 
-VERIFIED 이후 같은 Revision을 다시 실행하려면 기존 VERIFIED를 조용히 덮어쓰지 않는다. 새 Run을 만들고, retry / reopen reason을 남긴다. 새 Run은 `reviewRequired = true`로 시작하며, 사람이 다시 VERIFIED 처리하기 전까지 Queue progression 근거가 되지 않는다.
+VERIFIED 이후 같은 Revision을 다시 실행하려면 기존 VERIFIED를 조용히 덮어쓰지 않는다. 새 Run을 만들고, retry / reopen reason을 남긴다. 새 Run이 존재한다는 사실만으로 기존 VERIFIED를 자동 무효화하지 않는다. 같은 `objectiveQueueItemId + taskId + taskRevision`에 대해 더 최신의 effective Review Decision이 기록되면 그 decision이 VERIFIED 계산의 기준이 된다.
+
+#### Review Decision / VERIFIED 권위 규칙
+
+최종 정리:
+
+```text
+Run Trace
+= evidence truth
+= stdout, stderr, diff, command log, verification raw output
+= .codefleet/runs/<runId>/
+= git 제외 가능
+
+Run Summary / result.json
+= normalized execution summary
+= 실행 결과를 짧게 정규화한 파일
+
+Objective ledger
+= decision truth
+= 사람이 내린 durable decision 저장
+
+Run-derived State
+= evidence + decision을 해석한 derived state
+
+VERIFIED
+= 최신 ACCEPTED Review Decision + verification gate에서 계산
+```
+
+핵심 문장:
+
+```text
+DONE은 실행 성공이다.
+VERIFIED는 사람이 받아들인 성공이다.
+```
+
+`RUN_REVIEW_DECIDED`는 실행 이벤트가 아니다. `RUN_REVIEW_DECIDED`는 사람이 특정 Run 결과를 보고 받아들였는지, 거절했는지, 수정이 필요한지 결정한 durable decision event다.
+
+최소 필드:
+
+```text
+objectiveQueueItemId
+taskId
+taskRevision
+runId
+decision
+observedResultSnapshot
+observedCheckSnapshot
+verificationGateResult
+evidenceRef optional
+evidenceHash optional
+actor
+reason
+at
+```
+
+`decision` allowed values:
+
+```text
+ACCEPTED
+REJECTED
+NEEDS_CHANGES
+```
+
+Review Decision 결과:
+
+```text
+ACCEPTED
+-> verification gate 충족 시 VERIFIED
+
+REJECTED
+-> VERIFIED 불가
+-> Run-derived State는 FAILED로 해석
+-> QueueState.BLOCKED로 자동 변경하지 않음
+
+NEEDS_CHANGES
+-> VERIFIED 불가
+-> Run-derived State는 FAILED로 해석
+-> 새 Revision 생성은 자동이 아니라 별도 Draft / Revision flow에서 처리
+```
+
+VERIFIED 계산 규칙:
+
+```text
+VERIFIED =
+  같은 objectiveQueueItemId + taskId + taskRevision에 대해
+  최신 effective RUN_REVIEW_DECIDED.decision == ACCEPTED
+  AND verificationGateResult in {SATISFIED, WAIVED_ALLOWED}
+```
+
+`verificationGateResult`는 사람이 자유롭게 입력하는 값이 아니다. CodeFleet이 `requiredGates.verification`, observed check, waiver policy를 기준으로 계산한다.
+
+검증 관련 값의 권위:
+
+```text
+observedCheck
+= Run Summary / Run Trace에서 나온 실제 검증 결과
+= PASS | FAIL | SKIP | NONE
+
+verificationGateResult
+= CodeFleet이 requiredGates와 observedCheck를 비교해 계산
+= SATISFIED | NOT_SATISFIED | WAIVED_ALLOWED
+```
+
+규칙:
+
+```text
+- PASS는 사람이 적는 값이 아니다.
+- PASS는 evidence에서만 나온다.
+- WAIVED는 policy가 허용한 경우에만 가능하다.
+- WAIVED는 actor, reason, risk condition, approver evidence를 가져야 한다.
+- requiredGates.verification = REQUIRED이고 observedCheck != PASS이면 기본적으로 VERIFIED가 될 수 없다.
+```
+
+`BLOCKED` namespace 분리:
+
+```text
+RunSummary.result.BLOCKED
+= 실행 요약상 외부 요인으로 막힘
+= Queue item을 자동 BLOCKED로 만들지 않음
+
+QueueState.BLOCKED
+= 사람이 queue item을 막아둔 결정 상태
+= QUEUE_ITEM_BLOCKED decision event 필요
+
+PlanningBlock.BLOCKED_UNTIL_POLICY
+= Run Planning이 정책 충돌이나 unresolved field 때문에 실행을 막은 파생 결과
+```
+
+따라서 `RunSummary.result = BLOCKED`라고 해서 `QueueState = BLOCKED`가 되지 않는다. Queue item을 BLOCKED로 바꾸려면 반드시 `QUEUE_ITEM_BLOCKED` decision event가 필요하다.
+
+Run Trace 부재 처리:
+
+```text
+evidenceRef missing
+-> EVIDENCE_ABSENT warning
+-> 기존 Review Decision 유지
+-> VERIFIED 자동 무효화 금지
+
+evidenceRef exists but hash mismatch
+-> EXECUTION_EVIDENCE_INTEGRITY finding
+```
+
+raw evidence 부재는 audit 약화다. 과거 decision의 자동 무효화 사유는 아니다.
+
+이 규칙으로 확정되는 범위:
+
+```text
+VERIFIED 권위 source
+-> 닫힘
+
+Run Trace 휘발성과 queue progression 복원성
+-> progression은 복원 가능
+-> raw DONE / FAILED evidence 재계산은 여전히 local evidence에 의존
+
+Draft -> Revision approval event 위치
+-> Task ledger가 소유
+-> Task ledger / Objective ledger cross-ledger validation은 별도 규칙으로 검증
+```
 
 ### 0.8 Risk 판단 원칙
 
@@ -2261,24 +2529,70 @@ default repair:
 - rerun only after explicit approval
 ```
 
+EVIDENCE_ABSENT:
+
+```text
+check target:
+- optional local evidence reference
+- evidenceRef inside durable decision event
+
+expected:
+- referenced Run Trace may exist on the current machine when available
+- missing local evidence does not invalidate durable decision by itself
+
+actual:
+- reference resolution result on current machine
+
+source of truth:
+- 깨지지 않음
+- raw local evidence가 현재 machine에 없음
+
+default repair:
+- emit warning
+- restore Run Trace from backup if available
+- keep durable Review Decision and derived progression unless another integrity rule fails
+```
+
+severity / gating:
+
+```text
+severity:
+- WARNING
+
+does not block:
+- objective replay
+- queue progression based on durable Review Decision
+- Task planning
+- Run Planning
+- carry-forward of approved Decision / sanitized Summary
+
+may block or degrade:
+- raw Run Trace inspection
+- raw diff / stdout / stderr export
+- evidence hash revalidation
+- audit report that requires local raw evidence
+```
+
+`EVIDENCE_ABSENT`는 raw evidence가 현재 machine에 없다는 뜻이다. source-of-truth corruption이 아니며, durable Review Decision이나 VERIFIED를 자동 무효화하지 않는다.
+
 REVIEW_INTEGRITY:
 
 ```text
 check target:
-- review record
+- Review Decision record
 
 expected:
-- review schema
-- review reference validity
+- Review Decision schema
+- Review Decision reference validity
 - actor present
 - timestamp present
-- review result consistency
+- Review Decision consistency
 
 actual:
-- review record
+- Review Decision record
 
 source of truth:
-- 리뷰 증거가 의심됨
+- 리뷰 결정이 의심됨
 
 default repair:
 - review invalidation
@@ -2365,12 +2679,13 @@ Category 우선순위:
 2. REFERENCE_INTEGRITY
 3. STATE_TRANSITION_INTEGRITY
 4. EXECUTION_EVIDENCE_INTEGRITY
-5. REVIEW_INTEGRITY
-6. CARRY_FORWARD_INTEGRITY
-7. POLICY_ENFORCEMENT_INTEGRITY
-8. WORKSPACE_GROUNDING
-9. SNAPSHOT_CONSISTENCY
-10. READ_MODEL_CONSISTENCY
+5. EVIDENCE_ABSENT
+6. REVIEW_INTEGRITY
+7. CARRY_FORWARD_INTEGRITY
+8. POLICY_ENFORCEMENT_INTEGRITY
+9. WORKSPACE_GROUNDING
+10. SNAPSHOT_CONSISTENCY
+11. READ_MODEL_CONSISTENCY
 ```
 
 우선순위 원칙:
@@ -2392,9 +2707,14 @@ REFERENCE_INTEGRITY vs EXECUTION_EVIDENCE_INTEGRITY
 - Run이 없는 revision을 참조하면 REFERENCE_INTEGRITY
 - Run Trace 내부 파일 / result / command log가 깨지면 EXECUTION_EVIDENCE_INTEGRITY
 
+EVIDENCE_ABSENT vs EXECUTION_EVIDENCE_INTEGRITY
+- durable Review Decision의 evidenceRef가 현재 machine에 없으면 EVIDENCE_ABSENT
+- referenced Run Trace가 존재하지만 hash / schema / result consistency가 깨졌으면 EXECUTION_EVIDENCE_INTEGRITY
+- EVIDENCE_ABSENT는 기본적으로 WARNING이며 과거 Review Decision이나 VERIFIED를 자동 무효화하지 않는다
+
 REVIEW_INTEGRITY vs EXECUTION_EVIDENCE_INTEGRITY
 - run result 자체가 이상하면 EXECUTION_EVIDENCE_INTEGRITY
-- VERIFIED / review record가 이상하면 REVIEW_INTEGRITY
+- VERIFIED / Review Decision record가 이상하면 REVIEW_INTEGRITY
 
 CARRY_FORWARD_INTEGRITY vs WORKSPACE_GROUNDING
 - CarryForwardItem 자체의 상태 / 내용 / sanitization 위반이면 CARRY_FORWARD_INTEGRITY
@@ -2691,7 +3011,7 @@ does not change:
 - ledger
 - Task Revision
 - Run Trace
-- review record
+- Review Decision record
 - CarryForward event
 - Project Profile
 
@@ -2750,7 +3070,7 @@ RESTORE_SOURCE:
 target:
 - missing Task Revision file
 - missing Run Trace file
-- missing review record
+- missing Review Decision record
 - missing ledger file
 - missing policy file
 
@@ -2882,7 +3202,7 @@ changes:
 does not change:
 - do not delete evidence file
 - do not edit run result
-- do not edit review record
+- do not edit Review Decision record
 
 preconditions:
 - invalidation reason required
@@ -4210,6 +4530,7 @@ Source of Truth:
 - Project Profile
 - Local Overlay
 - Objective / Queue Ledger
+- Task Ledger
 - Task Draft
 - Task Revision
 - Run Options
@@ -4225,8 +4546,9 @@ Evidence Truth:
 - Run Trace
 
 Decision Record:
-- Approval
-- Review
+- Approval decision in Task Ledger
+- Objective relation / queue decision in Objective Ledger
+- Review Decision
 - Close / Retry / Reject
 - Corrective Event
 ```
@@ -5563,7 +5885,7 @@ durable queue 아이디어는 가져온다.
 = Task 계약의 진실
 
 .codefleet/runs/<run-id>/*
-= 실행 결과의 진실
+= 실행 증거의 진실
 
 .codefleet/objectives/<objective-id>/ledger.jsonl
 = Objective / Queue 변경 이력의 진실
@@ -5658,7 +5980,7 @@ Queue 상태 원칙:
 - VERIFIED
 ```
 
-`NEXT`, `ACTIVE`, `DONE`, `VERIFIED`는 approved Revision, Run Trace, review result, Queue policy에서 계산할 수 있으므로 원본 진실로 저장하지 않는다. snapshot에는 표시할 수 있지만, 불일치가 생기면 재계산 결과가 우선한다.
+`NEXT`, `ACTIVE`, `DONE`, `VERIFIED`는 approved Revision, Run Trace, durable Review Decision, Queue policy에서 계산할 수 있으므로 원본 진실로 저장하지 않는다. snapshot에는 표시할 수 있지만, 불일치가 생기면 재계산 결과가 우선한다.
 
 여기서 "저장 가능한 상태"와 "계산해야 하는 상태"의 차이는 다음과 같다.
 
@@ -5667,7 +5989,7 @@ Queue 상태 원칙:
 = 사람이 명시적으로 결정하거나 외부 근거가 필요해서 파일/ledger에 기록해야 알 수 있는 상태
 
 계산해야 하는 상태
-= 이미 존재하는 Task Revision, Run Trace, Queue 순서를 보면 자동으로 판단할 수 있는 상태
+= 이미 존재하는 Task Revision, Run Trace, durable Review Decision, Queue 순서를 보면 자동으로 판단할 수 있는 상태
 ```
 
 핵심 원칙:
@@ -5690,7 +6012,7 @@ DONE
 = 이미 존재하는 실행 증거에서 계산 가능
 
 VERIFIED
-= Run review result를 보고 판단할 수 있음
+= durable Review Decision을 보고 판단할 수 있음
 = 사람이 해당 queue item 결과를 받아들였다는 증거에서 계산 가능
 ```
 
@@ -5735,7 +6057,7 @@ DONE
 - 저장하지 않음
 
 VERIFIED
-- Run review result를 보면 계산 가능
+- durable Review Decision을 보면 계산 가능
 - 저장하지 않음
 ```
 
@@ -5747,7 +6069,7 @@ task revision:  task-001 revision 1 is APPROVED
 run/result:     task-001 failed
 ```
 
-이런 상태가 생기면 무엇을 믿어야 할지 애매해진다. 따라서 Objective Queue에는 `DONE`이나 `VERIFIED`를 원본 진실로 저장하지 않고, approved Revision, Run Trace, review result를 기준으로 계산한다.
+이런 상태가 생기면 무엇을 믿어야 할지 애매해진다. 따라서 Objective Queue에는 `DONE`이나 `VERIFIED`를 원본 진실로 저장하지 않고, approved Revision, Run Trace, durable Review Decision을 기준으로 계산한다.
 
 좋은 상태 예시:
 
@@ -5780,7 +6102,7 @@ derived queue state:
 - SEQUENCE Objective는 derived NEXT가 최대 1개다.
 - 기본 정책에서 ACTIVE Run은 Objective당 최대 1개다.
 - Queue position은 직접 수정하지 않고 reorder 이벤트로만 바꾼다.
-- Objective snapshot은 ledger, Task Revision, Run Trace, review result에서 재생성 가능해야 한다.
+- Objective snapshot은 ledger, Task Revision, Run Trace, durable Review Decision에서 재생성 가능해야 한다.
 - raw stdout/stderr/diff는 Objective나 carry-forward context에 들어가지 않는다.
 ```
 
@@ -5844,7 +6166,22 @@ Task Draft는 아직 승인된 실행 계약이 아니므로 queue history를 �
 }
 ```
 
-Ledger event 최소 세트:
+Ledger event 최소 세트는 owner별로 구분한다.
+
+Task ledger events:
+
+```text
+Draft / Revision events
+- TASK_DRAFT_UPDATED
+- TASK_REVISION_CREATED
+
+Approval events
+- TASK_APPROVED
+- TASK_APPROVAL_INVALIDATED
+- TASK_REVISION_SUPERSEDED
+```
+
+Objective ledger events:
 
 ```text
 Objective events
@@ -5874,9 +6211,12 @@ Context events
 - CARRY_FORWARD_ATTACHED
 - CARRY_FORWARD_REVOKED
 - CARRY_FORWARD_EXPIRED
+
+Review events
+- RUN_REVIEW_DECIDED
 ```
 
-Ledger는 제안 로그가 아니라 결정 로그다.
+Objective ledger는 제안 로그가 아니라 결정 로그다. Task ledger는 draft mutation, revision creation, approval decision을 append-only로 남기는 Task-level audit ledger다.
 
 따라서 `TASK_RELATION_PROPOSED`는 ledger에 남기지 않는다. Proposed relation은 Draft Task 안의 제안일 뿐이며, 실행에는 사용할 수 없다. 사람이 review 단계에서 accept / approve / reject한 순간부터 ledger에 기록한다.
 
@@ -5913,10 +6253,19 @@ Ledger event 공통 필드:
 eventId
 seq
 type
-objectiveId
 actor
 at
 reason optional
+```
+
+owner별 필수 식별자:
+
+```text
+Task ledger event
+-> taskId
+
+Objective ledger event
+-> objectiveId
 ```
 
 공통 규칙:
@@ -5941,7 +6290,37 @@ reason optional
 - TEST_FAILED
 ```
 
-이 이벤트들은 Objective / Queue 결정이 아니라 실행 결과에 속한다. 실행 결과의 진실은 Run Trace에 남긴다.
+이 이벤트들은 Objective / Queue 결정이 아니라 실행 결과에 속한다. 실행 원본 증거의 진실은 Run Trace에 남긴다.
+
+Approval event는 실행 이벤트가 아니다.
+
+```text
+TASK_APPROVED
+= 특정 Task Revision content hash를 사람이 실행 가능하다고 승인한 decision event
+= Task ledger event
+
+TASK_APPROVAL_INVALIDATED
+= 기존 approval decision을 append-only로 무효화하는 corrective decision event
+= Task ledger event
+
+TASK_REVISION_SUPERSEDED
+= 새 Revision이 기존 Revision을 대체했음을 남기는 corrective decision event
+= Task ledger event
+```
+
+이 이벤트들은 과거 Revision 파일이나 과거 approval event를 수정하지 않는다. 현재 approval state는 Task ledger의 approval decision event replay로 계산한다. Objective ledger는 approval state를 소유하지 않고, approved Revision을 Objective relation / queue decision의 대상으로 참조한다.
+
+단, review decision event는 실행 이벤트가 아니다.
+
+```text
+RUN_REVIEW_DECIDED
+= 사람이 특정 Run 결과를 보고 받아들였는지 결정한 Objective ledger event
+= Queue progression을 계산하기 위한 durable decision
+```
+
+`RUN_REVIEW_DECIDED`는 decision audit을 위해 frozen evidence snapshot을 포함할 수 있다. 이 snapshot은 실행 결과의 원본 진실이 아니라, 사람이 결정을 내린 시점에 어떤 Run result / check를 보고 판단했는지 설명하는 audit context다.
+
+따라서 Objective ledger는 여전히 `TASK_DONE`, `TASK_FAILED`, `TEST_PASSED`, `TEST_FAILED` 같은 실행 이벤트를 저장하지 않는다.
 
 이벤트별 주요 추가 필드:
 
@@ -5976,6 +6355,51 @@ CARRY_FORWARD_PROPOSED / ATTACHED / REVOKED / EXPIRED
 - sourceRunId optional
 - objectiveQueueItemId optional
 - changedFiles optional
+
+TASK_DRAFT_UPDATED
+- taskId
+- draftHash
+- changedFields
+- reason
+
+TASK_REVISION_CREATED
+- taskId
+- taskRevision
+- revisionHash
+- sourceDraftHash
+
+TASK_APPROVED
+- taskId
+- taskRevision
+- revisionHash
+- approvalTargetHash
+
+TASK_APPROVAL_INVALIDATED
+- taskId
+- taskRevision
+- revisionHash
+- targetApprovalEventId
+- reason
+
+TASK_REVISION_SUPERSEDED
+- taskId
+- taskRevision
+- revisionHash
+- supersededByTaskRevision
+- supersededByRevisionHash
+- reason
+
+RUN_REVIEW_DECIDED
+- objectiveQueueItemId
+- taskId
+- taskRevision
+- runId
+- decision: ACCEPTED | REJECTED | NEEDS_CHANGES
+- observedResultSnapshot
+- observedCheckSnapshot
+- verificationGateResult
+- evidenceRef optional
+- evidenceHash optional
 ```
 
 `reason`이 필수인 이벤트:
@@ -5990,6 +6414,9 @@ CARRY_FORWARD_PROPOSED / ATTACHED / REVOKED / EXPIRED
 - CARRY_FORWARD_ATTACHED
 - CARRY_FORWARD_REVOKED
 - CARRY_FORWARD_EXPIRED
+- TASK_APPROVED
+- TASK_APPROVAL_INVALIDATED
+- TASK_REVISION_SUPERSEDED
 ```
 
 이 설계의 목적은 OMX의 durable workflow 장점을 가져오되, CodeFleet의 핵심인 승인 가능한 Task 계약과 검증 가능한 실행 증거를 흐리지 않는 것이다.
@@ -6009,13 +6436,13 @@ Task
 Task Draft
 = 승인 전 수정 가능한 계약 후보
 = draft.yaml에 저장된다.
-= draft-ledger.jsonl로 변경 이력을 남긴다.
+= task-ledger.jsonl로 변경 이력을 남긴다.
 = 실행 불가
 
 Task Revision
 = 실행 가능한 계약 단위
 = 특정 시점의 Task Spec 내용
-= approval, objective relation, run, summary가 묶이는 단위
+= approval decision, objective relation decision, run, summary가 참조하는 단위
 = immutable
 ```
 
@@ -6050,12 +6477,11 @@ Draft
 
 Revision
 - intent
-- accepted / approved objective relation
+- objective context snapshot / reference
 - scope
 - guardrails
 - verification
 - doneCriteria
-- approval
 - content hash
 
 Run
@@ -6078,7 +6504,7 @@ Run
 ```text
 Draft는 수정 가능하지만 실행 불가하다.
 Revision은 불변이며 실행 가능하다.
-Run은 실행 결과의 진실이다.
+Run은 실행 증거의 진실이다.
 ```
 
 최종 원칙:
@@ -6106,7 +6532,7 @@ Run은 실행 증거를 남기기 위한 것이다.
   <task-id>/
     task.json
     draft.yaml
-    draft-ledger.jsonl
+    task-ledger.jsonl
     revisions/
       1.yaml
       2.yaml
@@ -6127,13 +6553,14 @@ draft.yaml
 = 승인 전이므로 수정 가능
 = proposed relation만 가질 수 있음
 
-draft-ledger.jsonl
+task-ledger.jsonl
 = draft가 언제, 왜, 어떻게 바뀌었는지 기록
+= revision 생성, approval, invalidation, supersede decision 기록
 
 revisions/<n>.yaml
 = 특정 revision의 실행 계약
 = intent, objective, scope, guardrails, verification, doneCriteria
-= approval과 objective relation 상태
+= approval과 objective relation decision이 참조하는 immutable contract
 ```
 
 연결 규칙:
@@ -6188,7 +6615,7 @@ Run Trace는 실행 당시의 연결 snapshot을 가진다.
 }
 ```
 
-`objectiveId`와 `objectiveQueueItemId`는 Run Trace 안에서는 실행 당시 snapshot이다. 권위는 Objective ledger와 Task Revision의 relation에 있으며, validate는 Run Trace의 snapshot이 이 권위 상태와 충돌하지 않는지 확인한다.
+`objectiveId`와 `objectiveQueueItemId`는 Run Trace 안에서는 실행 당시 snapshot이다. Objective relation과 queue binding의 권위는 Objective ledger에 있다. Task Revision은 Objective context snapshot / reference를 가질 수 있지만 Objective relation state를 소유하지 않는다. validate는 Run Trace의 snapshot이 Objective ledger의 권위 상태와 충돌하지 않는지 확인한다.
 
 처리 흐름 예시:
 
@@ -6224,11 +6651,13 @@ task.json
 - superseded 관계
 
 revisions/<n>.yaml
-- revision별 계약과 approval / relation 상태
+- revision별 immutable contract
+- approval / relation decision이 참조하는 revision hash
 
 objective ledger
 - 어떤 revision이 Objective에 붙었는지
 - 어떤 relation이 accepted / approved / invalidated 됐는지
+- 어떤 approval / invalidation / supersede decision이 현재 유효한지
 
 runs/<run-id>/result.json
 - 어떤 taskId / taskRevision을 실행했는지
@@ -6239,7 +6668,7 @@ runs/<run-id>/result.json
 
 ```text
 - Task ID는 논리적 작업 단위로 유지한다.
-- Task Draft는 수정 가능하지만 draft-ledger로 변경 이력을 남긴다.
+- Task Draft는 수정 가능하지만 task-ledger로 변경 이력을 남긴다.
 - Task Revision은 실행 계약 단위다.
 - Task Revision은 생성 후 직접 수정하지 않는다.
 - 승인, relation, run, summary는 모두 revision에 묶인다.
@@ -6266,7 +6695,7 @@ Objective queue items point to revisions.
 한국어:
 
 ```text
-Draft는 수정 가능하지만 변경 이력을 남긴다.
+Draft는 수정 가능하지만 Task ledger에 변경 이력을 남긴다.
 Revision은 불변 실행 계약이다.
 승인은 revision에만 묶인다.
 Run은 revision에만 묶인다.
@@ -6298,6 +6727,44 @@ Task가 정의해야 하는 것:
 
 Task Spec은 최종적으로 단순 작업 메모가 아니라 승인 가능한 실행 계약서다.
 
+최종 정의:
+
+```text
+Task Spec
+= Human Approval과 Run Planning이 공유하는 실행 계약 source
+
+Task Draft
+= mutable contract candidate
+= unresolved field 허용
+= proposed Objective context 허용
+= 실행 불가
+
+Task Revision
+= immutable execution contract
+= unresolved field 금지
+= approval state / Objective relation state를 직접 소유하지 않음
+= Run Plan의 primary source input
+```
+
+Task Spec은 `Source / Evidence / Decision / Derived` 경계를 섞지 않는다.
+
+```text
+Task Spec
+= Source
+
+Run Plan / effectivePolicy / computedRisk
+= Derived
+
+Run Trace / stdout / stderr / diff / result.json
+= Evidence
+
+Approval / Review Decision / Objective relation decision
+= Decision
+
+DONE / VERIFIED / NEXT
+= Derived State
+```
+
 즉 Task Spec은 다음 계층이 함께 사용하는 기준이다.
 
 ```text
@@ -6318,25 +6785,205 @@ Task Spec의 1차 필드에는 다음 항목을 포함한다.
 
 ```text
 intent
-objective
+objectiveContext
+agentRole
+harnessMode
 scope
 guardrails
+requiredGates
+workflow
 verification
 doneCriteria
+riskSignals
 needsReview
+unresolvedRequiredFields
 ```
 
 이 필드는 v0.2 편의를 위한 임시 구조가 아니라 최종 모델의 핵심 필드다.
 
-`objective` 필드는 Task가 어떤 Objective queue item에 속하는지 표현한다. Draft 단계에서는 proposed relation일 수 있고, Task Review 단계에서 사람이 이를 accepted / approved / rejected 중 하나로 확정하거나 수정한다.
+`objectiveContext` 필드는 Task가 어떤 Objective와 관련 있는지 설명하는 context-only snapshot이다. Draft 단계에서는 proposed Objective context일 수 있고, Task Review 단계에서 사람이 이를 수정할 수 있다. 그러나 Objective relation state, queue position, accepted / approved state, NEXT 여부의 권위는 `objectiveContext`가 아니라 Objective ledger에 있다.
 
-최종 모델에서는 여기에 다음 실행 계약 필드가 더해질 수 있다.
+`objectiveContext` allowed fields:
 
 ```text
-approval
-discovery
-review
-run
+objectiveId
+relationIntent
+rationale
+source
+```
+
+`objectiveContext` forbidden fields:
+
+```text
+relationState
+queuePosition
+objectiveQueueItemId
+acceptedAt
+approvedAt
+NEXT / ACTIVE / DONE / VERIFIED 같은 derived state
+```
+
+Task Revision의 `objectiveContext`는 Objective relation을 소유하지 않는다. Objective ledger의 relation / queue decision이 `taskId + taskRevision + revisionHash`를 참조하고, Task Revision은 사람이 계약을 이해할 수 있는 context만 가진다.
+
+`verification.commands`는 Task가 기대하는 검증 후보 / 요구를 나타낸다. `verification.commands`는 명령 실행 권한이 아니다. 실제 명령 실행은 Project Profile `policies.commands`, effectivePolicy, Run Plan verificationPlan을 통과해야 한다.
+
+Task Spec 최소 schema:
+
+```yaml
+schemaVersion: "1.0"
+documentKind: "TASK_DRAFT | TASK_REVISION"
+taskId: "task-auth-error-response"
+taskRevision: 1 # TASK_REVISION only
+
+intent:
+  summary: ""
+  userRequest: ""
+  constraints: []
+
+objectiveContext:
+  objectiveId: ""
+  relationIntent: "START | CONTINUATION"
+  rationale: ""
+  source: "USER | DRAFT_HARNESS | REVIEW"
+
+agentRole: "BACKEND_IMPLEMENTER"
+harnessMode: "WORKSPACE_EDIT"
+
+scope:
+  targetPaths: []
+  excludedPaths: []
+  components: []
+  notes: ""
+
+guardrails:
+  doNotTouch: []
+  additionalRestrictions: []
+  commandRestrictions: []
+
+requiredGates:
+  runApproval: "NONE | HUMAN_REVIEW | EXPLICIT_APPROVAL"
+  resultReview: "NONE | HUMAN_REVIEW | EXPLICIT_APPROVAL"
+  verification: "NONE | REQUIRED"
+
+workflow:
+  stages: ["PLAN", "INSPECT", "APPLY", "VERIFY", "REVIEW"]
+
+verification:
+  commands: []
+  manualChecks: []
+  expectedEvidence: []
+
+doneCriteria:
+  - ""
+
+riskSignals:
+  - ""
+
+needsReview: []              # TASK_DRAFT only
+unresolvedRequiredFields: [] # TASK_DRAFT only
+```
+
+Task Draft-only fields:
+
+```text
+- needsReview
+- unresolvedRequiredFields
+- REQUIRE_EXPLICIT values
+- proposed Objective context
+- discovery notes / uncertainty notes
+```
+
+Task Revision required fields:
+
+```text
+- schemaVersion
+- documentKind = TASK_REVISION
+- taskId
+- taskRevision
+- intent
+- objectiveContext snapshot / reference
+- concrete agentRole
+- concrete harnessMode
+- scope
+- guardrails
+- concrete requiredGates
+- concrete workflow.stages
+- verification
+- doneCriteria
+- riskSignals
+- contentHash
+```
+
+Task Revision forbidden fields:
+
+```text
+- REQUIRE_EXPLICIT
+- unresolvedRequiredFields
+- blocking needsReview
+- approval state
+- current Objective relation state
+- queue position authority
+- selectedAgentAdapter
+- adapter command path
+- provider model name
+- provider-specific CLI option
+- transcript parsing rule
+- Run Plan
+- effectivePolicy
+- computedRisk
+- stdout / stderr / diff
+- result.json
+- Review Decision
+- DONE / VERIFIED / NEXT 같은 derived state
+```
+
+Task Draft -> Task Revision 승격 조건:
+
+```text
+- schema valid
+- taskId 있음
+- intent 있음
+- concrete agentRole
+- concrete harnessMode
+- concrete requiredGates
+- concrete workflow.stages
+- scope 있음
+- guardrails 있음
+- verification 있음
+- doneCriteria 있음
+- riskSignals 고정
+- unresolvedRequiredFields 없음
+- blocking needsReview 없음
+- provider-specific 실행 설정 없음
+- canonical revision hash 계산 가능
+```
+
+boundary rules:
+
+```text
+1. Task Revision may reference Objective context, but does not own Objective relation state.
+2. Objective ledger owns relation and queue decisions.
+3. Task Revision content hash is the target of approval.
+4. Approval is a ledger decision event, not mutable state inside the revision file.
+5. scope and guardrails restrict the task contract, but do not widen Project Profile policy.
+6. verification.commands is an execution request / expectation, not a command permission grant.
+7. riskSignals are recorded inputs for deterministic risk calculation; computedRisk is not stored as Task Spec source.
+```
+
+Task Spec에 넣지 않는 실행 산출물 / 결정 / 파생값은 다음 위치에 둔다.
+
+```text
+Approval
+= approval decision event
+
+Review
+= review decision event
+
+Run
+= Run Trace
+
+computedRisk / effectivePolicy / verificationPlan
+= Run Plan
 ```
 
 경계는 다음과 같다.
@@ -6501,8 +7148,8 @@ codefleet task review <task-id>
 
 codefleet task approve <task-id>
   -> Draft를 immutable Task Revision으로 생성
-  -> Revision approval 기록
-  -> accepted 또는 approved Objective relation 확인
+  -> Task ledger에 Revision approval 기록
+  -> Objective ledger의 accepted 또는 approved Objective relation decision 확인
 
 codefleet run <task-id>
   -> accepted 또는 approved Objective context만 Harness prompt에 포함
@@ -6567,7 +7214,7 @@ approved Revision
 Task Review / Edit 안전 규칙:
 
 ```text
-- Task Draft는 수정 가능하지만 draft-ledger에 변경 이력을 남긴다.
+- Task Draft는 수정 가능하지만 task-ledger에 변경 이력을 남긴다.
 - approved Revision은 직접 수정하지 않는다.
 - 승인 후 수정은 새 Draft를 만들고 새 Revision을 생성한다.
 - approval 정보는 새 Revision에 자동 승계되지 않는다.
