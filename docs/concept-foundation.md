@@ -301,7 +301,8 @@ All correction is explicit.
   "taskRevision": 2,
   "revisionHash": "sha256:revision-2",
   "approvalTargetHash": "sha256:revision-2",
-  "actor": "user",
+  "actorKind": "HUMAN",
+  "actorId": "user",
   "reason": "Reviewed and approved revision 2 contract.",
   "at": "2026-05-29T10:30:00+09:00"
 }
@@ -749,7 +750,7 @@ v0.2 같은 초기 구현에서는 `QUEUE_ITEM_UNSKIPPED`를 제외하고 SKIPPE
 ```text
 ACTIVE item을 skip / cancel하면 실행 중인 Agent 결과와 queue 결정이 충돌한다.
 DONE / VERIFIED item을 skip / cancel하면 과거 실행 이력을 왜곡한다.
-BLOCKED / SKIPPED / CANCELED item을 run하면 사람이 내린 흐름 결정과 실행이 충돌한다.
+BLOCKED / SKIPPED / CANCELED item을 run하면 정책상 허용된 actor가 내린 흐름 결정과 실행이 충돌한다.
 ```
 
 Objective State와의 관계:
@@ -893,7 +894,7 @@ Task revision이 바뀌면 기존 accepted / approved relation은 invalidated �
 이유:
 
 ```text
-사람이 수락 / 승인한 것은 특정 Task revision이다.
+정책상 허용된 actor가 수락 / 승인한 것은 특정 Task revision이다.
 Task 내용이 바뀌면 Objective 연결의 의미도 달라질 수 있다.
 ```
 
@@ -1053,7 +1054,8 @@ approval decision / correction event 공통 필드:
 taskId
 taskRevision
 revisionHash
-actor
+actorKind
+actorId
 reason
 at
 ```
@@ -1219,7 +1221,7 @@ FAILED
 DONE
 - 최신 유효 terminal Run이 성공함
 - 필요한 자동 검증이 통과함
-- human review가 아직 최종 승인되지 않았을 수 있음
+- Review Decision이 아직 ACCEPTED가 아닐 수 있음
 
 VERIFIED
 - 최신 effective RUN_REVIEW_DECIDED가 ACCEPTED임
@@ -1236,7 +1238,7 @@ DONE
 = 기본적으로 Queue를 자동 진행시키지 않음
 
 VERIFIED
-= 사람이 결과를 받아들임
+= 정책상 허용된 actor가 결과를 받아들임
 = Queue progression을 만족시키는 상태
 = SEQUENCE Objective에서 다음 item을 NEXT로 계산할 수 있는 기본 근거
 ```
@@ -1248,7 +1250,7 @@ DONE
 = objectiveQueueItemId + taskId + taskRevision 단위의 실행 성공
 
 VERIFIED
-= 해당 queue item 결과를 사람이 받아들인 상태
+= 해당 queue item 결과를 정책상 허용된 actor가 받아들인 상태
 
 CLOSED
 = Objective 전체를 사람이 명시적으로 닫은 상태
@@ -1262,6 +1264,7 @@ CLOSED
 SEQUENCE Objective:
 - previous item VERIFIED -> next item can become NEXT
 - previous item DONE only -> stop and wait for review
+- previous item DONE + reviewNotRequiredProgressionCondition -> next item can become NEXT
 - previous item FAILED -> stop
 - previous item NO_RUN / ACTIVE -> stop
 ```
@@ -1270,7 +1273,9 @@ SEQUENCE Objective:
 
 ```text
 LOW risk + Project Profile explicitly allows autoAdvanceOnDone
--> DONE만으로 다음 item 진행 가능
+-> DONE을 직접 progression 근거로 쓰지 않음
+-> SYSTEM_POLICY auto review 조건을 만족하면 RUN_REVIEW_DECIDED(ACCEPTED)를 append
+-> 그 결과 VERIFIED가 계산되면 다음 item 진행 가능
 
 MEDIUM / HIGH risk
 -> VERIFIED 필요
@@ -1302,7 +1307,7 @@ Queue State decides workflow control.
 
 ```text
 Run Trace는 실행 증거를 남긴다.
-Review Decision은 사람이 결과를 받아들였는지에 대한 durable decision을 남긴다.
+Review Decision은 정책상 허용된 actor가 결과를 받아들였는지에 대한 durable decision을 남긴다.
 Run-derived State는 실행 증거와 durable decision을 해석한다.
 Queue State는 Objective 흐름 제어를 담당한다.
 ```
@@ -1364,7 +1369,7 @@ Run Summary / result.json
 
 Objective ledger
 = decision truth
-= 사람이 내린 durable decision 저장
+= 정책상 허용된 actor가 내린 durable decision 저장
 
 Run-derived State
 = evidence + decision을 해석한 derived state
@@ -1377,10 +1382,10 @@ VERIFIED
 
 ```text
 DONE은 실행 성공이다.
-VERIFIED는 사람이 받아들인 성공이다.
+VERIFIED는 정책상 허용된 actor가 받아들인 성공이다.
 ```
 
-`RUN_REVIEW_DECIDED`는 실행 이벤트가 아니다. `RUN_REVIEW_DECIDED`는 사람이 특정 Run 결과를 보고 받아들였는지, 거절했는지, 수정이 필요한지 결정한 durable decision event다.
+`RUN_REVIEW_DECIDED`는 실행 이벤트가 아니다. `RUN_REVIEW_DECIDED`는 정책상 허용된 actor가 특정 Run 결과를 보고 받아들였는지, 거절했는지, 수정이 필요한지 결정한 durable decision event다.
 
 최소 필드:
 
@@ -1395,8 +1400,11 @@ observedCheckSnapshot
 verificationGateResult
 evidenceRef optional
 evidenceHash optional
-actor
+actorKind
+actorId
 reason
+decisionBasis
+policyRuleRefs optional
 at
 ```
 
@@ -1407,6 +1415,21 @@ ACCEPTED
 REJECTED
 NEEDS_CHANGES
 ```
+
+Review Decision actor:
+
+```text
+actorKind
+= HUMAN | SYSTEM_POLICY
+
+actorId
+= user id, local username, or stable system actor id such as codefleet-policy
+
+decisionBasis
+= HUMAN_REVIEW | SYSTEM_POLICY_AUTO_ACCEPT
+```
+
+`actorKind`가 `requiredGates.resultReview.allowedActors`와 맞지 않으면 Review Decision은 effective decision이 될 수 없다. `actorId`는 감사 추적용 식별자이고, gate 판정에는 `actorKind`를 사용한다.
 
 Review Decision 결과:
 
@@ -1423,6 +1446,172 @@ NEEDS_CHANGES
 -> VERIFIED 불가
 -> Run-derived State는 FAILED로 해석
 -> 새 Revision 생성은 자동이 아니라 별도 Draft / Revision flow에서 처리
+```
+
+SYSTEM_POLICY auto review 조건:
+
+```text
+SYSTEM_POLICY가 RUN_REVIEW_DECIDED(ACCEPTED)를 자동 append하려면:
+
+1. effectivePolicy.requiredGates.resultReview.required == true
+2. SYSTEM_POLICY가 effectivePolicy.requiredGates.resultReview.allowedActors에 포함됨
+3. effectivePolicy.requiredGates.resultReview.explicit == false
+4. effectivePolicy.autoAdvanceOnDone == true임
+5. normalized Run result가 DONE임
+6. verificationGateResult가 SATISFIED 또는 WAIVED_ALLOWED임
+7. computedRisk가 LOW임
+8. unknown risk가 아님
+9. blocking finding이 없음
+10. unresolved required field가 없음
+11. blocking needsReview가 없음
+12. run evidenceRef와 evidenceHash가 decision 시점에 존재함
+13. decisionBasis = SYSTEM_POLICY_AUTO_ACCEPT로 기록됨
+```
+
+SYSTEM_POLICY auto review는 `ACCEPTED`만 append할 수 있다. `REJECTED`와 `NEEDS_CHANGES`는 HUMAN Review Decision 또는 별도 policy rule이 명시적으로 정의된 뒤에만 허용한다.
+
+`autoAdvanceOnDone`은 DONE 상태를 직접 Queue progression 근거로 쓰라는 뜻이 아니다. `autoAdvanceOnDone`은 위 조건을 만족할 때 CodeFleet이 SYSTEM_POLICY Review Decision을 자동 append할 수 있다는 Project Profile 정책이다. 따라서 자동 진행이 일어나도 progression의 durable source는 여전히 `RUN_REVIEW_DECIDED(ACCEPTED)`다.
+
+`resultReview.required=false` 의미:
+
+```text
+resultReview.required=false
+= Queue progression에 별도 Review Decision을 요구하지 않음
+= Review Decision 생성을 금지한다는 뜻은 아님
+= verification gate와 normalized Run result 조건은 여전히 적용됨
+```
+
+`resultReview.required=false`일 때:
+
+```text
+DONE + computedRisk LOW + verificationGateResult SATISFIED
+-> reviewNotRequiredProgressionCondition satisfied
+
+DONE + computedRisk LOW + verificationGateResult WAIVED_ALLOWED
+-> reviewNotRequiredProgressionCondition satisfied
+
+DONE + computedRisk MEDIUM / HIGH / unknown
+-> progression blocked until effective resultReview requires Review Decision
+
+DONE + verificationGateResult NOT_SATISFIED
+-> progression blocked
+
+FAILED
+-> progression blocked
+```
+
+이 경우 `VERIFIED`라는 이름을 사용하지 않는다. `VERIFIED`는 durable Review Decision이 있는 경우의 가장 강한 progression state다. Review가 필요 없는 LOW risk 경우에만 Queue policy는 `DONE + verificationGateResult`를 보고 다음 item을 계산할 수 있지만, 이 상태를 Review acceptance로 과장하지 않는다.
+
+`reviewNotRequiredProgressionCondition`은 저장 상태가 아니고 ledger event도 아니다. Queue policy가 NEXT 계산 시 사용하는 derived condition이다.
+
+따라서 SEQUENCE progression의 기본 규칙은 다음처럼 해석한다.
+
+```text
+previous item VERIFIED
+-> next item can become NEXT
+
+previous item DONE + resultReview.required=false + computedRisk LOW + verificationGateResult in {SATISFIED, WAIVED_ALLOWED}
+-> next item can become NEXT
+
+previous item DONE + resultReview.required=true
+-> stop and wait for Review Decision or bounded SYSTEM_POLICY auto review
+
+previous item DONE + verificationGateResult NOT_SATISFIED
+-> stop
+```
+
+`resultReview.required=false`는 `autoAdvanceOnDone`과 다르다. `resultReview.required=false`는 애초에 review gate를 요구하지 않는 Task 계약이다. `autoAdvanceOnDone`은 review gate가 필요한 경우에도 엄격한 조건 아래 SYSTEM_POLICY가 durable Review Decision을 자동 append할 수 있게 하는 정책이다.
+
+Risk-to-review-gate elevation:
+
+```text
+computedRisk LOW
+-> resultReview.required=false can remain false when no stricter source requires review
+
+computedRisk MEDIUM
+-> effectivePolicy.requiredGates.resultReview.required=true
+
+computedRisk HIGH
+-> effectivePolicy.requiredGates.resultReview.required=true
+
+computedRisk unknown
+-> effectivePolicy.requiredGates.resultReview.required=true
+```
+
+즉 Task/Profile이 `resultReview.required=false`를 요청해도 Run Planning에서 risk가 MEDIUM / HIGH / unknown으로 계산되면 effectivePolicy는 review gate를 다시 요구한다.
+
+SYSTEM_POLICY Review Decision FINAL RULE:
+
+```text
+ruleId: SYSTEM_POLICY_AUTO_REVIEW_DECISION_IS_BOUNDED
+status: FINAL
+scope: REVIEW
+sourceOfTruth:
+- Run Plan effectivePolicy.autoAdvanceOnDone
+- Run Plan effectivePolicy.requiredGates.resultReview
+- Run Plan computedRisk
+- Run Trace
+- Run Summary / result.json
+- validation findings
+- Objective ledger RUN_REVIEW_DECIDED
+inputs:
+- effectivePolicy.autoAdvanceOnDone
+- effectivePolicy.requiredGates.resultReview
+- normalized Run result
+- observedCheck
+- verificationGateResult
+- computedRisk
+- unresolved required fields
+- needsReview
+- findings
+- evidenceRef
+- evidenceHash
+preconditions:
+- Run has terminal normalized result
+- Run Summary has been normalized
+- verificationGateResult has been computed by CodeFleet
+- resultReview.required == true
+condition:
+- effectivePolicy.autoAdvanceOnDone == true
+- SYSTEM_POLICY is in resultReview.allowedActors
+- resultReview.explicit == false
+- normalized Run result == DONE
+- verificationGateResult is SATISFIED or WAIVED_ALLOWED
+- computedRisk == LOW
+- computedRisk is not unknown
+- no blocking finding exists
+- no unresolved required field exists
+- no blocking needsReview exists
+- evidenceRef exists at decision time
+- evidenceHash exists at decision time
+- RUN_REVIEW_DECIDED.actorKind == SYSTEM_POLICY
+- RUN_REVIEW_DECIDED.decision == ACCEPTED
+- RUN_REVIEW_DECIDED.decisionBasis == SYSTEM_POLICY_AUTO_ACCEPT
+allowedEffect:
+- CodeFleet may append RUN_REVIEW_DECIDED(ACCEPTED)
+- VERIFIED may be calculated from the appended decision and verification gate
+- Queue progression may use VERIFIED
+deniedEffect:
+- CodeFleet must not append SYSTEM_POLICY ACCEPTED review decision
+- Queue progression must not use DONE alone
+evidence:
+- runPlanId
+- runId
+- objectiveQueueItemId
+- taskId
+- taskRevision
+- resultReview gate snapshot
+- effectivePolicy.autoAdvanceOnDone
+- computedRisk
+- verificationGateResult
+- finding ids considered
+- evidenceRef
+- evidenceHash
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- require HUMAN Review Decision or fix the unmet evidence / policy condition
 ```
 
 VERIFIED 계산 규칙:
@@ -1448,13 +1637,32 @@ verificationGateResult
 = SATISFIED | NOT_SATISFIED | WAIVED_ALLOWED
 ```
 
+verificationGateResult 계산:
+
+```text
+verification.required == false
+-> SATISFIED
+
+verification.required == true + observedCheck == PASS
+-> SATISFIED
+
+verification.required == true + observedCheck in {FAIL, NONE}
+-> NOT_SATISFIED
+
+verification.required == true + observedCheck == SKIP + valid waiver decision
+-> WAIVED_ALLOWED
+
+verification.required == true + observedCheck == SKIP + no valid waiver decision
+-> NOT_SATISFIED
+```
+
 규칙:
 
 ```text
 - PASS는 사람이 적는 값이 아니다.
 - PASS는 evidence에서만 나온다.
 - WAIVED는 policy가 허용한 경우에만 가능하다.
-- WAIVED는 actor, reason, risk condition, approver evidence를 가져야 한다.
+- WAIVED는 actorKind, actorId, reason, risk condition, approver evidence를 가져야 한다.
 - requiredGates.verification.required=true이고 observedCheck != PASS이면 기본적으로 VERIFIED가 될 수 없다.
 ```
 
@@ -1466,7 +1674,7 @@ RunSummary.result.BLOCKED
 = Queue item을 자동 BLOCKED로 만들지 않음
 
 QueueState.BLOCKED
-= 사람이 queue item을 막아둔 결정 상태
+= 정책상 허용된 actor가 queue item을 막아둔 결정 상태
 = QUEUE_ITEM_BLOCKED decision event 필요
 
 PlanningBlock.BLOCKED_UNTIL_POLICY
@@ -1755,7 +1963,7 @@ PROPOSED
 - review 대상
 
 ATTACHED
-- 사람이 승인해 Objective context에 붙인 상태
+- 정책상 허용된 actor가 승인해 Objective context에 붙인 상태
 - 다음 Draft Harness / Execution Harness에 포함 가능
 
 REVOKED
@@ -1802,7 +2010,7 @@ discard 가능 조건:
 1. item.state == PROPOSED
 2. item이 Harness prompt에 포함된 적 없음
 3. item이 ATTACHED 된 적 없음
-4. item이 사람이 명시적으로 승인 / 거절한 review 대상이 아니었음
+4. item이 정책상 허용된 actor가 명시적으로 승인 / 거절한 review 대상이 아니었음
 5. Project Profile carryForwardAuditMode == MINIMAL
 ```
 
@@ -1853,8 +2061,8 @@ Only ATTACHED context can be forwarded.
 DECISION이 ATTACHED 되기 위한 조건:
 
 ```text
-- 사람이 명시적으로 승인
-- actor 있음
+- 정책상 허용된 actor가 명시적으로 승인
+- actorKind / actorId 있음
 - reason 또는 근거 있음
 - sourceObjectiveId 또는 sourceTaskId 있음
 - 충돌하는 기존 ATTACHED Decision이 없거나 supersedes / revoke 처리됨
@@ -1902,7 +2110,7 @@ risk recheck 통과 조건:
 - REVOKED / EXPIRED는 포함 금지
 - state 변경은 직접 수정이 아니라 ledger event로만 처리
 - Summary는 sourceRunId / sourceTaskId / sourceTaskRevision 필수
-- Decision은 actor / reason / source 필수
+- Decision은 actorKind / actorId / reason / source 필수
 - 충돌하는 Decision은 동시에 ATTACHED 불가
 - EXPIRED Summary는 recheck 없이 다시 ATTACHED 불가
 - raw log / raw diff / agent scratchpad는 carry-forward 금지
@@ -1977,7 +2185,7 @@ FAILED
 = 상태 시스템은 정상
 
 BLOCKED
-= 사람이 흐름을 멈추기로 결정함
+= 정책상 허용된 actor가 흐름을 멈추기로 결정함
 = 상태 시스템은 정상
 
 CORRUPTED
@@ -2584,7 +2792,8 @@ check target:
 expected:
 - Review Decision schema
 - Review Decision reference validity
-- actor present
+- actorKind present
+- actorId present
 - timestamp present
 - Review Decision consistency
 
@@ -3114,7 +3323,8 @@ does not change:
 preconditions:
 - correction event type defined
 - reason required
-- actor required
+- actorKind required
+- actorId required
 - affected findingId required
 
 records:
@@ -3962,7 +4172,7 @@ Harness supplies accepted or approved context.
 ```text
 LLM이 작업의 연속성을 단정하지 않는다.
 CodeFleet이 연속성을 기록한다.
-사람이 연속성 제안을 수락하거나 수정한다.
+정책상 허용된 actor가 연속성 제안을 수락하거나 수정한다.
 Harness가 수락된 맥락만 전달한다.
 ```
 
@@ -4501,7 +4711,7 @@ Run Options
    = 실행 전 검토 가능한 작업 초안
 
 4. Task Review / Approval
-   = 사람이 Task 계약과 Objective relation을 검토 / 승인
+   = 정책상 허용된 actor가 Task 계약과 Objective relation을 검토 / 승인
 
 5. Task Revision
    = 승인된 불변 작업 계약
@@ -5086,20 +5296,24 @@ sourceOfTruth:
 - Task Revision.requiredGates
 - Task guardrails
 - policy-affecting Run Options
+- Run Plan computedRisk
 inputs:
 - candidate runApproval DecisionGate objects
 - candidate resultReview DecisionGate objects
 - candidate verification EvidenceGate objects
 - requiredGates merge rule definitions
+- computedRisk
 preconditions:
 - Project Profile validation passed
 - Task Revision.requiredGates is concrete
 - Local Overlay, if present, is valid and restrict-only
+- computedRisk has been calculated
 condition:
 - no REQUIRE_EXPLICIT value reaches effectivePolicy.requiredGates
 - unresolved required / explicit fields block Run Planning before merge completion
 - effectivePolicy.requiredGates.runApproval.required is OR(candidate required)
 - effectivePolicy.requiredGates.resultReview.required is OR(candidate required)
+- if computedRisk is MEDIUM, HIGH, or unknown, effectivePolicy.requiredGates.resultReview.required is true
 - effectivePolicy.requiredGates.runApproval.explicit is OR(candidate explicit)
 - effectivePolicy.requiredGates.resultReview.explicit is OR(candidate explicit)
 - required DecisionGate allowedActors are intersected across required sources
@@ -5120,12 +5334,93 @@ evidence:
 - runPlanId
 - source gate objects per requiredGates dimension
 - merged effectivePolicy.requiredGates
+- computedRisk
 failureFinding:
 - category = POLICY_ENFORCEMENT_INTEGRITY
 - severity = WARNING
 repairBehavior:
 - rebuild Run Plan from source policies and Task Revision
 - correct invalid source policy before execution
+```
+
+#### policies.autoAdvanceOnDone
+
+`policies.autoAdvanceOnDone`은 `DONE`을 직접 Queue progression 근거로 쓰게 하는 권한이 아니다. 이 값은 `SYSTEM_POLICY_AUTO_REVIEW_DECISION_IS_BOUNDED` 조건이 모두 만족될 때 CodeFleet이 `RUN_REVIEW_DECIDED(ACCEPTED)`를 자동 append할 수 있는지를 정하는 Project Profile policy다.
+
+기본값:
+
+```json
+{
+  "policies": {
+    "autoAdvanceOnDone": false
+  }
+}
+```
+
+의미:
+
+```text
+false
+= SYSTEM_POLICY auto review decision append 금지
+
+true
+= bounded SYSTEM_POLICY auto review 조건을 모두 만족할 때만 자동 review decision append 허용
+```
+
+병합 규칙:
+
+```text
+autoAdvanceOnDone
+= Project Profile boolean policy
+= absent이면 Core Policy Defaults가 false를 넣음
+= Project Profile이 명시적으로 true를 설정하면 candidate true가 될 수 있음
+= Local Overlay, Task guardrails, Run Options는 restrict-only source임
+= restrict-only source는 true를 false로 낮출 수만 있음
+= false가 이긴다는 말은 effective/restricting source 사이의 규칙이지, Core default false가 Project Profile의 명시적 true를 영구 veto한다는 뜻이 아님
+```
+
+Auto Advance Policy FINAL RULE:
+
+```text
+ruleId: PROFILE_POLICY_AUTO_ADVANCE_ON_DONE_IS_BOOLEAN
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+- <workspaceRoot>/.codefleet/config.json policies.autoAdvanceOnDone
+- Core Policy Defaults
+inputs:
+- parsed Project Profile policies.autoAdvanceOnDone
+- local overlay restrictions
+- Task guardrails
+- policy-affecting Run Options
+preconditions:
+- Project Profile validation has reached policies validation
+condition:
+- policies.autoAdvanceOnDone is absent or boolean
+- projectPolicy.autoAdvanceOnDone is parsed Project Profile value when present
+- projectPolicy.autoAdvanceOnDone is false when Project Profile value is absent
+- Project Profile explicit true may set projectPolicy.autoAdvanceOnDone=true
+- effectivePolicy.autoAdvanceOnDone starts from projectPolicy.autoAdvanceOnDone
+- effectivePolicy.autoAdvanceOnDone becomes false if any restrict-only source sets false
+- effectivePolicy.autoAdvanceOnDone remains true only when projectPolicy.autoAdvanceOnDone is true and no restrict-only source sets false
+- Local Overlay, Task guardrails, and Run Options cannot set true when projectPolicy.autoAdvanceOnDone is false
+allowedEffect:
+- Run Planning may include effectivePolicy.autoAdvanceOnDone
+- SYSTEM_POLICY auto review rule may read effectivePolicy.autoAdvanceOnDone
+deniedEffect:
+- Project Profile validation fails for non-boolean value
+- Run Planning blocks if a lower-precedence source attempts to relax false to true
+evidence:
+- profilePath
+- policies.autoAdvanceOnDone JSON pointer
+- source values
+- effectivePolicy.autoAdvanceOnDone
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- set policies.autoAdvanceOnDone to true or false
+- remove relax-only override from Local Overlay, Task guardrails, or Run Options
 ```
 
 #### defaults.task.workflow
@@ -5516,6 +5811,245 @@ repairBehavior:
 - choose an allowed and locally available adapter
 - install or configure the selected adapter locally
 - update Project Profile allowedAdapters only through Project Profile review
+```
+
+#### AgentAdapter invocation contract
+
+AgentAdapter 선택은 호출 계약의 전부가 아니다. 최종 모델은 선택된 adapter에게 무엇을 넘기고, 무엇을 회수하며, 무엇을 Core가 다시 판정하는지를 분리한다.
+
+핵심 경계:
+
+```text
+Execution Harness owns orchestration.
+AgentAdapter owns provider execution.
+Core owns normalization.
+Review Decision owns acceptance.
+```
+
+한국어:
+
+```text
+Execution Harness는 실행 절차와 경계를 소유한다.
+AgentAdapter는 provider-specific 실행만 담당한다.
+Core는 결과 정규화와 정책 판정을 소유한다.
+Review Decision은 결과 수용 여부를 소유한다.
+```
+
+AdapterRequest:
+
+```text
+AdapterRequest
+= Execution Harness가 AgentAdapter에 넘기는 provider-agnostic 실행 요청
+= Run Plan과 Task Revision에서 파생됨
+= Project Profile, Task Revision, Local Overlay를 수정하지 않음
+```
+
+AdapterRequest 최소 필드:
+
+```yaml
+schemaVersion: "1.0"
+runId: ""
+runPlanId: ""
+taskId: ""
+taskRevision: 1
+objectiveId: ""
+objectiveQueueItemId: ""
+selectedAgentAdapter: "codex"
+agentRole: "BACKEND_IMPLEMENTER"
+harnessMode: "WORKSPACE_EDIT"
+workspace:
+  workspaceRoot: ""
+  workingDirectory: ""
+  pathStyle: "POSIX_RELATIVE"
+taskContractRef:
+  revisionPath: ""
+  contentHash: ""
+promptRef:
+  promptPath: ""
+policySnapshotRef:
+  runPlanPath: ""
+  effectivePolicyHash: ""
+capabilities:
+  fileEdit: false
+  commandExecution: false
+  allowedPaths: []
+  deniedPaths: []
+  allowedCommands: []
+  deniedCommands: []
+verificationPlanRef:
+  path: ""
+trace:
+  runTracePath: ""
+  stdoutPath: ""
+  stderrPath: ""
+  artifactRoot: ""
+```
+
+AdapterResult:
+
+```text
+AdapterResult
+= AgentAdapter가 Execution Harness에 돌려주는 provider-agnostic 실행 관찰 결과
+= evidence input이지 final decision이 아님
+```
+
+AdapterResult 최소 필드:
+
+```yaml
+schemaVersion: "1.0"
+runId: ""
+adapterId: "codex"
+adapterExecutionStatus: "COMPLETED | ADAPTER_FAILED | CANCELED | TIMEOUT"
+synthetic: false
+startedAt: ""
+endedAt: ""
+exitCode: 0
+stdoutRef: ""
+stderrRef: ""
+artifactRefs: []
+changedFilesObserved: []
+commandsObserved: []
+providerMetadataRef: ""
+adapterError:
+  code: ""
+  message: ""
+```
+
+Synthetic AdapterResult:
+
+```text
+Synthetic AdapterResult
+= AgentAdapter가 structured AdapterResult를 남기지 못했을 때 Execution Harness가 생성하는 failure evidence
+= adapter crash, launch failure, timeout, malformed adapter output을 Run Trace에 남기기 위한 최소 결과
+```
+
+Synthetic AdapterResult 생성 조건:
+
+```text
+adapter process launch failed
+-> adapterExecutionStatus = ADAPTER_FAILED
+-> synthetic = true
+
+adapter process timeout
+-> adapterExecutionStatus = TIMEOUT
+-> synthetic = true
+
+adapter output malformed / unreadable
+-> adapterExecutionStatus = ADAPTER_FAILED
+-> synthetic = true
+```
+
+Synthetic AdapterResult도 final decision이 아니다. Core normalizer는 synthetic AdapterResult를 evidence로 사용해 RunSummary.result를 FAILED 또는 BLOCKED로 계산할 수 있지만, Review Decision이나 VERIFIED를 직접 만들 수는 없다.
+
+AdapterResult가 직접 소유하지 않는 것:
+
+```text
+- RunSummary.result
+- RunSummary.check
+- verificationGateResult
+- computedRisk
+- Review Decision
+- DONE / FAILED / VERIFIED
+- Objective Queue progression
+```
+
+Provider-specific transcript parsing, CLI option, command path, model name, token, API key는 Core 도메인에 들어가지 않는다. 이런 값은 local adapter registry 또는 adapter layer 내부 설정으로만 다룬다. Adapter가 transcript를 읽어 요약 후보를 만들 수는 있지만, Core가 받아들이는 것은 provider-agnostic AdapterResult와 Run Trace artifact뿐이다.
+
+AgentAdapter Invocation FINAL RULES:
+
+```text
+ruleId: ADAPTER_REQUEST_IS_PROVIDER_AGNOSTIC
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- Run Plan
+- Task Revision
+- Project Profile policies
+- Local Overlay restrictions
+- local adapter registry
+inputs:
+- selectedAgentAdapter
+- Task Revision contract
+- Run Plan effectivePolicy
+- verificationPlan
+- runTracePath
+preconditions:
+- RUN_PLAN_AGENT_ADAPTER_RESOLUTION passed
+- Task Revision is approved
+- effectivePolicy has been computed
+condition:
+- AdapterRequest contains stable CodeFleet ids and references
+- AdapterRequest contains no provider model name
+- AdapterRequest contains no provider-specific CLI option
+- AdapterRequest contains no token, API key, secret, or credential value
+- AdapterRequest capabilities do not exceed effectivePolicy
+- AdapterRequest prompt and policy refs point inside the Run Trace or workspace contract
+- AdapterRequest does not modify Project Profile, Local Overlay, or Task Revision
+allowedEffect:
+- Execution Harness may call the selected AgentAdapter with AdapterRequest
+deniedEffect:
+- Execution Harness must not call AgentAdapter
+evidence:
+- runPlanId
+- runId
+- selectedAgentAdapter
+- adapterRequest path or hash
+- effectivePolicy hash
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- rebuild AdapterRequest from Run Plan and Task Revision
+- move provider-specific settings to local adapter registry or adapter layer
+```
+
+```text
+ruleId: ADAPTER_RESULT_IS_EVIDENCE_NOT_DECISION
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- AdapterResult
+- Run Trace
+- Run Summary normalizer
+- Review Decision ledger
+inputs:
+- AdapterResult
+- stdout / stderr refs
+- artifact refs
+- changed files observed
+- command observations
+preconditions:
+- AgentAdapter returned a structured AdapterResult or Execution Harness created a synthetic AdapterResult
+condition:
+- AdapterResult records adapterExecutionStatus
+- if AgentAdapter failed before returning structured output, Execution Harness creates synthetic=true AdapterResult
+- synthetic AdapterResult records adapterError.code and adapterError.message
+- AdapterResult may reference provider metadata but does not inline provider-specific transcript as Core state
+- AdapterResult does not set RunSummary.result directly
+- AdapterResult does not set RunSummary.check directly
+- AdapterResult does not set verificationGateResult
+- AdapterResult does not write Review Decision
+- AdapterResult does not write DONE, FAILED, VERIFIED, NEXT, or Queue State
+- Core normalizer derives Run Summary from Run Trace and AdapterResult
+allowedEffect:
+- Core may use AdapterResult as evidence input for Run Summary normalization
+- Run Trace may store AdapterResult and referenced artifacts
+- Execution Harness may create synthetic AdapterResult for adapter crash, timeout, launch failure, or malformed output
+deniedEffect:
+- adapter output is rejected as a decision source
+- Run Summary normalization is blocked until provider-specific data is normalized
+evidence:
+- runId
+- adapterId
+- adapterExecutionStatus
+- adapterResult path or hash
+- normalization result
+failureFinding:
+- category = EXECUTION_EVIDENCE_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- normalize adapter output through adapter layer
+- store raw provider output only as Run Trace artifact
 ```
 
 ### 5.2 Project Profile 구조 FINAL RULE
@@ -6068,7 +6602,9 @@ SEQUENCE
 - cursor는 앞에서부터 queue items를 스캔해 계산할 수 있어야 한다.
 - VERIFIED / SKIPPED는 지나간다.
 - DONE은 기본적으로 review 대기이므로 멈춘다.
-- Project Profile이 LOW risk autoAdvanceOnDone을 명시적으로 허용한 경우에만 DONE을 지나갈 수 있다.
+- DONE이 reviewNotRequiredProgressionCondition을 만족하면 지나간다.
+- Project Profile이 LOW risk autoAdvanceOnDone을 명시적으로 허용해도 DONE을 직접 지나가지 않는다.
+- autoAdvanceOnDone 조건으로 SYSTEM_POLICY RUN_REVIEW_DECIDED(ACCEPTED)가 append되고 VERIFIED가 계산된 경우에만 지나간다.
 - BLOCKED를 만나면 멈춘다.
 - 처음 만나는 실행 후보가 NEXT가 된다.
 - snapshot의 cursor가 계산 결과와 다르면 계산 결과가 우선한다.
@@ -6105,7 +6641,7 @@ Queue 상태 원칙:
 
 ```text
 저장 가능한 상태
-= 사람이 명시적으로 결정하거나 외부 근거가 필요해서 파일/ledger에 기록해야 알 수 있는 상태
+= 정책상 허용된 actor가 명시적으로 결정하거나 외부 근거가 필요해서 파일/ledger에 기록해야 알 수 있는 상태
 
 계산해야 하는 상태
 = 이미 존재하는 Task Revision, Run Trace, durable Review Decision, Queue 순서를 보면 자동으로 판단할 수 있는 상태
@@ -6132,14 +6668,14 @@ DONE
 
 VERIFIED
 = durable Review Decision을 보고 판단할 수 있음
-= 사람이 해당 queue item 결과를 받아들였다는 증거에서 계산 가능
+= 정책상 허용된 actor가 해당 queue item 결과를 받아들였다는 증거에서 계산 가능
 ```
 
 반대로 `SKIPPED`는 저장해야 한다.
 
 ```text
 SKIPPED
-= 사람이 이 queue item을 건너뛰기로 결정한 상태
+= 정책상 허용된 actor가 이 queue item을 건너뛰기로 결정한 상태
 = Task/Run 기록만 봐서는 자동으로 알 수 없음
 = ledger event로 남겨야 함
 ```
@@ -6280,7 +6816,8 @@ Task Draft는 아직 승인된 실행 계약이 아니므로 queue history를 �
     "task-signup-error-implementation"
   ],
   "reason": "공통 응답 포맷 설계를 먼저 확정해야 구현 Task를 안전하게 진행할 수 있음",
-  "actor": "user",
+  "actorKind": "HUMAN",
+  "actorId": "user",
   "at": "2026-05-29T10:30:00+09:00"
 }
 ```
@@ -6337,7 +6874,7 @@ Review events
 
 Objective ledger는 제안 로그가 아니라 결정 로그다. Task ledger는 draft mutation, revision creation, approval decision을 append-only로 남기는 Task-level audit ledger다.
 
-따라서 `TASK_RELATION_PROPOSED`는 ledger에 남기지 않는다. Proposed relation은 Draft Task 안의 제안일 뿐이며, 실행에는 사용할 수 없다. 사람이 review 단계에서 accept / approve / reject한 순간부터 ledger에 기록한다.
+따라서 `TASK_RELATION_PROPOSED`는 ledger에 남기지 않는다. Proposed relation은 Draft Task 안의 제안일 뿐이며, 실행에는 사용할 수 없다. 정책상 허용된 actor가 review 단계에서 accept / approve / reject한 순간부터 ledger에 기록한다.
 
 예시:
 
@@ -6350,7 +6887,7 @@ objective:
     reason: "사용자가 이어서 에러 응답 통일 작업을 요청했고 열린 Objective가 일치함"
 ```
 
-위 proposed relation은 Task Draft에만 존재한다. 사람이 수락하면 ledger에는 다음처럼 결정 이벤트가 남는다.
+위 proposed relation은 Task Draft에만 존재한다. 정책상 허용된 actor가 수락하면 ledger에는 다음처럼 결정 이벤트가 남는다.
 
 ```json
 {
@@ -6361,7 +6898,8 @@ objective:
   "taskId": "task-signup-error-implementation",
   "taskRevision": 1,
   "relation": "CONTINUATION",
-  "actor": "user",
+  "actorKind": "HUMAN",
+  "actorId": "user",
   "at": "2026-05-29T10:30:00+09:00"
 }
 ```
@@ -6372,10 +6910,13 @@ Ledger event 공통 필드:
 eventId
 seq
 type
-actor
+actorKind
+actorId
 at
 reason optional
 ```
+
+`actorKind`는 decision gate의 `allowedActors`와 대조하는 권위 필드다. `actorId`는 감사 추적용 식별자다.
 
 owner별 필수 식별자:
 
@@ -6433,11 +6974,11 @@ TASK_REVISION_SUPERSEDED
 
 ```text
 RUN_REVIEW_DECIDED
-= 사람이 특정 Run 결과를 보고 받아들였는지 결정한 Objective ledger event
+= 정책상 허용된 actor가 특정 Run 결과를 보고 받아들였는지 결정한 Objective ledger event
 = Queue progression을 계산하기 위한 durable decision
 ```
 
-`RUN_REVIEW_DECIDED`는 decision audit을 위해 frozen evidence snapshot을 포함할 수 있다. 이 snapshot은 실행 결과의 원본 진실이 아니라, 사람이 결정을 내린 시점에 어떤 Run result / check를 보고 판단했는지 설명하는 audit context다.
+`RUN_REVIEW_DECIDED`는 decision audit을 위해 frozen evidence snapshot을 포함할 수 있다. 이 snapshot은 실행 결과의 원본 진실이 아니라, 정책상 허용된 actor가 결정을 내린 시점에 어떤 Run result / check를 보고 판단했는지 설명하는 audit context다.
 
 따라서 Objective ledger는 여전히 `TASK_DONE`, `TASK_FAILED`, `TEST_PASSED`, `TEST_FAILED` 같은 실행 이벤트를 저장하지 않는다.
 
@@ -6517,6 +7058,11 @@ RUN_REVIEW_DECIDED
 - observedResultSnapshot
 - observedCheckSnapshot
 - verificationGateResult
+- actorKind: HUMAN | SYSTEM_POLICY
+- actorId
+- reason
+- decisionBasis
+- policyRuleRefs optional
 - evidenceRef optional
 - evidenceHash optional
 ```
@@ -6536,6 +7082,7 @@ RUN_REVIEW_DECIDED
 - TASK_APPROVED
 - TASK_APPROVAL_INVALIDATED
 - TASK_REVISION_SUPERSEDED
+- RUN_REVIEW_DECIDED
 ```
 
 이 설계의 목적은 OMX의 durable workflow 장점을 가져오되, CodeFleet의 핵심인 승인 가능한 Task 계약과 검증 가능한 실행 증거를 흐리지 않는 것이다.
@@ -7645,7 +8192,7 @@ CodeFleet이 말하는 "안전한 오케스트레이션"은 AI가 실수하지 �
 
 최종 정의:
 
-> 안전한 오케스트레이션이란 사용자의 의도를 명시적 Objective와 Task로 구조화하고, 사람이 Task revision을 승인하고 Objective relation을 수락 또는 승인한 뒤, Workspace 정책과 Harness가 허용한 권한 안에서만 AI Agent가 작업하게 하며, 모든 실행 결과를 검증 가능하고 되돌릴 수 있고 감사 가능한 기록으로 남기는 것이다.
+> 안전한 오케스트레이션이란 사용자의 의도를 명시적 Objective와 Task로 구조화하고, 정책상 허용된 actor가 Task revision을 승인하고 Objective relation을 수락 또는 승인한 뒤, Workspace 정책과 Harness가 허용한 권한 안에서만 AI Agent가 작업하게 하며, 모든 실행 결과를 검증 가능하고 되돌릴 수 있고 감사 가능한 기록으로 남기는 것이다.
 
 짧게 표현하면:
 
@@ -7752,6 +8299,11 @@ DRY_RUN < SUGGEST_ONLY < WORKSPACE_EDIT < COMMAND_EXEC
 boolean permission:
 false < true
 
+autoAdvanceOnDone:
+Project Profile absent -> false
+Project Profile explicit true -> candidate true
+restrict-only sources can only lower true to false
+
 DecisionGate.required:
 false < true
 
@@ -7788,6 +8340,7 @@ defaults / policy merge 값이 아니라 Run Planning에서 계산되는 derived
 - deniedCommands는 합집합을 선택한다.
 - verificationCommands는 profile required commands + task required commands의 합집합이다.
 - requiredGates는 DecisionGate / EvidenceGate field별 병합 규칙으로 더 엄격한 object를 계산한다.
+- autoAdvanceOnDone은 Project Profile candidate 값을 먼저 정한 뒤 restrict-only source가 true를 false로 낮출 수 있다.
 ```
 
 병합 실패 조건:
