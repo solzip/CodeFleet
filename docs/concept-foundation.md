@@ -37,7 +37,7 @@ CodeFleet의 최종 목표는 현재 정의에서 더 넓히지 않는다.
 ```text
 CodeFleet은 사용자의 개발/운영 Objective를 하나 이상의 Task로 구조화하고,
 백엔드/인프라 작업을 역할·범위·가드레일·검증 조건이 포함된 Task로 정의하며,
-사람이 승인한 Task를 AI 에이전트에게 역할 기반으로 위임하고,
+정책상 유효한 approval decision이 있는 Task를 AI 에이전트에게 역할 기반으로 위임하고,
 실행 결과를 로그·diff·테스트·리뷰 기준으로 추적하는
 AI-native 개발 오케스트레이션 CLI다.
 ```
@@ -51,8 +51,8 @@ Objective
 Task
 = 무엇을 어떤 조건으로 시킬 것인가
 
-Human Approval
-= 사람이 실행 계약을 확정했는가
+Approval Decision
+= 정책상 허용된 actor가 실행 계약을 확정했는가
 
 Harness
 = 범위/권한/검증을 어떻게 통제할 것인가
@@ -115,7 +115,7 @@ Mutation Engine이 필요한 이유:
 Task를 역할·범위·가드레일·검증 조건이 포함된 계약으로 정의
 -> Task Draft / Revision과 approval 상태가 깨지지 않게 관리
 
-사람이 승인한 Task를 AI 에이전트에게 위임
+정책상 유효한 approval decision이 있는 Task를 AI 에이전트에게 위임
 -> accepted/approved Objective relation과 approved Task revision 없이는 run을 막음
 
 실행 결과를 로그·diff·테스트·리뷰 기준으로 추적
@@ -984,7 +984,7 @@ Revision State:
 
 ```text
 APPROVED
-- 사람이 승인한 immutable contract
+- 유효한 approval decision이 있는 immutable contract
 - 실행 가능
 - accepted / approved Objective relation 필요
 
@@ -1455,7 +1455,7 @@ verificationGateResult
 - PASS는 evidence에서만 나온다.
 - WAIVED는 policy가 허용한 경우에만 가능하다.
 - WAIVED는 actor, reason, risk condition, approver evidence를 가져야 한다.
-- requiredGates.verification = REQUIRED이고 observedCheck != PASS이면 기본적으로 VERIFIED가 될 수 없다.
+- requiredGates.verification.required=true이고 observedCheck != PASS이면 기본적으로 VERIFIED가 될 수 없다.
 ```
 
 `BLOCKED` namespace 분리:
@@ -1649,7 +1649,7 @@ riskLevel
 = LOW | MEDIUM | HIGH
 
 requiredGates
-= optional per-dimension gate requirements
+= optional DecisionGate / EvidenceGate requirements
 = runApproval / resultReview / verification
 
 evidence
@@ -1662,7 +1662,7 @@ Risk lowering 규칙:
 
 ```text
 - LLM signal은 risk를 낮출 수 없다.
-- Human review는 risk를 낮출 수 없다.
+- Review Decision은 risk를 낮출 수 없다.
 - Project Profile의 explicit risk exemption만 risk를 낮출 수 있다.
 - exemption은 ruleId, matchCondition, maxAllowedRisk, reason, approver를 가져야 한다.
 - exemption도 matched evidence가 없으면 적용되지 않는다.
@@ -1675,7 +1675,7 @@ Risk 계산 불변식:
 - 같은 Project Profile, Task Spec, Run evidence, rule set이면 같은 riskLevel이 계산된다.
 - riskLevel이 unknown이면 MEDIUM이 아니라 HIGH로 취급한다.
 - risk rule 충돌 시 더 높은 riskLevel이 이긴다.
-- requiredGates 충돌 시 dimension별 더 엄격한 gate가 이긴다.
+- requiredGates 충돌 시 DecisionGate / EvidenceGate field별 더 엄격한 gate가 이긴다.
 ```
 
 예:
@@ -1711,11 +1711,11 @@ Context Carry-forward State는 이전 Task의 어떤 맥락을 다음 Task에 �
 ```text
 Run Trace = evidence truth
 Run Summary = sanitized pointer / hint
-Decision = human-approved intent
+Decision = policy-authorized approved intent
 Current workspace = execution ground truth
 ```
 
-따라서 raw Run Trace를 다음 prompt에 직접 넣지 않는다. Carry-forward에 포함 가능한 것은 사람이 승인한 Decision과 정제된 Summary뿐이다.
+따라서 raw Run Trace를 다음 prompt에 직접 넣지 않는다. Carry-forward에 포함 가능한 것은 정책상 허용된 actor가 승인한 Decision과 정제된 Summary뿐이다.
 
 Decision과 Summary는 의미가 다르지만, 다음 Task에 포함 가능한지 판단하는 상태 흐름은 같다. 따라서 하나의 Carry-forward state machine을 공유하고, type만 나눈다.
 
@@ -1739,7 +1739,7 @@ type 의미:
 
 ```text
 DECISION
-= 사람이 승인한 의도 / 방향 / 제약
+= 정책상 허용된 actor가 승인한 의도 / 방향 / 제약
 
 SUMMARY
 = Run Trace에서 만든 정제된 전달 맥락
@@ -3881,7 +3881,7 @@ NOT_FINAL_YET:
 
 위 고정 목표를 오케스트레이션 흐름으로 풀면 다음과 같다.
 
-> CodeFleet은 사용자의 개발/운영 Objective를 하나 이상의 AI-generated Task Draft로 구조화하고, 사람이 승인한 Task를 Harness를 통해 역할·범위·가드레일·검증 조건 안에서 AI Agent에게 위임하며, 결과를 로그·diff·테스트·리뷰 기준으로 추적하는 AI-native 개발 오케스트레이션 CLI다.
+> CodeFleet은 사용자의 개발/운영 Objective를 하나 이상의 AI-generated Task Draft로 구조화하고, 정책상 유효한 approval decision이 있는 Task를 Harness를 통해 역할·범위·가드레일·검증 조건 안에서 AI Agent에게 위임하며, 결과를 로그·diff·테스트·리뷰 기준으로 추적하는 AI-native 개발 오케스트레이션 CLI다.
 
 이 정의에서 중요한 점은 CodeFleet이 단순한 AI CLI 래퍼가 아니라는 것이다.
 
@@ -3891,7 +3891,7 @@ CodeFleet의 중심은 AI 모델 호출이 아니라 다음 구조다.
 Intent
   -> Objective
   -> Task Draft
-  -> Human Approval
+  -> Approval Decision
   -> Harness Execution
   -> Agent Adapter
   -> Run Trace
@@ -3903,7 +3903,7 @@ Intent
 ```text
 Objective frames the work.
 AI drafts executable tasks.
-Human approves the work.
+Policy-authorized actor approves the work.
 Harness controls the work.
 Agent executes the work.
 Trace records the work.
@@ -3915,7 +3915,7 @@ Summary communicates the work.
 ```text
 Objective는 작업의 맥락과 연속성을 정의한다.
 AI는 실행 가능한 작업 초안을 만든다.
-사람은 실행 가능한 작업으로 승인한다.
+정책상 허용된 actor는 실행 가능한 작업으로 승인한다.
 Harness는 작업 조건을 통제한다.
 Agent는 작업을 수행한다.
 Trace는 실행을 기록한다.
@@ -3946,14 +3946,14 @@ Run
 = 로그, diff, 검증 결과, 리뷰 결과가 남는 단위
 ```
 
-LLM은 현재 요청이 일회성인지, 이전 작업의 연속인지, 장기 workstream의 일부인지 스스로 단정하면 안 된다. CodeFleet은 이 연속성을 Objective 자료구조에 기록하고, 사람은 review 단계에서 그 연속성 제안을 수락하거나 수정한다.
+LLM은 현재 요청이 일회성인지, 이전 작업의 연속인지, 장기 workstream의 일부인지 스스로 단정하면 안 된다. CodeFleet은 이 연속성을 Objective 자료구조에 기록하고, 정책상 허용된 actor는 review 단계에서 그 연속성 제안을 수락하거나 수정한다.
 
 핵심 원칙:
 
 ```text
 LLM decides nothing about continuity.
 CodeFleet records continuity.
-Human accepts or approves continuity.
+Policy-authorized actor accepts or approves continuity.
 Harness supplies accepted or approved context.
 ```
 
@@ -4441,7 +4441,7 @@ Project Profile의 `defaults`, `policies`, Task 계약, Run 실행을 논의하�
    = defaults.task는 Draft 생성 시 생략값으로 적용될 수 있음
 
 5. Task Revision
-   = 사람이 승인한 불변 실행 계약
+   = 유효한 approval decision이 있는 불변 실행 계약
    = 승인 이후 직접 수정하지 않고 새 Revision으로 전진함
 
 6. Run Plan
@@ -4602,9 +4602,24 @@ Decision은 evidence에 대한 사람 / 정책의 판단이다.
       "agentRole": "REQUIRE_EXPLICIT",
       "harnessMode": "REQUIRE_EXPLICIT",
       "requiredGates": {
-        "runApproval": "NONE",
-        "resultReview": "HUMAN_REVIEW",
-        "verification": "REQUIRE_EXPLICIT"
+        "runApproval": {
+          "required": false,
+          "allowedActors": [],
+          "explicit": false
+        },
+        "resultReview": {
+          "required": true,
+          "allowedActors": ["SYSTEM_POLICY", "HUMAN"],
+          "explicit": false
+        },
+        "verification": {
+          "required": "REQUIRE_EXPLICIT",
+          "waiver": {
+            "allowed": false,
+            "allowedActors": [],
+            "explicit": true
+          }
+        }
       },
       "workflow": {
         "stages": ["PLAN", "INSPECT", "APPLY", "VERIFY", "REVIEW"]
@@ -4771,50 +4786,116 @@ Draft unresolved field 구조:
 
 `defaults.task.requiredGate` 단일 필드는 사용하지 않는다. 최종 모델은 `defaults.task.requiredGates` object를 사용한다.
 
+최종 모델의 기본 목표는 `policy-governed automated orchestration`이다.
+
+```text
+AUTOMATED
+= 정책, risk, scope, verification evidence가 충분해 CodeFleet이 자동 진행할 수 있음
+
+HUMAN_GATED
+= 정책상 사람 decision이 필요함
+
+BLOCKED
+= 정책 충돌, unresolved field, adapter unavailable, required evidence missing 등으로 진행 불가
+```
+
+따라서 `requiredGates`는 사람 중심 enum이 아니라 actor-neutral decision requirement 구조를 사용한다.
+
+Decision actor:
+
+```text
+HUMAN
+= 사용자 또는 권한 있는 사람이 명시적으로 내린 decision
+
+SYSTEM_POLICY
+= CodeFleet이 deterministic policy / evidence / risk rule로 내린 decision
+
+AGENT
+= approval / review decision actor가 될 수 없음
+
+LLM
+= approval / review decision actor가 될 수 없음
+```
+
+`SYSTEM_POLICY`는 LLM 판단이 아니다. `SYSTEM_POLICY` decision은 machine-checkable rule, evidence, risk result, gate result를 가져야 한다.
+
 추천 기본값:
 
 ```json
 {
   "requiredGates": {
-    "runApproval": "NONE",
-    "resultReview": "HUMAN_REVIEW",
-    "verification": "REQUIRE_EXPLICIT"
+    "runApproval": {
+      "required": false,
+      "allowedActors": [],
+      "explicit": false
+    },
+    "resultReview": {
+      "required": true,
+      "allowedActors": ["SYSTEM_POLICY", "HUMAN"],
+      "explicit": false
+    },
+    "verification": {
+      "required": "REQUIRE_EXPLICIT",
+      "waiver": {
+        "allowed": false,
+        "allowedActors": [],
+        "explicit": true
+      }
+    }
   }
 }
 ```
 
-`requiredGates`는 실행 전 승인, 실행 후 결과 리뷰, 검증 요구를 분리한다.
+`requiredGates`는 실행 전 decision, 실행 후 review decision, 검증 evidence 요구를 분리한다.
 
 ```text
 runApproval
-= Run 실행 전에 추가 사람 승인이 필요한가
+= Run 실행 전에 approval decision이 필요한가
 
 resultReview
-= Run 결과를 close / advance 하기 전에 사람 리뷰가 필요한가
+= Run 결과를 close / advance 하기 전에 review decision이 필요한가
 
 verification
-= 테스트 / 빌드 / 검증 결과가 필요한가
+= 테스트 / 빌드 / 검증 evidence가 필요한가
 ```
 
-허용값:
+DecisionGate 구조:
 
 ```text
-runApproval:
-- NONE
-- HUMAN_REVIEW
-- EXPLICIT_APPROVAL
-- REQUIRE_EXPLICIT
+required
+= true | false | REQUIRE_EXPLICIT
 
-resultReview:
-- NONE
-- HUMAN_REVIEW
-- EXPLICIT_APPROVAL
-- REQUIRE_EXPLICIT
+allowedActors
+= ["SYSTEM_POLICY", "HUMAN"] 중 0개 이상을 담은 unique array
 
-verification:
-- NONE
-- REQUIRED
-- REQUIRE_EXPLICIT
+explicit
+= true | false | REQUIRE_EXPLICIT
+```
+
+EvidenceGate 구조:
+
+```text
+required
+= true | false | REQUIRE_EXPLICIT
+
+waiver.allowed
+= true | false
+
+waiver.allowedActors
+= ["SYSTEM_POLICY", "HUMAN"] 중 0개 이상을 담은 unique array
+
+waiver.explicit
+= true | false | REQUIRE_EXPLICIT
+```
+
+예전 scalar label은 최종 schema 값이 아니다. 다음 매핑은 마이그레이션 설명용으로만 사용한다.
+
+```text
+HUMAN_REVIEW
+~= { required: true, allowedActors: ["HUMAN"], explicit: false }
+
+EXPLICIT_APPROVAL
+~= { required: true, allowedActors: ["HUMAN"], explicit: true }
 ```
 
 `BLOCKED_UNTIL_POLICY`는 `defaults` 값이 아니다. `BLOCKED_UNTIL_POLICY`는 policy merge 입력값이나 gate enum 값이 아니라, unresolved explicit field, policy conflict, invalid overlay, denied capability 같은 조건을 Run Planning이 평가한 뒤 생성하는 derived blocking state다.
@@ -4822,7 +4903,7 @@ verification:
 Draft / Revision 규칙:
 
 ```text
-- defaults.task.requiredGates의 각 dimension은 concrete value 또는 REQUIRE_EXPLICIT을 가질 수 있다.
+- defaults.task.requiredGates의 required / explicit field는 concrete value 또는 REQUIRE_EXPLICIT을 가질 수 있다.
 - Task Draft에는 REQUIRE_EXPLICIT이 unresolved required field로 남을 수 있다.
 - Task Revision에는 REQUIRE_EXPLICIT이 남을 수 없다.
 - Task Revision에는 concrete requiredGates만 저장된다.
@@ -4833,9 +4914,14 @@ Gate 병합 규칙:
 
 ```text
 - gate 병합은 dimension별 more restrictive wins다.
-- runApproval: NONE < HUMAN_REVIEW < EXPLICIT_APPROVAL
-- resultReview: NONE < HUMAN_REVIEW < EXPLICIT_APPROVAL
-- verification: NONE < REQUIRED
+- DecisionGate.required는 OR 병합이다. 하나라도 true면 true다. REQUIRE_EXPLICIT이 남아 있으면 Run Planning 전에 resolution으로 보낸다.
+- DecisionGate.allowedActors는 required=true인 source들끼리 intersection한다.
+- DecisionGate.explicit은 OR 병합이다. 하나라도 true면 true다. REQUIRE_EXPLICIT이 남아 있으면 Run Planning 전에 resolution으로 보낸다.
+- EvidenceGate.required는 OR 병합이다. 하나라도 true면 true다. REQUIRE_EXPLICIT이 남아 있으면 Run Planning 전에 resolution으로 보낸다.
+- EvidenceGate.waiver.allowed는 AND 병합이다. 하나라도 false면 false다.
+- EvidenceGate.waiver.allowedActors는 waiver.allowed=true인 source들끼리 intersection한다.
+- EvidenceGate.waiver.explicit은 OR 병합이다. 하나라도 true면 true다. REQUIRE_EXPLICIT이 남아 있으면 Run Planning 전에 resolution으로 보낸다.
+- allowedActors intersection이 비면 Run Planning은 blocked 된다.
 ```
 
 Run Summary `Check`와의 관계:
@@ -4851,17 +4937,17 @@ RunSummary.check
 검증 gate 판정:
 
 ```text
-verification REQUIRED + check PASS
+verification.required true + check PASS
 = gate satisfied
 
-verification REQUIRED + check FAIL
+verification.required true + check FAIL
 = gate failed
 
-verification REQUIRED + check NONE
+verification.required true + check NONE
 = gate unsatisfied
 
-verification REQUIRED + check SKIP
-= explicit waiver가 없으면 gate unsatisfied
+verification.required true + check SKIP
+= allowed waiver decision이 없으면 gate unsatisfied
 ```
 
 8개 꼬임 방지 규칙:
@@ -4870,13 +4956,13 @@ verification REQUIRED + check SKIP
 1. Task Revision approval과 runApproval은 다른 단계다.
    이유: Revision approval은 작업 계약 승인이고, runApproval은 지금 이 조건으로 실행해도 되는지에 대한 실행 시도 승인이다.
 
-2. runApproval 기본값은 NONE으로 둔다.
+2. runApproval 기본값은 required=false로 둔다.
    이유: Task Revision approval이 이미 기본 안전장치이므로 모든 Run마다 추가 승인을 요구하면 오케스트레이션이 과도하게 무거워진다.
 
 3. resultReview와 verification은 다른 gate다.
-   이유: 테스트 / 빌드 검증 증거와 사람이 결과를 수용 / 거절 / 재시도 판단하는 것은 다른 판단이다.
+   이유: 테스트 / 빌드 검증 증거와 결과를 수용 / 거절 / 재시도 판단하는 decision은 다른 판단이다.
 
-4. verification REQUIRED인데 check PASS가 아니면 close / advance 불가.
+4. verification.required=true인데 check PASS가 아니면 close / advance 불가.
    이유: 검증이 필수인데 검증 증거가 없거나 실패했으면 성공으로 과장하면 안 된다.
 
 5. REQUIRE_EXPLICIT 질문은 한 번의 review step에서 묶어서 처리한다.
@@ -4889,7 +4975,7 @@ verification REQUIRED + check SKIP
    이유: runApproval, resultReview, verification은 서로 다른 축이므로 하나의 선형 enum으로 덮어쓰면 의미가 섞인다.
 
 8. autoAdvance는 resultReview gate를 조용히 우회할 수 없다.
-   이유: resultReview가 HUMAN_REVIEW 또는 EXPLICIT_APPROVAL이면 자동 진행이 사람 리뷰 gate를 몰래 무시하는 경로가 된다.
+   이유: resultReview.required=true이면 유효한 Review Decision 없이 자동 진행할 수 없다. 다만 allowedActors에 SYSTEM_POLICY가 있으면 CodeFleet이 policy evidence로 Review Decision을 자동 append할 수 있다.
 ```
 
 Required Gates FINAL RULES:
@@ -4909,9 +4995,20 @@ preconditions:
 - defaults.task.requiredGates is present or defaulted by Core Policy Defaults
 condition:
 - requiredGates has exactly runApproval, resultReview, verification keys
-- runApproval is one of NONE, HUMAN_REVIEW, EXPLICIT_APPROVAL, REQUIRE_EXPLICIT
-- resultReview is one of NONE, HUMAN_REVIEW, EXPLICIT_APPROVAL, REQUIRE_EXPLICIT
-- verification is one of NONE, REQUIRED, REQUIRE_EXPLICIT
+- runApproval matches DecisionGate schema
+- resultReview matches DecisionGate schema
+- verification matches EvidenceGate schema
+- DecisionGate.required is true, false, or REQUIRE_EXPLICIT
+- DecisionGate.allowedActors is a unique array containing only HUMAN or SYSTEM_POLICY
+- DecisionGate.explicit is true, false, or REQUIRE_EXPLICIT
+- a DecisionGate with required=false has allowedActors=[] and explicit=false
+- EvidenceGate.required is true, false, or REQUIRE_EXPLICIT
+- EvidenceGate.waiver.allowed is true or false
+- EvidenceGate.waiver.allowedActors is a unique array containing only HUMAN or SYSTEM_POLICY
+- EvidenceGate.waiver.explicit is true, false, or REQUIRE_EXPLICIT
+- a DecisionGate with required=true has at least one allowedActor
+- an EvidenceGate waiver with allowed=true has at least one waiver.allowedActor
+- scalar gate labels such as NONE, HUMAN_REVIEW, EXPLICIT_APPROVAL, REQUIRED are not accepted as final schema values
 - BLOCKED_UNTIL_POLICY is not accepted as a defaults.task.requiredGates value
 allowedEffect:
 - Task Draft creation may use defaults.task.requiredGates as default gate values
@@ -4939,16 +5036,28 @@ sourceOfTruth:
 inputs:
 - Task Draft.requiredGates
 - Task Draft unresolved required fields
-- selected user choices during Task Review / Approval
+- selected policy-authorized choices during Task Review / Approval
 - Task Revision.requiredGates
 preconditions:
 - Task Draft is being approved into a Task Revision
 condition:
 - Task Revision.requiredGates has runApproval, resultReview, verification keys
-- Task Revision.requiredGates contains no REQUIRE_EXPLICIT value
-- runApproval is one of NONE, HUMAN_REVIEW, EXPLICIT_APPROVAL
-- resultReview is one of NONE, HUMAN_REVIEW, EXPLICIT_APPROVAL
-- verification is one of NONE, REQUIRED
+- Task Revision.requiredGates contains no REQUIRE_EXPLICIT value anywhere
+- runApproval matches concrete DecisionGate schema
+- resultReview matches concrete DecisionGate schema
+- verification matches concrete EvidenceGate schema
+- DecisionGate.required is true or false
+- DecisionGate.allowedActors is a unique array containing only HUMAN or SYSTEM_POLICY
+- DecisionGate.explicit is true or false
+- a DecisionGate with required=false has allowedActors=[] and explicit=false
+- EvidenceGate.required is true or false
+- EvidenceGate.waiver.allowed is true or false
+- EvidenceGate.waiver.allowedActors is a unique array containing only HUMAN or SYSTEM_POLICY
+- EvidenceGate.waiver.explicit is true or false
+- a DecisionGate with required=true has at least one allowedActor
+- an EvidenceGate waiver with allowed=true has at least one waiver.allowedActor
+- scalar gate labels such as NONE, HUMAN_REVIEW, EXPLICIT_APPROVAL, REQUIRED are not accepted
+- Task Revision stores gate requirements, not the approval or review decision event that satisfies them
 allowedEffect:
 - Task Revision may be created
 - Run Planning may read Task Revision.requiredGates as an authoritative source input
@@ -4958,7 +5067,7 @@ deniedEffect:
 evidence:
 - taskDraftId
 - unresolved required fields
-- selected requiredGates values
+- selected requiredGates objects
 failureFinding:
 - category = POLICY_ENFORCEMENT_INTEGRITY
 - severity = WARNING
@@ -4978,19 +5087,29 @@ sourceOfTruth:
 - Task guardrails
 - policy-affecting Run Options
 inputs:
-- candidate runApproval values
-- candidate resultReview values
-- candidate verification values
-- requiredGates order definitions
+- candidate runApproval DecisionGate objects
+- candidate resultReview DecisionGate objects
+- candidate verification EvidenceGate objects
+- requiredGates merge rule definitions
 preconditions:
 - Project Profile validation passed
 - Task Revision.requiredGates is concrete
 - Local Overlay, if present, is valid and restrict-only
 condition:
-- effectivePolicy.requiredGates.runApproval is max(candidate runApproval values by NONE < HUMAN_REVIEW < EXPLICIT_APPROVAL)
-- effectivePolicy.requiredGates.resultReview is max(candidate resultReview values by NONE < HUMAN_REVIEW < EXPLICIT_APPROVAL)
-- effectivePolicy.requiredGates.verification is max(candidate verification values by NONE < REQUIRED)
-- no dimension is overwritten by a less restrictive value
+- no REQUIRE_EXPLICIT value reaches effectivePolicy.requiredGates
+- unresolved required / explicit fields block Run Planning before merge completion
+- effectivePolicy.requiredGates.runApproval.required is OR(candidate required)
+- effectivePolicy.requiredGates.resultReview.required is OR(candidate required)
+- effectivePolicy.requiredGates.runApproval.explicit is OR(candidate explicit)
+- effectivePolicy.requiredGates.resultReview.explicit is OR(candidate explicit)
+- required DecisionGate allowedActors are intersected across required sources
+- if a merged DecisionGate has required=true, its allowedActors intersection is non-empty
+- effectivePolicy.requiredGates.verification.required is OR(candidate required)
+- effectivePolicy.requiredGates.verification.waiver.allowed is AND(candidate waiver.allowed)
+- effectivePolicy.requiredGates.verification.waiver.explicit is OR(candidate waiver.explicit)
+- waiver.allowedActors are intersected across sources that allow waiver
+- if merged waiver.allowed=true, its waiver.allowedActors intersection is non-empty
+- no dimension is overwritten by a less restrictive gate object
 allowedEffect:
 - Run Plan may include effectivePolicy.requiredGates
 - Execution Harness may evaluate runApproval, resultReview, and verification gates independently
@@ -4999,7 +5118,7 @@ deniedEffect:
 - Execution Harness is blocked
 evidence:
 - runPlanId
-- source values per requiredGates dimension
+- source gate objects per requiredGates dimension
 - merged effectivePolicy.requiredGates
 failureFinding:
 - category = POLICY_ENFORCEMENT_INTEGRITY
@@ -6296,7 +6415,7 @@ Approval event는 실행 이벤트가 아니다.
 
 ```text
 TASK_APPROVED
-= 특정 Task Revision content hash를 사람이 실행 가능하다고 승인한 decision event
+= 특정 Task Revision content hash를 정책상 허용된 actor가 실행 가능하다고 승인한 decision event
 = Task ledger event
 
 TASK_APPROVAL_INVALIDATED
@@ -6456,7 +6575,7 @@ Draft
 
 Revision
 = 승인된 불변 실행 계약
-= 사람이 승인한 Task 계약의 특정 버전
+= 유효한 approval decision이 있는 Task 계약의 특정 버전
 = 실행 가능
 
 Run
@@ -6731,7 +6850,7 @@ Task Spec은 최종적으로 단순 작업 메모가 아니라 승인 가능한 
 
 ```text
 Task Spec
-= Human Approval과 Run Planning이 공유하는 실행 계약 source
+= Approval Decision과 Run Planning이 공유하는 실행 계약 source
 
 Task Draft
 = mutable contract candidate
@@ -6771,8 +6890,8 @@ DONE / VERIFIED / NEXT
 Draft Harness
 = 사용자의 Intent를 Task Draft로 구조화할 때 사용하는 출력 모델
 
-Human Approval
-= 사람이 실행 가능한 작업인지 검토하고 승인하는 계약
+Approval Decision
+= 정책상 허용된 actor가 실행 가능한 작업인지 검토하고 승인하는 계약
 
 Execution Harness
 = 승인된 Task를 Project Profile과 병합해 실행 조건으로 바꾸는 입력
@@ -6861,9 +6980,20 @@ guardrails:
   commandRestrictions: []
 
 requiredGates:
-  runApproval: "NONE | HUMAN_REVIEW | EXPLICIT_APPROVAL"
-  resultReview: "NONE | HUMAN_REVIEW | EXPLICIT_APPROVAL"
-  verification: "NONE | REQUIRED"
+  runApproval:
+    required: false
+    allowedActors: []
+    explicit: false
+  resultReview:
+    required: true
+    allowedActors: ["SYSTEM_POLICY", "HUMAN"]
+    explicit: false
+  verification:
+    required: true
+    waiver:
+      allowed: false
+      allowedActors: []
+      explicit: true
 
 workflow:
   stages: ["PLAN", "INSPECT", "APPLY", "VERIFY", "REVIEW"]
@@ -7012,7 +7142,7 @@ User Intent
   -> Objective Selection / Creation
   -> Draft Harness
   -> AI-generated Task Draft
-  -> Human Review / Approval
+  -> Review / Approval Decision
   -> Execution Harness
   -> Agent Adapter
   -> Run Trace
@@ -7021,11 +7151,11 @@ User Intent
 
 핵심 원칙:
 
-> AI may draft tasks, but only humans can approve executable tasks.
+> AI may draft tasks, but executable tasks require an approval decision by a policy-authorized actor.
 
 한국어:
 
-> AI는 Task 초안을 작성할 수 있지만, 실행 가능한 Task로 승인하는 권한은 사람에게만 있다.
+> AI는 Task 초안을 작성할 수 있지만, 실행 가능한 Task가 되려면 정책상 허용된 actor의 approval decision이 필요하다.
 
 Objective 연결도 마찬가지다.
 
@@ -7441,7 +7571,7 @@ User Intent
   -> Draft Harness
      - read-only bounded discovery
      - Task Draft 생성
-  -> Human Approval
+  -> Approval Decision
   -> Execution Harness
      - approved Revision 실행
      - 수정/검증/로그 수집
@@ -7450,7 +7580,7 @@ User Intent
 
 ### 8.2 Execution Harness
 
-Execution Harness는 사람이 승인한 Task Revision만 실행한다.
+Execution Harness는 유효한 approval decision이 있는 Task Revision만 실행한다.
 
 책임:
 
@@ -7530,7 +7660,7 @@ User Intent
   -> Task Draft
   -> Task Review / Edit
   -> Draft READY_FOR_APPROVAL
-  -> Human Approval creates Task Revision
+  -> Approval Decision creates Task Revision
   -> Accept / Approve Objective Relation
   -> Approved Task Revision
   -> Objective Queue Update
@@ -7547,8 +7677,8 @@ User Intent
 1. Explicit Objective and Task
    모든 AI 작업은 명시적 Objective와 Task에서 시작한다.
 
-2. Human Approval
-   AI가 만든 Task Draft는 사람이 승인해야 실행 가능하다.
+2. Approval Decision
+   AI가 만든 Task Draft는 정책상 허용된 actor의 approval decision이 있어야 실행 가능하다.
    Objective relation은 review에서 accepted 또는 approved 상태여야 실행 가능하다.
 
 3. Non-relaxable Workspace Policy
@@ -7622,14 +7752,26 @@ DRY_RUN < SUGGEST_ONLY < WORKSPACE_EDIT < COMMAND_EXEC
 boolean permission:
 false < true
 
-runApprovalOrder:
-NONE < HUMAN_REVIEW < EXPLICIT_APPROVAL
+DecisionGate.required:
+false < true
 
-resultReviewOrder:
-NONE < HUMAN_REVIEW < EXPLICIT_APPROVAL
+DecisionGate.explicit:
+false < true
 
-verificationOrder:
-NONE < REQUIRED
+DecisionGate.allowedActors:
+required=true source들의 intersection
+
+EvidenceGate.required:
+false < true
+
+EvidenceGate.waiver.allowed:
+true < false
+
+EvidenceGate.waiver.explicit:
+false < true
+
+EvidenceGate.waiver.allowedActors:
+waiver.allowed=true source들의 intersection
 
 BLOCKED_UNTIL_POLICY:
 defaults / policy merge 값이 아니라 Run Planning에서 계산되는 derived planning block result
@@ -7645,7 +7787,7 @@ defaults / policy merge 값이 아니라 Run Planning에서 계산되는 derived
 - allowedCommands는 교집합을 선택한다.
 - deniedCommands는 합집합을 선택한다.
 - verificationCommands는 profile required commands + task required commands의 합집합이다.
-- requiredGates는 dimension별 더 엄격한 값을 선택한다.
+- requiredGates는 DecisionGate / EvidenceGate field별 병합 규칙으로 더 엄격한 object를 계산한다.
 ```
 
 병합 실패 조건:
@@ -7951,7 +8093,7 @@ Approval gate 후보:
 
 ```text
 APPROVAL_REQUIRED
-- 위험 명령은 사람 승인 필요
+- 위험 명령은 approval decision 필요
 ```
 
 VERSION_PLAN:
