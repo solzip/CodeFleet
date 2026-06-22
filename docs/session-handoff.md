@@ -160,6 +160,18 @@ AI-native 개발 오케스트레이션 CLI다.
 - v0.2 Codex slice는 prompt stdin, local adapter command/args, stdout/stderr capture, git status/diff 기반 최소 HarnessWorkspaceSnapshot, HarnessObservation, AdapterResult를 만든다.
 - v0.2 Codex slice는 sandbox enforcement, command proxy, full path policy enforcement, provider transcript truth, automatic VERIFIED를 제공하지 않는다.
 - v0.2에서 command channel이 Harness-visible이 아니면 command authority는 NONE 또는 PROVIDER_REPORTED_ONLY이고, verification / command compliance / automatic VERIFIED를 만족할 수 없다.
+- S4 Review record 최소 형태를 고정했다. 최종 source of truth는 run-local note가 아니라 Objective ledger의 RUN_REVIEW_DECIDED durable decision event다.
+- ReviewEvidenceBundle은 decision 시점에 reviewer가 본 RunSummary, AdapterRequest, AdapterResult, HarnessObservation, HarnessWorkspaceSnapshot, verification evidence, findings, computedRisk, commandEvidenceAuthority, pathViolationSummary를 frozen refs/hash로 묶는다.
+- RUN_REVIEW_DECIDED는 reviewEvidenceBundleRef와 reviewEvidenceBundleHash를 필수로 가진다. Review Decision은 Run Trace를 수정하지 않고 DONE / FAILED / VERIFIED / NEXT / Queue State를 직접 쓰지 않는다.
+- decision values는 ACCEPTED / REJECTED / NEEDS_CHANGES만 사용한다. RETRY는 Review Decision value가 아니라 새 Run request / Run Options의 retry reason이다.
+- VERIFIED는 최신 effective RUN_REVIEW_DECIDED(ACCEPTED) + verificationGateResult SATISFIED 또는 WAIVED_ALLOWED + successful normalized Run result에서 계산한다.
+- S4 v0.2 manual review slice는 VERSION_PLAN이다. Objective ledger가 아직 없으면 run-local review-decision artifact를 둘 수 있지만 final architecture로 취급하지 않는다.
+- ReviewEvidenceBundle 저장 위치는 `.codefleet/reviews/<reviewDecisionId>/evidence-bundle.json`로 고정했다. Objective ledger event에는 inline하지 않고 ref/hash로 참조한다.
+- RUN_REVIEW_DECIDED는 reviewDecisionId를 가지며, supersede / invalidate는 기존 이벤트 수정이 아니라 새 event의 supersedesReviewDecisionId / invalidatesReviewDecisionId 참조로 표현한다.
+- latest effective Review Decision은 objectiveQueueItemId + taskId + taskRevision 단위에서 valid actor, valid ReviewEvidenceBundle, not invalidated, latest ledger order로 계산한다.
+- REJECTED는 실행 결과가 잘못됐거나 허용 불가함을 뜻하고, NEEDS_CHANGES는 미완료 또는 추가 수정 필요를 뜻한다. 둘 다 VERIFIED 불가지만 follow-up planning 의미가 다르다.
+- raw evidence absent는 EVIDENCE_ABSENT warning으로 과거 decision을 자동 무효화하지 않는다. ReviewEvidenceBundle 또는 referenced artifact hash mismatch는 REVIEW_INTEGRITY failure이며 해당 decision을 ineffective로 만든다.
+- v0.2 local review artifact 경로는 `.codefleet/runs/<runId>/review-decision.local.json`이며 final decision truth가 아니라 Objective ledger migration input이다.
 ```
 
 ## 현재 규칙 기준
@@ -209,7 +221,7 @@ same workspace state
 다음 논의 주제:
 
 ```text
-S4 Review record 최소 형태
+S3 Verification seam 실행 / 기록 방식
 ```
 
 이유:
@@ -222,12 +234,12 @@ S2 Run attempt lifecycle도 고정했다. AdapterRequest 생성 이후에는 실
 preRunStateRef / postRunStateRef의 실체는 HarnessWorkspaceSnapshot으로 고정했다.
 command observation의 진실성도 고정했다. Command truth는 Harness-visible channel에서만 나오고, provider-reported commands는 degraded evidence다.
 S2 v0.2 Codex transport slice도 VERSION_PLAN으로 명시했다. v0.2는 final 계약을 약화하지 않고, command/path evidence가 부족한 부분은 unavailable 또는 degraded로 기록한다.
-다음 병목은 실행 결과를 사람이 어떻게 수용 / 거절 / 재시도 판단으로 남기는지다.
-Review record가 없으면 AdapterResult와 Run Trace는 evidence로만 남고, VERIFIED / Close / carry-forward를 계산할 수 없다.
+S4 Review record 최소 형태도 고정했다. RUN_REVIEW_DECIDED는 Objective ledger durable decision event이고, ReviewEvidenceBundle을 필수 참조한다.
+다음 병목은 S3 Verification seam의 실행 / 기록 방식이다.
 
-- S4 Review record 최소 형태
-- RUN_REVIEW_DECIDED decision event 필드
-- VERIFIED 계산에 필요한 최소 evidence reference
+- S3 Verification seam 실행 / 기록 방식
+- observedCheck와 verificationGateResult 계산 증거
+- v0.2 prompt-only verification과 final Harness-executed verification의 차이
 ```
 
 현재 확정한 Project Profile 구조:
@@ -302,16 +314,15 @@ repairBehavior
 목표 루프 기준 남은 우선순위:
 
 ```text
-1. S4 Review record 최소 형태
-2. S3 Verification seam 실행 / 기록 방식
-3. S1 Task Spec 최소 schema
-4. S5 Run Summary / Export seam
-5. defaults.run.isolationMode
-6. policy block internal schema
-7. Harness enforcement details
-8. AgentRole / Guardrail taxonomy
-9. Workspace discovery
-10. v0.1 / v0.2 / final implementation slicing
+1. S3 Verification seam 실행 / 기록 방식
+2. S1 Task Spec 최소 schema
+3. S5 Run Summary / Export seam
+4. defaults.run.isolationMode
+5. policy block internal schema
+6. Harness enforcement details
+7. AgentRole / Guardrail taxonomy
+8. Workspace discovery
+9. v0.1 / v0.2 / final implementation slicing
 ```
 
 ## 저장소 메모

@@ -67,19 +67,19 @@ Task Revision          [S] ✅   불변 실행 계약
 Run Planning           [D] 🟡   effectivePolicy / risk / gate / adapter 선택 계산
    │
    ▼
-║ Harness Execution ║      ⬜   실행 경계      ◀══ SEAM S2: Adapter  ★ 최대 빈칸
+║ Harness Execution ║      🟡   실행 경계      ◀══ SEAM S2: Adapter  (최종 계약 고정, 구현 남음)
    │
    ▼
 Evidence / Trace       [S] 🟡   실행 증거       ◀══ SEAM S3: Verification
    │
    ▼
-◆ Review / Close           ⬜   사람 게이트 ②: "결과 받아들이나"  ◀══ SEAM S4: Review record
+◆ Review / Close           🟡   사람 게이트 ②: "결과 받아들이나"  ◀══ SEAM S4: Review record
    │
    ▼
 [닫힘] derived state (VERIFIED 등)  →  carry-forward(승인된 결정/요약)  →  다음 Objective
 ```
 
-이 척추에서 색을 정직하게 읽으면: **상태·계약 쪽(Revision)만 ✅이고, 실제로 일이 일어나는 아래쪽(Execution / Review / Close)은 ⬜에 가깝다.** 목표 기준 진짜 남은 일은 전부 척추의 아래 절반이다.
+이 척추에서 색을 정직하게 읽으면: **상태·계약 쪽(Revision)은 ✅이고, S2 Adapter와 S4 Review는 최종 계약이 잡힌 🟡 상태다.** 목표 기준 진짜 남은 일은 S3 Verification seam, S1 최소 Task Spec, 그리고 S2/S4의 v0.2 구현 절단면이다.
 
 ---
 
@@ -111,15 +111,20 @@ S3  Verification seam     검증 명령 실행 ─▶ NOT_RUN / PASSED / FAILED 
     빈칸: prompt-only인가, allowlist 자동 실행인가, 결과 어디에 어떤 형식으로
 
 S4  Review seam     ◆    Run 결과 ─▶ 사람 수용/거절 기록 ─▶ VERIFIED 계산
-    상태: ⬜
-    빈칸: review가 무엇이고 어떻게 파일로 남는가. VERIFIED는 이게 있어야 도는데 실체가 없음
+    상태: 🟡  (최소 계약 고정, 구현 남음)
+    고정: RUN_REVIEW_DECIDED는 Objective ledger durable decision event
+    고정: ReviewEvidenceBundle refs/hash가 decision evidence context
+    고정: ReviewEvidenceBundle 위치는 .codefleet/reviews/<reviewDecisionId>/
+    고정: latest effective review는 ledger order + valid actor/bundle + not invalidated
+    고정: ACCEPTED / REJECTED / NEEDS_CHANGES, RETRY는 새 Run reason
+    빈칸: v0.2 manual review artifact, UI/CLI flow, ledger implementation
 
 S5  Export seam           Run Trace ─▶ Run Summary(sanitized) ─▶ Notion / 일지 / Issue
     상태: 🟡  (필드/sanitization 규칙 O, adapter별 출력 미정)
     빈칸: summary.md 자동 생성, 대상별 필드 제한, redactionReport 출력 형식
 ```
 
-핵심: **S2(Adapter)의 최종 계약과 증거 권위 분리는 고정됐고, 다음 병목은 S4 Review record다.** S1은 우회 가능, S3·S5는 S2와 S4가 돌아야 의미가 커진다.
+핵심: **S2(Adapter)와 S4(Review)의 최소 계약은 고정됐고, 다음 병목은 S3 Verification seam이다.** S1은 우회 가능, S3·S5는 S2와 S4가 돌아야 의미가 커진다.
 
 ---
 
@@ -197,8 +202,8 @@ S5  Export seam           Run Trace ─▶ Run Summary(sanitized) ─▶ Notion 
   - Export adapter (S5)
 ```
 
-즉 **"지금 한 줄로 정하면 가장 목표에 가까운 것" = Review seam(S4)의 최소 record와 VERIFIED 계산 입력을 구체적으로 박는 것.**
-S2는 `AdapterRequest -> AgentAdapter -> AdapterResult` 최종 계약이 고정됐고, 실행 증거 권위는 `HarnessObservation`이 소유한다. v0.2 Codex transport는 그 아래 구현 절단면으로 다룬다.
+즉 **"지금 한 줄로 정하면 가장 목표에 가까운 것" = Verification seam(S3)의 실행 / 기록 방식을 구체적으로 박는 것.**
+S2는 `AdapterRequest -> AgentAdapter -> AdapterResult` 최종 계약이 고정됐고, S4는 `RUN_REVIEW_DECIDED + ReviewEvidenceBundle` 최소 계약이 고정됐다.
 
 ---
 
@@ -215,25 +220,14 @@ S2는 `AdapterRequest -> AgentAdapter -> AdapterResult` 최종 계약이 고정�
   - 진행도 축 = 목표 루프 (실행 경계 중심)
   - Adapter를 seam으로 1급화 (S2, 최대 빈칸으로 명시)
   - 상태(✅/🟡/⬜)와 역할([S]/[D]/◆/║)을 분리
-  - 비어 있는 걸 비어 있다고 표시 (Execution/Review/Close = ⬜)
+  - 비어 있는 걸 비어 있다고 표시하고, 계약만 고정된 seam은 🟡로 분리
 ```
 
 ## 다음에 할 일 (이 지도 기준)
 
 ```text
-1. S2 Adapter seam 프로토콜 1종 확정      ← 목표에 가장 가까움
-2. Task Spec 최소 schema + 최소 role 세트  (S1 우회 가능하게)
-3. Review record 최소 형태                (S4, VERIFIED 계산용)
-4. 위 셋으로 SPINE 한 바퀴 수동 검증
-5. 그 다음 GUARDS를 한 겹씩 덧댐
-```
-
-업데이트된 목표 루프 우선순위:
-
-```text
-1. S4 Review record 최소 형태 확정        ← 다음 병목
-2. S3 Verification seam 기록 방식 확정
-3. S1 Task Spec 최소 schema 정리
-4. 위 항목으로 SPINE 한 바퀴 수동 검증
-5. 그 다음 GUARDS를 한 겹씩 덧댐
+1. S3 Verification seam 기록 방식 확정    ← 다음 병목
+2. S1 Task Spec 최소 schema 정리
+3. 위 항목으로 SPINE 한 바퀴 수동 검증
+4. 그 다음 GUARDS를 한 겹씩 덧댐
 ```

@@ -1390,6 +1390,7 @@ VERIFIED는 정책상 허용된 actor가 받아들인 성공이다.
 최소 필드:
 
 ```text
+reviewDecisionId
 objectiveQueueItemId
 taskId
 taskRevision
@@ -1398,13 +1399,16 @@ decision
 observedResultSnapshot
 observedCheckSnapshot
 verificationGateResult
-evidenceRef optional
-evidenceHash optional
 actorKind
 actorId
 reason
 decisionBasis
 policyRuleRefs optional
+reviewEvidenceBundleRef
+reviewEvidenceBundleHash
+reviewNoteRef optional
+supersedesReviewDecisionId optional
+invalidatesReviewDecisionId optional
 at
 ```
 
@@ -1448,6 +1452,445 @@ NEEDS_CHANGES
 -> 새 Revision 생성은 자동이 아니라 별도 Draft / Revision flow에서 처리
 ```
 
+S4 Review record 최소 형태:
+
+```text
+Run Trace
+= execution evidence truth
+
+ReviewEvidenceBundle
+= decision 시점에 reviewer가 본 주요 evidence snapshot / refs
+= 원본 evidence가 아니라 audit context
+
+RUN_REVIEW_DECIDED
+= Objective ledger durable decision event
+= ReviewEvidenceBundle을 참조하고 ACCEPTED / REJECTED / NEEDS_CHANGES를 기록
+
+Run-derived State
+= Run Trace + ReviewEvidenceBundle + RUN_REVIEW_DECIDED + gates를 해석한 derived state
+```
+
+ReviewEvidenceBundle:
+
+```text
+ReviewEvidenceBundle
+= RUN_REVIEW_DECIDED를 내릴 때 사용한 evidence refs와 계산 snapshot을 묶은 immutable review artifact
+= raw Run Trace를 대체하지 않음
+= decision audit을 위한 frozen context
+```
+
+ReviewEvidenceBundle 저장 위치:
+
+```text
+<workspaceRoot>/.codefleet/reviews/<reviewDecisionId>/evidence-bundle.json
+```
+
+ReviewEvidenceBundle은 Objective ledger event payload에 inline하지 않는다. `RUN_REVIEW_DECIDED`가 `reviewEvidenceBundleRef`와 `reviewEvidenceBundleHash`로 참조한다. Run Trace 내부에 저장하지 않는 이유는 ReviewEvidenceBundle이 실행 증거가 아니라 decision audit context이기 때문이다.
+
+ReviewEvidenceBundle 최소 필드:
+
+```yaml
+schemaVersion: "1.0"
+reviewDecisionId: ""
+reviewEvidenceBundleId: ""
+runId: ""
+runPlanId: ""
+objectiveQueueItemId: ""
+taskId: ""
+taskRevision: 1
+taskRevisionHash: ""
+runSummaryRef:
+  path: ""
+  hash: ""
+adapterRequestRef:
+  path: ""
+  hash: ""
+adapterResultRef:
+  path: ""
+  hash: ""
+harnessObservationRef:
+  path: ""
+  hash: ""
+preRunStateRef:
+  path: ""
+  hash: ""
+postRunStateRef:
+  path: ""
+  hash: ""
+verificationEvidenceRef:
+  path: ""
+  hash: ""
+  unavailableReason: ""
+findingRefs: []
+observedResultSnapshot: ""
+observedCheckSnapshot: ""
+verificationGateResult: "SATISFIED | NOT_SATISFIED | WAIVED_ALLOWED"
+computedRisk: "LOW | MEDIUM | HIGH | UNKNOWN"
+commandEvidenceAuthority: "NONE | PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED | HARNESS_EXECUTED"
+pathViolationSummary:
+  hasViolation: false
+  violationRefs: []
+effectivePolicyHash: ""
+createdAt: ""
+```
+
+S4 decision value 의미:
+
+```text
+ACCEPTED
+= reviewer가 해당 Run evidence를 받아들임
+= verification gate가 SATISFIED 또는 WAIVED_ALLOWED이면 VERIFIED 계산 가능
+
+REJECTED
+= 해당 Run evidence를 받아들이지 않음
+= 실행 결과가 잘못됐거나 허용 불가하다고 판단
+= VERIFIED 불가
+= QueueState.BLOCKED를 자동 생성하지 않음
+= rejected result는 carry-forward / next action에서 acceptance evidence로 사용하지 않음
+
+NEEDS_CHANGES
+= 해당 Run evidence를 받아들이지 않고 수정 필요로 판단
+= 실행 결과가 미완료이거나 추가 수정이 필요함
+= VERIFIED 불가
+= 새 Draft / Revision / Run은 별도 flow에서 생성
+= follow-up planning에는 사용할 수 있지만, verified carry-forward evidence가 아님
+```
+
+`RETRY`는 Review Decision value가 아니다. 재실행은 새 Run request / Run Options의 retry reason으로 표현한다. Review Decision은 기존 Run 결과의 수용 여부만 결정한다.
+
+S4 v0.2 manual review slice는 VERSION_PLAN이다.
+
+```text
+v0.2 may write .codefleet/runs/<runId>/review-decision.local.json when Objective ledger is not implemented yet.
+That artifact must use RUN_REVIEW_DECIDED-compatible fields and must not be treated as final architecture.
+The local artifact is migration input for the final Objective ledger event, not final decision truth.
+Final source of truth remains the Objective ledger durable decision event.
+```
+
+S4 Review Decision FINAL RULES:
+
+```text
+ruleId: RUN_REVIEW_DECIDED_IS_DURABLE_DECISION_EVENT
+status: FINAL
+scope: REVIEW
+sourceOfTruth:
+- Objective ledger
+- RUN_REVIEW_DECIDED event
+- ReviewEvidenceBundle
+inputs:
+- reviewDecisionId
+- objectiveQueueItemId
+- taskId
+- taskRevision
+- runId
+- decision
+- actorKind
+- actorId
+- decisionBasis
+- reason
+- reviewEvidenceBundleRef
+- reviewEvidenceBundleHash
+- supersedesReviewDecisionId when present
+- invalidatesReviewDecisionId when present
+preconditions:
+- Run Trace exists or EVIDENCE_ABSENT is explicitly recorded
+- Run Summary normalization has completed or is explicitly blocked with evidence
+- ReviewEvidenceBundle has been created
+condition:
+- RUN_REVIEW_DECIDED is appended to the Objective ledger
+- RUN_REVIEW_DECIDED includes reviewDecisionId
+- RUN_REVIEW_DECIDED does not modify Run Trace
+- RUN_REVIEW_DECIDED decision is one of ACCEPTED, REJECTED, NEEDS_CHANGES
+- RUN_REVIEW_DECIDED includes actorKind, actorId, decisionBasis, reason, at
+- RUN_REVIEW_DECIDED includes reviewEvidenceBundleRef and reviewEvidenceBundleHash
+- RUN_REVIEW_DECIDED may supersede or invalidate an earlier Review Decision only by reference, never by editing the old event
+- RUN_REVIEW_DECIDED does not directly write DONE, FAILED, VERIFIED, NEXT, or Queue State
+allowedEffect:
+- Run-derived State may interpret the decision with evidence and gates
+- Queue progression may use VERIFIED only if derived from effective ACCEPTED Review Decision and satisfied gates
+deniedEffect:
+- Review / Close cannot calculate VERIFIED from a run-local note alone
+- Queue progression must not use Review Decision without gate interpretation
+evidence:
+- objectiveQueueItemId
+- reviewDecisionId
+- taskId
+- taskRevision
+- runId
+- decision
+- actorKind
+- actorId
+- reviewEvidenceBundleRef
+- reviewEvidenceBundleHash
+failureFinding:
+- category = REVIEW_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- append a corrective Review Decision event
+- recreate ReviewEvidenceBundle only when deterministic evidence refs are available
+- rerun through a new Run when evidence cannot be reconstructed
+```
+
+```text
+ruleId: REVIEW_DECISION_REQUIRES_FROZEN_EVIDENCE_BUNDLE
+status: FINAL
+scope: REVIEW
+sourceOfTruth:
+- ReviewEvidenceBundle
+- Run Trace
+- Run Summary
+- AdapterRequest
+- AdapterResult
+- HarnessObservation
+- HarnessWorkspaceSnapshot
+- verification evidence
+- Objective ledger RUN_REVIEW_DECIDED
+inputs:
+- runId
+- runSummaryRef
+- adapterRequestRef
+- adapterResultRef
+- harnessObservationRef
+- preRunStateRef
+- postRunStateRef
+- verificationEvidenceRef
+- findingRefs
+- observedResultSnapshot
+- observedCheckSnapshot
+- verificationGateResult
+- computedRisk
+- commandEvidenceAuthority
+- pathViolationSummary
+preconditions:
+- Run has reached terminal normalized result or terminal blocked/failed evidence state
+- S2 run artifacts exist or explicit unavailableReason / EVIDENCE_ABSENT is recorded
+condition:
+- ReviewEvidenceBundle references the Run evidence considered at decision time
+- ReviewEvidenceBundle stores hashes for referenced artifacts when available
+- ReviewEvidenceBundle records unavailableReason for missing required evidence
+- ReviewEvidenceBundle records observedResultSnapshot and observedCheckSnapshot
+- ReviewEvidenceBundle records verificationGateResult calculated by CodeFleet
+- ReviewEvidenceBundle records computedRisk and commandEvidenceAuthority
+- ReviewEvidenceBundle records pathViolationSummary
+- ReviewEvidenceBundle is referenced by RUN_REVIEW_DECIDED
+- ReviewEvidenceBundle does not replace raw Run Trace as evidence truth
+allowedEffect:
+- Reviewer may make ACCEPTED, REJECTED, or NEEDS_CHANGES decision using the bundle
+- Run-derived State may use the bundle to audit what evidence was considered
+deniedEffect:
+- RUN_REVIEW_DECIDED is ineffective when required ReviewEvidenceBundle is absent or hash-invalid
+- VERIFIED cannot be calculated from Review Decision without effective ReviewEvidenceBundle
+evidence:
+- reviewEvidenceBundleId
+- reviewEvidenceBundleRef
+- reviewEvidenceBundleHash
+- missing evidence unavailableReason fields
+- referenced artifact hashes
+failureFinding:
+- category = REVIEW_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- rebuild ReviewEvidenceBundle from immutable Run Trace refs when deterministic
+- append corrective Review Decision if reviewed evidence was wrong
+- rerun through a new Run when required evidence is unavailable
+```
+
+```text
+ruleId: REVIEW_DECISION_ACTOR_MUST_SATISFY_RESULT_REVIEW_GATE
+status: FINAL
+scope: REVIEW
+sourceOfTruth:
+- Run Plan effectivePolicy.requiredGates.resultReview
+- RUN_REVIEW_DECIDED actor fields
+- Objective ledger
+inputs:
+- effectivePolicy.requiredGates.resultReview.allowedActors
+- effectivePolicy.requiredGates.resultReview.required
+- RUN_REVIEW_DECIDED.actorKind
+- RUN_REVIEW_DECIDED.actorId
+- RUN_REVIEW_DECIDED.decisionBasis
+preconditions:
+- Review Decision is being evaluated for effectiveness
+- effectivePolicy required gates snapshot is available
+condition:
+- actorKind must be in resultReview.allowedActors for the decision to be effective
+- actorId is audit identity and does not replace actorKind gate matching
+- HUMAN decisions use decisionBasis = HUMAN_REVIEW
+- SYSTEM_POLICY decisions use decisionBasis = SYSTEM_POLICY_AUTO_ACCEPT or another explicit policy basis
+- SYSTEM_POLICY may append ACCEPTED only when SYSTEM_POLICY_AUTO_REVIEW_DECISION_IS_BOUNDED passes
+allowedEffect:
+- Review Decision may be effective for Run-derived State calculation
+deniedEffect:
+- Review Decision is recorded but ineffective for VERIFIED and queue progression
+evidence:
+- runId
+- actorKind
+- actorId
+- decisionBasis
+- allowedActors
+- effectiveness result
+failureFinding:
+- category = REVIEW_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- append a valid Review Decision by an allowed actor
+- update requiredGates only through Task / Profile review flow
+```
+
+```text
+ruleId: LATEST_EFFECTIVE_REVIEW_DECISION_IS_LEDGER_DERIVED
+status: FINAL
+scope: REVIEW
+sourceOfTruth:
+- Objective ledger RUN_REVIEW_DECIDED events
+- ReviewEvidenceBundle
+- Run Plan effectivePolicy.requiredGates.resultReview
+- Task Revision identity
+inputs:
+- objectiveQueueItemId
+- taskId
+- taskRevision
+- reviewDecisionId
+- runId
+- actorKind
+- reviewEvidenceBundleRef
+- reviewEvidenceBundleHash
+- supersedesReviewDecisionId
+- invalidatesReviewDecisionId
+- ledger order
+preconditions:
+- Run-derived State is calculating review effectiveness
+- Objective ledger events are loaded in append order
+condition:
+- effective Review Decision is calculated for objectiveQueueItemId + taskId + taskRevision
+- Review Decision must have valid actor gate
+- Review Decision must have effective ReviewEvidenceBundle
+- Review Decision must not be invalidated by a later effective corrective Review Decision
+- if multiple effective Review Decisions target the same objectiveQueueItemId + taskId + taskRevision, the latest by ledger order is current
+- runId is evidence link and does not define VERIFIED identity by itself
+- supersede / invalidate is represented by appending a new Review Decision event with references
+allowedEffect:
+- Run-derived State may use the latest effective Review Decision for DONE / FAILED / VERIFIED interpretation
+deniedEffect:
+- old Review Decision must not be edited or deleted to change current effectiveness
+- runId alone must not select the current Review Decision
+evidence:
+- objectiveQueueItemId
+- taskId
+- taskRevision
+- latestReviewDecisionId
+- invalidatedReviewDecisionIds
+- ledger order evidence
+- effectiveness calculation result
+failureFinding:
+- category = REVIEW_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- append corrective Review Decision event
+- repair invalid references through explicit review correction
+```
+
+```text
+ruleId: REVIEW_EVIDENCE_ABSENCE_AND_HASH_MISMATCH_HAVE_DIFFERENT_EFFECTS
+status: FINAL
+scope: REVIEW
+sourceOfTruth:
+- ReviewEvidenceBundle
+- referenced Run Trace artifacts
+- artifact hashes
+- REVIEW_INTEGRITY checks
+inputs:
+- reviewEvidenceBundleRef
+- reviewEvidenceBundleHash
+- referenced artifact refs
+- referenced artifact hashes
+- local artifact availability
+- hash verification result
+preconditions:
+- Review Decision effectiveness is being evaluated
+- ReviewEvidenceBundle reference is present
+condition:
+- missing raw artifact after a durable Review Decision is EVIDENCE_ABSENT unless another integrity rule fails
+- EVIDENCE_ABSENT weakens local audit but does not automatically invalidate past Review Decision
+- ReviewEvidenceBundle hash mismatch is REVIEW_INTEGRITY failure
+- referenced artifact hash mismatch is REVIEW_INTEGRITY failure
+- hash mismatch makes the Review Decision ineffective until corrected
+- ReviewEvidenceBundle absence makes the Review Decision ineffective
+allowedEffect:
+- past Review Decision may remain effective when raw evidence is absent but ReviewEvidenceBundle hash is valid and policy allows absent raw evidence
+- validation may report EVIDENCE_ABSENT as WARNING
+deniedEffect:
+- VERIFIED must not be calculated from hash-mismatched ReviewEvidenceBundle
+- Review Decision must not be effective when ReviewEvidenceBundle is missing
+evidence:
+- reviewDecisionId
+- reviewEvidenceBundleRef
+- reviewEvidenceBundleHash
+- missing artifact refs
+- hash mismatch refs
+- evidence absence finding ids
+failureFinding:
+- category = REVIEW_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- restore missing raw evidence from backup when available
+- append corrective Review Decision if reviewed evidence was wrong
+- rerun through a new Run when evidence cannot be trusted
+```
+
+```text
+ruleId: VERIFIED_REQUIRES_ACCEPTED_REVIEW_AND_SATISFIED_GATES
+status: FINAL
+scope: REVIEW
+sourceOfTruth:
+- Objective ledger RUN_REVIEW_DECIDED
+- ReviewEvidenceBundle
+- Run Summary
+- verification gate calculation
+- Run-derived State calculator
+inputs:
+- objectiveQueueItemId
+- taskId
+- taskRevision
+- latest effective RUN_REVIEW_DECIDED
+- verificationGateResult
+- normalized Run result
+- blocking findings
+- computedRisk
+preconditions:
+- Run-derived State is being calculated
+- Review Decision effectiveness has been evaluated
+- verificationGateResult has been calculated by CodeFleet
+condition:
+- VERIFIED requires latest effective RUN_REVIEW_DECIDED.decision == ACCEPTED
+- VERIFIED requires verificationGateResult in {SATISFIED, WAIVED_ALLOWED}
+- VERIFIED requires normalized Run result to be successful according to Run Summary policy
+- VERIFIED is calculated for objectiveQueueItemId + taskId + taskRevision, not runId alone
+- REJECTED and NEEDS_CHANGES cannot produce VERIFIED
+- provider-reported command claims, stateHash alone, or adapter success alone cannot produce VERIFIED
+allowedEffect:
+- Queue progression may use VERIFIED according to Queue policy
+deniedEffect:
+- Queue progression must not use DONE alone when resultReview.required == true
+- Review / Close must not auto-verify from degraded evidence
+evidence:
+- objectiveQueueItemId
+- taskId
+- taskRevision
+- runId
+- reviewDecision event id
+- reviewEvidenceBundleRef
+- verificationGateResult
+- normalized Run result
+failureFinding:
+- category = REVIEW_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- require accepted Review Decision with valid evidence
+- satisfy or waive verification gate according to policy
+- rerun through a new Run when evidence is insufficient
+```
+
 SYSTEM_POLICY auto review 조건:
 
 ```text
@@ -1464,7 +1907,7 @@ SYSTEM_POLICY가 RUN_REVIEW_DECIDED(ACCEPTED)를 자동 append하려면:
 9. blocking finding이 없음
 10. unresolved required field가 없음
 11. blocking needsReview가 없음
-12. run evidenceRef와 evidenceHash가 decision 시점에 존재함
+12. reviewEvidenceBundleRef와 reviewEvidenceBundleHash가 decision 시점에 존재함
 13. decisionBasis = SYSTEM_POLICY_AUTO_ACCEPT로 기록됨
 ```
 
@@ -1564,8 +2007,8 @@ inputs:
 - unresolved required fields
 - needsReview
 - findings
-- evidenceRef
-- evidenceHash
+- reviewEvidenceBundleRef
+- reviewEvidenceBundleHash
 preconditions:
 - Run has terminal normalized result
 - Run Summary has been normalized
@@ -1582,8 +2025,8 @@ condition:
 - no blocking finding exists
 - no unresolved required field exists
 - no blocking needsReview exists
-- evidenceRef exists at decision time
-- evidenceHash exists at decision time
+- reviewEvidenceBundleRef exists at decision time
+- reviewEvidenceBundleHash exists at decision time
 - RUN_REVIEW_DECIDED.actorKind == SYSTEM_POLICY
 - RUN_REVIEW_DECIDED.decision == ACCEPTED
 - RUN_REVIEW_DECIDED.decisionBasis == SYSTEM_POLICY_AUTO_ACCEPT
@@ -1605,8 +2048,8 @@ evidence:
 - computedRisk
 - verificationGateResult
 - finding ids considered
-- evidenceRef
-- evidenceHash
+- reviewEvidenceBundleRef
+- reviewEvidenceBundleHash
 failureFinding:
 - category = POLICY_ENFORCEMENT_INTEGRITY
 - severity = WARNING
@@ -1686,16 +2129,25 @@ PlanningBlock.BLOCKED_UNTIL_POLICY
 Run Trace 부재 처리:
 
 ```text
-evidenceRef missing
+raw Run Trace artifact missing after durable Review Decision
 -> EVIDENCE_ABSENT warning
--> 기존 Review Decision 유지
--> VERIFIED 자동 무효화 금지
+-> 기존 Review Decision 자동 무효화 금지
+-> ReviewEvidenceBundle hash가 valid하면 VERIFIED 자동 무효화 금지
 
-evidenceRef exists but hash mismatch
--> EXECUTION_EVIDENCE_INTEGRITY finding
+ReviewEvidenceBundle missing
+-> REVIEW_INTEGRITY finding
+-> Review Decision ineffective
+
+ReviewEvidenceBundle hash mismatch
+-> REVIEW_INTEGRITY finding
+-> Review Decision ineffective
+
+referenced raw artifact exists but hash mismatch
+-> REVIEW_INTEGRITY finding
+-> Review Decision ineffective until corrected
 ```
 
-raw evidence 부재는 audit 약화다. 과거 decision의 자동 무효화 사유는 아니다.
+raw evidence 부재는 audit 약화다. 과거 decision의 자동 무효화 사유는 아니다. 반대로 ReviewEvidenceBundle 부재나 hash mismatch는 decision context 자체가 깨진 것이므로 해당 Review Decision을 effective decision으로 사용할 수 없다.
 
 이 규칙으로 확정되는 범위:
 
@@ -2742,7 +3194,8 @@ EVIDENCE_ABSENT:
 ```text
 check target:
 - optional local evidence reference
-- evidenceRef inside durable decision event
+- raw Run Trace artifact referenced by ReviewEvidenceBundle
+- local artifact referenced by durable decision audit context
 
 expected:
 - referenced Run Trace may exist on the current machine when available
@@ -2917,13 +3370,13 @@ REFERENCE_INTEGRITY vs EXECUTION_EVIDENCE_INTEGRITY
 - Run Trace 내부 파일 / result / command log가 깨지면 EXECUTION_EVIDENCE_INTEGRITY
 
 EVIDENCE_ABSENT vs EXECUTION_EVIDENCE_INTEGRITY
-- durable Review Decision의 evidenceRef가 현재 machine에 없으면 EVIDENCE_ABSENT
+- durable Review Decision의 ReviewEvidenceBundle은 valid하지만 raw Run Trace artifact가 현재 machine에 없으면 EVIDENCE_ABSENT
 - referenced Run Trace가 존재하지만 hash / schema / result consistency가 깨졌으면 EXECUTION_EVIDENCE_INTEGRITY
 - EVIDENCE_ABSENT는 기본적으로 WARNING이며 과거 Review Decision이나 VERIFIED를 자동 무효화하지 않는다
 
 REVIEW_INTEGRITY vs EXECUTION_EVIDENCE_INTEGRITY
 - run result 자체가 이상하면 EXECUTION_EVIDENCE_INTEGRITY
-- VERIFIED / Review Decision record가 이상하면 REVIEW_INTEGRITY
+- VERIFIED / Review Decision record / ReviewEvidenceBundle이 이상하면 REVIEW_INTEGRITY
 
 CARRY_FORWARD_INTEGRITY vs WORKSPACE_GROUNDING
 - CarryForwardItem 자체의 상태 / 내용 / sanitization 위반이면 CARRY_FORWARD_INTEGRITY
@@ -8172,6 +8625,7 @@ TASK_REVISION_SUPERSEDED
 - reason
 
 RUN_REVIEW_DECIDED
+- reviewDecisionId
 - objectiveQueueItemId
 - taskId
 - taskRevision
@@ -8185,8 +8639,11 @@ RUN_REVIEW_DECIDED
 - reason
 - decisionBasis
 - policyRuleRefs optional
-- evidenceRef optional
-- evidenceHash optional
+- reviewEvidenceBundleRef
+- reviewEvidenceBundleHash
+- reviewNoteRef optional
+- supersedesReviewDecisionId optional
+- invalidatesReviewDecisionId optional
 ```
 
 `reason`이 필수인 이벤트:
