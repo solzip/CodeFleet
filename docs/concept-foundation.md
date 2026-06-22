@@ -4874,7 +4874,7 @@ Scope 기준:     hunik-msa 기준 상대 경로
 Run 저장:       hunik-msa/.codefleet/runs/*
 ```
 
-Workspace discovery는 VERSION_PLAN이다.
+Workspace discovery implementation slicing은 VERSION_PLAN이다. 최종 계약은 아래 규칙을 따른다.
 
 ```text
 v0.x:
@@ -4883,7 +4883,172 @@ v0.x:
 final:
 - 하위 디렉터리에서 명령을 실행해도 부모 방향으로 올라가며 .codefleet을 찾을 수 있다.
 - --workspace 옵션이 주어지면 해당 경로를 우선한다.
-- 여러 .codefleet이 발견되면 가장 가까운 부모를 기본값으로 선택하되, 명령 출력에 선택 경로를 표시한다.
+- 자동 탐색에서 여러 .codefleet/config.json이 발견되면 가장 가까운 부모를 선택한다.
+- 명령 출력과 Run Plan은 선택된 workspace identity / metadata root ref / config hash를 기록한다.
+```
+
+Workspace discovery는 Project Profile을 읽기 전의 Core invariant다. Project Profile은 workspaceRoot를 저장하거나 선택하지 않는다.
+
+Discovery inputs:
+
+```text
+invocationCwd
+= 사용자가 CodeFleet 명령을 실행한 현재 디렉터리
+
+explicitWorkspaceInput
+= --workspace <path>가 주어진 경우의 원본 입력값
+
+candidateMetadataDir
+= <candidateWorkspaceRoot>/.codefleet
+
+candidateConfigPath
+= <candidateWorkspaceRoot>/.codefleet/config.json
+```
+
+Discovery result:
+
+```yaml
+workspaceDiscovery:
+  discoveryMode: "EXPLICIT | PARENT_SEARCH"
+  invocationCwd: ""
+  explicitWorkspaceInput: null
+  workspaceRootRef: "."
+  selectedWorkspaceRootRealPath: ""
+  metadataRootRef: ".codefleet"
+  metadataRootRealPath: ""
+  workspaceId: ""
+  configRef:
+    path: ".codefleet/config.json"
+    hash: ""
+  localOverlayRef:
+    path: ".codefleet/local.json"
+    hash: ""
+    present: false
+  gitRoot: ""
+  fsCaseMode: "CASE_SENSITIVE | CASE_INSENSITIVE | UNKNOWN"
+  selectedBy: "explicit-workspace | nearest-parent"
+  candidateRoots: []
+  nestedWorkspaceRefs: []
+  warnings: []
+```
+
+`workspaceDiscovery`는 runtime-local derived result다. Project Profile에 저장하지 않는다. Run Plan은 portable refs/hash를 freeze하고, absolute realpath는 local evidence로만 기록한다.
+
+v0.x `CWD_ONLY` discovery는 implementation slicing 전용이다. FINAL `workspaceDiscovery.discoveryMode` 값에는 포함하지 않는다.
+
+Discovery precedence:
+
+```text
+1. --workspace가 있으면 explicitWorkspaceInput을 invocationCwd 기준으로 normalize / realpath resolve한다.
+2. explicitWorkspaceInput은 workspace root 디렉터리를 가리켜야 한다. .codefleet 디렉터리 자체를 workspace 입력으로 받지 않는다.
+3. <explicitWorkspaceInput>/.codefleet/config.json이 없으면 discovery는 실패한다.
+4. --workspace가 없으면 invocationCwd realpath에서 시작해 부모 방향으로 올라가며 .codefleet/config.json을 찾는다.
+5. 자동 탐색에서는 가장 가까운 부모 candidate를 선택한다.
+6. 어떤 candidate도 없으면 command는 workspace-required error로 실패한다.
+```
+
+Nested workspace / nested repo rules:
+
+```text
+- 자동 탐색은 nearest workspace를 선택한다.
+- 부모 workspace 안에 더 가까운 child .codefleet/config.json이 있으면 child workspace가 우선한다.
+- explicit --workspace는 자동 탐색보다 우선하지만, selected workspace 안의 nested workspace는 별도 ownership boundary다.
+- parent workspace는 nested workspace의 .codefleet/ 또는 그 nested workspace가 소유한 task/run/review metadata를 자기 metadata로 취급할 수 없다.
+- nested git repository는 discovery source가 아니다. .codefleet/config.json이 없으면 별도 workspace로 선택되지 않는다.
+- selected workspace 밖 sibling repo는 Project Profile에 저장하지 않고, 상위 Objective / Orchestration layer가 별도 workspace Task로 분해한다.
+```
+
+Filesystem normalization rules:
+
+```text
+- discovery는 lexical path가 아니라 realpath 기준으로 selectedWorkspaceRootRealPath와 metadataRootRealPath를 계산한다.
+- .codefleet 디렉터리와 config.json의 realpath는 selectedWorkspaceRootRealPath 내부에 남아야 한다.
+- .codefleet이 symlink로 workspace 밖을 가리키면 discovery는 실패한다.
+- config.json이 symlink로 workspace 밖을 가리키면 discovery는 실패한다.
+- relative --workspace 입력은 invocationCwd 기준으로 resolve할 수 있지만, 결과는 canonical selectedWorkspaceRootRealPath로 기록한다.
+- drive letter / path separator / trailing slash 차이는 canonicalization 후 비교한다.
+- exact `.codefleet` directory name만 metadata directory로 인정한다.
+- case-insensitive filesystem에서는 case-only duplicate candidate를 같은 realpath로 접고 canonical path를 기록한다.
+- case-sensitive filesystem에서 `.CodeFleet` 같은 case variant는 workspace metadata로 인정하지 않는다.
+```
+
+Durability / portability rules:
+
+```text
+- discovery는 git tracked 여부가 아니라 filesystem 존재와 content hash를 기준으로 한다.
+- .codefleet/config.json은 shared Project Profile source이므로 portable workspace에서는 git tracked 상태여야 한다.
+- config.json이 gitignored 또는 untracked여도 discovery 자체는 실패하지 않지만 POLICY_ENFORCEMENT_INTEGRITY warning finding을 남길 수 있다.
+- .codefleet/local.json, .codefleet/runs/*, .codefleet/reviews/* 같은 local/runtime artifact는 gitignored일 수 있다.
+- Run Plan이 생성된 뒤 configRef.hash 또는 workspace.id가 바뀌면 기존 Run Plan으로 resume할 수 없다.
+- localOverlayRef.hash가 다르면 resume을 즉시 금지하지 않고 같은 Run Plan 기준으로 Local Overlay를 재검증한다. 재검증 결과가 기존 effectivePolicy보다 권한을 넓히거나 동등/더 제한적임을 증명할 수 없으면 resume을 차단하거나 새 Run으로 전진한다.
+- 다른 local clone에서는 selectedWorkspaceRootRealPath가 달라도, rediscovery 결과의 workspace.id / configRef.hash / relative source refs가 일치하면 portable resume 후보가 될 수 있다.
+- Run 중 .codefleet/config.json 삭제 / rename / replacement는 workspace contract mutation으로 기록되며, 기존 Run의 policy source를 갱신하지 않는다.
+```
+
+Discovery final rule:
+
+```yaml
+ruleId: WORKSPACE_DISCOVERY_RESOLVES_SINGLE_WORKSPACE_CONTRACT
+status: FINAL
+scope: WORKSPACE
+sourceOfTruth:
+  - invocation cwd
+  - explicit --workspace input when present
+  - filesystem realpath
+  - <workspaceRoot>/.codefleet/config.json
+  - Project Profile schemaVersion after discovery
+  - Project Profile workspace.id after discovery
+inputs:
+  - invocationCwd
+  - explicitWorkspaceInput
+  - filesystem directory entries
+  - realpath/canonical path resolver
+preconditions:
+  - CodeFleet command requires a workspace
+  - filesystem can resolve invocationCwd
+condition:
+  - exactly one selectedWorkspaceRootRealPath is resolved by explicit --workspace or nearest-parent discovery
+  - workspaceRootRef equals .
+  - metadataRootRef equals .codefleet
+  - metadataRootRealPath equals <selectedWorkspaceRootRealPath>/.codefleet
+  - configRef.path equals .codefleet/config.json
+  - metadataRootRealPath and configRef realpaths stay inside selectedWorkspaceRootRealPath
+  - Project Profile is loaded only after selectedWorkspaceRootRealPath and metadataRootRealPath are fixed
+  - workspaceId equals Project Profile workspace.id after Project Profile validation
+  - Project Profile paths are interpreted only as POSIX relative paths from workspaceRootRef
+allowedEffect:
+  - CodeFleet may load Project Profile and Local Overlay for the selected workspace
+  - Run Planning may freeze workspaceDiscovery portable refs/hash in run-plan.json
+  - Harness may use selectedWorkspaceRootRealPath as cwd / path normalization / artifact root boundary
+deniedEffect:
+  - Project Profile must not select or override workspaceRoot
+  - Project Profile must not store local absolute clone paths or sibling repo paths
+  - CodeFleet must not infer workspace identity from git root alone
+  - CodeFleet must not treat provider transcript or user prose as workspace discovery evidence
+  - CodeFleet must not cross into a nested workspace metadata directory as if it belonged to the parent workspace
+evidence:
+  - discoveryMode
+  - invocationCwd
+  - explicitWorkspaceInput
+  - workspaceRootRef
+  - selectedWorkspaceRootRealPath
+  - metadataRootRef
+  - metadataRootRealPath
+  - workspaceId
+  - configRef path/hash
+  - localOverlayRef path/hash when present
+  - candidateRoots
+  - nestedWorkspaceRefs
+  - gitRoot when available
+  - fsCaseMode
+failureFinding:
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: CORRUPTION
+repairBehavior:
+  - run from inside a valid workspace
+  - pass --workspace pointing at a valid workspace root
+  - create or repair .codefleet/config.json
+  - create a new Run Plan after workspace source refs change
 ```
 
 ## 4. Metadata
@@ -6121,8 +6286,22 @@ runOptions:
 workspace:
   projectId: ""
   workspaceId: ""
-  workspaceRoot: ""
-  workingDirectory: ""
+  discovery:
+    discoveryMode: "EXPLICIT | PARENT_SEARCH"
+    selectedBy: "explicit-workspace | nearest-parent"
+    workspaceRootRef: "."
+    metadataRootRef: ".codefleet"
+    configRef:
+      path: ".codefleet/config.json"
+      contentHash: ""
+    localOverlayRef:
+      path: ".codefleet/local.json"
+      contentHash: ""
+      present: false
+      unavailableReason: ""
+  workspaceRootRef: "."
+  metadataRootRef: ".codefleet"
+  workingDirectoryRef: "."
   pathStyle: "POSIX_RELATIVE"
 
 selectedTask:
@@ -6264,6 +6443,7 @@ condition:
 - run-plan.json is persisted after Run Planning succeeds and before AdapterRequest creation
 - run-plan.json has a stable runPlanId and runId
 - run-plan.json records source refs and hashes for Task Revision and Project Profile
+- run-plan.json records workspace discovery portable refs and hashes
 - run-plan.json records Run Options snapshot
 - run-plan.json records selectedAgentAdapter and adapterResolution without provider-local command path or token
 - run-plan.json records effectivePolicy, computedRisk, isolation, requiredGates, and verificationPlan
@@ -6290,6 +6470,10 @@ evidence:
 - Task Revision ref/hash
 - Project Profile ref/hash
 - Local Overlay ref/hash or unavailableReason
+- workspaceDiscovery discoveryMode
+- workspaceDiscovery selectedBy
+- workspaceRootRef
+- metadataRootRef
 - Run Options snapshot
 - selectedAgentAdapter
 - effectivePolicy hash
@@ -7816,8 +8000,8 @@ selectedAgentAdapter: "codex"
 agentRole: "BACKEND_IMPLEMENTER"
 harnessMode: "WORKSPACE_EDIT"
 workspace:
-  workspaceRoot: ""
-  workingDirectory: ""
+  workspaceRootRef: "."
+  workingDirectoryRef: "."
   pathStyle: "POSIX_RELATIVE"
 taskContractRef:
   revisionPath: ""
@@ -7926,8 +8110,10 @@ observationStatus: "COMPLETE | PARTIAL | UNAVAILABLE"
 startedAt: ""
 endedAt: ""
 workspace:
-  workspaceRoot: ""
-  workingDirectory: ""
+  workspaceRootRef: "."
+  selectedWorkspaceRootRealPath: ""
+  workingDirectoryRef: "."
+  workingDirectoryRealPath: ""
   preRunStateRef: ""
   postRunStateRef: ""
 stdio:
@@ -7991,8 +8177,10 @@ HarnessWorkspaceSnapshot 최소 필드:
 schemaVersion: "1.0"
 runId: ""
 phase: "PRE_RUN | POST_RUN"
-workspaceRoot: ""
-workingDirectory: ""
+workspaceRootRef: "."
+selectedWorkspaceRootRealPath: ""
+workingDirectoryRef: "."
+workingDirectoryRealPath: ""
 git:
   headRef: ""
   statusRef: ""
@@ -8058,7 +8246,7 @@ violationCode: ""
 Path policy 판정 순서:
 
 ```text
-1. originalPath를 workspaceRoot 기준 normalized relative path로 변환한다.
+1. originalPath를 workspaceRootRef 기준 normalized relative path로 변환한다.
 2. absolute path, drive escape, UNC path, `..` escape를 검사한다.
 3. lstat / realpath / snapshot evidence로 pathKind와 real target을 확인한다.
 4. deniedPaths match를 먼저 검사한다.
@@ -8354,7 +8542,7 @@ v0.2 Codex transport does:
 - AdapterRequest artifact를 최소 형태로 생성한다.
 - Codex transport는 prompt 본문을 stdin으로 넘긴다.
 - 기본 transport command는 local adapter registry / local config의 command + args를 사용한다.
-- cwd는 Run Plan workingDirectory 또는 v0.x task projectPath를 사용한다.
+- cwd는 Run Plan workspace.workingDirectoryRef를 selectedWorkspaceRootRealPath 기준으로 resolve한 경로 또는 v0.x task projectPath를 사용한다.
 - stdout.log / stderr.log를 Harness가 capture한다.
 - git status / git diff 기반 HarnessWorkspaceSnapshot 최소 형태를 생성한다.
 - HarnessObservation 최소 형태를 생성한다.
@@ -8553,8 +8741,10 @@ inputs:
 - runId
 - runPlanId
 - runTracePath
-- workspaceRoot
-- workingDirectory
+- workspaceRootRef
+- selectedWorkspaceRootRealPath
+- workingDirectoryRef
+- workingDirectoryRealPath
 - pre-run workspace state
 - post-run workspace state
 - stdout / stderr capture result
@@ -8581,6 +8771,10 @@ evidence:
 - runId
 - runPlanId
 - harnessObservation path or hash
+- workspaceRootRef
+- selectedWorkspaceRootRealPath
+- workingDirectoryRef
+- workingDirectoryRealPath
 - stdoutRef
 - stderrRef
 - diffRef or changedFiles unavailableReason
@@ -8608,8 +8802,10 @@ sourceOfTruth:
 - HarnessObservation postRunStateRef
 inputs:
 - runId
-- workspaceRoot
-- workingDirectory
+- workspaceRootRef
+- selectedWorkspaceRootRealPath
+- workingDirectoryRef
+- workingDirectoryRealPath
 - effectivePolicy allowed paths
 - effectivePolicy denied paths
 - git status capture
@@ -8618,7 +8814,7 @@ inputs:
 - state hash calculation
 preconditions:
 - Run Directory has been created
-- workspaceRoot and workingDirectory have been resolved
+- workspaceRootRef / workingDirectoryRef and selectedWorkspaceRootRealPath / workingDirectoryRealPath have been resolved
 condition:
 - preRunStateRef references a HarnessWorkspaceSnapshot with phase = PRE_RUN
 - postRunStateRef references a HarnessWorkspaceSnapshot with phase = POST_RUN
@@ -8642,6 +8838,10 @@ evidence:
 - runId
 - preRunStateRef
 - postRunStateRef
+- workspaceRootRef
+- selectedWorkspaceRootRealPath
+- workingDirectoryRef
+- workingDirectoryRealPath
 - git status refs
 - git diff refs
 - scoped file snapshot refs
@@ -8901,8 +9101,10 @@ sourceOfTruth:
 - Project Profile policies.files
 - Run Plan effectivePolicy
 inputs:
-- workspaceRoot
-- workingDirectory
+- workspaceRootRef
+- selectedWorkspaceRootRealPath
+- workingDirectoryRef
+- workingDirectoryRealPath
 - changed paths from Run delta
 - original path strings
 - normalized path strings
@@ -8917,8 +9119,8 @@ condition:
 - absolute paths are rejected as policy targets
 - drive-qualified paths are rejected as policy targets
 - UNC paths are rejected as policy targets
-- `..` path escape outside workspaceRoot is rejected
-- realpath escape outside workspaceRoot is rejected
+- `..` path escape outside workspaceRootRef is rejected
+- realpath escape outside selectedWorkspaceRootRealPath is rejected
 - original path casing and raw path string are preserved as evidence
 allowedEffect:
 - PathPolicyEvaluation may continue to allowedPaths / deniedPaths matching
@@ -8930,7 +9132,8 @@ evidence:
 - originalPath
 - normalizedPath
 - realPath when available
-- workspaceRoot
+- workspaceRootRef
+- selectedWorkspaceRootRealPath
 - violationCode
 failureFinding:
 - category = POLICY_ENFORCEMENT_INTEGRITY
@@ -9005,7 +9208,7 @@ preconditions:
 condition:
 - symlink link path must be allowed
 - symlink target must be resolvable or recorded as violation
-- symlink target realPath must remain inside workspaceRoot
+- symlink target realPath must remain inside selectedWorkspaceRootRealPath
 - symlink target must not match deniedPaths
 - symlink target must match allowedPaths when target is inside workspace policy scope
 allowedEffect:
@@ -13168,20 +13371,21 @@ v0.1 구현 내용:
 - AgentRole은 permission grant가 아니라 classification / max capability input이라는 원칙
 - Guardrail은 Task-local restriction source이며 Project Profile / Local Overlay보다 권한을 넓힐 수 없다는 원칙
 - Verification execution policy는 Harness-owned command evidence만 PASS authority로 인정한다는 원칙
+- Workspace discovery는 explicit --workspace 또는 nearest-parent .codefleet/config.json으로 단일 workspace를 결정하고, portable refs/hash와 local realpath evidence를 분리하는 Core invariant라는 원칙
 ```
 
 다음으로 논의할 항목:
 
 ```text
-1. Workspace discovery
-   - 현재 cwd 기준
-   - 부모 디렉터리 탐색
-   - 명시적 --workspace 옵션
-
-2. Review 모델 구현
+1. Review 모델 구현
    - AI review.md
    - human review note
    - approval 기록
+
+2. v0.1 / v0.2 / final implementation slicing
+   - Workspace discovery v0.2 구현 범위
+   - S1-S5 최소 루프 구현 순서
+   - final 계약 대비 unavailable/degraded evidence 처리
 ```
 
 ## 16. 다음 세션에서 이어갈 때
