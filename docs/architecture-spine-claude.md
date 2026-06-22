@@ -79,7 +79,7 @@ Evidence / Trace       [S] 🟡   실행 증거       ◀══ SEAM S3: Verific
 [닫힘] derived state (VERIFIED 등)  →  carry-forward(승인된 결정/요약)  →  다음 Objective
 ```
 
-이 척추에서 색을 정직하게 읽으면: **상태·계약 쪽(Revision)은 ✅이고, S2 Adapter, S3 Verification, S4 Review는 최종 계약이 잡힌 🟡 상태다.** 목표 기준 진짜 남은 일은 S1 최소 Task Spec, S2/S3/S4의 v0.2 구현 절단면, 그리고 S5 Export seam이다.
+이 척추에서 색을 정직하게 읽으면: **S1-S5 최소 계약과 Project Profile defaults/policies 계약은 고정됐고, 아직 구현 절단면은 🟡 상태다.** 목표 기준 진짜 남은 일은 Harness enforcement, AgentRole / Guardrail taxonomy, Verification 실행 구현, Workspace discovery, v0.1 / v0.2 / final implementation slicing이다.
 
 ---
 
@@ -130,11 +130,12 @@ S4  Review seam     ◆    Run 결과 ─▶ 사람 수용/거절 기록 ─▶ 
     빈칸: ledger implementation
 
 S5  Export seam           Run Trace ─▶ Run Summary(sanitized) ─▶ Notion / 일지 / Issue
-    상태: 🟡  (필드/sanitization 규칙 O, adapter별 출력 미정)
-    빈칸: summary.md 자동 생성, 대상별 필드 제한, redactionReport 출력 형식
+    상태: 🟡  (sanitized artifact / adapter field contract 고정, 구현 미정)
+    고정: sanitized-run-summary.json / summary.md / redaction-report.json / exportAttempt
+    고정: adapter별 field allowlist와 raw evidence export 금지
 ```
 
-핵심: **S1(Task Revision 최소 계약), S2(Adapter), S3(Verification), S4(Review)의 최소 계약, 최소 CLI flow, SPINE 수동 검증 계약은 고정됐다.** 다음 병목은 S5 Export seam을 닫는 것이다.
+핵심: **S1(Task Revision 최소 계약), S2(Adapter), S3(Verification), S4(Review), S5(Export), Project Profile defaults/policies 최소 계약은 고정됐다.** 다만 구현 절단면, Harness enforcement, 실제 end-to-end runtime validation은 남아 있다. 다음 병목은 Harness enforcement 상세 정의다.
 
 ---
 
@@ -236,8 +237,8 @@ S1은 `Task Revision minimum contract`, S2는 `AdapterRequest -> AgentAdapter ->
 ## 다음에 할 일 (이 지도 기준)
 
 ```text
-1. S5 Run Summary / Export seam 정리   ← 다음 병목
-2. Project Profile defaults / policy block 세부 스키마
-3. Harness enforcement 상세 정의
+1. Harness enforcement 상세 정의   ← 다음 병목
+2. AgentRole / Guardrail taxonomy
+3. Verification 실행 정책 구현
 4. 그 다음 GUARDS를 한 겹씩 덧댐
 ```

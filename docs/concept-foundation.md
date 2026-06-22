@@ -7389,6 +7389,347 @@ repairBehavior:
 - update Project Profile allowedAdapters only through Project Profile review
 ```
 
+#### defaults.run.isolationMode
+
+`defaults.run.isolationMode`는 Run Planning에서 사용할 기본 workspace isolation 선택값이다. 이 값은 권한 부여가 아니다. 실제 허용은 `policies.harness`, `policies.files`, `policies.commands`, `policies.risk`, Local Overlay restriction, Task guardrails, Run Options를 병합한 effectivePolicy가 결정한다.
+
+Allowed values:
+
+```text
+REQUIRE_EXPLICIT
+NONE
+GIT_WORKTREE
+TEMP_WORKSPACE
+CONTAINER
+```
+
+Meaning:
+
+```text
+REQUIRE_EXPLICIT
+= Run Planning이 AdapterRequest 생성 전에 concrete isolation mode를 요구한다.
+
+NONE
+= 현재 workspaceRoot 외 추가 isolation을 만들지 않는다.
+= 파일 수정 또는 명령 실행이 있는 Run에서는 LOW risk가 될 수 없다.
+
+GIT_WORKTREE
+= repo가 지원하면 별도 git worktree에서 Run을 수행한다.
+
+TEMP_WORKSPACE
+= 복사 또는 준비된 임시 workspace에서 Run을 수행한다.
+
+CONTAINER
+= policy와 local availability가 허용할 때 container boundary에서 Run을 수행한다.
+```
+
+Rules:
+
+```text
+- defaults.run.isolationMode is a default selection input only.
+- defaults.run.isolationMode may be overridden only by stricter Run Options or Local Overlay restrictions.
+- Run Planning records the concrete isolation mode in run-plan.json.
+- AdapterRequest receives only the concrete Run Plan isolation mode.
+- Project Profile must not store local temp paths, container ids, image digests, socket paths, credentials, or shell commands in defaults.run.isolationMode.
+- If the selected isolation mode is unavailable locally, Run Planning is blocked or a stricter available mode must be selected by explicit resolution.
+- automatic downgrade from CONTAINER / TEMP_WORKSPACE / GIT_WORKTREE to NONE is forbidden.
+```
+
+```text
+ruleId: PROFILE_DEFAULTS_RUN_ISOLATION_MODE_SCHEMA
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+- <workspaceRoot>/.codefleet/config.json defaults.run.isolationMode
+- Project Profile policies.harness
+- Local Overlay restrictions when present
+inputs:
+- parsed Project Profile defaults.run.isolationMode
+- local isolation availability
+- Run Options isolation override when present
+preconditions:
+- Project Profile validation has reached defaults.run validation
+- Project Profile policies.harness has been parsed
+condition:
+- defaults.run.isolationMode is one of REQUIRE_EXPLICIT, NONE, GIT_WORKTREE, TEMP_WORKSPACE, CONTAINER
+- defaults.run.isolationMode does not contain a local path, container id, image tag, socket path, token, credential, or shell command
+- Run Plan resolves REQUIRE_EXPLICIT before AdapterRequest creation
+- Run Plan records a concrete isolation.mode and reason
+allowedEffect:
+- Run Planning may use defaults.run.isolationMode as default isolation selection input
+- effectivePolicy / computedRisk may use the selected concrete isolation mode as risk input
+deniedEffect:
+- Project Profile validation fails for invalid isolation value
+- Run Planning is blocked when concrete isolation cannot be resolved safely
+- Execution Harness is not called without concrete isolation in Run Plan
+evidence:
+- profilePath
+- defaults.run.isolationMode JSON pointer
+- selected isolation.mode
+- isolation selection source
+- local availability check result
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- set defaults.run.isolationMode to REQUIRE_EXPLICIT or an allowed isolation mode
+- move local runtime details to .codefleet/local.json or runtime registry
+- choose a stricter locally available isolation mode through Run Options or explicit resolution
+```
+
+### 5.1.4 Project Profile policy block internal schema
+
+Project Profile `policies`는 workspace policy source다. `policies`는 Run Plan, effectivePolicy snapshot, local machine state, 실행 로그가 아니다.
+
+Minimum final shape:
+
+```yaml
+policies:
+  harness:
+    allowedModes: ["DRY_RUN", "SUGGEST_ONLY", "WORKSPACE_EDIT", "COMMAND_EXEC"]
+    maxMode: "COMMAND_EXEC"
+    requireIsolationForMutation: true
+    allowDegradedCommandObservation: false
+    approvalRequiredForDestructiveCommands: true
+  agentAdapters:
+    allowedAdapters: ["codex"]
+  files:
+    allowedPaths: []
+    deniedPaths: []
+    allowSymlinkTargets: false
+    caseSensitivity: "AUTO | CASE_SENSITIVE | CASE_INSENSITIVE"
+    includeGitIgnored: false
+    nestedRepoPolicy: "DENY | REQUIRE_EXPLICIT"
+    generatedFilesPolicy: "ALLOW_IF_UNDER_ALLOWED_PATH | REQUIRE_EXPLICIT | DENY"
+  commands:
+    allowedCommands: []
+    deniedCommands: []
+    destructiveCommands: []
+    requireHarnessVisibleCommandChannel: true
+    allowProviderReportedCommandTruth: false
+  risk:
+    defaultLevel: "UNKNOWN"
+    maxWithoutIsolation: "MEDIUM"
+    maxWithProviderReportedOnlyEvidence: "HIGH"
+    loweringRequiresExplicitPolicy: true
+  verification:
+    requireHarnessEvidenceForPass: true
+    allowProviderReportedVerificationAsHint: true
+    defaultAttemptIdPrefix: "verify"
+    allowWaiver: false
+  redaction:
+    blockExportOnSecretMatch: true
+    allowLocalPathExport: false
+    allowPublicUrlExport: false
+    rules: []
+  carryForward:
+    allowSanitizedSummary: true
+    allowRawRunTrace: false
+    requireAcceptedReviewForDecisionCarryForward: true
+    requireRiskRecheck: true
+  agentRoles:
+    allowedRoles: []
+    defaultRolePolicy: "REQUIRE_EXPLICIT"
+```
+
+Block ownership:
+
+```text
+policies.harness
+= allowed harness modes, degraded evidence permission, mutation isolation requirements
+
+policies.agentAdapters
+= stable AdapterId allowlist only
+
+policies.files
+= path permission source for allowedPaths / deniedPaths and path violation calculation
+
+policies.commands
+= command execution permission source and command truth requirements
+
+policies.risk
+= deterministic risk ceiling / lowering / degraded-evidence risk rules
+
+policies.verification
+= verification evidence authority rules and waiver defaults
+
+policies.redaction
+= export sanitizer rules and external sharing limits
+
+policies.carryForward
+= what may be reused in later prompts / tasks / objectives
+
+policies.agentRoles
+= allowed task role taxonomy and validation source
+```
+
+Policy block rules:
+
+```text
+- policies block may contain policy source values only.
+- policies block must not contain effectivePolicy, Run Plan, Run Options, Run Trace, Review Decision, local adapter command path, credential, token, provider model, container id, temp directory, or execution log.
+- every policy block is merged by deterministic meet operation with Core Policy Defaults, Local Overlay restrictions, Task guardrails, and policy-affecting Run Options.
+- deniedPaths / deniedCommands override allow rules.
+- Local Overlay can only restrict Project Profile policies.
+- policy block values must be serializable and portable across local machines.
+- missing optional policy block fields are filled by Core Policy Defaults, not by guessing from local state.
+```
+
+Policy field merge table:
+
+```text
+policies.harness.allowedModes
+= intersection
+
+policies.harness.maxMode
+= lower capability wins: DRY_RUN < SUGGEST_ONLY < WORKSPACE_EDIT < COMMAND_EXEC
+
+policies.harness.requireIsolationForMutation
+= OR; true wins
+
+policies.harness.allowDegradedCommandObservation
+= AND; false wins
+
+policies.harness.approvalRequiredForDestructiveCommands
+= OR; true wins
+
+policies.agentAdapters.allowedAdapters
+= intersection
+
+policies.files.allowedPaths
+= intersection after normalization
+
+policies.files.deniedPaths
+= union after normalization; denied wins over allowed
+
+policies.files.allowSymlinkTargets
+= AND; false wins
+
+policies.files.caseSensitivity
+= explicit stricter runtime evaluation wins; AUTO resolves from workspace filesystem evidence
+
+policies.files.includeGitIgnored
+= AND; false wins
+
+policies.files.nestedRepoPolicy
+= stricter wins: DENY > REQUIRE_EXPLICIT
+
+policies.files.generatedFilesPolicy
+= stricter wins: DENY > REQUIRE_EXPLICIT > ALLOW_IF_UNDER_ALLOWED_PATH
+
+policies.commands.allowedCommands
+= intersection
+
+policies.commands.deniedCommands
+= union; denied wins over allowed
+
+policies.commands.destructiveCommands
+= union
+
+policies.commands.requireHarnessVisibleCommandChannel
+= OR; true wins
+
+policies.commands.allowProviderReportedCommandTruth
+= AND; false wins; final model default is false
+
+policies.risk.defaultLevel
+= fallback risk default only.
+= concrete risk severity uses LOW < MEDIUM < HIGH.
+= UNKNOWN is unresolved / insufficient evidence state, not a higher concrete severity.
+= UNKNOWN wins only when no concrete risk can be determined or a policy source explicitly requires unknown-as-blocking.
+
+policies.risk.maxWithoutIsolation
+= stricter ceiling wins
+
+policies.risk.maxWithProviderReportedOnlyEvidence
+= stricter ceiling wins
+
+policies.risk.loweringRequiresExplicitPolicy
+= OR; true wins
+
+policies.verification.requireHarnessEvidenceForPass
+= OR; true wins
+
+policies.verification.allowProviderReportedVerificationAsHint
+= AND; false wins; hint permission never grants PASS authority
+
+policies.verification.defaultAttemptIdPrefix
+= Project Profile value only; Local Overlay and Run Options cannot change naming authority
+
+policies.verification.allowWaiver
+= AND; false wins
+
+policies.redaction.blockExportOnSecretMatch
+= OR; true wins
+
+policies.redaction.allowLocalPathExport
+= AND; false wins
+
+policies.redaction.allowPublicUrlExport
+= AND; false wins
+
+policies.redaction.rules
+= union, then stricter matching/action wins for overlapping rules
+
+policies.carryForward.allowSanitizedSummary
+= AND; false wins
+
+policies.carryForward.allowRawRunTrace
+= AND; false wins; final model default is false
+
+policies.carryForward.requireAcceptedReviewForDecisionCarryForward
+= OR; true wins
+
+policies.carryForward.requireRiskRecheck
+= OR; true wins
+
+policies.agentRoles.allowedRoles
+= intersection
+
+policies.agentRoles.defaultRolePolicy
+= stricter wins: REQUIRE_EXPLICIT > concrete default
+```
+
+```text
+ruleId: PROJECT_PROFILE_POLICY_BLOCK_INTERNAL_SCHEMA
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+- <workspaceRoot>/.codefleet/config.json policies
+- Core Policy Defaults
+inputs:
+- parsed Project Profile policies
+- policy block schema
+- Core Policy Defaults
+preconditions:
+- Project Profile top-level schema validation passed
+condition:
+- policies contains only supported policy blocks
+- each policy block contains only portable policy source fields
+- policies.harness, policies.files, policies.commands, policies.risk, policies.verification, policies.redaction, policies.carryForward, policies.agentRoles, and policies.agentAdapters validate against their internal shape
+- policies does not contain effectivePolicy or local runtime state
+allowedEffect:
+- Run Planning may derive effectivePolicy from policies
+- Draft validation may use policies.agentRoles and policies.harness to validate Task Draft choices
+- Execution Harness may use effectivePolicy derived from policies
+deniedEffect:
+- direct execution from raw Project Profile policies is blocked
+- storing derived Run state or local secrets in policies is blocked
+- widening permissions through Local Overlay is blocked
+evidence:
+- profilePath
+- policies JSON pointer
+- validated policy block names
+- invalid field paths when present
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- remove unsupported policy fields
+- move local-only state to .codefleet/local.json or runtime registry
+- rebuild effectivePolicy after Project Profile correction
+```
+
 #### AgentAdapter invocation contract
 
 AgentAdapter 선택은 호출 계약의 전부가 아니다. 최종 모델은 선택된 adapter에게 무엇을 넘기고, 무엇을 회수하며, 무엇을 Core가 다시 판정하는지를 분리한다.
@@ -9205,14 +9546,10 @@ repairBehavior:
 
 ```text
 DESIGN CANDIDATE:
-- defaults 내부 enum 전체
-- harness policy 내부 schema
-- files policy 내부 glob schema
-- commands policy 내부 command matcher schema
-- risk policy 내부 rule schema
-- verification policy 내부 preset schema
-- redaction policy 내부 pattern/action schema
-- carryForward policy 내부 audit/recheck 세부 기본값
+- files policy glob matcher 세부 문법
+- commands policy command matcher 세부 문법
+- risk policy rule expression 세부 문법
+- redaction policy pattern language
 - agentRoles 내부 role taxonomy
 - profile rule id 세부 네이밍 체계
 ```
@@ -11579,6 +11916,214 @@ Sanitization 실패 효과:
 - finding.severity = WARNING 또는 CORRUPTION은 sanitizer rule definition이 결정
 ```
 
+S5 Export seam 최종 계약:
+
+```text
+S5 Export
+= Run Trace 원본이 아니라 sanitized Run Summary를 외부 표면으로 내보내는 seam
+= Notion / diary / issue / PR comment adapter가 공유하는 redaction boundary
+= evidence truth 또는 decision truth가 아님
+```
+
+Export artifact 위치:
+
+```text
+.codefleet/runs/<runId>/exports/
+  sanitized-run-summary.json
+  summary.md
+  redaction-report.json
+  <exportAttemptId>.json
+```
+
+역할:
+
+```text
+sanitized-run-summary.json
+= run-summary.json에서 export 가능한 필드만 추린 structured derived artifact
+
+summary.md
+= 사람이 읽는 sanitized Markdown rendering
+= raw log / raw diff / secret / local absolute path를 포함하지 않음
+
+redaction-report.json
+= sanitizer가 어떤 입력을 어떤 rule로 제거/축약/상대화/해시했는지 기록
+= match가 없어도 count 0 summary를 남김
+
+<exportAttemptId>.json
+= target adapter, source refs/hash, sanitized refs/hash, result, external target reference를 기록
+= 외부 전송 성공/실패 evidence일 뿐 Run result 또는 Review Decision이 아님
+```
+
+SanitizedRunSummary 최소 필드:
+
+```yaml
+schemaVersion: "1.0"
+documentKind: "SANITIZED_RUN_SUMMARY"
+sanitizedSummaryId: ""
+runId: ""
+runSummaryRef:
+  path: ".codefleet/runs/<runId>/run-summary.json"
+  hash: ""
+reviewEvidenceBundleRef:
+  path: ""
+  hash: ""
+  unavailableReason: ""
+title: ""
+summary: ""
+result:
+  value: "DONE | FAILED | BLOCKED | CANCELED | UNKNOWN"
+  displayLabel: ""
+check:
+  observedCheck: "PASS | FAIL | SKIP | NONE"
+  verificationGateResult: "SATISFIED | NOT_SATISFIED | WAIVED_ALLOWED"
+changedFiles:
+  - path: "workspace-relative/path"
+    changeKind: "ADDED | MODIFIED | DELETED | RENAMED | UNKNOWN"
+verificationResults:
+  - commandLabel: ""
+    authority: "NONE | PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED | HARNESS_EXECUTED"
+    exitCode: null
+    passed: null
+decisions: []
+risks: []
+nextActions: []
+artifactRefs:
+  - kind: "run-summary | verification | review-bundle | local-artifact"
+    path: ".codefleet/runs/<runId>/..."
+    pathKind: "CODEFLEET_RELATIVE | WORKSPACE_RELATIVE"
+    exportable: true
+    hash: ""
+redactionReportRef:
+  path: ".codefleet/runs/<runId>/exports/redaction-report.json"
+  hash: ""
+createdAt: ""
+```
+
+redaction-report.json 최소 필드:
+
+```yaml
+schemaVersion: "1.0"
+documentKind: "REDACTION_REPORT"
+redactionReportId: ""
+runId: ""
+sourceRefs:
+  - path: ".codefleet/runs/<runId>/..."
+    pathKind: "CODEFLEET_RELATIVE | WORKSPACE_RELATIVE"
+    hash: ""
+rules:
+  - ruleId: ""
+    sourceFile: ".codefleet/runs/<runId>/..."
+    sourceFilePathKind: "CODEFLEET_RELATIVE | WORKSPACE_RELATIVE"
+    matchKind: "SECRET | TOKEN | RAW_LOG | RAW_DIFF | INTERNAL_URL | LOCAL_ABSOLUTE_PATH | ENV_DUMP | CUSTOM"
+    action: "REDACTED | DROPPED | RELATIVIZED | HASHED"
+    count: 0
+    severity: "INFO | WARNING | CORRUPTION"
+summary:
+  totalMatches: 0
+  blockedExport: false
+  blockedReasons: []
+createdAt: ""
+```
+
+exportAttempt 최소 필드:
+
+```yaml
+schemaVersion: "1.0"
+documentKind: "EXPORT_ATTEMPT"
+exportAttemptId: ""
+runId: ""
+target: "MARKDOWN | NOTION | DIARY | ISSUE | PR_COMMENT"
+sanitizedRunSummaryRef:
+  path: ".codefleet/runs/<runId>/exports/sanitized-run-summary.json"
+  hash: ""
+summaryMarkdownRef:
+  path: ".codefleet/runs/<runId>/exports/summary.md"
+  hash: ""
+redactionReportRef:
+  path: ".codefleet/runs/<runId>/exports/redaction-report.json"
+  hash: ""
+adapterPayloadRef:
+  path: ".codefleet/runs/<runId>/exports/<exportAttemptId>-payload.json"
+  pathKind: "CODEFLEET_RELATIVE"
+  hash: ""
+result: "EXPORTED | BLOCKED | FAILED | SKIPPED"
+externalRef:
+  type: "notion-page | markdown-file | issue-comment | pr-comment | none"
+  value: ""
+failureReason: ""
+createdAt: ""
+```
+
+Adapter별 field 제한:
+
+```text
+MARKDOWN / DIARY:
+- allowed: title, summary, result, check, changedFiles, verificationResults, decisions, risks, nextActions, artifactRefs, redaction summary
+- denied: raw stdout/stderr, raw git diff, env dump, secret match text, provider transcript 원문
+
+NOTION:
+- allowed: title, summary, compact outcome checklist, verification summary, decisions, risks, nextActions, workspace-relative artifact refs
+- denied: local absolute paths unless allowLocalPathExport == true, internal URLs unless allowPublicUrlExport == true, raw logs/diff/transcript
+
+ISSUE / PR_COMMENT:
+- allowed: problem/result summary, changed file names, verification status, follow-up actions, public-safe refs
+- denied: local run paths by default, internal hostnames by default, large evidence tables, raw command output
+```
+
+S5 규칙:
+
+```text
+- Export adapter input은 sanitized-run-summary.json 또는 summary.md뿐이다.
+- Export adapter는 run-summary.json, HarnessObservation, AdapterResult, raw stdout/stderr, raw diff를 직접 외부로 보내지 않는다.
+- summary.md는 항상 redaction-report.json과 같은 export set에서 생성된다.
+- redactionReport.summary.blockedExport == true이면 외부 export를 실행하지 않는다.
+- exportAttempt는 외부 전송 evidence이며, Run result / Review Decision / VERIFIED / Queue progression을 만들 수 없다.
+- 외부 전송 실패는 Run 실패가 아니다. 실패한 exportAttempt를 남기고 재시도할 수 있다.
+- Carry-forward에 붙일 수 있는 것은 sanitized summary뿐이며, raw Run Trace Evidence는 attach할 수 없다.
+- adapter별 출력 schema는 target별 allowlist보다 넓어질 수 없다.
+- sanitized artifact path fields are CODEFLEET_RELATIVE or WORKSPACE_RELATIVE only.
+- adapterPayloadRef is CODEFLEET_RELATIVE local evidence and is never copied into external payload as a local path.
+- external payload must not contain local absolute paths. If allowLocalPathExport is true, the exported value must still be explicitly marked as public-safe or relativized.
+- redaction-report sourceRefs may point to local evidence for audit, but exported adapter payload may include only redaction summary counts and blocked reasons.
+```
+
+```text
+ruleId: S5_EXPORT_SEAM_USES_SANITIZED_SUMMARY_ONLY
+status: FINAL
+scope: EXPORT
+sourceOfTruth:
+- run-summary.json
+- Project Profile redaction policy
+- redaction-report.json
+- sanitized-run-summary.json
+- summary.md
+- exportAttempt artifact
+inputs:
+- runSummaryRef
+- ReviewEvidenceBundle ref when available
+- redaction policy
+- export target
+- adapter field allowlist
+condition:
+- sanitized-run-summary.json is created from run-summary.json with forbidden content removed
+- summary.md is created from sanitized-run-summary.json
+- redaction-report.json records all redaction, drop, relativize, and hash actions
+- export adapters consume only sanitized artifacts
+- blocked redaction prevents external transmission
+deniedEffect:
+- S5 must not export raw Run Trace Evidence
+- S5 must not export provider transcript raw text
+- S5 must not turn export success into Review Decision or VERIFIED
+- S5 must not widen target adapter field allowlist at runtime
+failureFinding:
+- category = EXECUTION_EVIDENCE_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- regenerate sanitized artifacts from run-summary.json after policy correction
+- retry export by creating a new exportAttempt
+- block external export until redactionReport passes
+```
+
 장기 구조:
 
 ```text
@@ -11853,48 +12398,31 @@ v0.1 구현 내용:
 - run-summary.json / VerificationEvidence / local review artifact layout과 final migration boundary
 - 최소 CLI flow는 v0.2 shorthand와 final internal boundary를 분리한다는 원칙
 - SPINE 한 바퀴 수동 검증은 durable artifact refs/hash 기반 evidence checklist라는 원칙
+- S5 Export seam은 sanitized-run-summary.json / summary.md / redaction-report.json / exportAttempt만 외부 adapter 입력으로 사용한다는 원칙
+- Project Profile defaults.run.isolationMode와 policies block internal schema는 portable policy source로 고정한다는 원칙
 ```
 
 다음으로 논의할 항목:
 
 ```text
-1. S5 Run Summary / Export seam
-   - summary.md 자동 생성
-   - adapter별 필드 제한
-   - redactionReport 출력 형식
-
-2. Project Profile defaults block 세부 스키마
-   - defaults.run.isolationMode
-
-3. Project Profile policy block 세부 스키마
-   - harness policy
-   - agentAdapters policy
-   - files policy
-   - commands policy
-   - risk policy
-   - verification policy
-   - redaction policy
-   - carryForward policy
-   - agentRoles policy
-
-4. Harness enforcement 상세 정의
+1. Harness enforcement 상세 정의
    - Draft Harness discovery budget 기본값
    - Execution Harness isolationMode
    - Command-policy Harness
    - Sandbox-level Harness
 
-5. AgentRole / Guardrail taxonomy
+2. AgentRole / Guardrail taxonomy
    - allowedAgentRoles
    - role별 기본 권한
    - destructive command taxonomy
 
-6. Verification 실행 정책 구현
+3. Verification 실행 정책 구현
    - v0.2 prompt-only degraded evidence 처리
    - Harness-executed verification command 실행
    - VerificationEvidence artifact 구현
    - observedCheck / verificationGateResult 계산 구현
 
-7. Workspace discovery
+4. Workspace discovery
    - 현재 cwd 기준
    - 부모 디렉터리 탐색
    - 명시적 --workspace 옵션
