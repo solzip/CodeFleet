@@ -127,14 +127,14 @@ S4  Review seam     ◆    Run 결과 ─▶ 사람 수용/거절 기록 ─▶ 
     고정: ReviewEvidenceBundle 위치는 .codefleet/reviews/<reviewDecisionId>/
     고정: latest effective review는 ledger order + valid actor/bundle + not invalidated
     고정: ACCEPTED / REJECTED / NEEDS_CHANGES, RETRY는 새 Run reason
-    빈칸: v0.2 manual review artifact, UI/CLI flow, ledger implementation
+    빈칸: ledger implementation
 
 S5  Export seam           Run Trace ─▶ Run Summary(sanitized) ─▶ Notion / 일지 / Issue
     상태: 🟡  (필드/sanitization 규칙 O, adapter별 출력 미정)
     빈칸: summary.md 자동 생성, 대상별 필드 제한, redactionReport 출력 형식
 ```
 
-핵심: **S1(Task Revision 최소 계약), S2(Adapter), S3(Verification), S4(Review)의 최소 계약은 고정됐다.** 다음 병목은 이 계약들을 v0.2 artifact layout과 CLI flow로 묶어 한 바퀴를 수동 검증하는 것이다.
+핵심: **S1(Task Revision 최소 계약), S2(Adapter), S3(Verification), S4(Review)의 최소 계약, 최소 CLI flow, SPINE 수동 검증 계약은 고정됐다.** 다음 병목은 S5 Export seam을 닫는 것이다.
 
 ---
 
@@ -236,8 +236,8 @@ S1은 `Task Revision minimum contract`, S2는 `AdapterRequest -> AgentAdapter ->
 ## 다음에 할 일 (이 지도 기준)
 
 ```text
-1. run-summary.json / verification evidence / local review artifact layout 정리   ← 다음 병목
-2. 최소 CLI flow 정리
-3. 위 항목으로 SPINE 한 바퀴 수동 검증
+1. S5 Run Summary / Export seam 정리   ← 다음 병목
+2. Project Profile defaults / policy block 세부 스키마
+3. Harness enforcement 상세 정의
 4. 그 다음 GUARDS를 한 겹씩 덧댐
 ```

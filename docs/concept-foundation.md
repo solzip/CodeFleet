@@ -5123,6 +5123,575 @@ repairBehavior:
 - rebuild derived snapshots from authoritative inputs
 ```
 
+Run summary / verification / local review layout:
+
+```text
+Goal:
+make a Run resumable and reviewable from durable artifacts without letting any
+derived file replace the source / evidence / decision layer that owns truth.
+```
+
+`run-summary.json` is the normalized derived execution summary for one Run. It is
+created after `adapter-request.json`, `harness-observation.json`, and
+`adapter-result.json` exist, and after required verification evidence is either
+created or explicitly unavailable.
+
+`run-summary.json` minimum fields:
+
+```yaml
+schemaVersion: "1.0"
+documentKind: "RUN_SUMMARY"
+runSummaryId: ""
+runId: ""
+runPlanRef:
+  path: ".codefleet/runs/<runId>/run-plan.json"
+  hash: ""
+adapterRequestRef:
+  path: ".codefleet/runs/<runId>/adapter-request.json"
+  hash: ""
+harnessObservationRef:
+  path: ".codefleet/runs/<runId>/harness-observation.json"
+  hash: ""
+adapterResultRef:
+  path: ".codefleet/runs/<runId>/adapter-result.json"
+  hash: ""
+verificationEvidenceRefs:
+  - verificationAttemptId: "verify-001"
+    path: ".codefleet/runs/<runId>/verification/verify-001.json"
+    hash: ""
+normalization:
+  status: "COMPLETE | PARTIAL | BLOCKED"
+  unavailableReasons: []
+result:
+  value: "DONE | FAILED | BLOCKED | CANCELED | UNKNOWN"
+  derivedFrom: []
+check:
+  observedCheck: "PASS | FAIL | SKIP | NONE"
+  verificationGateResult: "SATISFIED | NOT_SATISFIED | WAIVED_ALLOWED"
+  derivedFromVerificationAttemptIds: []
+evidenceAuthority:
+  commandEvidenceAuthority: "NONE | PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED | HARNESS_EXECUTED"
+  changedFilesAuthority: "NONE | PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED"
+policy:
+  computedRisk: "LOW | MEDIUM | HIGH | UNKNOWN"
+  pathViolationSummary:
+    hasViolation: false
+    violationRefs: []
+  commandViolationSummary:
+    hasViolation: false
+    violationRefs: []
+  capabilityViolationSummary:
+    hasViolation: false
+    violationRefs: []
+artifacts:
+  changedFilesRef:
+    path: ""
+    hash: ""
+    unavailableReason: ""
+  diffRef:
+    path: ""
+    hash: ""
+    unavailableReason: ""
+  stdoutRef:
+    path: ""
+    hash: ""
+    unavailableReason: ""
+  stderrRef:
+    path: ""
+    hash: ""
+    unavailableReason: ""
+createdAt: ""
+```
+
+Run Summary rules:
+
+```text
+- Run Summary is derived, not source truth.
+- Run Summary does not create Review Decision, VERIFIED, QueueState, or Objective progress by itself.
+- Run Summary must retain refs and hashes for the artifacts used to calculate each normalized field.
+- Run Summary may be rebuilt from AdapterRequest, HarnessObservation, AdapterResult, and VerificationEvidence.
+- fields that require missing Harness evidence must be UNKNOWN, PARTIAL, BLOCKED, or unavailable; they must not be inferred from provider claims.
+- provider-reported command / diff / verification data may be recorded as degraded evidence, but it must not raise evidence authority to HARNESS_OBSERVED or HARNESS_EXECUTED.
+```
+
+`VerificationEvidence` attempt layout:
+
+```text
+Path:
+.codefleet/runs/<runId>/verification/<verificationAttemptId>.json
+
+Attempt id:
+verify-001, verify-002, ...
+
+Hash:
+verificationEvidenceHash = content hash of the canonical VerificationEvidence artifact.
+```
+
+`VerificationEvidence` minimum fields:
+
+```yaml
+schemaVersion: "1.0"
+documentKind: "VERIFICATION_EVIDENCE"
+verificationAttemptId: "verify-001"
+runId: ""
+runPlanRef:
+  path: ".codefleet/runs/<runId>/run-plan.json"
+  hash: ""
+verificationPlanRef:
+  path: ".codefleet/runs/<runId>/run-plan.json#verificationPlan"
+  hash: ""
+attemptNumber: 1
+authority: "NONE | PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED | HARNESS_EXECUTED | WAIVED_BY_POLICY"
+requiredByGate: false
+commandEvidence:
+  commandId: ""
+  command: []
+  cwd: ""
+  exitCode: null
+  startedAt: ""
+  endedAt: ""
+  stdoutRef:
+    path: ""
+    hash: ""
+  stderrRef:
+    path: ""
+    hash: ""
+providerReportedVerificationRef:
+  path: ""
+  hash: ""
+  unavailableReason: ""
+observedCheck: "PASS | FAIL | SKIP | NONE"
+verificationGateResult: "SATISFIED | NOT_SATISFIED | WAIVED_ALLOWED"
+unavailableReason: ""
+waiver:
+  allowed: false
+  policyRef:
+    path: ""
+    hash: ""
+  reason: ""
+policyViolations: []
+createdAt: ""
+```
+
+VerificationEvidence rules:
+
+```text
+- If verification is required, the Harness creates a VerificationEvidence artifact even when no command could be run.
+- Missing verification execution is represented by authority NONE, observedCheck SKIP or NONE, and unavailableReason.
+- providerReportedVerificationRef is allowed as degraded evidence, but cannot produce observedCheck PASS.
+- observedCheck PASS requires HARNESS_EXECUTED or sufficiently trustworthy HARNESS_OBSERVED evidence with a passing required check.
+- verificationGateResult SATISFIED requires observedCheck PASS for required verification.
+- verificationGateResult WAIVED_ALLOWED requires an explicit policy waiver and normally pairs with observedCheck SKIP.
+- command policy violation prevents that attempt from being a PASS source.
+- The latest or effective verification attempt is selected by Run Summary policy; old attempts are not edited.
+```
+
+`review-decision.local.json` is v0.2-only migration input. It exists only when
+the Objective ledger `RUN_REVIEW_DECIDED` event is not implemented for that path.
+It must be shaped so the final ledger event can be created later without treating
+the local file as final decision truth.
+
+`review-decision.local.json` minimum fields:
+
+```yaml
+schemaVersion: "1.0"
+documentKind: "LOCAL_REVIEW_DECISION"
+finalDecisionTruth: false
+migrationTarget: "RUN_REVIEW_DECIDED"
+localReviewId: ""
+reviewDecisionId: ""
+runId: ""
+objectiveQueueItemId: ""
+taskId: ""
+taskRevision: 1
+decision: "ACCEPTED | REJECTED | NEEDS_CHANGES"
+actorKind: "HUMAN | SYSTEM_POLICY | AGENT_REVIEWER"
+actorId: ""
+decisionBasis: ""
+reason: ""
+runSummaryRef:
+  path: ".codefleet/runs/<runId>/run-summary.json"
+  hash: ""
+reviewEvidenceBundleRef:
+  path: ".codefleet/reviews/<reviewDecisionId>/evidence-bundle.json"
+  hash: ""
+observedResultSnapshot: "DONE | FAILED | BLOCKED | CANCELED | UNKNOWN"
+observedCheckSnapshot: "PASS | FAIL | SKIP | NONE"
+verificationGateResult: "SATISFIED | NOT_SATISFIED | WAIVED_ALLOWED"
+computedRisk: "LOW | MEDIUM | HIGH | UNKNOWN"
+pathViolationSummary:
+  hasViolation: false
+  violationRefs: []
+supersedesLocalReviewId: ""
+createdAt: ""
+```
+
+Local review rules:
+
+```text
+- review-decision.local.json cannot calculate VERIFIED by itself.
+- review-decision.local.json cannot progress the queue by itself.
+- review-decision.local.json must reference the Run Summary and ReviewEvidenceBundle it was based on.
+- review-decision.local.json must be replaced by a RUN_REVIEW_DECIDED ledger event during final migration.
+- migrated RUN_REVIEW_DECIDED must retain or supersede reviewDecisionId and reviewEvidenceBundleHash.
+```
+
+```text
+ruleId: RUN_SUMMARY_VERIFICATION_AND_LOCAL_REVIEW_LAYOUT_FIXED
+status: FINAL
+scope: RUN_ARTIFACTS
+sourceOfTruth:
+- .codefleet/runs/<runId>/adapter-request.json
+- .codefleet/runs/<runId>/harness-observation.json
+- .codefleet/runs/<runId>/adapter-result.json
+- .codefleet/runs/<runId>/verification/<verificationAttemptId>.json
+- .codefleet/reviews/<reviewDecisionId>/evidence-bundle.json
+- Objective ledger RUN_REVIEW_DECIDED event
+inputs:
+- runPlanRef
+- adapterRequestRef
+- harnessObservationRef
+- adapterResultRef
+- verificationEvidenceRefs
+- runSummaryRef
+- reviewEvidenceBundleRef
+condition:
+- run-summary.json contains normalized execution fields plus refs/hash for its evidence inputs
+- VerificationEvidence attempt ids are monotonic within a Run
+- VerificationEvidence hash is the canonical content hash of the attempt artifact
+- local review artifact is explicitly marked finalDecisionTruth false
+- local review artifact contains migrationTarget RUN_REVIEW_DECIDED
+deniedEffect:
+- Run Summary cannot replace Run Trace Evidence
+- VerificationEvidence cannot be replaced by provider-reported verification
+- local review artifact cannot replace RUN_REVIEW_DECIDED
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- rebuild Run Summary from durable evidence when possible
+- create missing VerificationEvidence with unavailableReason when required verification reached an immutable boundary
+- migrate local review artifact into RUN_REVIEW_DECIDED when Objective ledger support exists
+```
+
+Minimum CLI flow contract:
+
+```text
+Goal:
+v0.2 can expose a short manual workflow, but the internal durable boundaries
+must remain the final model boundaries. A shorthand command may orchestrate
+multiple boundaries, but it must not merge their ownership or truth sources.
+```
+
+v0.2 user-facing manual workflow:
+
+```text
+codefleet task validate <taskId>
+codefleet run <taskId | taskRevisionRef>
+codefleet verify <runId>
+codefleet review <runId>
+```
+
+Final internal boundary workflow:
+
+```text
+codefleet task validate <taskId>
+-> validates Task Revision as an executable source contract
+
+codefleet run plan <taskId | taskRevisionRef>
+-> writes .codefleet/runs/<runId>/run-plan.json
+
+codefleet run execute <runId>
+-> writes .codefleet/runs/<runId>/adapter-request.json
+-> writes .codefleet/runs/<runId>/harness-observation.json
+-> writes .codefleet/runs/<runId>/adapter-result.json or synthetic AdapterResult
+
+codefleet run verify <runId>
+-> writes .codefleet/runs/<runId>/verification/<verificationAttemptId>.json
+
+codefleet run summarize <runId>
+-> writes .codefleet/runs/<runId>/run-summary.json
+
+codefleet review decide <runId>
+-> writes .codefleet/reviews/<reviewDecisionId>/evidence-bundle.json
+-> final: appends RUN_REVIEW_DECIDED to Objective ledger
+-> v0.2: writes .codefleet/runs/<runId>/review-decision.local.json
+
+codefleet objective status <objectiveId>
+-> reads ledgers, task revisions, run artifacts, verification evidence, and review decisions
+-> prints derived state without writing decision truth
+
+codefleet objective reconcile <objectiveId>
+-> rebuilds derived snapshots from authoritative ledgers and artifacts
+-> must not invent missing decision or evidence truth
+```
+
+v0.2 shorthand expansion:
+
+```text
+codefleet run
+= run plan + run execute
+
+codefleet verify
+= run verify + run summarize
+
+codefleet review
+= review decide
+```
+
+CLI boundary rules:
+
+```text
+- A shorthand command must persist each final boundary artifact separately.
+- A failed shorthand command resumes from the latest complete durable boundary, not from provider text.
+- `run plan` freezes policy, risk, selected adapter, verificationPlan, and artifactPlan before adapter execution.
+- `run execute` cannot run without an existing run-plan.json hash.
+- `run execute` owns AdapterRequest / HarnessObservation / AdapterResult creation, not Review Decision.
+- `run verify` owns VerificationEvidence creation, not Run Summary final decision state.
+- `run summarize` owns normalized derived fields, not queue progression.
+- `review decide` owns ReviewEvidenceBundle and Review Decision creation, not Run Trace mutation.
+- `objective status` is read-only derived interpretation.
+- `objective reconcile` may rebuild derived snapshots, but cannot create missing evidence or decision events.
+- No CLI command may widen effectivePolicy or Local Overlay permissions during resume.
+```
+
+Minimum CLI smoke path before full manual SPINE validation:
+
+```text
+1. Task Revision exists and `codefleet task validate` accepts it.
+2. `codefleet run` creates run-plan.json and S2 Run Trace artifacts.
+3. `codefleet verify` creates VerificationEvidence and run-summary.json.
+4. `codefleet review` creates ReviewEvidenceBundle and v0.2 local review artifact or final RUN_REVIEW_DECIDED.
+5. `codefleet objective status` can derive VERIFIED only from effective Review Decision plus satisfied or waived verification gate.
+```
+
+```text
+ruleId: MINIMUM_CLI_FLOW_PRESERVES_FINAL_BOUNDARIES
+status: FINAL
+scope: CLI
+sourceOfTruth:
+- Task Revision
+- run-plan.json
+- AdapterRequest
+- HarnessObservation
+- AdapterResult
+- VerificationEvidence
+- run-summary.json
+- ReviewEvidenceBundle
+- Objective ledger RUN_REVIEW_DECIDED event
+inputs:
+- command name
+- taskId or taskRevisionRef
+- runId
+- objectiveId
+- effectivePolicy
+- existing durable artifacts
+condition:
+- v0.2 shorthand commands expand into final internal boundaries
+- each internal boundary leaves its own durable artifact or explicit blocked evidence
+- CLI resume starts from the latest complete durable boundary
+- review and objective status read normalized evidence but do not mutate Run Trace
+deniedEffect:
+- codefleet run must not skip run-plan.json
+- codefleet verify must not create observedCheck PASS from provider-reported verification alone
+- codefleet review must not replace RUN_REVIEW_DECIDED with review-decision.local.json in the final model
+- codefleet objective status must not append decisions
+- codefleet objective reconcile must not invent evidence
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- rerun the missing internal boundary when still mutable
+- create explicit unavailable / blocked evidence when an immutable boundary was reached
+- require a new Run or new Review Decision when evidence or decision truth cannot be repaired deterministically
+```
+
+Manual SPINE pass contract:
+
+```text
+Goal:
+prove that the S1 -> S2 -> S3 -> S4 goal loop can be walked once from durable
+artifacts, and that VERIFIED is derived only when the final model allows it.
+```
+
+The manual SPINE pass is not a demo transcript. It is an evidence checklist. A
+pass means CodeFleet can explain every state transition from durable artifacts
+and can refuse unsafe progression when evidence is degraded or missing.
+
+Required fixture:
+
+```text
+- .codefleet/config.json exists
+- Task Revision exists and is immutable
+- Task Revision references scope / guardrails / doneCriteria / verification expectations
+- Objective or v0.2 objective placeholder identifies objectiveQueueItemId
+- local workspace can resolve workspaceRoot and metadataRoot
+```
+
+Manual pass steps:
+
+```text
+1. Validate Task Revision
+   command: codefleet task validate <taskId>
+   required evidence:
+   - Task Revision path and hash
+   - Project Profile path and hash
+   - validation result
+   pass condition:
+   - Task Revision is executable as a source contract
+
+2. Plan Run
+   command: codefleet run plan <taskId | taskRevisionRef>
+   required artifact:
+   - .codefleet/runs/<runId>/run-plan.json
+   pass condition:
+   - run-plan.json freezes sourceRefs, effectivePolicy, computedRisk, selectedAgentAdapter, verificationPlan, artifactPlan, and resume boundary
+
+3. Execute Run
+   command: codefleet run execute <runId>
+   required artifacts:
+   - .codefleet/runs/<runId>/adapter-request.json
+   - .codefleet/runs/<runId>/harness-observation.json
+   - .codefleet/runs/<runId>/adapter-result.json or synthetic AdapterResult
+   pass condition:
+   - AdapterRequest exists before AgentAdapter execution
+   - HarnessObservation records changed-files / command / violation truth or explicit unavailableReason
+   - AdapterResult is evidence input only and does not decide final state
+
+4. Verify Run
+   command: codefleet run verify <runId>
+   required artifact:
+   - .codefleet/runs/<runId>/verification/<verificationAttemptId>.json
+   pass condition:
+   - observedCheck and verificationGateResult are derived from Harness-owned VerificationEvidence
+   - provider-reported verification alone cannot produce observedCheck PASS
+
+5. Summarize Run
+   command: codefleet run summarize <runId>
+   required artifact:
+   - .codefleet/runs/<runId>/run-summary.json
+   pass condition:
+   - Run Summary references run-plan, AdapterRequest, HarnessObservation, AdapterResult, and VerificationEvidence by path and hash
+   - Run Summary does not create Review Decision, QueueState, or VERIFIED
+
+6. Decide Review
+   command: codefleet review decide <runId>
+   required artifacts:
+   - .codefleet/reviews/<reviewDecisionId>/evidence-bundle.json
+   - final: RUN_REVIEW_DECIDED in Objective ledger
+   - v0.2: .codefleet/runs/<runId>/review-decision.local.json
+   pass condition:
+   - ReviewEvidenceBundle freezes the evidence refs/hash used for decision
+   - local review artifact is marked finalDecisionTruth false when ledger is absent
+
+7. Derive Objective Status
+   command: codefleet objective status <objectiveId>
+   required behavior:
+   - reads Task Revision, Run artifacts, VerificationEvidence, Run Summary, ReviewEvidenceBundle, and Review Decision
+   - derives VERIFIED only from effective ACCEPTED review plus SATISFIED or WAIVED_ALLOWED verification gate
+   - does not append decisions or mutate Run Trace
+```
+
+Positive pass:
+
+```text
+VERIFIED can be derived when:
+- Task Revision hash matches the Run Plan sourceRefs
+- Run Summary result is successful according to Run Summary policy
+- latest effective ledger-backed Review Decision is ACCEPTED
+- ReviewEvidenceBundle exists and hash-valid
+- verificationGateResult is SATISFIED or WAIVED_ALLOWED
+- no blocking policy / path / command violation remains
+```
+
+Negative pass:
+
+```text
+The manual SPINE pass is still successful when CodeFleet correctly refuses
+VERIFIED because:
+- VerificationEvidence is PROVIDER_REPORTED_ONLY
+- required verification has observedCheck SKIP or NONE without valid waiver
+- ReviewEvidenceBundle is missing or hash-invalid
+- review-decision.local.json exists but final ledger decision is required
+- Run Summary is missing required refs/hash
+- path or command violation blocks acceptance
+```
+
+v0.2 local migration pass:
+
+```text
+v0.2 may complete a local migration-ready pass with review-decision.local.json
+instead of RUN_REVIEW_DECIDED only if:
+- finalDecisionTruth is false
+- migrationTarget is RUN_REVIEW_DECIDED
+- ReviewEvidenceBundle is created and hash-valid
+- objective status labels the decision as local migration input, not final ledger truth
+- objective status does not derive final VERIFIED from the local artifact
+```
+
+v0.2 degraded local pass:
+
+```text
+If ReviewEvidenceBundle cannot be created, v0.2 may still record explicit
+unavailableReason for audit and resume, but that is a degraded negative pass:
+- it cannot be used as acceptance evidence
+- it cannot produce VERIFIED
+- it must require a later ReviewEvidenceBundle or RUN_REVIEW_DECIDED repair before final migration
+```
+
+Manual evidence checklist:
+
+```text
+- Task Revision path/hash
+- Project Profile path/hash
+- run-plan.json path/hash
+- adapter-request.json path/hash
+- harness-observation.json path/hash
+- adapter-result.json path/hash
+- verification/<verificationAttemptId>.json path/hash
+- run-summary.json path/hash
+- ReviewEvidenceBundle path/hash
+- RUN_REVIEW_DECIDED event id or review-decision.local.json path/hash
+- derived status output showing VERIFIED or the exact refusal reason
+```
+
+```text
+ruleId: MANUAL_SPINE_PASS_IS_EVIDENCE_CHECKLIST
+status: FINAL
+scope: SPINE_VALIDATION
+sourceOfTruth:
+- Project Profile
+- Task Revision
+- run-plan.json
+- Run Trace Evidence
+- VerificationEvidence
+- run-summary.json
+- ReviewEvidenceBundle
+- Objective ledger RUN_REVIEW_DECIDED event
+inputs:
+- manual CLI commands
+- durable artifact paths
+- durable artifact hashes
+- derived objective status output
+condition:
+- every S1/S2/S3/S4 boundary is represented by a durable artifact or explicit unavailableReason
+- every derived state is explainable from refs/hash
+- VERIFIED is derived only from effective review plus satisfied or waived verification gate
+- unsafe or degraded evidence produces a deterministic refusal reason
+deniedEffect:
+- manual pass must not treat provider transcript as Harness truth
+- manual pass must not treat Run Summary as Review Decision
+- manual pass must not treat review-decision.local.json as final ledger truth
+- manual pass must not pass by visual inspection alone
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- rerun the missing internal CLI boundary when mutable
+- create explicit unavailableReason when evidence is permanently unavailable
+- create a new Run or Review Decision when immutable evidence or decision truth is invalid
+```
+
 ## 5. Project Profile
 
 Project Profile은 `.codefleet/config.json`에 저장되는 공유 가능한 Workspace Policy Contract다.
@@ -11281,33 +11850,23 @@ v0.1 구현 내용:
 - Project/Profile, Objective, Task, Run Plan, Run Trace, Verification, Review artifact는 서로 대체하지 않는다는 원칙
 - run-plan.json 최소 필드와 immutable resume boundary 원칙
 - AdapterRequest / HarnessObservation / AdapterResult 최소 artifact layout과 필수 생성 조건
+- run-summary.json / VerificationEvidence / local review artifact layout과 final migration boundary
+- 최소 CLI flow는 v0.2 shorthand와 final internal boundary를 분리한다는 원칙
+- SPINE 한 바퀴 수동 검증은 durable artifact refs/hash 기반 evidence checklist라는 원칙
 ```
 
 다음으로 논의할 항목:
 
 ```text
-1. run-summary.json / verification evidence / local review artifact layout
-   - Run Summary normalization output
-   - VerificationEvidence attempt naming / hash
-   - local review artifact와 RUN_REVIEW_DECIDED migration path
+1. S5 Run Summary / Export seam
+   - summary.md 자동 생성
+   - adapter별 필드 제한
+   - redactionReport 출력 형식
 
-2. 최소 CLI flow
-   - codefleet task validate
-   - codefleet run
-   - codefleet verify
-   - codefleet review
-
-3. SPINE 한 바퀴 수동 검증
-   - Draft 또는 수동 Task Revision
-   - Adapter Run
-   - VerificationEvidence
-   - Review Decision
-   - VERIFIED 계산
-
-4. Project Profile defaults block 세부 스키마
+2. Project Profile defaults block 세부 스키마
    - defaults.run.isolationMode
 
-5. Project Profile policy block 세부 스키마
+3. Project Profile policy block 세부 스키마
    - harness policy
    - agentAdapters policy
    - files policy
@@ -11318,29 +11877,24 @@ v0.1 구현 내용:
    - carryForward policy
    - agentRoles policy
 
-6. Harness enforcement 상세 정의
+4. Harness enforcement 상세 정의
    - Draft Harness discovery budget 기본값
    - Execution Harness isolationMode
    - Command-policy Harness
    - Sandbox-level Harness
 
-7. AgentRole / Guardrail taxonomy
+5. AgentRole / Guardrail taxonomy
    - allowedAgentRoles
    - role별 기본 권한
    - destructive command taxonomy
 
-8. Verification 실행 정책 구현
+6. Verification 실행 정책 구현
    - v0.2 prompt-only degraded evidence 처리
    - Harness-executed verification command 실행
    - VerificationEvidence artifact 구현
    - observedCheck / verificationGateResult 계산 구현
 
-9. Run Summary export adapter
-   - summary.md 자동 생성
-   - adapter별 필드 제한
-   - redactionReport 출력 형식
-
-10. Workspace discovery
+7. Workspace discovery
    - 현재 cwd 기준
    - 부모 디렉터리 탐색
    - 명시적 --workspace 옵션

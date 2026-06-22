@@ -31,7 +31,7 @@
 - 사람이나 LLM의 감, 추론, 추측으로 판정하지 않는다.
 - 아직 확정되지 않은 내용은 DESIGN CANDIDATE 또는 VERSION_PLAN으로 분리한다.
 
-바로 다음 논의 주제는 run-summary.json / VerificationEvidence / local review artifact layout이다.
+바로 다음 논의 주제는 S5 Run Summary / Export seam이다.
 ```
 
 ## 제품 정의
@@ -134,7 +134,7 @@ AI-native 개발 오케스트레이션 CLI다.
 - 큰 설계 틀이 확정될 때마다 architecture snapshot 이미지를 생성해 `docs/assets/`에 저장하고, 문서에서 참조한다.
 - `docs/final-model-architecture.md`는 architecture snapshot을 읽는 방법과 각 layer의 책임을 설명한다.
 - Local Overlay는 `.codefleet/local.json`이며 `RESTRICT_ONLY`로만 병합된다.
-- 목표 루프 기준 우선순위는 S2 Adapter seam -> S4 Review record -> S3 Verification seam -> S1 Task Spec 최소 schema -> run-plan.json -> S2 artifact layout 순서로 먼저 고정했고, 현재 다음 병목은 run-summary.json / VerificationEvidence / local review artifact layout이다.
+- 목표 루프 기준 우선순위는 S2 Adapter seam -> S4 Review record -> S3 Verification seam -> S1 Task Spec 최소 schema -> run-plan.json -> S2 artifact layout -> run-summary/verification/local review artifact layout -> 최소 CLI flow -> SPINE 수동 검증 계약 순서로 먼저 고정했고, 현재 다음 병목은 S5 Run Summary / Export seam이다.
 - S2 Adapter seam 최종 계약은 `AdapterRequest -> AgentAdapter -> AdapterResult`로 고정했다.
 - AdapterRequest와 AdapterResult는 provider-agnostic Run Trace Evidence artifact이며, adapter output은 evidence이지 final decision이 아니다.
 - Codex adapter는 최종 아키텍처 자체가 아니라 S2 최종 계약 아래의 첫 concrete transport 구현으로 취급한다.
@@ -187,6 +187,9 @@ AI-native 개발 오케스트레이션 CLI다.
 - 다른 로컬에서 resume할 때 Task Revision hash와 Project Profile hash는 일치해야 하며, Local Overlay와 adapter availability는 같은 Run Plan 기준으로 재검증한다. 재검증은 권한을 넓힐 수 없다.
 - AdapterRequest / HarnessObservation / AdapterResult 최소 artifact layout을 고정했다. AdapterRequest는 AgentAdapter 실행 전 존재해야 하고, HarnessObservation은 AdapterRequest 생성에 도달한 모든 Run attempt에 존재해야 하며, AdapterResult는 structured 또는 synthetic으로 존재해야 한다.
 - HarnessObservation의 일부 evidence가 없으면 artifact를 생략하지 않고 unavailableReason을 기록한다. AdapterResult provider-reported observations는 degraded evidence다.
+- run-summary.json / VerificationEvidence / local review artifact layout을 고정했다. Run Summary는 refs/hash를 가진 derived execution summary이고, VerificationEvidence attempt id는 `verify-001`, `verify-002`처럼 Run 안에서 단조 증가하며, review-decision.local.json은 `finalDecisionTruth: false`와 `migrationTarget: RUN_REVIEW_DECIDED`를 가진 v0.2 migration input이다.
+- 최소 CLI flow를 고정했다. v0.2 사용자-facing 명령은 `codefleet task validate`, `codefleet run`, `codefleet verify`, `codefleet review`로 짧게 유지하되, 내부 boundary는 `run plan`, `run execute`, `run verify`, `run summarize`, `review decide`, `objective status/reconcile`로 분리한다.
+- SPINE 한 바퀴 수동 검증 계약을 고정했다. 수동 검증은 데모 transcript가 아니라 durable artifact refs/hash 기반 evidence checklist이며, positive pass는 ledger-backed Review Decision으로 VERIFIED를 정당하게 계산하는 경우이고 negative pass는 degraded/missing evidence에서 VERIFIED를 올바르게 거부하는 경우다. v0.2 local review는 migration-ready pass일 수 있지만 final VERIFIED 근거가 아니다.
 - 프로젝트/목표 진행 방향은 `.codefleet/objectives/<objectiveId>/ledger.jsonl`과 `objective.json`이 담당한다.
 - durable file은 lifecycle 단계에 도달하면 반드시 남아야 한다. 단, durable은 반드시 git commit된다는 뜻이 아니며 공유 / redaction / export 정책은 별도다.
 ```
@@ -238,7 +241,7 @@ same workspace state
 다음 논의 주제:
 
 ```text
-run-summary.json / VerificationEvidence / local review artifact layout
+S5 Run Summary / Export seam
 ```
 
 이유:
@@ -258,10 +261,12 @@ v0.2 prompt-only verification은 final 계약 아래의 VERSION_PLAN이고, Harn
 S1 Task Spec 최소 schema도 고정했다. Task Revision은 source-only immutable execution contract이고, Run Plan / AdapterRequest / VerificationEvidence / ReviewEvidenceBundle의 공통 입력이다.
 Durable file map도 고정했다. 프로젝트 정책은 `.codefleet/config.json`, 프로젝트/목표 진행 방향은 `.codefleet/objectives/<objectiveId>/ledger.jsonl`과 `objective.json`, 개별 작업 계약은 Task Revision, 개별 실행 계획은 `run-plan.json`, 실행 증거는 Run Trace Evidence, 정규화 요약은 `run-summary.json`, 검토 판단 context는 ReviewEvidenceBundle이 담당한다.
 run-plan.json 최소 필드와 resume boundary도 고정했다.
-AdapterRequest / HarnessObservation / AdapterResult 최소 artifact layout도 고정했다. 다음 병목은 run-summary.json / VerificationEvidence / local review artifact layout이다.
+AdapterRequest / HarnessObservation / AdapterResult 최소 artifact layout도 고정했다.
+run-summary.json / VerificationEvidence / local review artifact layout도 고정했다.
+최소 CLI flow도 고정했다. v0.2 shorthand는 final internal boundary를 보존해야 한다.
+SPINE 한 바퀴 수동 검증 계약도 고정했다. 다음 병목은 S5 Run Summary / Export seam이다.
 
-- run-summary.json / VerificationEvidence / local review artifact layout
-- 한 바퀴 수동 검증에 필요한 최소 CLI flow
+- S5 Run Summary / Export seam
 ```
 
 현재 확정한 Project Profile 구조:
@@ -336,16 +341,14 @@ repairBehavior
 목표 루프 기준 남은 우선순위:
 
 ```text
-1. run-summary.json / verification evidence / local review artifact layout
-2. 최소 CLI flow
-3. SPINE 한 바퀴 수동 검증
-4. S5 Run Summary / Export seam
-5. defaults.run.isolationMode
-6. policy block internal schema
-7. Harness enforcement details
-8. AgentRole / Guardrail taxonomy
-9. Workspace discovery
-10. v0.1 / v0.2 / final implementation slicing
+1. S5 Run Summary / Export seam
+2. defaults.run.isolationMode
+3. policy block internal schema
+4. Harness enforcement details
+5. AgentRole / Guardrail taxonomy
+6. Verification 실행 정책 구현
+7. Workspace discovery
+8. v0.1 / v0.2 / final implementation slicing
 ```
 
 ## 저장소 메모
