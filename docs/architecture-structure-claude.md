@@ -9,7 +9,7 @@
 
 ```text
 상태:  ✅ RUNS(돌 만큼 정의)   🟡 SHAPED(규칙만)   ⬜ EMPTY(빈칸)
-역할:  [S] source   [D] derived   ◆ human gate   ║ seam(외부 경계)
+역할:  [S] source   [D] derived   [E] evidence   [F] frozen decision context   [M] migration input   ◆ human gate   ║ seam(외부 경계)
 구분:  GUARD = 안전 machinery (보호대)   SEAM = 외부/실작업 경계
 ```
 
@@ -85,18 +85,27 @@ Run Summary / Export
 │   └─ <task-id>/
 │       ├─ task.json            [S] 🟡  head / revision lineage
 │       ├─ draft.yaml           [S] 🟡  계약 후보 (mutable)
-│       ├─ draft-ledger.jsonl   [S] 🟡  draft 변경 이력
+│       ├─ task-ledger.jsonl    [S] 🟡  draft/revision/approval 변경 이력
 │       └─ revisions/
 │           └─ <n>.yaml         [S] ✅  불변 실행 계약 ◀ approval/relation 묶임
 │
 ├─ runs/                            (git 제외)
 │   └─ <run-id>/
-│       ├─ prompt.md  task.yaml  agent-role.md
-│       ├─ stdout.log  stderr.log  commands.log
-│       ├─ git-diff.patch  changed-files.txt
-│       ├─ verification/         [evidence] 🟡
-│       ├─ review.md             [decision] ⬜
-│       └─ result.json           [evidence] 🟡  ◀ 실행 증거의 진실
+│       ├─ run-plan.json            [D] 🟡  실행 snapshot / resume boundary
+│       ├─ adapter-request.json     [E] 🟡  S2 요청 artifact
+│       ├─ harness-observation.json [E] 🟡  Harness-owned 실행 증거 ◀ 권위
+│       ├─ adapter-result.json      [E] 🟡  provider report
+│       ├─ run-summary.json         [D] 🟡  normalized execution summary
+│       ├─ prompt.md
+│       ├─ stdout.log  stderr.log
+│       ├─ git-diff.patch
+│       ├─ verification/
+│       │   └─ <attempt-id>.json    [E] 🟡  S3 VerificationEvidence
+│       └─ review-decision.local.json [M] 🟡  v0.2 migration input only
+│
+├─ reviews/
+│   └─ <review-decision-id>/
+│       └─ evidence-bundle.json     [F] 🟡  frozen review context refs/hash
 │
 ├─ context/                     [S] 사람이 쓴 프로젝트 맥락
 ├─ templates/                   [S] prompt/review/summary 템플릿
@@ -105,7 +114,7 @@ Run Summary / Export
     └─ workspace.lock                상태 변경 writer 1명 직렬화
 ```
 
-색을 보면: **revisions/와 config만 ✅이고, 실제로 일이 쌓이는 runs/(review·result)는 🟡~⬜.** 디스크에서도 "계약은 정의됐고 실행 증거는 비었다"가 그대로 보인다.
+색을 보면: **config와 revision 계약은 source로 고정됐고, runs/reviews는 실행과 판단이 실제로 지나갈 때 durable artifact로 쌓인다.** 디스크에서도 "계약, 계획, 증거, 판단이 서로 다른 파일로 남는다"가 그대로 보여야 한다.
 
 ---
 

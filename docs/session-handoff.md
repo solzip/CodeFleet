@@ -1,6 +1,6 @@
 # CodeFleet Session Handoff
 
-마지막 업데이트: 2026-06-02
+마지막 업데이트: 2026-06-22
 
 이 문서는 다른 PC나 새 세션에서 CodeFleet 설계 논의를 이어가기 위한 압축 인계 문서다. 원본 기준 문서는 항상 `docs/concept-foundation.md`다.
 
@@ -31,7 +31,7 @@
 - 사람이나 LLM의 감, 추론, 추측으로 판정하지 않는다.
 - 아직 확정되지 않은 내용은 DESIGN CANDIDATE 또는 VERSION_PLAN으로 분리한다.
 
-바로 다음 논의 주제는 Project Profile 최종 스키마다.
+바로 다음 논의 주제는 run-summary.json / VerificationEvidence / local review artifact layout이다.
 ```
 
 ## 제품 정의
@@ -134,13 +134,13 @@ AI-native 개발 오케스트레이션 CLI다.
 - 큰 설계 틀이 확정될 때마다 architecture snapshot 이미지를 생성해 `docs/assets/`에 저장하고, 문서에서 참조한다.
 - `docs/final-model-architecture.md`는 architecture snapshot을 읽는 방법과 각 layer의 책임을 설명한다.
 - Local Overlay는 `.codefleet/local.json`이며 `RESTRICT_ONLY`로만 병합된다.
-- 목표 루프 기준 우선순위는 S2 Adapter seam -> S4 Review record -> S3 Verification seam -> S1 Task Spec 최소 schema -> S5 Export seam -> Guards 순서로 재정렬했다.
+- 목표 루프 기준 우선순위는 S2 Adapter seam -> S4 Review record -> S3 Verification seam -> S1 Task Spec 최소 schema -> run-plan.json -> S2 artifact layout 순서로 먼저 고정했고, 현재 다음 병목은 run-summary.json / VerificationEvidence / local review artifact layout이다.
 - S2 Adapter seam 최종 계약은 `AdapterRequest -> AgentAdapter -> AdapterResult`로 고정했다.
-- AdapterRequest와 AdapterResult는 provider-agnostic Run Trace durable artifact이며, adapter output은 evidence이지 final decision이 아니다.
+- AdapterRequest와 AdapterResult는 provider-agnostic Run Trace Evidence artifact이며, adapter output은 evidence이지 final decision이 아니다.
 - Codex adapter는 최종 아키텍처 자체가 아니라 S2 최종 계약 아래의 첫 concrete transport 구현으로 취급한다.
-- AdapterRequest와 AdapterResult는 Run Trace artifact로 저장되어야 하며, Review Decision / VERIFIED / Objective Queue progression을 직접 만들 수 없다.
+- AdapterRequest와 AdapterResult는 Run Directory 안의 Run Trace Evidence artifact로 저장되어야 하며, Review Decision / VERIFIED / Objective Queue progression을 직접 만들 수 없다.
 - AdapterResult는 provider execution report일 뿐이며 changed-files truth, command execution truth, policy violation truth를 소유하지 않는다.
-- HarnessObservation을 Run Trace durable artifact로 추가하고, changed files / diff / command log / policy violation evidence의 권위는 Execution Harness가 소유하도록 고정했다.
+- HarnessObservation을 Run Trace Evidence durable artifact로 추가하고, changed files / diff / command log / policy violation evidence의 권위는 Execution Harness가 소유하도록 고정했다.
 - Core normalizer는 AdapterResult 단독이 아니라 AdapterResult + HarnessObservation + verification evidence를 기준으로 Run Summary를 계산한다.
 - S2 Run attempt lifecycle을 고정했다. AdapterRequest 생성까지 도달한 모든 Run attempt는 AdapterRequest, HarnessObservation, AdapterResult 또는 synthetic AdapterResult 세 artifact를 반드시 남긴다.
 - Adapter failure는 HarnessObservation을 지우지 않고, Harness observation failure는 AdapterResult를 지우지 않는다. 두 artifact는 서로 대체할 수 없다.
@@ -162,7 +162,7 @@ AI-native 개발 오케스트레이션 CLI다.
 - v0.2에서 command channel이 Harness-visible이 아니면 command authority는 NONE 또는 PROVIDER_REPORTED_ONLY이고, verification / command compliance / automatic VERIFIED를 만족할 수 없다.
 - S4 Review record 최소 형태를 고정했다. 최종 source of truth는 run-local note가 아니라 Objective ledger의 RUN_REVIEW_DECIDED durable decision event다.
 - ReviewEvidenceBundle은 decision 시점에 reviewer가 본 RunSummary, AdapterRequest, AdapterResult, HarnessObservation, HarnessWorkspaceSnapshot, verification evidence, findings, computedRisk, commandEvidenceAuthority, pathViolationSummary를 frozen refs/hash로 묶는다.
-- RUN_REVIEW_DECIDED는 reviewEvidenceBundleRef와 reviewEvidenceBundleHash를 필수로 가진다. Review Decision은 Run Trace를 수정하지 않고 DONE / FAILED / VERIFIED / NEXT / Queue State를 직접 쓰지 않는다.
+- RUN_REVIEW_DECIDED는 reviewEvidenceBundleRef와 reviewEvidenceBundleHash를 필수로 가진다. Review Decision은 Run Trace Evidence를 수정하지 않고 DONE / FAILED / VERIFIED / NEXT / Queue State를 직접 쓰지 않는다.
 - decision values는 ACCEPTED / REJECTED / NEEDS_CHANGES만 사용한다. RETRY는 Review Decision value가 아니라 새 Run request / Run Options의 retry reason이다.
 - VERIFIED는 최신 effective RUN_REVIEW_DECIDED(ACCEPTED) + verificationGateResult SATISFIED 또는 WAIVED_ALLOWED + successful normalized Run result에서 계산한다.
 - S4 v0.2 manual review slice는 VERSION_PLAN이다. Objective ledger가 아직 없으면 run-local review-decision artifact를 둘 수 있지만 final architecture로 취급하지 않는다.
@@ -172,6 +172,23 @@ AI-native 개발 오케스트레이션 CLI다.
 - REJECTED는 실행 결과가 잘못됐거나 허용 불가함을 뜻하고, NEEDS_CHANGES는 미완료 또는 추가 수정 필요를 뜻한다. 둘 다 VERIFIED 불가지만 follow-up planning 의미가 다르다.
 - raw evidence absent는 EVIDENCE_ABSENT warning으로 과거 decision을 자동 무효화하지 않는다. ReviewEvidenceBundle 또는 referenced artifact hash mismatch는 REVIEW_INTEGRITY failure이며 해당 decision을 ineffective로 만든다.
 - v0.2 local review artifact 경로는 `.codefleet/runs/<runId>/review-decision.local.json`이며 final decision truth가 아니라 Objective ledger migration input이다.
+- S3 VerificationEvidence는 Run Trace Evidence의 Harness-owned artifact다.
+- observedCheck는 PASS / FAIL / SKIP / NONE이고 VerificationEvidence에서 파생한다.
+- verificationGateResult는 SATISFIED / NOT_SATISFIED / WAIVED_ALLOWED이고 CodeFleet이 requiredGates.verification, observedCheck, waiver policy로 계산한다.
+- provider-reported verification은 degraded evidence / review hint이며 observedCheck PASS source가 될 수 없다.
+- v0.2 prompt-only verification은 VERSION_PLAN이고, Harness-visible evidence가 없으면 required verification을 SATISFIED로 만들 수 없다.
+- S1 Task Revision minimum contract를 고정했다. Task Revision은 source-only immutable execution contract이고 S2/S3/S4가 공유하는 최소 입력이다.
+- Task Revision.scope.targetPaths는 allowedPaths candidate이고, scope.excludedPaths + guardrails.doNotTouch는 deniedPaths candidate다. 최종 allowedPaths / deniedPaths는 Run Plan / AdapterRequest capabilities에서 effectivePolicy로 파생된다.
+- Task Revision.verification.commands는 verificationPlan candidate이며 command permission이 아니다.
+- CodeFleet durable file map을 고정했다. Project Profile, Objective ledger/snapshot, Task lineage/revision, Run Plan, Run Trace, Run Summary, VerificationEvidence, ReviewEvidenceBundle은 목적이 다른 required durable artifacts다.
+- `run-plan.json`은 프로젝트 전체 계획이 아니라 특정 Run의 derived execution snapshot / resume boundary다.
+- `run-plan.json`은 Run Planning 성공 후 AdapterRequest 생성 전에 저장되고 hash가 확정된다. 이 전에는 AgentAdapter를 실행할 수 없다.
+- `run-plan.json`은 sourceRefs, Run Options snapshot, workspace snapshot, selectedAgentAdapter, effectivePolicy, computedRisk, isolation, verificationPlan, artifactPlan, resume policy를 가진다.
+- 다른 로컬에서 resume할 때 Task Revision hash와 Project Profile hash는 일치해야 하며, Local Overlay와 adapter availability는 같은 Run Plan 기준으로 재검증한다. 재검증은 권한을 넓힐 수 없다.
+- AdapterRequest / HarnessObservation / AdapterResult 최소 artifact layout을 고정했다. AdapterRequest는 AgentAdapter 실행 전 존재해야 하고, HarnessObservation은 AdapterRequest 생성에 도달한 모든 Run attempt에 존재해야 하며, AdapterResult는 structured 또는 synthetic으로 존재해야 한다.
+- HarnessObservation의 일부 evidence가 없으면 artifact를 생략하지 않고 unavailableReason을 기록한다. AdapterResult provider-reported observations는 degraded evidence다.
+- 프로젝트/목표 진행 방향은 `.codefleet/objectives/<objectiveId>/ledger.jsonl`과 `objective.json`이 담당한다.
+- durable file은 lifecycle 단계에 도달하면 반드시 남아야 한다. 단, durable은 반드시 git commit된다는 뜻이 아니며 공유 / redaction / export 정책은 별도다.
 ```
 
 ## 현재 규칙 기준
@@ -221,25 +238,30 @@ same workspace state
 다음 논의 주제:
 
 ```text
-S3 Verification seam 실행 / 기록 방식
+run-summary.json / VerificationEvidence / local review artifact layout
 ```
 
 이유:
 
 ```text
 목표 루프 관점에서 S2 Adapter seam 최종 계약을 먼저 고정했다.
-S2는 AdapterRequest -> AgentAdapter -> AdapterResult 계약이며, AdapterRequest와 AdapterResult는 Run Trace durable artifact다.
+S2는 AdapterRequest -> AgentAdapter -> AdapterResult 계약이며, AdapterRequest와 AdapterResult는 Run Trace Evidence durable artifact다.
 S2 증거 권위는 AdapterResult가 아니라 HarnessObservation에 있다. AdapterResult의 provider-reported observations는 참고 정보이고, diff / changed-files / command evidence / policy violation truth는 Execution Harness가 직접 관측한다.
 S2 Run attempt lifecycle도 고정했다. AdapterRequest 생성 이후에는 실패하더라도 AdapterRequest, HarnessObservation, AdapterResult 또는 synthetic AdapterResult가 남아야 한다.
 preRunStateRef / postRunStateRef의 실체는 HarnessWorkspaceSnapshot으로 고정했다.
 command observation의 진실성도 고정했다. Command truth는 Harness-visible channel에서만 나오고, provider-reported commands는 degraded evidence다.
 S2 v0.2 Codex transport slice도 VERSION_PLAN으로 명시했다. v0.2는 final 계약을 약화하지 않고, command/path evidence가 부족한 부분은 unavailable 또는 degraded로 기록한다.
 S4 Review record 최소 형태도 고정했다. RUN_REVIEW_DECIDED는 Objective ledger durable decision event이고, ReviewEvidenceBundle을 필수 참조한다.
-다음 병목은 S3 Verification seam의 실행 / 기록 방식이다.
+S3 Verification seam도 고정했다. VerificationEvidence는 Run Trace Evidence의 Harness-owned artifact이고, observedCheck / verificationGateResult의 직접 입력이다.
+provider-reported verification은 degraded evidence이며 observedCheck PASS source가 될 수 없다.
+v0.2 prompt-only verification은 final 계약 아래의 VERSION_PLAN이고, Harness-visible evidence가 없으면 required verification을 SATISFIED로 만들 수 없다.
+S1 Task Spec 최소 schema도 고정했다. Task Revision은 source-only immutable execution contract이고, Run Plan / AdapterRequest / VerificationEvidence / ReviewEvidenceBundle의 공통 입력이다.
+Durable file map도 고정했다. 프로젝트 정책은 `.codefleet/config.json`, 프로젝트/목표 진행 방향은 `.codefleet/objectives/<objectiveId>/ledger.jsonl`과 `objective.json`, 개별 작업 계약은 Task Revision, 개별 실행 계획은 `run-plan.json`, 실행 증거는 Run Trace Evidence, 정규화 요약은 `run-summary.json`, 검토 판단 context는 ReviewEvidenceBundle이 담당한다.
+run-plan.json 최소 필드와 resume boundary도 고정했다.
+AdapterRequest / HarnessObservation / AdapterResult 최소 artifact layout도 고정했다. 다음 병목은 run-summary.json / VerificationEvidence / local review artifact layout이다.
 
-- S3 Verification seam 실행 / 기록 방식
-- observedCheck와 verificationGateResult 계산 증거
-- v0.2 prompt-only verification과 final Harness-executed verification의 차이
+- run-summary.json / VerificationEvidence / local review artifact layout
+- 한 바퀴 수동 검증에 필요한 최소 CLI flow
 ```
 
 현재 확정한 Project Profile 구조:
@@ -304,7 +326,7 @@ repairBehavior
 3. Harness enforcement details
 4. AgentRole taxonomy
 5. Guardrail taxonomy
-6. Verification execution policy
+6. Verification execution policy implementation
 7. Run Summary export adapter schema
 8. Workspace discovery
 9. Review model
@@ -314,15 +336,16 @@ repairBehavior
 목표 루프 기준 남은 우선순위:
 
 ```text
-1. S3 Verification seam 실행 / 기록 방식
-2. S1 Task Spec 최소 schema
-3. S5 Run Summary / Export seam
-4. defaults.run.isolationMode
-5. policy block internal schema
-6. Harness enforcement details
-7. AgentRole / Guardrail taxonomy
-8. Workspace discovery
-9. v0.1 / v0.2 / final implementation slicing
+1. run-summary.json / verification evidence / local review artifact layout
+2. 최소 CLI flow
+3. SPINE 한 바퀴 수동 검증
+4. S5 Run Summary / Export seam
+5. defaults.run.isolationMode
+6. policy block internal schema
+7. Harness enforcement details
+8. AgentRole / Guardrail taxonomy
+9. Workspace discovery
+10. v0.1 / v0.2 / final implementation slicing
 ```
 
 ## 저장소 메모

@@ -145,7 +145,7 @@ Mutation 후 rebuild / validate 흐름:
 4. transition 가능 여부 확인
 5. ledger event append
 6. 필요한 경우 Task Spec 갱신
-7. ledger + Task Spec + Run Trace + Summary를 기준으로 objective.json rebuild
+7. ledger + Task Spec + Run Trace Evidence + Run Summary를 기준으로 objective.json rebuild
 8. 결과 validate
 9. lock 해제
 ```
@@ -320,7 +320,7 @@ Immutable 기록 원칙:
 ```text
 - ledger는 append-only다.
 - Task revision file은 생성 후 직접 수정하지 않는다.
-- Run Trace directory는 생성 후 덮어쓰지 않는다.
+- Run Directory는 생성 후 덮어쓰지 않는다.
 - 새로운 실행은 새 runId를 만든다.
 - Task 내용이 바뀌면 새 revision을 만든다.
 - 기존 approval / relation / summary는 새 revision에 자동 승계하지 않는다.
@@ -1190,7 +1190,7 @@ VERIFIED
 ```text
 Run-derived State
 = approved Revision에 대한 실행 시도와 review decision의 현재 해석
-= Run Trace 단독이 아니라 Run Trace + Objective ledger decision에서 계산되는 상태
+= Run Trace Evidence 단독이 아니라 Run Trace Evidence + Objective ledger decision에서 계산되는 상태
 = Queue State를 자동 변경하지 않는 상태
 ```
 
@@ -1363,7 +1363,7 @@ Run Trace
 = .codefleet/runs/<runId>/
 = git 제외 가능
 
-Run Summary / result.json
+Run Summary / run-summary.json
 = normalized execution summary
 = 실행 결과를 짧게 정규화한 파일
 
@@ -1467,7 +1467,7 @@ RUN_REVIEW_DECIDED
 = ReviewEvidenceBundle을 참조하고 ACCEPTED / REJECTED / NEEDS_CHANGES를 기록
 
 Run-derived State
-= Run Trace + ReviewEvidenceBundle + RUN_REVIEW_DECIDED + gates를 해석한 derived state
+= Run Trace Evidence + ReviewEvidenceBundle + RUN_REVIEW_DECIDED + gates를 해석한 derived state
 ```
 
 ReviewEvidenceBundle:
@@ -1475,7 +1475,7 @@ ReviewEvidenceBundle:
 ```text
 ReviewEvidenceBundle
 = RUN_REVIEW_DECIDED를 내릴 때 사용한 evidence refs와 계산 snapshot을 묶은 immutable review artifact
-= raw Run Trace를 대체하지 않음
+= raw Run Trace Evidence를 대체하지 않음
 = decision audit을 위한 frozen context
 ```
 
@@ -1485,7 +1485,7 @@ ReviewEvidenceBundle 저장 위치:
 <workspaceRoot>/.codefleet/reviews/<reviewDecisionId>/evidence-bundle.json
 ```
 
-ReviewEvidenceBundle은 Objective ledger event payload에 inline하지 않는다. `RUN_REVIEW_DECIDED`가 `reviewEvidenceBundleRef`와 `reviewEvidenceBundleHash`로 참조한다. Run Trace 내부에 저장하지 않는 이유는 ReviewEvidenceBundle이 실행 증거가 아니라 decision audit context이기 때문이다.
+ReviewEvidenceBundle은 Objective ledger event payload에 inline하지 않는다. `RUN_REVIEW_DECIDED`가 `reviewEvidenceBundleRef`와 `reviewEvidenceBundleHash`로 참조한다. Run Directory 내부에 저장하지 않는 이유는 ReviewEvidenceBundle이 실행 증거가 아니라 decision audit context이기 때문이다.
 
 ReviewEvidenceBundle 최소 필드:
 
@@ -1593,7 +1593,7 @@ inputs:
 - supersedesReviewDecisionId when present
 - invalidatesReviewDecisionId when present
 preconditions:
-- Run Trace exists or EVIDENCE_ABSENT is explicitly recorded
+- Run Trace Evidence exists or EVIDENCE_ABSENT is explicitly recorded
 - Run Summary normalization has completed or is explicitly blocked with evidence
 - ReviewEvidenceBundle has been created
 condition:
@@ -1673,7 +1673,7 @@ condition:
 - ReviewEvidenceBundle records computedRisk and commandEvidenceAuthority
 - ReviewEvidenceBundle records pathViolationSummary
 - ReviewEvidenceBundle is referenced by RUN_REVIEW_DECIDED
-- ReviewEvidenceBundle does not replace raw Run Trace as evidence truth
+- ReviewEvidenceBundle does not replace raw Run Trace Evidence as evidence truth
 allowedEffect:
 - Reviewer may make ACCEPTED, REJECTED, or NEEDS_CHANGES decision using the bundle
 - Run-derived State may use the bundle to audit what evidence was considered
@@ -1796,7 +1796,7 @@ status: FINAL
 scope: REVIEW
 sourceOfTruth:
 - ReviewEvidenceBundle
-- referenced Run Trace artifacts
+- referenced Run Trace Evidence artifacts
 - artifact hashes
 - REVIEW_INTEGRITY checks
 inputs:
@@ -1994,7 +1994,7 @@ sourceOfTruth:
 - Run Plan effectivePolicy.requiredGates.resultReview
 - Run Plan computedRisk
 - Run Trace
-- Run Summary / result.json
+- Run Summary / run-summary.json
 - validation findings
 - Objective ledger RUN_REVIEW_DECIDED
 inputs:
@@ -2109,6 +2109,113 @@ verification.required == true + observedCheck == SKIP + no valid waiver decision
 - requiredGates.verification.required=true이고 observedCheck != PASS이면 기본적으로 VERIFIED가 될 수 없다.
 ```
 
+VerificationEvidence 최종 계약:
+
+```text
+VerificationEvidence
+= Run Trace 안에 저장되는 Harness-owned 검증 증거 artifact
+= observedCheck와 verificationGateResult 계산의 직접 입력
+= AdapterResult나 provider transcript가 직접 작성할 수 없음
+```
+
+최종 위치:
+
+```text
+.codefleet/runs/<runId>/verification/<verificationAttemptId>.json
+```
+
+최소 필드:
+
+```yaml
+schemaVersion: "1.0"
+runId: ""
+runPlanId: ""
+verificationAttemptId: ""
+verificationPlanRef: ""
+verificationPlanHash: ""
+authority: "NONE | PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED | HARNESS_EXECUTED | WAIVED_BY_POLICY"
+observedCheck: "PASS | FAIL | SKIP | NONE"
+verificationGateResult: "SATISFIED | NOT_SATISFIED | WAIVED_ALLOWED"
+commands:
+  - commandId: ""
+    command: []
+    cwd: ""
+    authority: "PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED | HARNESS_EXECUTED"
+    startedAt: ""
+    endedAt: ""
+    exitCode: null
+    stdoutRef: ""
+    stderrRef: ""
+    logRef: ""
+    result: "PASS | FAIL | SKIP | NONE"
+    unavailableReason: ""
+providerReportedVerificationRef: ""
+waiverRef: ""
+failureFindingRefs: []
+```
+
+observedCheck 계산:
+
+```text
+PASS
+= verificationPlan의 required check가 모두 통과했고,
+  실패 / 미실행 / policy violation이 남아 있지 않음
+
+FAIL
+= required check 중 하나 이상이 실행됐고 실패함
+
+SKIP
+= required check가 있었지만 실행되지 않았고,
+  skip / waiver 판단 대상임
+
+NONE
+= verificationPlan 또는 검증 증거가 없음
+```
+
+검증 증거 권위:
+
+```text
+HARNESS_EXECUTED
+= Execution Harness가 verificationPlan에 있는 명령을 직접 실행하고 exitCode/log를 기록함
+= 최종 모델의 기본 PASS source
+
+HARNESS_OBSERVED
+= command proxy / sandbox / container exec log 등 Harness-visible channel로
+   verificationPlan에 있는 명령 실행과 exitCode/log가 관찰됨
+= 직접 실행이 아니어도 command truth가 충분하면 PASS source가 될 수 있음
+
+PROVIDER_REPORTED_ONLY
+= provider / adapter가 "검증했다"고 보고함
+= degraded evidence / review hint일 뿐 observedCheck PASS source가 될 수 없음
+
+WAIVED_BY_POLICY
+= 검증이 통과된 것이 아니라 policy가 허용한 waiver가 있음
+= observedCheck는 SKIP이고 verificationGateResult만 WAIVED_ALLOWED가 될 수 있음
+```
+
+핵심 규칙:
+
+```text
+- observedCheck는 VerificationEvidence에서 파생한다.
+- VerificationEvidence는 Harness-owned artifact다.
+- AdapterResult.providerReportedVerification은 저장할 수 있지만 PASS source가 아니다.
+- verification.commands는 실행 요청 / 기대치일 뿐 실행 권한이 아니다.
+- 실제 실행은 Project Profile policies.commands, effectivePolicy, Run Plan verificationPlan을 통과해야 한다.
+- verificationPlan 밖의 명령 결과는 review hint가 될 수 있어도 required verification을 만족시키지 않는다.
+- command policy violation이 남아 있는 검증 명령은 PASS source가 될 수 없다.
+- verificationGateResult는 observedCheck와 requiredGates.verification으로 CodeFleet이 계산한다.
+```
+
+v0.2 검증 계약:
+
+```text
+v0.2는 prompt-only verification instruction을 사용할 수 있다.
+provider가 "테스트를 실행했다"고 보고하면 providerReportedVerificationRef에 저장할 수 있다.
+그러나 Harness-visible command evidence가 없으면 observedCheck를 PASS로 계산하지 않는다.
+required verification이 있는데 Harness evidence가 없으면 observedCheck는 SKIP 또는 NONE이고,
+verificationGateResult는 valid waiver가 없는 한 NOT_SATISFIED다.
+```
+
 `BLOCKED` namespace 분리:
 
 ```text
@@ -2129,7 +2236,7 @@ PlanningBlock.BLOCKED_UNTIL_POLICY
 Run Trace 부재 처리:
 
 ```text
-raw Run Trace artifact missing after durable Review Decision
+raw Run Trace Evidence artifact missing after durable Review Decision
 -> EVIDENCE_ABSENT warning
 -> 기존 Review Decision 자동 무효화 금지
 -> ReviewEvidenceBundle hash가 valid하면 VERIFIED 자동 무효화 금지
@@ -2375,7 +2482,7 @@ Decision = policy-authorized approved intent
 Current workspace = execution ground truth
 ```
 
-따라서 raw Run Trace를 다음 prompt에 직접 넣지 않는다. Carry-forward에 포함 가능한 것은 정책상 허용된 actor가 승인한 Decision과 정제된 Summary뿐이다.
+따라서 raw Run Trace Evidence를 다음 prompt에 직접 넣지 않는다. Carry-forward에 포함 가능한 것은 정책상 허용된 actor가 승인한 Decision과 정제된 Summary뿐이다.
 
 Decision과 Summary는 의미가 다르지만, 다음 Task에 포함 가능한지 판단하는 상태 흐름은 같다. 따라서 하나의 Carry-forward state machine을 공유하고, type만 나눈다.
 
@@ -3194,7 +3301,7 @@ EVIDENCE_ABSENT:
 ```text
 check target:
 - optional local evidence reference
-- raw Run Trace artifact referenced by ReviewEvidenceBundle
+- raw Run Trace Evidence artifact referenced by ReviewEvidenceBundle
 - local artifact referenced by durable decision audit context
 
 expected:
@@ -3228,7 +3335,7 @@ does not block:
 - carry-forward of approved Decision / sanitized Summary
 
 may block or degrade:
-- raw Run Trace inspection
+- raw Run Trace Evidence inspection
 - raw diff / stdout / stderr export
 - evidence hash revalidation
 - audit report that requires local raw evidence
@@ -3367,10 +3474,10 @@ SNAPSHOT_CONSISTENCY vs READ_MODEL_CONSISTENCY
 
 REFERENCE_INTEGRITY vs EXECUTION_EVIDENCE_INTEGRITY
 - Run이 없는 revision을 참조하면 REFERENCE_INTEGRITY
-- Run Trace 내부 파일 / result / command log가 깨지면 EXECUTION_EVIDENCE_INTEGRITY
+- Run Directory 내부의 Run Trace Evidence 파일 / result / command log가 깨지면 EXECUTION_EVIDENCE_INTEGRITY
 
 EVIDENCE_ABSENT vs EXECUTION_EVIDENCE_INTEGRITY
-- durable Review Decision의 ReviewEvidenceBundle은 valid하지만 raw Run Trace artifact가 현재 machine에 없으면 EVIDENCE_ABSENT
+- durable Review Decision의 ReviewEvidenceBundle은 valid하지만 raw Run Trace Evidence artifact가 현재 machine에 없으면 EVIDENCE_ABSENT
 - referenced Run Trace가 존재하지만 hash / schema / result consistency가 깨졌으면 EXECUTION_EVIDENCE_INTEGRITY
 - EVIDENCE_ABSENT는 기본적으로 WARNING이며 과거 Review Decision이나 VERIFIED를 자동 무효화하지 않는다
 
@@ -4778,8 +4885,10 @@ CodeFleet Metadata는 프로젝트 코드 자체가 아니다.
 
 CodeFleet Metadata:
 - .codefleet/config.json
-- .codefleet/tasks/*.yaml
+- .codefleet/objectives/*
+- .codefleet/tasks/*
 - .codefleet/runs/*
+- .codefleet/reviews/*
 - .codefleet/context/*
 - .codefleet/templates/*
 - .codefleet/policies/*
@@ -4789,13 +4898,46 @@ CodeFleet Metadata:
 
 ```text
 .codefleet/
-  config.json          # Project Profile / Workspace Contract
-  local.json           # 개인 로컬 설정, git 제외
-  tasks/               # Task Spec
-  runs/                # Run Trace, git 제외
-  context/             # 프로젝트별 AI 작업 컨텍스트
-  templates/           # 역할별/출력별 템플릿
-  policies/            # guardrail, verification 정책
+  config.json                         # Project Profile / shared Workspace Policy Contract
+  local.json                          # personal local overlay, git 제외, 권한 완화 불가
+
+  objectives/
+    <objectiveId>/
+      ledger.jsonl                    # Objective relation / queue / review decisions
+      objective.json                  # derived snapshot, rebuild 가능
+
+  tasks/
+    <taskId>/
+      task.json                       # task head / revision lineage
+      draft.yaml                      # mutable Task Draft
+      task-ledger.jsonl               # draft mutation / revision / approval audit
+      revisions/
+        <taskRevision>.yaml           # immutable Task Revision source contract
+
+  runs/
+    <runId>/
+      run-plan.json                   # derived execution snapshot / resume boundary
+      adapter-request.json            # S2 request artifact
+      harness-observation.json        # Harness-owned execution evidence
+      adapter-result.json             # provider report artifact
+      run-summary.json                # normalized Run Summary derived artifact
+      prompt.md
+      stdout.log
+      stderr.log
+      git-diff.patch
+      verification/
+        <verificationAttemptId>.json  # S3 VerificationEvidence
+      review-decision.local.json      # v0.2 only, final ledger migration input
+
+  reviews/
+    <reviewDecisionId>/
+      evidence-bundle.json            # frozen decision evidence context
+
+  context/                            # 사람이 작성한 프로젝트별 AI 작업 컨텍스트
+  templates/                          # prompt / review / summary templates
+  policies/                           # reusable guardrail / verification policy fragments
+  locks/
+    workspace.lock                    # state-changing writer serialization
 ```
 
 Metadata 원칙:
@@ -4806,6 +4948,179 @@ Metadata 원칙:
 - Metadata는 CodeFleet Core가 해석한다.
 - Metadata는 비밀 정보를 담지 않는다.
 - Metadata는 중앙으로 수집되지 않는다.
+- 서로 목적이 다른 durable files는 서로 대체하지 않는다.
+- lifecycle 단계에 도달한 artifact는 durable file로 남긴다.
+- durable file은 "반드시 git commit"을 뜻하지 않는다. 공유 / redaction / export 정책은 별도로 정한다.
+```
+
+Durable file map:
+
+```text
+Project Profile
+= .codefleet/config.json
+= workspace policy / defaults source
+
+Local Overlay
+= .codefleet/local.json
+= personal restrict-only source, 권한 완화 불가
+
+Objective Ledger
+= .codefleet/objectives/<objectiveId>/ledger.jsonl
+= objective relation, queue, review, close 같은 decision source
+
+Objective Snapshot
+= .codefleet/objectives/<objectiveId>/objective.json
+= ledger + task + run + review에서 재생성 가능한 derived snapshot
+
+Task Lineage
+= .codefleet/tasks/<taskId>/task.json
+= task head, revision lineage, current draft/revision pointer source
+
+Task Revision
+= .codefleet/tasks/<taskId>/revisions/<taskRevision>.yaml
+= immutable execution contract source
+
+Run Plan
+= .codefleet/runs/<runId>/run-plan.json
+= Run Planning 결과로 생성되는 derived execution snapshot
+= resume boundary
+
+Run Directory
+= .codefleet/runs/<runId>/
+= one Run attempt에 속한 derived / evidence / migration artifacts container
+
+Run Trace Evidence
+= adapter-request.json, harness-observation.json, adapter-result.json, prompt.md, stdout.log, stderr.log, git-diff.patch, verification/*
+= execution evidence artifact set
+= run-plan.json, run-summary.json, review-decision.local.json은 포함하지 않음
+
+Run Summary
+= .codefleet/runs/<runId>/run-summary.json
+= AdapterResult + HarnessObservation + VerificationEvidence에서 정규화한 derived execution summary
+
+VerificationEvidence
+= .codefleet/runs/<runId>/verification/<verificationAttemptId>.json
+= Harness-owned verification evidence
+
+ReviewEvidenceBundle
+= .codefleet/reviews/<reviewDecisionId>/evidence-bundle.json
+= decision 시점에 reviewer가 본 evidence context의 frozen refs/hash
+
+v0.2 Local Review
+= .codefleet/runs/<runId>/review-decision.local.json
+= Objective ledger가 없을 때 쓰는 migration input
+= final decision source가 아님
+```
+
+Artifact 대체 금지:
+
+```text
+- objective.json은 objective ledger를 대체하지 않는다.
+- Task Revision은 Run Plan을 대체하지 않는다.
+- Run Plan은 Run Trace Evidence를 대체하지 않는다.
+- AdapterResult는 HarnessObservation을 대체하지 않는다.
+- provider-reported verification은 VerificationEvidence PASS를 대체하지 않는다.
+- review-decision.local.json은 RUN_REVIEW_DECIDED를 대체하지 않는다.
+- ReviewEvidenceBundle은 Review Decision을 대체하지 않는다.
+```
+
+Lifecycle required artifacts:
+
+```text
+workspace initialized
+-> .codefleet/config.json
+
+objective created or attached
+-> .codefleet/objectives/<objectiveId>/ledger.jsonl
+-> .codefleet/objectives/<objectiveId>/objective.json
+
+task drafted
+-> .codefleet/tasks/<taskId>/task.json
+-> .codefleet/tasks/<taskId>/draft.yaml
+-> .codefleet/tasks/<taskId>/task-ledger.jsonl
+
+task approved into revision
+-> .codefleet/tasks/<taskId>/revisions/<taskRevision>.yaml
+-> task ledger approval decision or v0.2 approval marker
+
+run requested and planning succeeded
+-> .codefleet/runs/<runId>/run-plan.json
+
+adapter execution begins
+-> .codefleet/runs/<runId>/adapter-request.json
+-> pre-run workspace observation artifact or unavailableReason prepared
+
+adapter execution ends or fails
+-> .codefleet/runs/<runId>/harness-observation.json
+-> .codefleet/runs/<runId>/adapter-result.json or synthetic AdapterResult
+
+run normalization completed
+-> .codefleet/runs/<runId>/run-summary.json
+
+verification attempted or required
+-> .codefleet/runs/<runId>/verification/<verificationAttemptId>.json
+
+review decision recorded
+-> .codefleet/reviews/<reviewDecisionId>/evidence-bundle.json
+-> RUN_REVIEW_DECIDED in Objective ledger
+
+v0.2 review without Objective ledger
+-> .codefleet/runs/<runId>/review-decision.local.json
+```
+
+```text
+ruleId: CODEFLEET_DURABLE_FILE_MAP_IS_LAYERED_CONTRACT
+status: FINAL
+scope: WORKSPACE
+sourceOfTruth:
+- .codefleet/config.json
+- .codefleet/objectives/<objectiveId>/ledger.jsonl
+- .codefleet/tasks/<taskId>/task.json
+- .codefleet/tasks/<taskId>/revisions/<taskRevision>.yaml
+- .codefleet/runs/<runId>/run-plan.json
+- .codefleet/runs/<runId>/adapter-request.json
+- .codefleet/runs/<runId>/harness-observation.json
+- .codefleet/runs/<runId>/adapter-result.json
+- .codefleet/runs/<runId>/run-summary.json
+- .codefleet/runs/<runId>/verification/<verificationAttemptId>.json
+- .codefleet/reviews/<reviewDecisionId>/evidence-bundle.json
+inputs:
+- workspace lifecycle stage
+- objective lifecycle stage
+- task lifecycle stage
+- run lifecycle stage
+- review lifecycle stage
+preconditions:
+- CodeFleet metadata root has been discovered
+- workspaceRoot has been resolved
+condition:
+- each lifecycle stage that has been reached leaves its required durable file artifact
+- source, derived artifact, evidence, and decision files are stored separately
+- no durable file substitutes for another layer's source of truth
+- derived snapshots are rebuildable from their source / evidence / decision inputs
+- v0.2 local review artifact is marked as migration input, not final decision truth
+- missing required artifact creates an integrity finding for that lifecycle stage
+allowedEffect:
+- CodeFleet may resume work from the latest complete durable boundary
+- CodeFleet may rebuild derived snapshots from ledgers, task revisions, Run Trace Evidence, and review decisions
+- Review may reference durable artifacts by path and hash
+deniedEffect:
+- CodeFleet must not infer missing source, evidence, or decision artifacts from provider claims
+- CodeFleet must not treat objective.json, run-plan.json, run-summary.json, AdapterResult, or review-decision.local.json as a replacement for their authoritative layer
+- CodeFleet must not mark a lifecycle stage complete when its required durable artifact is missing
+evidence:
+- metadata root path
+- artifact path list
+- artifact hashes
+- lifecycle stage reached
+- missing artifact list
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- create the missing artifact if the lifecycle stage has not crossed an immutable boundary
+- otherwise create a new lifecycle event / new Run / new Review Decision rather than editing immutable evidence
+- rebuild derived snapshots from authoritative inputs
 ```
 
 ## 5. Project Profile
@@ -5114,6 +5429,20 @@ Project Profile의 `defaults`, `policies`, Task 계약, Run 실행을 논의하�
 
 Run Plan은 source of truth가 아니다. Run Plan은 특정 Run을 위한 파생 실행 계약이다.
 
+`run-plan.json` 생성 boundary:
+
+```text
+run-plan.json is created after Run Planning succeeds and before AdapterRequest creation.
+No AgentAdapter execution may start before run-plan.json is persisted and hashed.
+```
+
+한국어:
+
+```text
+run-plan.json은 Run Planning이 성공한 뒤, AdapterRequest 생성 전에 저장되고 hash가 확정된다.
+run-plan.json이 저장되고 hash가 확정되기 전에는 어떤 AgentAdapter도 실행할 수 없다.
+```
+
 Run Plan includes:
 
 ```text
@@ -5149,6 +5478,231 @@ Run Options
 = Project Profile에 저장하지 않음
 = Run Plan 입력이며 source input으로 기록될 수 있음
 = policy-affecting Run Options만 effectivePolicy 계산에 참여할 수 있음
+```
+
+run-plan.json 최소 필드:
+
+```yaml
+schemaVersion: "1.0"
+documentKind: "RUN_PLAN"
+runPlanId: ""
+runId: ""
+createdAt: ""
+createdBy: ""
+codefleetVersion: ""
+planningStatus: "READY"
+
+sourceRefs:
+  taskRevision:
+    taskId: ""
+    taskRevision: 1
+    path: ".codefleet/tasks/<taskId>/revisions/<taskRevision>.yaml"
+    contentHash: ""
+  projectProfile:
+    path: ".codefleet/config.json"
+    contentHash: ""
+  localOverlay:
+    path: ".codefleet/local.json"
+    contentHash: ""
+    unavailableReason: ""
+  objective:
+    objectiveId: ""
+    objectiveQueueItemId: ""
+    ledgerPath: ".codefleet/objectives/<objectiveId>/ledger.jsonl"
+    relationDecisionRef: ""
+  taskApproval:
+    ledgerPath: ".codefleet/tasks/<taskId>/task-ledger.jsonl"
+    approvalDecisionRef: ""
+
+runOptions:
+  retryReason: ""
+  selectedAgentAdapterOverride: ""
+  isolationModeOverride: ""
+  verificationOverride: ""
+
+workspace:
+  projectId: ""
+  workspaceId: ""
+  workspaceRoot: ""
+  workingDirectory: ""
+  pathStyle: "POSIX_RELATIVE"
+
+selectedTask:
+  agentRole: "BACKEND_IMPLEMENTER"
+  harnessMode: "WORKSPACE_EDIT"
+  workflowStages: ["PLAN", "INSPECT", "APPLY", "VERIFY", "REVIEW"]
+
+adapter:
+  selectedAgentAdapter: "codex"
+  selectionSource: "RUN_OPTIONS | PROJECT_DEFAULT | USER_RESOLUTION"
+  policyAllowed: true
+  locallyAvailableAtPlanning: true
+  adapterResolutionRef: ""
+
+effectivePolicy:
+  policyHash: ""
+  capabilities:
+    fileEdit: false
+    commandExecution: false
+    allowedPaths: []
+    deniedPaths: []
+    allowedCommands: []
+    deniedCommands: []
+  requiredGates:
+    runApproval:
+      required: false
+      allowedActors: []
+      explicit: false
+    resultReview:
+      required: true
+      allowedActors: []
+      explicit: false
+    verification:
+      required: true
+      waiver:
+        allowed: false
+        allowedActors: []
+        explicit: true
+  autoAdvanceOnDone: false
+
+computedRisk:
+  level: "LOW | MEDIUM | HIGH | UNKNOWN"
+  reasons: []
+
+isolation:
+  mode: "NONE | GIT_WORKTREE | TEMP_WORKSPACE | CONTAINER"
+  reason: ""
+
+verificationPlan:
+  planHash: ""
+  commands:
+    - commandId: ""
+      command: []
+      cwd: ""
+      required: true
+      source: "TASK_REVISION | PROJECT_PROFILE | RUN_OPTIONS"
+  manualChecks: []
+  expectedEvidence: []
+
+artifactPlan:
+  runTracePath: ".codefleet/runs/<runId>"
+  adapterRequestPath: ".codefleet/runs/<runId>/adapter-request.json"
+  harnessObservationPath: ".codefleet/runs/<runId>/harness-observation.json"
+  adapterResultPath: ".codefleet/runs/<runId>/adapter-result.json"
+  runSummaryPath: ".codefleet/runs/<runId>/run-summary.json"
+  verificationDir: ".codefleet/runs/<runId>/verification"
+
+resume:
+  boundary: "PLANNED_BEFORE_ADAPTER_REQUEST"
+  sourceHashPolicy: "TASK_AND_PROFILE_MUST_MATCH"
+  localRevalidationRequired: true
+  allowMutation: false
+```
+
+Run Plan portability:
+
+```text
+- run-plan.json은 특정 Run의 immutable derived snapshot이다.
+- 다른 로컬에서 이어 실행할 때도 run-plan.json 자체를 수정하지 않는다.
+- Task Revision hash와 Project Profile hash가 다르면 같은 run-plan.json으로 resume하지 않는다.
+- Local Overlay / local adapter availability는 다른 로컬에서 다시 검증한다.
+- local revalidation은 Run Plan 권한을 넓힐 수 없다.
+- local revalidation이 실패하면 기존 Run Plan을 수정하지 않고 resume blocked 또는 새 Run으로 전진한다.
+- adapter command path, token, provider model, provider-specific CLI option은 run-plan.json에 저장하지 않는다.
+```
+
+resume boundary:
+
+```text
+run-plan.json 없음
+= Run Planning 전 또는 Run Planning 실패
+= resume 불가, 새 planning 필요
+
+run-plan.json 있음 + adapter-request.json 없음
+= planning 완료, adapter 호출 전 중단
+= 같은 run-plan.json 기준으로 AdapterRequest 생성 가능
+
+adapter-request.json 있음 + adapter-result.json 없음
+= adapter 호출 중 또는 실패
+= HarnessObservation과 synthetic AdapterResult 필요
+
+adapter-result.json 있음 + run-summary.json 없음
+= execution evidence normalization 전 중단
+= 같은 run-plan.json과 Run Trace Evidence 기준으로 Run Summary 생성 가능
+
+run-summary.json 있음 + verification evidence 없음
+= 실행 정규화 완료, 검증 전 중단
+= 같은 run-plan.json의 verificationPlan 기준으로 검증 가능
+```
+
+```text
+ruleId: RUN_PLAN_IS_IMMUTABLE_RESUME_BOUNDARY
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- Run Planning
+- .codefleet/runs/<runId>/run-plan.json
+- Task Revision
+- Project Profile
+- Local Overlay when present
+- Run Options
+- Objective ledger relation decision
+- Task ledger approval decision
+inputs:
+- approved Task Revision
+- Project Profile defaults and policies
+- Local Overlay restrictions
+- Run Options
+- Objective relation / queue binding
+- local adapter availability check
+preconditions:
+- Task Revision is valid and approved
+- Objective relation / queue binding is valid for the selected Task Revision
+- Project Profile is valid
+- Local Overlay is valid or explicitly unavailable
+- Run Options have been parsed
+- Run Planning has no blocking policy conflict
+condition:
+- run-plan.json is persisted after Run Planning succeeds and before AdapterRequest creation
+- run-plan.json has a stable runPlanId and runId
+- run-plan.json records source refs and hashes for Task Revision and Project Profile
+- run-plan.json records Run Options snapshot
+- run-plan.json records selectedAgentAdapter and adapterResolution without provider-local command path or token
+- run-plan.json records effectivePolicy, computedRisk, isolation, requiredGates, and verificationPlan
+- run-plan.json records artifactPlan paths for required Run artifacts
+- run-plan.json is immutable after its hash is finalized
+- AgentAdapter execution cannot start before run-plan.json is persisted and hashed
+- resume uses the existing run-plan.json and does not recompute it in place
+allowedEffect:
+- AdapterRequest may be derived from run-plan.json and Task Revision
+- VerificationEvidence may use run-plan.json verificationPlan
+- ReviewEvidenceBundle may reference run-plan.json by path and hash
+- CodeFleet may resume from the latest complete run artifact boundary
+deniedEffect:
+- Run Plan cannot modify Task Revision, Project Profile, Local Overlay, Objective ledger, or Task ledger
+- Run Plan cannot be edited to reflect a changed Project Profile or Task Revision
+- Run Plan cannot store adapter command path, token, provider model, provider-specific CLI option, or transcript parsing rule
+- AgentAdapter execution is blocked when run-plan.json is missing after planning should have succeeded
+- resume is blocked when required source hashes do not match
+evidence:
+- runId
+- runPlanId
+- run-plan.json path
+- run-plan hash
+- Task Revision ref/hash
+- Project Profile ref/hash
+- Local Overlay ref/hash or unavailableReason
+- Run Options snapshot
+- selectedAgentAdapter
+- effectivePolicy hash
+- verificationPlan hash
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- if AdapterRequest has not been created, create a new Run Plan by starting a new Run
+- if immutable Run artifacts already exist, do not edit run-plan.json; create a new Run
+- fix Task Revision, Project Profile, Local Overlay, or Run Options at their source and re-plan
 ```
 
 실행 생명주기:
@@ -5206,7 +5760,7 @@ Derived Artifact:
 - Run Summary
 
 Evidence Truth:
-- Run Trace
+- Run Trace Evidence
 
 Decision Record:
 - Approval decision in Task Ledger
@@ -5223,8 +5777,8 @@ Decision Record:
 2. Revision은 immutable이다.
 3. Run Plan은 derived artifact다.
 4. Effective Policy는 Run Plan 내부의 derived snapshot이다.
-5. Run Trace는 execution evidence truth다.
-6. Review / Close는 Run Trace를 수정하지 않고 decision event를 추가한다.
+5. Run Trace Evidence는 execution evidence truth다.
+6. Review / Close는 Run Trace Evidence를 수정하지 않고 decision event를 추가한다.
 7. 과거 객체를 고치지 않고 새 Draft, 새 Revision, 새 Run, corrective event로 전진한다.
 ```
 
@@ -6302,8 +6856,12 @@ AdapterRequest 최소 필드:
 
 ```yaml
 schemaVersion: "1.0"
+documentKind: "ADAPTER_REQUEST"
 runId: ""
 runPlanId: ""
+runPlanRef:
+  path: ".codefleet/runs/<runId>/run-plan.json"
+  contentHash: ""
 taskId: ""
 taskRevision: 1
 objectiveId: ""
@@ -6324,6 +6882,9 @@ promptRef:
 policySnapshotRef:
   runPlanPath: ""
   effectivePolicyHash: ""
+adapter:
+  adapterId: "codex"
+  adapterResolutionRef: ""
 capabilities:
   fileEdit: false
   commandExecution: false
@@ -6339,6 +6900,10 @@ verificationPlanRef:
   contentHash: ""
 trace:
   runTracePath: ""
+  adapterRequestPath: ""
+  harnessObservationPath: ""
+  adapterResultPath: ""
+  runSummaryPath: ""
   stdoutPath: ""
   stderrPath: ""
   artifactRoot: ""
@@ -6358,7 +6923,14 @@ AdapterResult 최소 필드:
 
 ```yaml
 schemaVersion: "1.0"
+documentKind: "ADAPTER_RESULT"
 runId: ""
+runPlanRef:
+  path: ".codefleet/runs/<runId>/run-plan.json"
+  contentHash: ""
+adapterRequestRef:
+  path: ".codefleet/runs/<runId>/adapter-request.json"
+  contentHash: ""
 adapterId: "codex"
 adapterExecutionStatus: "COMPLETED | ADAPTER_FAILED | CANCELED | TIMEOUT"
 synthetic: false
@@ -6370,10 +6942,12 @@ stderrRef: ""
 artifactRefs: []
 providerReportedChangedFiles: []
 providerReportedCommands: []
+providerReportedVerificationRef: ""
 providerMetadataRef: ""
 adapterError:
   code: ""
   message: ""
+rawProviderOutputRef: ""
 ```
 
 AdapterResult의 `providerReportedChangedFiles`와 `providerReportedCommands`는 provider가 보고한 참고 정보다. Core는 이 값을 changed-files truth나 command execution truth로 사용하지 않는다. 최종 권위 증거는 Execution Harness가 직접 수집한 HarnessObservation에 있다.
@@ -6393,8 +6967,16 @@ HarnessObservation 최소 필드:
 
 ```yaml
 schemaVersion: "1.0"
+documentKind: "HARNESS_OBSERVATION"
 runId: ""
 runPlanId: ""
+runPlanRef:
+  path: ".codefleet/runs/<runId>/run-plan.json"
+  contentHash: ""
+adapterRequestRef:
+  path: ".codefleet/runs/<runId>/adapter-request.json"
+  contentHash: ""
+observationStatus: "COMPLETE | PARTIAL | UNAVAILABLE"
 startedAt: ""
 endedAt: ""
 workspace:
@@ -6405,6 +6987,7 @@ workspace:
 stdio:
   stdoutRef: ""
   stderrRef: ""
+  unavailableReason: ""
 changes:
   diffRef: ""
   changedFiles: []
@@ -6420,9 +7003,11 @@ policyChecks:
   pathViolations: []
   commandViolations: []
   capabilityViolations: []
+  pathPolicyEvaluationRef: ""
 observationSource:
   kind: "HARNESS"
   method: "GIT_DIFF | FILE_SNAPSHOT | SANDBOX_LOG | COMMAND_PROXY | NONE"
+artifactRefs: []
 ```
 
 `preRunStateRef`와 `postRunStateRef`는 HarnessWorkspaceSnapshot을 참조한다. 둘은 "workspace가 깨끗했다"는 주장이나 단일 hash가 아니라, Run 시작 전후의 관측 가능한 workspace 상태 증거다.
@@ -6431,7 +7016,7 @@ HarnessWorkspaceSnapshot:
 
 ```text
 HarnessWorkspaceSnapshot
-= Execution Harness가 특정 시점의 workspace 상태를 기록한 Run Trace artifact
+= Execution Harness가 특정 시점의 workspace 상태를 기록한 Run Trace Evidence artifact
 = git status, git diff, scoped file snapshot, state hash를 역할별로 분리한다
 = Run 전후 상태 비교와 path policy / corruption check의 입력이다
 ```
@@ -6589,7 +7174,7 @@ AdapterResult가 직접 소유하지 않는 것:
 - Objective Queue progression
 ```
 
-Provider-specific transcript parsing, CLI option, command path, model name, token, API key는 Core 도메인에 들어가지 않는다. 이런 값은 local adapter registry 또는 adapter layer 내부 설정으로만 다룬다. Adapter가 transcript를 읽어 요약 후보를 만들 수는 있지만, Core가 받아들이는 것은 provider-agnostic AdapterResult와 Run Trace artifact뿐이다.
+Provider-specific transcript parsing, CLI option, command path, model name, token, API key는 Core 도메인에 들어가지 않는다. 이런 값은 local adapter registry 또는 adapter layer 내부 설정으로만 다룬다. Adapter가 transcript를 읽어 요약 후보를 만들 수는 있지만, Core가 받아들이는 것은 provider-agnostic AdapterResult와 Run Trace Evidence artifact뿐이다.
 
 S2 Adapter seam 최종 계약:
 
@@ -6602,9 +7187,9 @@ AdapterRequest -> AgentAdapter -> AdapterResult
 최종 계약에서 durable artifact로 고정하는 파일:
 
 ```text
-- adapter-request.json 또는 adapter-request.yaml
-- adapter-result.json 또는 adapter-result.yaml
-- harness-observation.json 또는 harness-observation.yaml
+- adapter-request.json
+- harness-observation.json
+- adapter-result.json
 - prompt.md
 - stdout.log
 - stderr.log
@@ -6613,6 +7198,125 @@ AdapterRequest -> AgentAdapter -> AdapterResult
 ```
 
 AdapterRequest, AdapterResult, HarnessObservation은 Run Trace evidence다. 이 artifact들은 Review Decision, VERIFIED, Objective Queue progression을 직접 만들지 않는다.
+
+v0.2 S2 artifact layout:
+
+```text
+.codefleet/runs/<runId>/
+  run-plan.json
+  adapter-request.json
+  harness-observation.json
+  adapter-result.json
+  prompt.md
+  stdout.log
+  stderr.log
+  git-diff.patch
+```
+
+생성 순서:
+
+```text
+1. run-plan.json persisted and hashed
+2. prompt.md persisted and hashed
+3. adapter-request.json persisted and hashed
+4. pre-run workspace observation collected or unavailableReason prepared
+5. adapter process launch attempted
+6. stdout.log / stderr.log capture begins when process starts
+7. provider execution ends, fails, times out, or is canceled
+8. post-run workspace observation collected or unavailableReason prepared
+9. diff / changed-files / command observation calculated as available
+10. harness-observation.json persisted with evidence or unavailableReason
+11. adapter-result.json persisted, or synthetic adapter-result.json persisted
+12. run-summary.json normalization may start
+```
+
+필수 존재 조건:
+
+```text
+- adapter-request.json은 AgentAdapter 실행 전 반드시 존재한다.
+- harness-observation.json은 AdapterRequest 생성에 도달한 모든 Run attempt에 존재한다.
+- adapter-result.json은 adapter completion, launch failure, timeout, malformed output 중 하나로 존재한다.
+- structured AdapterResult가 없으면 Execution Harness가 synthetic adapter-result.json을 만든다.
+- HarnessObservation의 일부 증거를 못 모으면 artifact를 생략하지 않고 unavailableReason을 기록한다.
+- AdapterResult와 HarnessObservation은 서로 대체하지 않는다.
+```
+
+v0.2 degrade 규칙:
+
+```text
+- command proxy / sandbox log가 없으면 commands.authority는 NONE 또는 PROVIDER_REPORTED_ONLY다.
+- providerReportedCommands는 command truth가 아니다.
+- providerReportedChangedFiles는 changed-files truth가 아니다.
+- providerReportedVerificationRef는 VerificationEvidence PASS source가 아니다.
+- v0.2라도 artifact 이름과 source / evidence / decision 경계는 final 계약을 따른다.
+```
+
+```text
+ruleId: S2_MINIMUM_ARTIFACT_LAYOUT_IS_FIXED
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- run-plan.json
+- adapter-request.json
+- harness-observation.json
+- adapter-result.json
+- Execution Harness
+- AgentAdapter
+inputs:
+- runId
+- runPlanId
+- run-plan.json artifactPlan
+- prompt artifact
+- local adapter launch result
+- stdout / stderr capture result
+- Harness workspace observation result
+- structured AdapterResult when available
+preconditions:
+- RUN_PLAN_IS_IMMUTABLE_RESUME_BOUNDARY passed
+- run-plan.json is persisted and hashed
+- Run Directory exists
+condition:
+- adapter-request.json is persisted and hashed before AgentAdapter execution starts
+- adapter-request.json references run-plan.json by path and hash
+- adapter-request.json contains no provider token, provider model, provider-specific CLI option, local command path, or transcript parsing rule
+- harness-observation.json is created for every Run attempt that reaches AdapterRequest creation
+- harness-observation.json references run-plan.json and adapter-request.json by path and hash
+- harness-observation.json records stdout/stderr, workspace state, diff/changed files, command observation, and policy checks, or explicit unavailableReason for each unavailable evidence family
+- adapter-result.json is created after adapter completion, launch failure, timeout, cancellation, or malformed output
+- adapter-result.json references run-plan.json and adapter-request.json by path and hash
+- if the adapter cannot produce structured AdapterResult, Execution Harness creates synthetic adapter-result.json
+- AdapterResult provider-reported observations are stored only as degraded evidence
+- AdapterResult and HarnessObservation do not replace each other
+allowedEffect:
+- Run Summary normalization may start after adapter-request.json, harness-observation.json, and adapter-result.json exist
+- Review may inspect S2 artifacts as execution evidence
+- Verification may inspect HarnessObservation command authority as evidence context
+deniedEffect:
+- AgentAdapter execution is blocked when adapter-request.json cannot be persisted
+- Run Summary normalization is blocked when any required S2 artifact is missing
+- VERIFIED cannot be calculated from this Run when required S2 artifacts are missing or substituted by provider claims
+evidence:
+- runId
+- runPlanId
+- adapterRequest path/hash
+- harnessObservation path/hash
+- adapterResult path/hash
+- prompt path/hash
+- stdoutRef
+- stderrRef
+- diffRef or unavailableReason
+- command authority
+- adapterExecutionStatus
+- synthetic flag
+failureFinding:
+- category = EXECUTION_EVIDENCE_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- if adapter execution has not started, rebuild adapter-request.json from run-plan.json
+- if adapter execution failed before structured result, create synthetic adapter-result.json from Harness evidence
+- if required HarnessObservation evidence is unavailable, preserve artifact and record unavailableReason
+- if immutable evidence cannot be reconstructed, create a new Run instead of editing the existing Run
+```
 
 증거 권위 분리:
 
@@ -6635,7 +7339,7 @@ ReviewDecision
 S2 Run attempt lifecycle:
 
 ```text
-1. Run Trace directory 생성
+1. Run Directory 생성
 2. prompt artifact 생성
 3. AdapterRequest artifact 생성
 4. pre-run workspace observation 생성
@@ -6768,7 +7472,7 @@ condition:
 - AdapterRequest capabilities do not exceed effectivePolicy
 - AdapterRequest prompt and policy refs point inside the Run Trace or workspace contract
 - AdapterRequest does not modify Project Profile, Local Overlay, or Task Revision
-- AdapterRequest is stored as a durable Run Trace artifact before AgentAdapter execution starts
+- AdapterRequest is stored as a durable Run Trace Evidence artifact before AgentAdapter execution starts
 allowedEffect:
 - Execution Harness may call the selected AgentAdapter with AdapterRequest
 deniedEffect:
@@ -6856,7 +7560,7 @@ condition:
 - if AgentAdapter failed before returning structured output, Execution Harness creates synthetic=true AdapterResult
 - synthetic AdapterResult records adapterError.code and adapterError.message
 - AdapterResult may reference provider metadata but does not inline provider-specific transcript as Core state
-- AdapterResult is stored as a durable Run Trace artifact after AgentAdapter execution or synthetic result creation
+- AdapterResult is stored as a durable Run Trace Evidence artifact after AgentAdapter execution or synthetic result creation
 - AdapterResult provider-reported changed files are non-authoritative
 - AdapterResult provider-reported command observations are non-authoritative
 - AdapterResult does not override HarnessObservation changed-files evidence
@@ -6886,7 +7590,7 @@ failureFinding:
 - severity = WARNING
 repairBehavior:
 - normalize adapter output through adapter layer
-- store raw provider output only as Run Trace artifact
+- store raw provider output only as Run Trace Evidence artifact
 ```
 
 ```text
@@ -6967,7 +7671,7 @@ inputs:
 - scoped file snapshot capture
 - state hash calculation
 preconditions:
-- Run Trace directory has been created
+- Run Directory has been created
 - workspaceRoot and workingDirectory have been resolved
 condition:
 - preRunStateRef references a HarnessWorkspaceSnapshot with phase = PRE_RUN
@@ -7063,6 +7767,70 @@ repairBehavior:
 - rerun through Harness-visible command channel
 - run verification through Execution Harness
 - record PROVIDER_REPORTED_ONLY as degraded evidence, not truth
+```
+
+```text
+ruleId: VERIFICATION_EVIDENCE_IS_HARNESS_OWNED
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- Execution Harness
+- Run Trace
+- VerificationEvidence artifact
+- HarnessObservation command evidence
+- Run Plan verificationPlan
+- effectivePolicy requiredGates.verification
+inputs:
+- runId
+- runPlanId
+- verificationPlanRef
+- verificationPlanHash
+- requiredGates.verification
+- Harness-executed verification command logs
+- Harness-visible command observations when available
+- providerReportedVerificationRef when present
+- waiverRef when present
+preconditions:
+- Run Plan has been created
+- effectivePolicy has been computed
+- Run Trace path exists
+condition:
+- Execution Harness creates VerificationEvidence for every verification attempt, or records an explicit unavailableReason
+- if verification is required, Execution Harness creates VerificationEvidence even when no command could be run
+- VerificationEvidence is stored as a durable Run Trace Evidence artifact
+- observedCheck is derived from VerificationEvidence, not from human input
+- verificationGateResult is derived by CodeFleet from requiredGates.verification, observedCheck, and waiver policy
+- HARNESS_EXECUTED verification evidence may satisfy observedCheck PASS when the command matches verificationPlan and exits successfully
+- HARNESS_OBSERVED verification evidence may satisfy observedCheck PASS only when the Harness-visible channel records command, cwd, exitCode, and log ref for a verificationPlan command
+- PROVIDER_REPORTED_ONLY verification is degraded evidence and cannot satisfy observedCheck PASS
+- WAIVED_BY_POLICY does not mean PASS; it may only produce observedCheck SKIP plus verificationGateResult WAIVED_ALLOWED
+- verification command evidence with command policy violation cannot satisfy observedCheck PASS
+allowedEffect:
+- Core normalizer may use VerificationEvidence to compute observedCheck and verificationGateResult
+- Review may inspect providerReportedVerificationRef as a hint with degraded authority
+- ReviewEvidenceBundle may snapshot observedCheck and verificationGateResult derived from VerificationEvidence
+deniedEffect:
+- AdapterResult cannot set observedCheck directly
+- provider transcript cannot set observedCheck PASS
+- human review note cannot set verificationGateResult directly
+- VERIFIED cannot be calculated from PROVIDER_REPORTED_ONLY verification claims
+evidence:
+- runId
+- verificationAttemptId
+- verificationPlanRef
+- verification authority
+- command ids and log refs
+- exitCode values
+- observedCheck
+- verificationGateResult
+- waiverRef when used
+failureFinding:
+- category = EXECUTION_EVIDENCE_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- rerun verification through Execution Harness
+- attach valid policy waiver when waiver is allowed
+- preserve provider-reported verification as degraded review hint only
 ```
 
 ```text
@@ -7508,7 +8276,7 @@ ruleId: S2_RUN_ATTEMPT_ALWAYS_LEAVES_THREE_ARTIFACTS
 status: FINAL
 scope: RUN
 sourceOfTruth:
-- Run Trace directory
+- Run Directory
 - AdapterRequest
 - HarnessObservation
 - AdapterResult
@@ -7525,7 +8293,7 @@ inputs:
 - diff / changed files capture result
 - command observation result
 preconditions:
-- Run Trace directory has been created
+- Run Directory has been created
 - AdapterRequest artifact has been created
 condition:
 - every Run attempt that reaches AdapterRequest creation leaves an AdapterRequest artifact
@@ -7570,7 +8338,7 @@ ruleId: ADAPTER_REQUEST_AND_RESULT_ARE_RUN_TRACE_ARTIFACTS
 status: FINAL
 scope: RUN
 sourceOfTruth:
-- Run Trace directory
+- Run Directory
 - AdapterRequest
 - AdapterResult
 - HarnessObservation
@@ -7590,7 +8358,7 @@ inputs:
 - diff or changed-files evidence
 - command log or command observation unavailable reason
 preconditions:
-- Run Trace directory has been created
+- Run Directory has been created
 - selectedAgentAdapter is resolved
 condition:
 - AdapterRequest artifact exists before provider execution starts
@@ -7948,7 +8716,7 @@ Objective가 책임지면 안 되는 것:
 - Task별 실제 실행 증거
 ```
 
-이런 실행 증거는 Run Trace에 남긴다.
+이런 실행 증거는 Run Trace Evidence에 남긴다.
 
 초기 Objective 종류:
 
@@ -8525,7 +9293,7 @@ Objective ledger event
 - TEST_FAILED
 ```
 
-이 이벤트들은 Objective / Queue 결정이 아니라 실행 결과에 속한다. 실행 원본 증거의 진실은 Run Trace에 남긴다.
+이 이벤트들은 Objective / Queue 결정이 아니라 실행 결과에 속한다. 실행 원본 증거의 진실은 Run Trace Evidence에 남긴다.
 
 Approval event는 실행 이벤트가 아니다.
 
@@ -8734,14 +9502,15 @@ Run
 - taskRevision
 - objectiveId snapshot
 - queueItemId snapshot
-- prompt
-- stdout / stderr
-- command log
-- changed files
-- git diff
-- verification result
-- review
-- result.json
+- run-plan.json
+- adapter-request.json
+- harness-observation.json
+- adapter-result.json or synthetic adapter-result.json
+- run-summary.json
+- prompt.md
+- stdout / stderr refs
+- git diff / changed files evidence
+- verification evidence
 ```
 
 핵심 분리:
@@ -8904,7 +9673,7 @@ objective ledger
 - 어떤 relation이 accepted / approved / invalidated 됐는지
 - 어떤 approval / invalidation / supersede decision이 현재 유효한지
 
-runs/<run-id>/result.json
+runs/<run-id>/run-summary.json
 - 어떤 taskId / taskRevision을 실행했는지
 - 실행 결과가 무엇인지
 ```
@@ -8997,10 +9766,10 @@ Task Spec은 `Source / Evidence / Decision / Derived` 경계를 섞지 않는다
 Task Spec
 = Source
 
-Run Plan / effectivePolicy / computedRisk
+Run Plan / effectivePolicy / computedRisk / run-summary.json
 = Derived
 
-Run Trace / stdout / stderr / diff / result.json
+Run Trace / stdout / stderr / diff
 = Evidence
 
 Approval / Review Decision / Objective relation decision
@@ -9079,6 +9848,7 @@ schemaVersion: "1.0"
 documentKind: "TASK_DRAFT | TASK_REVISION"
 taskId: "task-auth-error-response"
 taskRevision: 1 # TASK_REVISION only
+contentHash: "" # TASK_REVISION canonical hash
 
 intent:
   summary: ""
@@ -9095,13 +9865,13 @@ agentRole: "BACKEND_IMPLEMENTER"
 harnessMode: "WORKSPACE_EDIT"
 
 scope:
-  targetPaths: []
-  excludedPaths: []
+  targetPaths: []   # task-requested path scope; Run Planning derives allowedPaths candidates
+  excludedPaths: [] # task-level deny candidates; Run Planning derives deniedPaths candidates
   components: []
   notes: ""
 
 guardrails:
-  doNotTouch: []
+  doNotTouch: [] # task-level denied path / behavior candidates
   additionalRestrictions: []
   commandRestrictions: []
 
@@ -9125,7 +9895,12 @@ workflow:
   stages: ["PLAN", "INSPECT", "APPLY", "VERIFY", "REVIEW"]
 
 verification:
-  commands: []
+  commands:
+    - commandId: ""
+      command: []
+      cwd: ""
+      required: true
+      reason: ""
   manualChecks: []
   expectedEvidence: []
 
@@ -9188,7 +9963,7 @@ Task Revision forbidden fields:
 - effectivePolicy
 - computedRisk
 - stdout / stderr / diff
-- result.json
+- run-summary.json
 - Review Decision
 - DONE / VERIFIED / NEXT 같은 derived state
 ```
@@ -9224,6 +9999,108 @@ boundary rules:
 5. scope and guardrails restrict the task contract, but do not widen Project Profile policy.
 6. verification.commands is an execution request / expectation, not a command permission grant.
 7. riskSignals are recorded inputs for deterministic risk calculation; computedRisk is not stored as Task Spec source.
+```
+
+S1 최소 실행 계약:
+
+```text
+Task Revision minimum contract
+= S2 AdapterRequest, S3 VerificationEvidence, S4 ReviewEvidenceBundle이 공유하는 immutable source input
+= Run Plan과 effectivePolicy의 입력이지 결과가 아님
+= v0.2에서 사람이 직접 작성할 수 있는 최소 실행 계약
+```
+
+S1 -> S2 / S3 / S4 연결:
+
+```text
+S2 Adapter seam:
+- taskId / taskRevision / contentHash -> AdapterRequest.taskContractRef
+- intent / doneCriteria / constraints -> adapter prompt source
+- agentRole / harnessMode -> Run Planning input and AdapterRequest snapshot
+- scope / guardrails -> effectivePolicy path and behavior restriction candidates
+
+S3 Verification seam:
+- verification.commands -> Run Plan verificationPlan candidates
+- requiredGates.verification -> verificationGateResult calculation input
+- verification.manualChecks / expectedEvidence -> Review and verification planning context
+
+S4 Review seam:
+- requiredGates.resultReview -> latest effective Review Decision requirement
+- doneCriteria -> ReviewEvidenceBundle acceptance context
+- riskSignals -> computedRisk input
+```
+
+Path contract mapping:
+
+```text
+Task Revision.scope.targetPaths
+= task-requested path scope
+= allowedPaths candidate for Run Planning
+
+Task Revision.scope.excludedPaths + guardrails.doNotTouch
+= task-level deny candidates
+= deniedPaths candidate for Run Planning
+
+Run Plan / AdapterRequest capabilities.allowedPaths
+= Project Profile, Local Overlay, Run Options, and Task Revision path candidates merged by effectivePolicy
+
+Run Plan / AdapterRequest capabilities.deniedPaths
+= Project Profile, Local Overlay, Run Options, and Task Revision deny candidates merged by effectivePolicy
+```
+
+따라서 Task Revision은 최종 `allowedPaths / deniedPaths` 권한 결과를 직접 소유하지 않는다. Task Revision은 path intent와 restriction source를 제공하고, Run Planning이 effectivePolicy를 통해 최종 allowed / denied capability snapshot을 만든다.
+
+```text
+ruleId: TASK_REVISION_MINIMUM_CONTRACT_IS_SOURCE_ONLY
+status: FINAL
+scope: TASK_REVISION
+sourceOfTruth:
+- Task Revision file
+- canonical Task Revision hash
+- Task ledger revision lineage
+inputs:
+- Task Draft
+- user-approved task review values
+- Project Profile defaults for draft filling only
+- Objective context snapshot
+preconditions:
+- Task Draft is being approved into a Task Revision
+- unresolvedRequiredFields is empty
+- blocking needsReview is empty
+condition:
+- Task Revision contains schemaVersion, documentKind, taskId, taskRevision, and contentHash
+- Task Revision contains intent, objectiveContext, agentRole, harnessMode, scope, guardrails, requiredGates, workflow, verification, doneCriteria, and riskSignals
+- Task Revision contains concrete agentRole and concrete harnessMode
+- Task Revision contains concrete requiredGates and concrete workflow.stages
+- Task Revision contains no REQUIRE_EXPLICIT value anywhere
+- Task Revision contains no provider-specific adapter command, model, CLI option, transcript parser, or local executable path
+- Task Revision contains no Run Plan, effectivePolicy, computedRisk, Run Trace, Review Decision, DONE, VERIFIED, or NEXT value
+- Task Revision.scope and Task Revision.guardrails may only restrict or describe requested work; they do not grant permissions
+- Task Revision.verification.commands may request verification but does not grant command execution permission
+allowedEffect:
+- Approval Decision may reference the Task Revision hash
+- Run Planning may derive Run Plan, effectivePolicy, adapter prompt, AdapterRequest, and verificationPlan from Task Revision
+- ReviewEvidenceBundle may reference Task Revision fields as acceptance context
+deniedEffect:
+- Task Revision creation is blocked
+- Run Planning is blocked until a valid approved Task Revision exists
+- execution is blocked when Task Revision tries to store derived, decision, evidence, or provider-local values
+evidence:
+- revision path
+- taskId
+- taskRevision
+- contentHash
+- validation result
+- unresolvedRequiredFields
+- needsReview
+- forbidden field findings
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = CORRUPTION
+repairBehavior:
+- edit Task Draft and create a new Task Revision
+- remove derived / decision / evidence / provider-local values from the Task source
+- resolve concrete agentRole, harnessMode, requiredGates, workflow, verification, and doneCriteria before approval
 ```
 
 Task Spec에 넣지 않는 실행 산출물 / 결정 / 파생값은 다음 위치에 둔다.
@@ -9753,7 +10630,7 @@ Trace-level Harness
 - task 복사
 - stdout/stderr 저장
 - diff 저장
-- result.json 저장
+- result.json 저장 (v0.x legacy; final normalized artifact는 run-summary.json)
 ```
 
 final Harness:
@@ -9967,26 +10844,49 @@ mode: SUGGEST_ONLY
 허용. Task가 더 보수적이다.
 ```
 
-## 10. Run Trace와 Run Summary
+## 10. Run Directory, Run Trace Evidence, Run Summary
 
-Run Trace는 원본 실행 기록이다.
+Run Directory는 한 Run attempt에 속한 durable artifacts를 담는 컨테이너다. 이 안에는 derived artifact, evidence artifact, v0.2 migration input이 함께 있을 수 있다.
 
 ```text
 .codefleet/runs/<run-id>/
-  task.yaml
+  run-plan.json
+  adapter-request.json
+  harness-observation.json
+  adapter-result.json
+  run-summary.json
   prompt.md
-  agent-role.md
   stdout.log
   stderr.log
-  commands.log
   git-diff.patch
-  changed-files.txt
   verification/
-  review.md
-  result.json
+    <verificationAttemptId>.json
+  review-decision.local.json # v0.2 only, final ledger migration input
 ```
 
-Run Trace는 기본적으로 git에 올리지 않는다.
+Run Trace Evidence는 위 Run Directory 안의 실행 증거 subset이다.
+
+```text
+Run Trace Evidence:
+- adapter-request.json
+- harness-observation.json
+- adapter-result.json
+- prompt.md
+- stdout.log
+- stderr.log
+- git-diff.patch
+- verification/<verificationAttemptId>.json
+```
+
+다음 파일은 같은 Run Directory 안에 있어도 Run Trace Evidence가 아니다.
+
+```text
+- run-plan.json
+- run-summary.json
+- review-decision.local.json
+```
+
+Run Directory는 기본적으로 git에 올리지 않는다.
 
 이유:
 
@@ -10286,10 +11186,15 @@ Verification 실행 방식은 VERSION_PLAN이다.
 
 ```text
 v0.x:
-- prompt에 검증 지시를 포함하고, 실행 여부는 Run Trace에 NOT_RUN / PASSED / FAILED로 기록한다.
+- prompt에 검증 지시를 포함할 수 있다.
+- provider-reported verification은 degraded evidence로 저장한다.
+- Harness-visible command evidence가 없으면 observedCheck PASS를 만들지 않는다.
+- required verification이 있으나 검증을 실행하지 못하면 observedCheck SKIP 또는 NONE으로 기록한다.
 
 final:
-- Harness가 Project Profile allowlist 안의 verification command를 직접 실행하고, command / exitCode / passed / log path를 Run Trace에 기록한다.
+- Harness가 Project Profile allowlist, effectivePolicy, Run Plan verificationPlan을 통과한 verification command를 직접 실행한다.
+- command / cwd / exitCode / stdoutRef / stderrRef / logRef / result를 VerificationEvidence에 기록한다.
+- observedCheck와 verificationGateResult는 VerificationEvidence에서 파생한다.
 ```
 
 ## 14. 현재 구현과의 관계
@@ -10362,15 +11267,47 @@ v0.1 구현 내용:
 - Draft만 mutable이고 Revision / Run Trace는 직접 수정하지 않는다는 꼬임 방지 원칙
 - Local Overlay는 .codefleet/local.json이며 RESTRICT_ONLY로만 병합된다는 원칙
 - defaults.task.workflow는 PLAN / INSPECT / APPLY / VERIFY / REVIEW 절차 템플릿이며 권한 / gate / RunSummary.type / Execution Lifecycle을 대체하지 않는다는 원칙
+- S2 Adapter seam의 AdapterRequest / AgentAdapter / AdapterResult 최종 계약
+- HarnessObservation이 changed-files / command / violation truth를 소유한다는 원칙
+- HarnessWorkspaceSnapshot이 pre/post git status / git diff / scoped file snapshot / stateHash를 소유한다는 원칙
+- path violation은 Harness-owned pre/post delta에서 normalized path 기준으로 계산한다는 원칙
+- S4 Review record는 RUN_REVIEW_DECIDED + ReviewEvidenceBundle ref/hash로 고정한다는 원칙
+- latest effective review decision과 VERIFIED 계산 규칙
+- S3 VerificationEvidence는 Harness-owned artifact이고 observedCheck / verificationGateResult의 직접 입력이라는 원칙
+- provider-reported verification은 degraded evidence이며 observedCheck PASS source가 될 수 없다는 원칙
+- S1 Task Revision minimum contract는 source-only immutable execution contract라는 원칙
+- scope / guardrails는 path restriction source이고, allowedPaths / deniedPaths는 Run Plan / AdapterRequest에서 파생된다는 원칙
+- CodeFleet durable file map과 lifecycle required artifacts 원칙
+- Project/Profile, Objective, Task, Run Plan, Run Trace, Verification, Review artifact는 서로 대체하지 않는다는 원칙
+- run-plan.json 최소 필드와 immutable resume boundary 원칙
+- AdapterRequest / HarnessObservation / AdapterResult 최소 artifact layout과 필수 생성 조건
 ```
 
 다음으로 논의할 항목:
 
 ```text
-1. Project Profile defaults block 세부 스키마
+1. run-summary.json / verification evidence / local review artifact layout
+   - Run Summary normalization output
+   - VerificationEvidence attempt naming / hash
+   - local review artifact와 RUN_REVIEW_DECIDED migration path
+
+2. 최소 CLI flow
+   - codefleet task validate
+   - codefleet run
+   - codefleet verify
+   - codefleet review
+
+3. SPINE 한 바퀴 수동 검증
+   - Draft 또는 수동 Task Revision
+   - Adapter Run
+   - VerificationEvidence
+   - Review Decision
+   - VERIFIED 계산
+
+4. Project Profile defaults block 세부 스키마
    - defaults.run.isolationMode
 
-2. Project Profile policy block 세부 스키마
+5. Project Profile policy block 세부 스키마
    - harness policy
    - agentAdapters policy
    - files policy
@@ -10381,34 +11318,34 @@ v0.1 구현 내용:
    - carryForward policy
    - agentRoles policy
 
-3. Harness enforcement 상세 정의
+6. Harness enforcement 상세 정의
    - Draft Harness discovery budget 기본값
    - Execution Harness isolationMode
    - Command-policy Harness
    - Sandbox-level Harness
 
-4. AgentRole / Guardrail taxonomy
+7. AgentRole / Guardrail taxonomy
    - allowedAgentRoles
    - role별 기본 권한
    - destructive command taxonomy
 
-5. Verification 실행 정책
-   - prompt-only
-   - manual command suggestion
-   - allowlist 기반 자동 실행
-   - NOT_RUN / PASSED / FAILED 기록 형식
+8. Verification 실행 정책 구현
+   - v0.2 prompt-only degraded evidence 처리
+   - Harness-executed verification command 실행
+   - VerificationEvidence artifact 구현
+   - observedCheck / verificationGateResult 계산 구현
 
-6. Run Summary export adapter
+9. Run Summary export adapter
    - summary.md 자동 생성
    - adapter별 필드 제한
    - redactionReport 출력 형식
 
-7. Workspace discovery
+10. Workspace discovery
    - 현재 cwd 기준
    - 부모 디렉터리 탐색
    - 명시적 --workspace 옵션
 
-8. Review 모델
+11. Review 모델 구현
    - AI review.md
    - human review note
    - approval 기록

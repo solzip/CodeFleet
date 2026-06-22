@@ -79,7 +79,7 @@ Evidence / Trace       [S] 🟡   실행 증거       ◀══ SEAM S3: Verific
 [닫힘] derived state (VERIFIED 등)  →  carry-forward(승인된 결정/요약)  →  다음 Objective
 ```
 
-이 척추에서 색을 정직하게 읽으면: **상태·계약 쪽(Revision)은 ✅이고, S2 Adapter와 S4 Review는 최종 계약이 잡힌 🟡 상태다.** 목표 기준 진짜 남은 일은 S3 Verification seam, S1 최소 Task Spec, 그리고 S2/S4의 v0.2 구현 절단면이다.
+이 척추에서 색을 정직하게 읽으면: **상태·계약 쪽(Revision)은 ✅이고, S2 Adapter, S3 Verification, S4 Review는 최종 계약이 잡힌 🟡 상태다.** 목표 기준 진짜 남은 일은 S1 최소 Task Spec, S2/S3/S4의 v0.2 구현 절단면, 그리고 S5 Export seam이다.
 
 ---
 
@@ -88,10 +88,14 @@ Evidence / Trace       [S] 🟡   실행 증거       ◀══ SEAM S3: Verific
 SPINE에서 화살표 옆에 붙은 ◀══ 들이다. 여기가 CodeFleet이 "바깥/실작업"과 만나는 지점이고, 목표를 돌리는 핵심 경로다.
 
 ```text
-S1  Drafting seam        Intent + Profile + discovery ─▶ Task Draft
-    상태: 🟡  (상태머신 O, drafter 입출력 계약 X)
-    빈칸: LLM이 무엇을 입력받아 어떤 schema를 뱉는가
-    우회: 사람이 YAML 직접 작성 (fallback 있어 치명적이진 않음)
+S1  Drafting seam        Intent + Profile + discovery ─▶ Task Draft / Task Revision
+    상태: 🟡  ★ Task Revision 최소 계약은 고정, Draft Harness 구현은 남음
+    고정: Task Revision은 source-only immutable execution contract
+    고정: S2/S3/S4가 공유하는 최소 입력은 Task Revision에서 나온다
+    고정: scope/guardrails는 path restriction source이고, allowedPaths/deniedPaths는 Run Plan에서 파생된다
+    고정: verification.commands는 execution request이며 command permission이 아니다
+    빈칸: LLM Draft Harness 입출력, review/edit CLI, YAML validation 구현
+    우회: 사람이 YAML 직접 작성
 
 S2  Adapter seam   ║     approved Revision ─▶ 외부 AI 도구 ─▶ 출력 회수
     상태: 🟡  ★ 최종 계약은 고정, concrete transport 구현은 남음
@@ -106,9 +110,15 @@ S2  Adapter seam   ║     approved Revision ─▶ 외부 AI 도구 ─▶ 출�
     이유: 목표 문장의 "AI 에이전트에게 위임"이 물리적으로 일어나는 유일한 지점.
           이게 없으면 SPINE 아래 절반이 전부 안 돈다.
 
-S3  Verification seam     검증 명령 실행 ─▶ NOT_RUN / PASSED / FAILED 기록
-    상태: 🟡  (기록 형식 윤곽 O, 실행 방식 미정)
-    빈칸: prompt-only인가, allowlist 자동 실행인가, 결과 어디에 어떤 형식으로
+S3  Verification seam     검증 명령 실행 ─▶ VerificationEvidence ─▶ observedCheck
+    상태: 🟡  ★ 최종 계약은 고정, concrete execution 구현은 남음
+    고정: VerificationEvidence는 Run Trace의 Harness-owned artifact
+    고정: observedCheck = PASS / FAIL / SKIP / NONE
+    고정: verificationGateResult = SATISFIED / NOT_SATISFIED / WAIVED_ALLOWED
+    고정: PASS는 HARNESS_EXECUTED 또는 충분한 HARNESS_OBSERVED evidence에서만 나옴
+    고정: provider-reported verification은 degraded evidence이며 PASS source가 아님
+    고정: v0.2 prompt-only verification은 final 계약 아래의 VERSION_PLAN
+    빈칸: v0.2 기록 구현, Harness-executed command runner, waiver CLI/UI
 
 S4  Review seam     ◆    Run 결과 ─▶ 사람 수용/거절 기록 ─▶ VERIFIED 계산
     상태: 🟡  (최소 계약 고정, 구현 남음)
@@ -124,7 +134,7 @@ S5  Export seam           Run Trace ─▶ Run Summary(sanitized) ─▶ Notion 
     빈칸: summary.md 자동 생성, 대상별 필드 제한, redactionReport 출력 형식
 ```
 
-핵심: **S2(Adapter)와 S4(Review)의 최소 계약은 고정됐고, 다음 병목은 S3 Verification seam이다.** S1은 우회 가능, S3·S5는 S2와 S4가 돌아야 의미가 커진다.
+핵심: **S1(Task Revision 최소 계약), S2(Adapter), S3(Verification), S4(Review)의 최소 계약은 고정됐다.** 다음 병목은 이 계약들을 v0.2 artifact layout과 CLI flow로 묶어 한 바퀴를 수동 검증하는 것이다.
 
 ---
 
@@ -189,10 +199,10 @@ S5  Export seam           Run Trace ─▶ Run Summary(sanitized) ─▶ Notion 
 
 ```text
 필수:
-  - Task Spec 최소 구체 schema      (S1 우회: 사람이 YAML 작성)
+  - Task Spec 최소 구체 schema      (S1 최소 계약 고정됨)
   - Adapter 최종 계약 + 호출 프로토콜 1종 (S2)  ★ 최종 계약 고정됨
   - 최소 AgentRole / Verification 확정값
-  - Run Trace 수집 (diff/stdout)     (S3 최소: NOT_RUN/PASSED/FAILED 기록)
+  - Run Trace 수집 (diff/stdout)     (S3 최소: VerificationEvidence 기록)
   - Review record 최소 형태          (S4)
 
 지금은 미루어도 됨 (GUARDS 전체):
@@ -202,8 +212,8 @@ S5  Export seam           Run Trace ─▶ Run Summary(sanitized) ─▶ Notion 
   - Export adapter (S5)
 ```
 
-즉 **"지금 한 줄로 정하면 가장 목표에 가까운 것" = Verification seam(S3)의 실행 / 기록 방식을 구체적으로 박는 것.**
-S2는 `AdapterRequest -> AgentAdapter -> AdapterResult` 최종 계약이 고정됐고, S4는 `RUN_REVIEW_DECIDED + ReviewEvidenceBundle` 최소 계약이 고정됐다.
+즉 **"지금 한 줄로 정하면 가장 목표에 가까운 것" = S1/S2/S3/S4 계약을 v0.2 artifact layout과 CLI flow로 연결하는 것.**
+S1은 `Task Revision minimum contract`, S2는 `AdapterRequest -> AgentAdapter -> AdapterResult`, S3는 `VerificationEvidence -> observedCheck -> verificationGateResult`, S4는 `RUN_REVIEW_DECIDED + ReviewEvidenceBundle` 최소 계약이 고정됐다.
 
 ---
 
@@ -226,8 +236,8 @@ S2는 `AdapterRequest -> AgentAdapter -> AdapterResult` 최종 계약이 고정�
 ## 다음에 할 일 (이 지도 기준)
 
 ```text
-1. S3 Verification seam 기록 방식 확정    ← 다음 병목
-2. S1 Task Spec 최소 schema 정리
+1. run-summary.json / verification evidence / local review artifact layout 정리   ← 다음 병목
+2. 최소 CLI flow 정리
 3. 위 항목으로 SPINE 한 바퀴 수동 검증
 4. 그 다음 GUARDS를 한 겹씩 덧댐
 ```
