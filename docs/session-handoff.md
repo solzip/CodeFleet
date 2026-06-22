@@ -31,7 +31,7 @@
 - 사람이나 LLM의 감, 추론, 추측으로 판정하지 않는다.
 - 아직 확정되지 않은 내용은 DESIGN CANDIDATE 또는 VERSION_PLAN으로 분리한다.
 
-바로 다음 논의 주제는 Harness enforcement 상세 정의다.
+바로 다음 논의 주제는 Verification 실행 정책 구현이다.
 ```
 
 ## 제품 정의
@@ -134,7 +134,7 @@ AI-native 개발 오케스트레이션 CLI다.
 - 큰 설계 틀이 확정될 때마다 architecture snapshot 이미지를 생성해 `docs/assets/`에 저장하고, 문서에서 참조한다.
 - `docs/final-model-architecture.md`는 architecture snapshot을 읽는 방법과 각 layer의 책임을 설명한다.
 - Local Overlay는 `.codefleet/local.json`이며 `RESTRICT_ONLY`로만 병합된다.
-- 목표 루프 기준 우선순위는 S2 Adapter seam -> S4 Review record -> S3 Verification seam -> S1 Task Spec 최소 schema -> run-plan.json -> S2 artifact layout -> run-summary/verification/local review artifact layout -> 최소 CLI flow -> SPINE 수동 검증 계약 -> S5 Export seam -> Project Profile defaults/policies 순서로 먼저 고정했고, 현재 다음 병목은 Harness enforcement 상세 정의다.
+- 목표 루프 기준 우선순위는 S2 Adapter seam -> S4 Review record -> S3 Verification seam -> S1 Task Spec 최소 schema -> run-plan.json -> S2 artifact layout -> run-summary/verification/local review artifact layout -> 최소 CLI flow -> SPINE 수동 검증 계약 -> S5 Export seam -> Project Profile defaults/policies -> Harness enforcement -> AgentRole / Guardrail taxonomy 순서로 먼저 고정했고, 현재 다음 병목은 Verification 실행 정책 구현이다.
 - S2 Adapter seam 최종 계약은 `AdapterRequest -> AgentAdapter -> AdapterResult`로 고정했다.
 - AdapterRequest와 AdapterResult는 provider-agnostic Run Trace Evidence artifact이며, adapter output은 evidence이지 final decision이 아니다.
 - Codex adapter는 최종 아키텍처 자체가 아니라 S2 최종 계약 아래의 첫 concrete transport 구현으로 취급한다.
@@ -192,7 +192,9 @@ AI-native 개발 오케스트레이션 CLI다.
 - SPINE 한 바퀴 수동 검증 계약을 고정했다. 수동 검증은 데모 transcript가 아니라 durable artifact refs/hash 기반 evidence checklist이며, positive pass는 ledger-backed Review Decision으로 VERIFIED를 정당하게 계산하는 경우이고 negative pass는 degraded/missing evidence에서 VERIFIED를 올바르게 거부하는 경우다. v0.2 local review는 migration-ready pass일 수 있지만 final VERIFIED 근거가 아니다.
 - S5 Export seam을 고정했다. 외부 adapter는 raw Run Trace가 아니라 `sanitized-run-summary.json`, `summary.md`, `redaction-report.json`, `exportAttempt` artifact만 사용하며 adapter별 field allowlist보다 넓게 export할 수 없다.
 - Project Profile defaults.run.isolationMode와 policies block internal schema를 고정했다. policies는 portable policy source이고 effectivePolicy, Run Plan, local runtime state, credential, execution log를 담을 수 없다.
-- S1-S5와 Project Profile 최소 계약은 고정됐지만 구현 절단면, Harness enforcement, 실제 end-to-end runtime validation은 남아 있다.
+- Harness enforcement 상세 계약을 고정했다. Draft / Execution / Verification / Export Harness를 분리하고, command / path / isolation evidence boundary는 Harness-owned evidence만 truth로 인정한다.
+- AgentRole / Guardrail taxonomy를 고정했다. AgentRole은 permission grant가 아니라 classification / max capability input이며, Guardrail은 Project Profile / Local Overlay보다 권한을 넓힐 수 없는 Task-local restriction source다.
+- S1-S5, Project Profile, Harness enforcement, AgentRole / Guardrail taxonomy 최소 계약은 고정됐지만 구현 절단면과 실제 end-to-end runtime validation은 남아 있다.
 - 프로젝트/목표 진행 방향은 `.codefleet/objectives/<objectiveId>/ledger.jsonl`과 `objective.json`이 담당한다.
 - durable file은 lifecycle 단계에 도달하면 반드시 남아야 한다. 단, durable은 반드시 git commit된다는 뜻이 아니며 공유 / redaction / export 정책은 별도다.
 ```
@@ -244,7 +246,7 @@ same workspace state
 다음 논의 주제:
 
 ```text
-Harness enforcement 상세 정의
+Verification 실행 정책 구현
 ```
 
 이유:
@@ -269,9 +271,11 @@ run-summary.json / VerificationEvidence / local review artifact layout도 고정
 최소 CLI flow도 고정했다. v0.2 shorthand는 final internal boundary를 보존해야 한다.
 SPINE 한 바퀴 수동 검증 계약도 고정했다.
 S5 Run Summary / Export seam도 고정했다.
-Project Profile defaults / policy block 세부 스키마도 고정했다. 다음 병목은 Harness enforcement 상세 정의다.
+Project Profile defaults / policy block 세부 스키마도 고정했다.
+Harness enforcement 상세 계약도 고정했다.
+AgentRole / Guardrail taxonomy도 고정했다. 다음 병목은 Verification 실행 정책 구현이다.
 
-- Harness enforcement 상세 정의
+- Verification 실행 정책 구현
 ```
 
 현재 확정한 Project Profile 구조:
@@ -331,26 +335,18 @@ repairBehavior
 ## 남은 설계 항목
 
 ```text
-1. Project Profile defaults.run.isolationMode internal schema
-2. Project Profile policy block internal schema
-3. Harness enforcement details
-4. AgentRole taxonomy
-5. Guardrail taxonomy
-6. Verification execution policy implementation
-7. Run Summary export adapter schema
-8. Workspace discovery
-9. Review model
-10. v0.1 / v0.2 / final implementation slicing
+1. Verification execution policy implementation
+2. Workspace discovery
+3. Review model
+4. v0.1 / v0.2 / final implementation slicing
 ```
 
 목표 루프 기준 남은 우선순위:
 
 ```text
-1. Harness enforcement details
-2. AgentRole / Guardrail taxonomy
-3. Verification 실행 정책 구현
-4. Workspace discovery
-5. v0.1 / v0.2 / final implementation slicing
+1. Verification 실행 정책 구현
+2. Workspace discovery
+3. v0.1 / v0.2 / final implementation slicing
 ```
 
 ## 저장소 메모

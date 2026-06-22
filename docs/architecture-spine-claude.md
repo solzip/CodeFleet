@@ -79,7 +79,7 @@ Evidence / Trace       [S] 🟡   실행 증거       ◀══ SEAM S3: Verific
 [닫힘] derived state (VERIFIED 등)  →  carry-forward(승인된 결정/요약)  →  다음 Objective
 ```
 
-이 척추에서 색을 정직하게 읽으면: **S1-S5 최소 계약과 Project Profile defaults/policies 계약은 고정됐고, 아직 구현 절단면은 🟡 상태다.** 목표 기준 진짜 남은 일은 Harness enforcement, AgentRole / Guardrail taxonomy, Verification 실행 구현, Workspace discovery, v0.1 / v0.2 / final implementation slicing이다.
+이 척추에서 색을 정직하게 읽으면: **S1-S5 최소 계약, Project Profile defaults/policies 계약, Harness enforcement 계약, AgentRole / Guardrail taxonomy는 고정됐고, 아직 구현 절단면은 🟡 상태다.** 목표 기준 진짜 남은 일은 Verification 실행 구현, Workspace discovery, v0.1 / v0.2 / final implementation slicing이다.
 
 ---
 
@@ -135,7 +135,7 @@ S5  Export seam           Run Trace ─▶ Run Summary(sanitized) ─▶ Notion 
     고정: adapter별 field allowlist와 raw evidence export 금지
 ```
 
-핵심: **S1(Task Revision 최소 계약), S2(Adapter), S3(Verification), S4(Review), S5(Export), Project Profile defaults/policies 최소 계약은 고정됐다.** 다만 구현 절단면, Harness enforcement, 실제 end-to-end runtime validation은 남아 있다. 다음 병목은 Harness enforcement 상세 정의다.
+핵심: **S1(Task Revision 최소 계약), S2(Adapter), S3(Verification), S4(Review), S5(Export), Project Profile defaults/policies 최소 계약, Harness enforcement 최소 계약, AgentRole / Guardrail taxonomy는 고정됐다.** 다만 구현 절단면과 실제 end-to-end runtime validation은 남아 있다. 다음 병목은 Verification 실행 정책 구현이다.
 
 ---
 
@@ -202,7 +202,7 @@ S5  Export seam           Run Trace ─▶ Run Summary(sanitized) ─▶ Notion 
 필수:
   - Task Spec 최소 구체 schema      (S1 최소 계약 고정됨)
   - Adapter 최종 계약 + 호출 프로토콜 1종 (S2)  ★ 최종 계약 고정됨
-  - 최소 AgentRole / Verification 확정값
+  - 최소 Verification 실행 정책 확정값
   - Run Trace 수집 (diff/stdout)     (S3 최소: VerificationEvidence 기록)
   - Review record 최소 형태          (S4)
 
@@ -237,8 +237,7 @@ S1은 `Task Revision minimum contract`, S2는 `AdapterRequest -> AgentAdapter ->
 ## 다음에 할 일 (이 지도 기준)
 
 ```text
-1. Harness enforcement 상세 정의   ← 다음 병목
-2. AgentRole / Guardrail taxonomy
-3. Verification 실행 정책 구현
-4. 그 다음 GUARDS를 한 겹씩 덧댐
+1. Verification 실행 정책 구현   ← 다음 병목
+2. Workspace discovery
+3. v0.1 / v0.2 / final implementation slicing
 ```

@@ -4637,9 +4637,7 @@ PASS_AFTER_REINFORCEMENT:
 
 NOT_FINAL_YET:
 - Project Profile 최종 JSON schema
-- Harness enforcement 구현 방식
-- AgentRole taxonomy
-- Guardrail taxonomy
+- Harness runtime implementation slicing
 - Verification command allowlist
 - Run Summary export adapter별 schema
 - Workspace discovery 버전별 구현 범위
@@ -6435,7 +6433,7 @@ Decision은 evidence에 대한 사람 / 정책의 판단이다.
 역할별 경계:
 
 ```text
-policies.agentRoles.allowedRoles
+policies.agentRoles.allowedAgentRoles
 = constraint
 = 허용 가능한 역할 목록
 
@@ -6463,9 +6461,9 @@ Run Plan agentRole
 2. Profile defaults 변경은 기존 Draft / Revision에 자동 반영되지 않는다.
 3. Draft에는 REQUIRE_EXPLICIT 또는 concrete agentRole이 있을 수 있다.
 4. Revision에는 concrete agentRole만 허용된다.
-5. Revision.agentRole은 policies.agentRoles.allowedRoles 안에 있어야 한다.
+5. Revision.agentRole은 policies.agentRoles.allowedAgentRoles 안에 있어야 한다.
 6. Run Plan은 Revision.agentRole을 수정하지 않는다.
-7. policies.agentRoles.allowedRoles는 검증 기준이지 선택값이 아니다.
+7. policies.agentRoles.allowedAgentRoles는 검증 기준이지 선택값이 아니다.
 ```
 
 Draft 생성 처리:
@@ -6479,7 +6477,7 @@ Approval / Revision 처리:
 
 ```text
 - Draft.agentRole이 unresolved이면 approval blocked.
-- 사람은 policies.agentRoles.allowedRoles 중 하나를 선택해야 한다.
+- 사람은 policies.agentRoles.allowedAgentRoles 중 하나를 선택해야 한다.
 - Task Revision에는 concrete agentRole만 저장된다.
 ```
 
@@ -7493,6 +7491,16 @@ policies:
     approvalRequiredForDestructiveCommands: true
   agentAdapters:
     allowedAdapters: ["codex"]
+  agentRoles:
+    allowedAgentRoles:
+      - BACKEND_IMPLEMENTER
+      - BACKEND_REVIEWER
+      - BACKEND_REFACTORER
+      - INFRA_OPERATOR
+      - INFRA_DEBUGGER
+      - IAC_ENGINEER
+      - DOCS_WRITER
+    customRoles: []
   files:
     allowedPaths: []
     deniedPaths: []
@@ -7527,9 +7535,6 @@ policies:
     allowRawRunTrace: false
     requireAcceptedReviewForDecisionCarryForward: true
     requireRiskRecheck: true
-  agentRoles:
-    allowedRoles: []
-    defaultRolePolicy: "REQUIRE_EXPLICIT"
 ```
 
 Block ownership:
@@ -7683,11 +7688,11 @@ policies.carryForward.requireAcceptedReviewForDecisionCarryForward
 policies.carryForward.requireRiskRecheck
 = OR; true wins
 
-policies.agentRoles.allowedRoles
+policies.agentRoles.allowedAgentRoles
 = intersection
 
-policies.agentRoles.defaultRolePolicy
-= stricter wins: REQUIRE_EXPLICIT > concrete default
+policies.agentRoles.customRoles
+= profile-defined only; Local Overlay may remove or restrict custom roles but must not add wider roles
 ```
 
 ```text
@@ -11282,8 +11287,8 @@ FINAL RULE:
 - Harness는 effectivePolicy를 기준으로 Agent에게 전달할 권한을 제한한다.
 
 DESIGN CANDIDATE:
-- Sandbox-level Harness 구현 방식
-- Command-policy Harness 구현 방식
+- Sandbox-level Harness runtime implementation
+- Command-policy Harness runtime implementation
 - agent adapter별 호출 프로토콜
 ```
 
@@ -11500,6 +11505,283 @@ Execution Harness는 유효한 approval decision이 있는 Task Revision만 실�
 - Agent Adapter 호출
 - stdout/stderr/diff/result를 수집
 - Run Trace 저장
+```
+
+### 8.2.1 Harness enforcement final structure
+
+Harness enforcement는 CodeFleet Core와 AgentAdapter 사이의 정책/증거 경계다. Harness는 Agent를 신뢰하지 않고, 실행 권한을 좁히고, 결과를 관측하고, durable evidence를 남긴다.
+
+Harness는 네 단계로 분리한다.
+
+```text
+Draft Harness
+- 입력: User Intent, Project Profile, Local Overlay
+- 출력: Task Draft
+- 허용: read-only bounded discovery
+- 금지: file edit, command execution, AgentAdapter call
+
+Execution Harness
+- 입력: approved Task Revision, run-plan.json, effectivePolicy
+- 출력: AdapterRequest, HarnessObservation, AdapterResult 또는 synthetic AdapterResult
+- 허용: preflight를 통과한 AgentAdapter 실행, command/path/isolation 관측
+- 금지: Run Plan effectivePolicy보다 넓은 권한, provider transcript를 command/file truth로 승격
+
+Verification Harness
+- 입력: verificationPlan, Harness-visible command channel
+- 출력: VerificationEvidence
+- 허용: 검증 명령 실행 또는 검증 불가 사유 기록
+- 금지: provider-reported test result만으로 PASS 또는 VERIFIED 생성
+
+Export Harness
+- 입력: run-summary.json, redaction policy, adapter field allowlist
+- 출력: sanitized-run-summary.json, summary.md, redaction-report.json, exportAttempt
+- 허용: redacted/sanitized artifact export
+- 금지: raw Run Trace, AdapterRequest raw payload, AdapterResult raw transcript export
+```
+
+공통 원칙:
+
+```text
+- Harness는 Project Profile, Local Overlay, Task Revision, Run Plan, effectivePolicy를 넓힐 수 없다.
+- Harness는 AgentAdapter 호출 전 preflight를 수행해야 한다.
+- Harness는 허용/차단/실패/불가 상태를 durable evidence로 남겨야 한다.
+- HarnessObservation은 changed files, path policy violation, command observation, isolation observation의 기본 권위다.
+- Core normalizer는 Harness-owned evidence를 기준으로 Run Summary와 gate result를 계산한다.
+```
+
+### 8.2.2 Harness-visible command channel
+
+명령 증거의 authority는 다음 넷 중 하나다.
+
+```text
+HARNESS_EXECUTED
+- Harness가 직접 명령을 실행하고 exitCode/log refs를 소유한다.
+
+HARNESS_OBSERVED
+- 외부 실행을 Harness가 통제 가능한 채널로 관측했고, 실행 식별자와 로그 refs를 소유한다.
+
+PROVIDER_REPORTED_ONLY
+- provider transcript, adapter output, human-readable report에만 존재한다.
+
+NONE
+- 명령 실행 증거가 없거나, 명령이 실행 전 차단되어 execution truth가 없다.
+```
+
+`HARNESS_OBSERVED`로 인정하려면 최소한 다음 증거가 필요하다.
+
+```text
+- normalized command
+- normalized cwd
+- startedAt / endedAt 또는 ordering evidence
+- exitCode
+- stdoutRef / stderrRef 또는 combinedLogRef
+- observation channel identity
+- channel integrity evidence
+- CodeFleet integration이 통제한 채널이라는 evidence
+```
+
+충족하지 못하면 command authority는 `PROVIDER_REPORTED_ONLY` 또는 `NONE`이다. 이 경우 `PASS`, `VERIFIED`, Objective Queue progression의 직접 근거가 될 수 없다.
+
+### 8.2.3 Command-policy Harness
+
+Command-policy Harness는 모든 command attempt를 실행 전 판정한다.
+
+Preflight 순서:
+
+```text
+1. command normalize
+2. cwd normalize
+3. effectivePolicy.commandExecution 확인
+4. deniedCommands match
+5. allowedCommands match
+6. destructiveCommands taxonomy match
+7. explicit approval decision 확인
+8. Harness-visible command channel availability 확인
+```
+
+차단 조건:
+
+```text
+- commandExecution이 false다.
+- deniedCommands에 match된다.
+- allowedCommands가 존재하지만 match되지 않는다.
+- destructive command인데 explicit approval decision이 없다.
+- cwd가 허용된 workspace/path policy 밖이다.
+- 정책이 Harness-visible command channel을 요구하지만 사용 가능한 채널이 없다.
+```
+
+Command attempt artifact의 최소 형태:
+
+```yaml
+commandAttempt:
+  commandId: ""
+  command: []
+  cwd: ""
+  decision: "ALLOWED | BLOCKED"
+  blockedReason: ""
+  authority: "NONE | PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED | HARNESS_EXECUTED"
+  policyRefs: []
+  approvalRef:
+    path: ""
+    hash: ""
+  executed: false
+  stdoutRef:
+    path: ""
+    hash: ""
+  stderrRef:
+    path: ""
+    hash: ""
+```
+
+규칙:
+
+```text
+- BLOCKED attempt도 HarnessObservation에 기록한다.
+- verification command attempt는 VerificationEvidence에서 참조한다.
+- provider transcript에만 있는 command는 degraded evidence로 기록한다.
+- destructive command approval은 provider claim이 아니라 Review/Approval durable decision ref여야 한다.
+```
+
+### 8.2.4 Execution isolation enforcement
+
+Run Plan은 AdapterRequest 생성 전에 concrete isolation mode를 가져야 한다.
+
+```text
+NONE
+- 격리 없음. allowed/denied path, command policy, post-run observation에 의존한다.
+
+GIT_WORKTREE
+- 별도 git worktree에서 실행한다.
+
+TEMP_WORKSPACE
+- 임시 workspace copy에서 실행한다.
+
+CONTAINER
+- container boundary 안에서 실행한다.
+```
+
+규칙:
+
+```text
+- Project Profile defaults.run.isolationMode는 기본값 source이고, 실제 실행값은 run-plan.json의 isolation.mode다.
+- Harness는 Run Plan의 isolation.mode를 낮출 수 없다.
+- 요청된 isolation.mode를 사용할 수 없으면 실행을 차단하거나 새 Run Plan을 생성해야 한다.
+- runtime container id, temp path, worktree path 같은 local runtime state는 Project Profile에 저장하지 않는다.
+- local runtime evidence는 Run Trace 또는 `.codefleet/local.json` / local runtime registry에만 둔다.
+```
+
+### 8.2.5 Sandbox-level file enforcement
+
+File enforcement는 prevention과 observation을 분리한다. Prevention은 isolation mode에 따라 best effort일 수 있지만, observation evidence는 Harness-owned여야 한다.
+
+Pre-run:
+
+```text
+- workspaceRoot resolve
+- allowedPaths / deniedPaths normalize
+- symlink policy load
+- nested repo policy load
+- generated file policy load
+- preRun HarnessWorkspaceSnapshot 생성
+```
+
+During-run:
+
+```text
+- 가능한 isolation write restriction 적용
+- cwd restriction 적용
+- generated path restriction 적용
+- command channel observation 적용
+```
+
+Post-run:
+
+```text
+- postRun HarnessWorkspaceSnapshot 생성
+- changed / deleted / renamed path 계산
+- symlink target 확인
+- relative path escape 확인
+- case-insensitive collision 확인
+- nested repo boundary 확인
+- generated file policy 확인
+- gitignored file policy 확인
+- deniedPaths를 allowedPaths보다 먼저 평가
+- PathPolicyEvaluation과 violation refs를 HarnessObservation에 기록
+```
+
+규칙:
+
+```text
+- sandbox가 위반을 사전에 막지 못해도 post-run PathPolicyEvaluation은 반드시 남긴다.
+- path violation 또는 command violation이 있으면 repaired 또는 allowed waiver가 기록되기 전까지 acceptance / VERIFIED / queue progression을 차단한다.
+- relative path escape, symlink escape, case-insensitive collision은 HarnessObservation의 policy violation truth다.
+```
+
+### 8.2.6 Harness enforcement final rule
+
+```yaml
+ruleId: HARNESS_ENFORCEMENT_IS_POLICY_AND_EVIDENCE_BOUNDARY
+status: FINAL
+scope: HARNESS
+sourceOfTruth:
+  - Project Profile policies
+  - Local Overlay restrictions
+  - approved Task Revision
+  - run-plan.json
+  - effectivePolicy
+  - HarnessObservation
+  - VerificationEvidence
+  - redaction-report.json
+inputs:
+  - User Intent for Draft Harness
+  - approved Task Revision for Execution Harness
+  - Run Plan isolation / capabilities / verificationPlan
+  - Harness-visible command channel evidence
+  - preRun HarnessWorkspaceSnapshot
+  - postRun HarnessWorkspaceSnapshot
+preconditions:
+  - Project Profile validation passed
+  - Task Revision approved before Execution Harness
+  - run-plan.json exists before AdapterRequest
+  - concrete isolation.mode exists before AdapterRequest
+condition:
+  - Draft Harness is read-only bounded discovery.
+  - Execution Harness never exceeds Run Plan effectivePolicy.
+  - Every command attempt is preflighted and recorded.
+  - HARNESS_EXECUTED and HARNESS_OBSERVED are the only command truth authorities.
+  - Provider-reported command evidence is degraded evidence.
+  - File/path violation truth comes from Harness-owned pre/post evidence.
+  - Verification Harness creates VerificationEvidence from Harness-owned command evidence or unavailableReason.
+  - Export Harness consumes only sanitized artifacts.
+allowedEffect:
+  - AgentAdapter may be called only after Harness preflight.
+  - Run Trace records allowed, blocked, failed, and unavailable attempts.
+  - Core normalizer derives Run Summary from Harness-owned evidence.
+deniedEffect:
+  - Harness must not mutate Project Profile.
+  - Harness must not mutate Task Revision.
+  - Harness must not mutate Objective ledger decisions.
+  - Harness must not mutate Review Decision.
+  - Provider transcript must not be used as command truth.
+  - VERIFIED and queue progression must not be created from degraded evidence.
+  - Raw Run Trace must not be exported.
+evidence:
+  - runId
+  - runPlanId
+  - effectivePolicyHash
+  - isolation.mode
+  - commandAttempt refs
+  - HarnessObservation ref/hash
+  - VerificationEvidence ref/hash
+  - pathViolation refs
+failureFinding:
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
+repairBehavior:
+  - Block AgentAdapter before immutable evidence boundary when preflight fails.
+  - Record unavailableReason when required Harness channel is unavailable.
+  - Create a new Run when immutable Run evidence is invalid.
+  - Use Review Decision repair only for review-layer corruption.
 ```
 
 ### 8.3 Harness 단계별 발전
@@ -12137,19 +12419,9 @@ Run Trace
 
 ## 11. AgentRole
 
-현재 상태:
+AgentRole은 Agent에게 주는 역할 계약이자 policy classification input이다. AgentRole은 권한을 직접 부여하지 않는다. 실제 실행 권한은 role max capability, Project Profile policies, Local Overlay restrictions, Task guardrails, Run options를 meet한 effectivePolicy에서만 나온다.
 
-```text
-DESIGN CANDIDATE:
-- 아래 AgentRole 목록은 초기 후보이며 FINAL RULE이 아니다.
-
-FINAL RULE:
-- Task Revision은 agentRole을 명시해야 한다.
-- agentRole은 Project Profile의 allowedAgentRoles 안에 있어야 한다.
-- agentRole별 권한은 Project Profile과 Task guardrails 병합 결과를 넘을 수 없다.
-```
-
-초기 AgentRole 후보:
+최종 Core AgentRole taxonomy:
 
 ```text
 BACKEND_IMPLEMENTER
@@ -12161,95 +12433,342 @@ IAC_ENGINEER
 DOCS_WRITER
 ```
 
-역할 의미:
+역할별 의미와 기본 상한:
 
 ```text
 BACKEND_IMPLEMENTER
 - API, 서비스 로직, DTO, 예외 처리, 테스트 구현
+- defaultMaxMode: WORKSPACE_EDIT
+- forbiddenByDefault: infra mutation, production access, destructive command
 
 BACKEND_REVIEWER
 - 코드 리뷰, 사이드이펙트 점검, 구조 검토
+- defaultMaxMode: SUGGEST_ONLY
+- forbiddenByDefault: file edit, command execution, destructive command
 
 BACKEND_REFACTORER
 - 중복 제거, 계층 분리, 유지보수성 개선
+- defaultMaxMode: WORKSPACE_EDIT
+- forbiddenByDefault: behavior change outside Task scope, public API contract change unless explicitly scoped, destructive command
 
 INFRA_OPERATOR
 - systemd, Nginx, Docker, 배포 스크립트 작업
+- defaultMaxMode: COMMAND_EXEC
+- forbiddenByDefault: production mutation, service restart/stop, deployment mutation unless explicitly approved
 
 INFRA_DEBUGGER
 - 로그 분석, 장애 원인 추정, 재현 절차 정리
+- defaultMaxMode: SUGGEST_ONLY
+- forbiddenByDefault: file edit, production mutation, service restart/stop, destructive command
 
 IAC_ENGINEER
 - Terraform, AWS, VPC, RDS, EC2, Security Group 작업
+- defaultMaxMode: COMMAND_EXEC
+- forbiddenByDefault: terraform apply/destroy, cloud resource mutation, production mutation unless explicitly approved
 
 DOCS_WRITER
 - README, 운영 문서, 장애 대응 문서 작성
+- defaultMaxMode: WORKSPACE_EDIT
+- forbiddenByDefault: non-doc source edit, command execution, destructive command
 ```
 
-역할은 너무 많이 만들면 안 된다. 역할이 많아지면 프롬프트 품질과 정책 관리가 어려워진다.
+AgentRole은 Project Profile에서 allowlist로 제한한다.
+
+```yaml
+policies:
+  agentRoles:
+    allowedAgentRoles:
+      - BACKEND_IMPLEMENTER
+      - BACKEND_REVIEWER
+      - BACKEND_REFACTORER
+      - INFRA_OPERATOR
+      - INFRA_DEBUGGER
+      - IAC_ENGINEER
+      - DOCS_WRITER
+    customRoles:
+      - roleId: "CUSTOM_RELEASE_NOTES_WRITER"
+        baseRole: "DOCS_WRITER"
+        description: ""
+        maxMode: "WORKSPACE_EDIT"
+```
+
+Custom role 규칙:
+
+```text
+- custom role id는 CUSTOM_[A-Z0-9_]+ 형식이어야 한다.
+- custom role은 반드시 Core AgentRole 하나를 baseRole로 가져야 한다.
+- custom role maxMode는 baseRole defaultMaxMode보다 넓을 수 없다.
+- custom role은 baseRole forbiddenByDefault를 해제할 수 없다.
+- custom role은 Project Profile 안에서만 정의되며 Task Revision 안에서 inline 정의할 수 없다.
+```
+
+AgentRole final rule:
+
+```yaml
+ruleId: AGENT_ROLE_IS_CLASSIFICATION_NOT_PERMISSION_GRANT
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+  - Core AgentRole taxonomy
+  - Project Profile policies.agentRoles.allowedAgentRoles
+  - Project Profile policies.agentRoles.customRoles
+  - defaults.task.agentRole
+  - Task Revision agentRole
+  - Local Overlay restrictions
+inputs:
+  - parsed Project Profile roles policy
+  - parsed Task Revision agentRole
+  - Run Planning role resolution input
+preconditions:
+  - Project Profile validation reached roles policy validation
+  - Task Revision validation reached execution contract validation
+condition:
+  - Task Revision has exactly one concrete agentRole before Run Plan creation.
+  - agentRole is a Core AgentRole or a Project Profile custom role.
+  - agentRole is included in allowedAgentRoles.
+  - when agentRole is custom, the custom role is based on exactly one Core AgentRole.
+  - when agentRole is custom, custom role maxMode does not exceed baseRole defaultMaxMode.
+  - role-derived capability is only an upper bound input to effectivePolicy.
+allowedEffect:
+  - Run Planning may use agentRole to derive role max capability.
+  - Harness may include role prompt instructions in AdapterRequest.
+  - Review may use agentRole as context when evaluating whether the run stayed in scope.
+deniedEffect:
+  - agentRole must not grant permissions by itself.
+  - Task Revision must not define inline custom roles.
+  - AdapterRequest must not widen effectivePolicy based on agentRole text.
+  - Unknown or disallowed agentRole must not reach AdapterRequest creation.
+evidence:
+  - profile roles policy ref/hash
+  - Task Revision agentRole JSON pointer
+  - resolved agentRole
+  - baseRole when custom
+  - roleMaxCapability
+  - effectivePolicyHash
+failureFinding:
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
+repairBehavior:
+  - choose an allowed Core AgentRole
+  - add a valid custom role to Project Profile
+  - set defaults.task.agentRole to REQUIRE_EXPLICIT when no safe default exists
+```
+
+역할은 너무 많이 만들면 안 된다. Core taxonomy는 작게 유지하고, 프로젝트 특화 역할은 custom role로 제한적으로 둔다.
 
 ## 12. Guardrail
 
 Guardrail은 백엔드/인프라 특화 CodeFleet에서 핵심이다.
 
-현재 상태:
+Guardrail은 Task Revision 안에 들어가는 task-local restriction source다. Guardrail은 Project Profile policy보다 권한을 넓힐 수 없고, effectivePolicy를 계산할 때 더 좁은 조건으로만 작동한다.
+
+Guardrail taxonomy:
 
 ```text
-FINAL RULE:
-- Guardrail은 effectivePolicy보다 권한을 넓힐 수 없다.
-- deniedPaths / deniedCommands는 allow 규칙보다 우선한다.
-- destructive command는 기본 차단이며 explicit approval 없이 실행할 수 없다.
+MODE_LIMIT
+- Task의 최대 실행 모드 제한
 
-DESIGN CANDIDATE:
-- 아래 위험 요소와 작업 모드 목록은 초기 후보이며 최종 taxonomy는 Project Profile schema 논의에서 확정한다.
+PATH_SCOPE
+- allowedPaths / deniedPaths / generated file boundary
+
+COMMAND_SCOPE
+- allowedCommands / deniedCommands / cwd restriction
+
+DESTRUCTIVE_COMMAND
+- 파일, 서비스, DB, 인프라, 배포, git history를 파괴적으로 바꾸는 command category
+
+ENVIRONMENT_BOUNDARY
+- local / dev / staging / production 같은 environment boundary
+
+SECRET_BOUNDARY
+- secret, token, credential, private key, .env 노출 제한
+
+NETWORK_BOUNDARY
+- 외부 네트워크 호출, download, upload, package registry, cloud API 접근 제한
+
+DATA_MUTATION_BOUNDARY
+- DB schema/data migration, destructive SQL, irreversible data operation 제한
+
+GENERATED_FILE_BOUNDARY
+- generated output, build artifact, cache, vendored file 수정 제한
+
+REVIEW_GATE
+- runApproval / resultReview / verification gate 강화
 ```
 
-위험 요소:
-
-```text
-- 운영 설정 파일 수정
-- DB migration
-- terraform apply
-- docker compose down
-- systemctl restart
-- rm -rf
-- secret 노출
-- prod 환경 접속
-- 무관한 리팩토링
-```
-
-작업 모드 후보:
+작업 모드:
 
 ```text
 DRY_RUN
-- 프롬프트와 실행 기록만 생성
+- artifact 생성과 planning만 허용
+- file edit 금지
+- command execution 금지
 
 SUGGEST_ONLY
-- 분석/제안만 허용
-- 파일 수정 금지
+- 분석, 제안, review output 생성만 허용
+- file edit 금지
+- command execution 금지
 
 WORKSPACE_EDIT
-- 지정된 scope 안에서 파일 수정 허용
+- allowedPaths 안의 file edit 허용
+- command execution은 verification/development command라도 별도 command policy가 필요
 
 COMMAND_EXEC
-- 허용된 명령만 실행 가능
+- allowedCommands와 Harness-visible command channel을 통과한 command execution 허용
 ```
 
-Approval gate 후보:
+Mode order:
 
 ```text
-APPROVAL_REQUIRED
-- 위험 명령은 approval decision 필요
+DRY_RUN < SUGGEST_ONLY < WORKSPACE_EDIT < COMMAND_EXEC
+```
+
+Destructive command taxonomy:
+
+```text
+FILE_DESTRUCTIVE
+- delete, overwrite, chmod/chown broad mutation, recursive move/copy with overwrite
+
+SERVICE_DISRUPTIVE
+- systemctl restart/stop, docker compose down, kubectl delete/restart, process kill
+
+DATA_DESTRUCTIVE
+- drop, truncate, destructive migration, bulk delete/update, irreversible data transform
+
+INFRA_MUTATING
+- terraform apply/destroy, cloud resource create/update/delete, security group/IAM mutation
+
+DEPLOYMENT_MUTATING
+- deploy, release, rollback, traffic switch, production config push
+
+GIT_HISTORY_MUTATING
+- reset --hard, rebase, force push, branch delete, tag overwrite
+
+SECRET_EXPOSING
+- printing, exporting, uploading, or copying secrets/tokens/private keys
+
+EXTERNAL_SIDE_EFFECT
+- sending email, calling payment/notification/webhook APIs, uploading artifacts outside workspace
+```
+
+Guardrail 최소 Task Revision shape:
+
+```yaml
+guardrails:
+  mode: "DRY_RUN | SUGGEST_ONLY | WORKSPACE_EDIT | COMMAND_EXEC"
+  allowedPaths: []
+  deniedPaths: []
+  allowedCommands: []
+  deniedCommands: []
+  destructiveCommandPolicy:
+    default: "BLOCK"
+    allowedWithExplicitApproval: []
+  environment:
+    allowed: []
+    denied: ["production"]
+  network:
+    externalAccess: "DENY | ALLOWLIST"
+    allowedHosts: []
+  secrets:
+    expose: false
+  reviewGates:
+    runApproval: "REQUIRED | OPTIONAL"
+    resultReview: "REQUIRED | OPTIONAL"
+    verification: "REQUIRED | OPTIONAL"
+```
+
+Guardrail merge rule:
+
+```text
+effectiveGuardrails =
+  meet(
+    Core Policy Defaults,
+    role max capability,
+    Project Profile policies,
+    Local Overlay restrictions,
+    Task Revision guardrails,
+    policy-affecting Run options
+  )
+
+Rules:
+- More restrictive wins.
+- deniedPaths wins over allowedPaths.
+- deniedCommands wins over allowedCommands.
+- destructive command category is BLOCK unless explicit durable approval covers that exact category / command / cwd / run.
+- production environment is denied unless Project Profile allows it and Task Revision explicitly scopes it and durable approval exists.
+- secret exposure is denied by default and cannot be allowed by Task Revision alone.
+- network externalAccess defaults to DENY unless Project Profile allows a target and Task Revision scopes it.
+- review gates can be strengthened by Task Revision or Local Overlay but not weakened.
+```
+
+Guardrail final rule:
+
+```yaml
+ruleId: GUARDRAIL_IS_TASK_LOCAL_RESTRICTION_SOURCE
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+  - Core Guardrail taxonomy
+  - Project Profile policies
+  - Local Overlay restrictions
+  - Task Revision guardrails
+  - Run Plan effectivePolicy
+  - durable approval decisions
+inputs:
+  - parsed Task Revision guardrails
+  - resolved agentRole max capability
+  - Project Profile policies
+  - Local Overlay restrictions
+  - Run options
+preconditions:
+  - Task Revision validation reached guardrail validation
+  - Run Planning reached effectivePolicy calculation
+condition:
+  - guardrails.mode is concrete before Run Plan creation.
+  - guardrails.mode does not exceed resolved role max capability.
+  - guardrails cannot allow a path, command, network target, secret exposure, environment, or gate weakening forbidden by Project Profile or Local Overlay.
+  - denied rules are evaluated before allowed rules.
+  - destructive command categories require explicit durable approval.
+  - production mutation requires Project Profile allowance, Task scope, and explicit durable approval.
+allowedEffect:
+  - Run Planning derives allowedPaths / deniedPaths / allowedCommands / deniedCommands from guardrails.
+  - Harness preflight may block command and path attempts based on effectiveGuardrails.
+  - Review may use guardrail compliance evidence as decision context.
+deniedEffect:
+  - Guardrails must not widen Project Profile policy.
+  - Guardrails must not override Local Overlay restrictions.
+  - AgentAdapter must not receive permissions beyond effectiveGuardrails.
+  - Provider transcript must not be used to waive guardrail violation.
+evidence:
+  - Task Revision guardrails ref/hash
+  - Project Profile policy ref/hash
+  - Local Overlay ref/hash when present
+  - resolved roleMaxCapability
+  - effectivePolicyHash
+  - path policy evaluation refs
+  - command attempt refs
+  - approvalDecision refs when destructive/prod action is allowed
+failureFinding:
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
+repairBehavior:
+  - narrow Task guardrails
+  - choose a narrower AgentRole
+  - add missing durable approval
+  - create a new Run Plan after policy correction
 ```
 
 VERSION_PLAN:
 
 ```text
-v0.x:
-- DRY_RUN과 SUGGEST_ONLY만 기본 실행 모드로 둔다.
+v0.2:
+- Core roles and guardrail taxonomy are validated in YAML/JSON.
+- destructive command categories are detected by conservative pattern matching.
+- unsupported enforcement is recorded as unavailable/degraded evidence.
 
 final:
-- WORKSPACE_EDIT / COMMAND_EXEC는 Project Profile policy와 approval gate를 통과한 경우에만 허용한다.
+- Harness enforces command/path/environment/network/secret guardrails before and after AgentAdapter execution.
+- destructive/prod approvals are checked against durable decision refs.
 ```
 
 ## 13. Verification
@@ -12400,34 +12919,26 @@ v0.1 구현 내용:
 - SPINE 한 바퀴 수동 검증은 durable artifact refs/hash 기반 evidence checklist라는 원칙
 - S5 Export seam은 sanitized-run-summary.json / summary.md / redaction-report.json / exportAttempt만 외부 adapter 입력으로 사용한다는 원칙
 - Project Profile defaults.run.isolationMode와 policies block internal schema는 portable policy source로 고정한다는 원칙
+- Harness enforcement는 Draft / Execution / Verification / Export Harness 경계와 command / path / isolation evidence boundary로 고정한다는 원칙
+- AgentRole은 permission grant가 아니라 classification / max capability input이라는 원칙
+- Guardrail은 Task-local restriction source이며 Project Profile / Local Overlay보다 권한을 넓힐 수 없다는 원칙
 ```
 
 다음으로 논의할 항목:
 
 ```text
-1. Harness enforcement 상세 정의
-   - Draft Harness discovery budget 기본값
-   - Execution Harness isolationMode
-   - Command-policy Harness
-   - Sandbox-level Harness
-
-2. AgentRole / Guardrail taxonomy
-   - allowedAgentRoles
-   - role별 기본 권한
-   - destructive command taxonomy
-
-3. Verification 실행 정책 구현
+1. Verification 실행 정책 구현
    - v0.2 prompt-only degraded evidence 처리
    - Harness-executed verification command 실행
    - VerificationEvidence artifact 구현
    - observedCheck / verificationGateResult 계산 구현
 
-4. Workspace discovery
+2. Workspace discovery
    - 현재 cwd 기준
    - 부모 디렉터리 탐색
    - 명시적 --workspace 옵션
 
-11. Review 모델 구현
+3. Review 모델 구현
    - AI review.md
    - human review note
    - approval 기록
