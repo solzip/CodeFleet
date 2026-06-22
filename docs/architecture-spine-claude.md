@@ -94,8 +94,13 @@ S1  Drafting seam        Intent + Profile + discovery ─▶ Task Draft
     우회: 사람이 YAML 직접 작성 (fallback 있어 치명적이진 않음)
 
 S2  Adapter seam   ║     approved Revision ─▶ 외부 AI 도구 ─▶ 출력 회수
-    상태: ⬜  ★ 제일 크고 제일 중요한 빈칸
-    빈칸: 호출 프로토콜 (stdin? CLI args?), 출력 회수, scope를 adapter 단에서 어떻게 거나
+    상태: 🟡  ★ 최종 계약은 고정, concrete transport 구현은 남음
+    고정: AdapterRequest -> AgentAdapter -> AdapterResult
+    고정: changed-files / command / violation truth는 HarnessObservation이 소유
+    고정: Run attempt는 AdapterRequest + HarnessObservation + AdapterResult를 남김
+    고정: pre/post state는 HarnessWorkspaceSnapshot(git status/diff + scoped snapshot + hash)
+    고정: command truth는 HARNESS_OBSERVED / HARNESS_EXECUTED만 인정
+    빈칸: v0.2 Codex transport 구현, scope enforcement 수준, HarnessObservation wiring
     이유: 목표 문장의 "AI 에이전트에게 위임"이 물리적으로 일어나는 유일한 지점.
           이게 없으면 SPINE 아래 절반이 전부 안 돈다.
 
@@ -112,7 +117,7 @@ S5  Export seam           Run Trace ─▶ Run Summary(sanitized) ─▶ Notion 
     빈칸: summary.md 자동 생성, 대상별 필드 제한, redactionReport 출력 형식
 ```
 
-핵심: **S2(Adapter)가 모든 것의 병목이다.** S1은 우회 가능, S3·S4·S5는 S2가 돌아야 의미가 생긴다.
+핵심: **S2(Adapter)의 최종 계약과 증거 권위 분리는 고정됐고, 다음 병목은 S4 Review record다.** S1은 우회 가능, S3·S5는 S2와 S4가 돌아야 의미가 커진다.
 
 ---
 
@@ -178,7 +183,7 @@ S5  Export seam           Run Trace ─▶ Run Summary(sanitized) ─▶ Notion 
 ```text
 필수:
   - Task Spec 최소 구체 schema      (S1 우회: 사람이 YAML 작성)
-  - Adapter 호출 프로토콜 1종        (S2)  ★
+  - Adapter 최종 계약 + 호출 프로토콜 1종 (S2)  ★ 최종 계약 고정됨
   - 최소 AgentRole / Verification 확정값
   - Run Trace 수집 (diff/stdout)     (S3 최소: NOT_RUN/PASSED/FAILED 기록)
   - Review record 최소 형태          (S4)
@@ -190,8 +195,8 @@ S5  Export seam           Run Trace ─▶ Run Summary(sanitized) ─▶ Notion 
   - Export adapter (S5)
 ```
 
-즉 **"한 줄로 정하면 가장 목표에 가까운 것" = Adapter seam(S2) 호출 프로토콜 한 개를 구체적으로 박는 것.**
-예: "Claude Code adapter는 정확히 이렇게 호출하고, 출력을 이렇게 회수하고, scope를 이렇게 적용한다."
+즉 **"지금 한 줄로 정하면 가장 목표에 가까운 것" = Review seam(S4)의 최소 record와 VERIFIED 계산 입력을 구체적으로 박는 것.**
+S2는 `AdapterRequest -> AgentAdapter -> AdapterResult` 최종 계약이 고정됐고, 실행 증거 권위는 `HarnessObservation`이 소유한다. v0.2 Codex transport는 그 아래 구현 절단면으로 다룬다.
 
 ---
 
@@ -219,4 +224,15 @@ S5  Export seam           Run Trace ─▶ Run Summary(sanitized) ─▶ Notion 
 3. Review record 최소 형태                (S4, VERIFIED 계산용)
 4. 위 셋으로 SPINE 한 바퀴 수동 검증
 5. 그 다음 GUARDS를 한 겹씩 덧댐
+```
+
+업데이트된 목표 루프 우선순위:
+
+```text
+1. S4 Review record 최소 형태 확정        ← 다음 병목
+2. S3 Verification seam 기록 방식 확정
+3. S1 Task Spec 최소 schema 정리
+4. S2 v0.2 Codex transport 구현 절단면 확정
+5. 위 항목으로 SPINE 한 바퀴 수동 검증
+6. 그 다음 GUARDS를 한 겹씩 덧댐
 ```

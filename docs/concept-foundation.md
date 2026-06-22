@@ -5842,6 +5842,7 @@ AdapterRequest
 = Execution Harness가 AgentAdapter에 넘기는 provider-agnostic 실행 요청
 = Run Plan과 Task Revision에서 파생됨
 = Project Profile, Task Revision, Local Overlay를 수정하지 않음
+= Run Trace에 durable artifact로 저장됨
 ```
 
 AdapterRequest 최소 필드:
@@ -5866,6 +5867,7 @@ taskContractRef:
   contentHash: ""
 promptRef:
   promptPath: ""
+  contentHash: ""
 policySnapshotRef:
   runPlanPath: ""
   effectivePolicyHash: ""
@@ -5876,8 +5878,12 @@ capabilities:
   deniedPaths: []
   allowedCommands: []
   deniedCommands: []
+isolation:
+  mode: "NONE | GIT_WORKTREE | TEMP_WORKSPACE | CONTAINER"
+  reason: ""
 verificationPlanRef:
   path: ""
+  contentHash: ""
 trace:
   runTracePath: ""
   stdoutPath: ""
@@ -5891,6 +5897,8 @@ AdapterResult:
 AdapterResult
 = AgentAdapter가 Execution Harness에 돌려주는 provider-agnostic 실행 관찰 결과
 = evidence input이지 final decision이 아님
+= Run Trace에 durable artifact로 저장됨
+= provider report이지 Harness-owned observation이 아님
 ```
 
 AdapterResult 최소 필드:
@@ -5907,13 +5915,135 @@ exitCode: 0
 stdoutRef: ""
 stderrRef: ""
 artifactRefs: []
-changedFilesObserved: []
-commandsObserved: []
+providerReportedChangedFiles: []
+providerReportedCommands: []
 providerMetadataRef: ""
 adapterError:
   code: ""
   message: ""
 ```
+
+AdapterResult의 `providerReportedChangedFiles`와 `providerReportedCommands`는 provider가 보고한 참고 정보다. Core는 이 값을 changed-files truth나 command execution truth로 사용하지 않는다. 최종 권위 증거는 Execution Harness가 직접 수집한 HarnessObservation에 있다.
+
+AdapterResult의 `stdoutRef`와 `stderrRef`는 Harness가 캡처한 stdio artifact를 가리키는 참조일 수 있다. 그러나 stdio capture의 존재 여부와 경로 권위는 AdapterResult가 아니라 HarnessObservation이 소유한다.
+
+HarnessObservation:
+
+```text
+HarnessObservation
+= Execution Harness가 provider 실행 전후 workspace와 실행 경계를 직접 관측한 증거
+= changed files, diff, command log, policy violation finding의 권위 evidence
+= adapter가 주장하거나 요약한 정보가 아님
+```
+
+HarnessObservation 최소 필드:
+
+```yaml
+schemaVersion: "1.0"
+runId: ""
+runPlanId: ""
+startedAt: ""
+endedAt: ""
+workspace:
+  workspaceRoot: ""
+  workingDirectory: ""
+  preRunStateRef: ""
+  postRunStateRef: ""
+stdio:
+  stdoutRef: ""
+  stderrRef: ""
+changes:
+  diffRef: ""
+  changedFiles: []
+  unavailableReason: ""
+commands:
+  authority: "NONE | PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED | HARNESS_EXECUTED"
+  commandLogRef: ""
+  providerReportedCommandsRef: ""
+  commandsObserved: []
+  commandsExecutedByHarness: []
+  unavailableReason: ""
+policyChecks:
+  pathViolations: []
+  commandViolations: []
+  capabilityViolations: []
+observationSource:
+  kind: "HARNESS"
+  method: "GIT_DIFF | FILE_SNAPSHOT | SANDBOX_LOG | COMMAND_PROXY | NONE"
+```
+
+`preRunStateRef`와 `postRunStateRef`는 HarnessWorkspaceSnapshot을 참조한다. 둘은 "workspace가 깨끗했다"는 주장이나 단일 hash가 아니라, Run 시작 전후의 관측 가능한 workspace 상태 증거다.
+
+HarnessWorkspaceSnapshot:
+
+```text
+HarnessWorkspaceSnapshot
+= Execution Harness가 특정 시점의 workspace 상태를 기록한 Run Trace artifact
+= git status, git diff, scoped file snapshot, state hash를 역할별로 분리한다
+= Run 전후 상태 비교와 path policy / corruption check의 입력이다
+```
+
+역할 분리:
+
+```text
+git status
+= changed / added / deleted / renamed 파일 목록 증거
+
+git diff
+= 사람이 검토할 내용 변경 증거
+
+scoped file snapshot
+= Git이 놓칠 수 있는 파일과 path policy 증거
+= untracked / gitignored / symlink / nested repo / path escape 검사의 입력
+
+state hash
+= 무결성 / 재검증 / corruption check 증거
+= 사람 review용 내용 증거가 아님
+```
+
+HarnessWorkspaceSnapshot 최소 필드:
+
+```yaml
+schemaVersion: "1.0"
+runId: ""
+phase: "PRE_RUN | POST_RUN"
+workspaceRoot: ""
+workingDirectory: ""
+git:
+  headRef: ""
+  statusRef: ""
+  diffRef: ""
+  untrackedPolicy: "IGNORE | LIST | SNAPSHOT"
+scopedFiles:
+  snapshotRef: ""
+  scopeBasis: "EFFECTIVE_ALLOWED_PATHS | CHANGED_PATHS | BOTH"
+stateHash:
+  algorithm: "sha256"
+  value: ""
+```
+
+pre-run workspace가 clean일 필요는 없다. `preRunStateRef`는 Run 시작 전 상태이고, `postRunStateRef`는 Run 종료 후 상태다. Run이 만든 변화는 `postRunState - preRunState`로 해석한다.
+
+Command observation authority:
+
+```text
+NONE
+= commandExecution=false이거나 command observation이 필요 없는 Run
+
+PROVIDER_REPORTED_ONLY
+= provider / adapter transcript나 AdapterResult가 보고한 명령만 있음
+= command truth가 아니라 degraded evidence / hint
+
+HARNESS_OBSERVED
+= command proxy, sandbox log, container exec log 같은 Harness-visible channel로 관찰됨
+= command observation truth
+
+HARNESS_EXECUTED
+= Execution Harness가 직접 실행한 명령
+= verification evidence 또는 Harness-owned command evidence
+```
+
+최종 모델에서 command execution truth는 provider transcript가 아니라 Harness-visible command channel에서만 나온다. Provider-reported command는 저장할 수 있지만 verification, command policy compliance, VERIFIED 계산을 만족시키는 증거로 사용할 수 없다.
 
 Synthetic AdapterResult:
 
@@ -5948,12 +6078,116 @@ AdapterResult가 직접 소유하지 않는 것:
 - RunSummary.check
 - verificationGateResult
 - computedRisk
+- changed-files truth
+- command execution truth
+- policy violation truth
 - Review Decision
 - DONE / FAILED / VERIFIED
 - Objective Queue progression
 ```
 
 Provider-specific transcript parsing, CLI option, command path, model name, token, API key는 Core 도메인에 들어가지 않는다. 이런 값은 local adapter registry 또는 adapter layer 내부 설정으로만 다룬다. Adapter가 transcript를 읽어 요약 후보를 만들 수는 있지만, Core가 받아들이는 것은 provider-agnostic AdapterResult와 Run Trace artifact뿐이다.
+
+S2 Adapter seam 최종 계약:
+
+```text
+AdapterRequest -> AgentAdapter -> AdapterResult
+```
+
+이 계약은 최종 아키텍처의 S2 실행 경계다. `codex exec -` 같은 특정 호출 방식은 이 계약 아래의 transport 구현일 뿐이다. v0.2에서 Codex adapter를 먼저 구현하더라도 최종 계약은 provider-agnostic AdapterRequest와 AdapterResult를 기준으로 유지한다.
+
+최종 계약에서 durable artifact로 고정하는 파일:
+
+```text
+- adapter-request.json 또는 adapter-request.yaml
+- adapter-result.json 또는 adapter-result.yaml
+- harness-observation.json 또는 harness-observation.yaml
+- prompt.md
+- stdout.log
+- stderr.log
+- git-diff.patch 또는 equivalent changed-files evidence
+- commands.log 또는 explicit command observation unavailable reason
+```
+
+AdapterRequest, AdapterResult, HarnessObservation은 Run Trace evidence다. 이 artifact들은 Review Decision, VERIFIED, Objective Queue progression을 직접 만들지 않는다.
+
+증거 권위 분리:
+
+```text
+AdapterResult
+= provider execution report
+= adapter status, exitCode, provider metadata reference, provider-reported observations
+
+HarnessObservation
+= harness-owned execution observation
+= stdout / stderr refs, diff / changed files, command log, policy violation evidence
+
+RunSummary
+= Core normalizer가 AdapterResult + HarnessObservation + verification evidence를 해석한 derived artifact
+
+ReviewDecision
+= 정책상 허용된 actor가 evidence를 보고 남기는 durable decision
+```
+
+S2 Run attempt lifecycle:
+
+```text
+1. Run Trace directory 생성
+2. prompt artifact 생성
+3. AdapterRequest artifact 생성
+4. pre-run workspace observation 생성
+5. AgentAdapter process launch 시도
+6. stdout / stderr capture 시작
+7. provider execution 종료 / 실패 / timeout
+8. stdout / stderr artifact flush
+9. post-run workspace observation 생성
+10. diff / changed files 계산
+11. command observation 계산 또는 unavailableReason 기록
+12. HarnessObservation artifact 생성
+13. AdapterResult artifact 생성 또는 synthetic AdapterResult 생성
+14. Core normalizer 대기
+15. Review 대기
+```
+
+S2 실패 케이스별 artifact 원칙:
+
+```text
+normal adapter completion:
+- AdapterResult.synthetic = false
+- AdapterResult.adapterExecutionStatus = COMPLETED or ADAPTER_FAILED
+- HarnessObservation records stdio, diff / changed files, command observation or unavailableReason
+
+adapter launch failure:
+- AdapterResult.synthetic = true
+- AdapterResult.adapterExecutionStatus = ADAPTER_FAILED
+- AdapterResult.adapterError.code = LAUNCH_FAILED
+- HarnessObservation still records pre/post observation and unavailable command observation reason
+
+adapter timeout:
+- AdapterResult.synthetic = true
+- AdapterResult.adapterExecutionStatus = TIMEOUT
+- AdapterResult.adapterError.code = TIMEOUT
+- HarnessObservation records stdio captured until timeout and post-timeout diff / changed files
+
+malformed adapter output:
+- AdapterResult.synthetic = true
+- AdapterResult.adapterExecutionStatus = ADAPTER_FAILED
+- AdapterResult.adapterError.code = MALFORMED_ADAPTER_OUTPUT
+- HarnessObservation preserves stdio, diff / changed files, and available command observation
+
+harness observation failure:
+- HarnessObservation records the failed observation field with unavailableReason
+- AdapterResult is still preserved if adapter execution result exists
+- Run Summary normalization treats fields requiring missing HarnessObservation evidence as blocked or unknown
+```
+
+핵심 원칙:
+
+```text
+Adapter failure does not erase HarnessObservation.
+Harness observation failure does not erase AdapterResult.
+Neither artifact can replace the other.
+```
 
 AgentAdapter Invocation FINAL RULES:
 
@@ -5985,6 +6219,7 @@ condition:
 - AdapterRequest capabilities do not exceed effectivePolicy
 - AdapterRequest prompt and policy refs point inside the Run Trace or workspace contract
 - AdapterRequest does not modify Project Profile, Local Overlay, or Task Revision
+- AdapterRequest is stored as a durable Run Trace artifact before AgentAdapter execution starts
 allowedEffect:
 - Execution Harness may call the selected AgentAdapter with AdapterRequest
 deniedEffect:
@@ -6004,20 +6239,67 @@ repairBehavior:
 ```
 
 ```text
+ruleId: ADAPTER_CANNOT_EXPAND_CAPABILITIES
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- Run Plan effectivePolicy
+- AdapterRequest capabilities
+- Execution Harness policy enforcement result
+inputs:
+- effectivePolicy capabilities
+- AdapterRequest capabilities
+- selectedAgentAdapter
+- local adapter registry
+preconditions:
+- ADAPTER_REQUEST_IS_PROVIDER_AGNOSTIC passed
+- effectivePolicy has been computed
+condition:
+- AdapterRequest fileEdit does not exceed effectivePolicy file edit permission
+- AdapterRequest commandExecution does not exceed effectivePolicy command execution permission
+- AdapterRequest allowedPaths are equal to or narrower than effectivePolicy allowed paths
+- AdapterRequest deniedPaths are equal to or broader than effectivePolicy denied paths
+- AdapterRequest allowedCommands are equal to or narrower than effectivePolicy allowed commands
+- AdapterRequest deniedCommands are equal to or broader than effectivePolicy denied commands
+- AgentAdapter does not add permissions that are absent from AdapterRequest
+allowedEffect:
+- Execution Harness may continue to AgentAdapter invocation
+deniedEffect:
+- Execution Harness must not call AgentAdapter
+- Run Planning or preflight is blocked with a policy enforcement finding
+evidence:
+- runPlanId
+- runId
+- selectedAgentAdapter
+- effectivePolicy hash
+- adapterRequest path or hash
+- capability comparison result
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- rebuild AdapterRequest from effectivePolicy
+- remove adapter-layer permission expansion
+- require Project Profile or Task Revision review for any intended permission change
+```
+
+```text
 ruleId: ADAPTER_RESULT_IS_EVIDENCE_NOT_DECISION
 status: FINAL
 scope: RUN
 sourceOfTruth:
 - AdapterResult
 - Run Trace
+- HarnessObservation
 - Run Summary normalizer
 - Review Decision ledger
 inputs:
 - AdapterResult
 - stdout / stderr refs
 - artifact refs
-- changed files observed
-- command observations
+- provider-reported changed files when present
+- provider-reported command observations when present
+- HarnessObservation
 preconditions:
 - AgentAdapter returned a structured AdapterResult or Execution Harness created a synthetic AdapterResult
 condition:
@@ -6025,12 +6307,18 @@ condition:
 - if AgentAdapter failed before returning structured output, Execution Harness creates synthetic=true AdapterResult
 - synthetic AdapterResult records adapterError.code and adapterError.message
 - AdapterResult may reference provider metadata but does not inline provider-specific transcript as Core state
+- AdapterResult is stored as a durable Run Trace artifact after AgentAdapter execution or synthetic result creation
+- AdapterResult provider-reported changed files are non-authoritative
+- AdapterResult provider-reported command observations are non-authoritative
+- AdapterResult does not override HarnessObservation changed-files evidence
+- AdapterResult does not override HarnessObservation command evidence
 - AdapterResult does not set RunSummary.result directly
 - AdapterResult does not set RunSummary.check directly
 - AdapterResult does not set verificationGateResult
+- AdapterResult does not set path, command, or capability violation truth directly
 - AdapterResult does not write Review Decision
 - AdapterResult does not write DONE, FAILED, VERIFIED, NEXT, or Queue State
-- Core normalizer derives Run Summary from Run Trace and AdapterResult
+- Core normalizer derives Run Summary from Run Trace, AdapterResult, HarnessObservation, and verification evidence
 allowedEffect:
 - Core may use AdapterResult as evidence input for Run Summary normalization
 - Run Trace may store AdapterResult and referenced artifacts
@@ -6050,6 +6338,360 @@ failureFinding:
 repairBehavior:
 - normalize adapter output through adapter layer
 - store raw provider output only as Run Trace artifact
+```
+
+```text
+ruleId: HARNESS_OBSERVATION_OWNS_EXECUTION_EVIDENCE
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- Execution Harness
+- Run Trace
+- HarnessObservation
+- workspace pre-run and post-run observation
+- command proxy / sandbox log when available
+inputs:
+- runId
+- runPlanId
+- runTracePath
+- workspaceRoot
+- workingDirectory
+- pre-run workspace state
+- post-run workspace state
+- stdout / stderr capture result
+- command proxy or sandbox command log when available
+- effectivePolicy capabilities
+preconditions:
+- AdapterRequest artifact exists
+- Execution Harness has started Run execution
+condition:
+- Execution Harness creates a HarnessObservation artifact for every Run attempt
+- HarnessObservation records stdoutRef and stderrRef or an explicit unavailableReason
+- HarnessObservation records diffRef / changedFiles or an explicit unavailableReason
+- HarnessObservation records commandLogRef / commandsObserved or an explicit unavailableReason
+- HarnessObservation records pathViolations, commandViolations, and capabilityViolations from Harness-owned checks
+- HarnessObservation evidence is not sourced from provider transcript claims alone
+- AdapterResult provider-reported observations cannot replace missing HarnessObservation evidence
+allowedEffect:
+- Core normalizer may use HarnessObservation as the authority for changed files, command observations, and policy violation evidence
+- Review may inspect HarnessObservation as execution evidence
+deniedEffect:
+- Run Summary normalization is blocked for fields that require missing HarnessObservation evidence
+- Review / Close cannot calculate VERIFIED from adapter-reported observations alone
+evidence:
+- runId
+- runPlanId
+- harnessObservation path or hash
+- stdoutRef
+- stderrRef
+- diffRef or changedFiles unavailableReason
+- commandLogRef or commands unavailableReason
+- policy violation check result
+failureFinding:
+- category = EXECUTION_EVIDENCE_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- preserve raw stdout / stderr / provider artifacts
+- create synthetic AdapterResult when adapter failure is known
+- record unavailableReason for evidence that cannot be reconstructed
+- rerun through a new Run if required HarnessObservation evidence is missing
+```
+
+```text
+ruleId: HARNESS_WORKSPACE_SNAPSHOT_IS_STATE_EVIDENCE
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- Execution Harness
+- Run Trace
+- HarnessWorkspaceSnapshot
+- HarnessObservation preRunStateRef
+- HarnessObservation postRunStateRef
+inputs:
+- runId
+- workspaceRoot
+- workingDirectory
+- effectivePolicy allowed paths
+- effectivePolicy denied paths
+- git status capture
+- git diff capture
+- scoped file snapshot capture
+- state hash calculation
+preconditions:
+- Run Trace directory has been created
+- workspaceRoot and workingDirectory have been resolved
+condition:
+- preRunStateRef references a HarnessWorkspaceSnapshot with phase = PRE_RUN
+- postRunStateRef references a HarnessWorkspaceSnapshot with phase = POST_RUN
+- HarnessWorkspaceSnapshot records git status evidence or an explicit unavailableReason
+- HarnessWorkspaceSnapshot records git diff evidence or an explicit unavailableReason
+- HarnessWorkspaceSnapshot records scoped file snapshot evidence or an explicit unavailableReason
+- HarnessWorkspaceSnapshot records stateHash or an explicit unavailableReason
+- git status is used as changed-file list evidence
+- git diff is used as human-reviewable content evidence
+- scoped file snapshot is used for Git-missed files and path policy evidence
+- stateHash is used for integrity / replay / corruption checks, not as the only review evidence
+- Run delta is interpreted as postRunState minus preRunState
+allowedEffect:
+- HarnessObservation may reference preRunStateRef and postRunStateRef
+- Core normalizer may compute changed files, path findings, and state consistency from the snapshots
+- Review may inspect git diff and scoped file snapshot evidence
+deniedEffect:
+- Run Summary normalization is blocked for state-derived fields whose snapshot evidence is missing
+- Review / Close cannot calculate VERIFIED from stateHash alone
+evidence:
+- runId
+- preRunStateRef
+- postRunStateRef
+- git status refs
+- git diff refs
+- scoped file snapshot refs
+- stateHash values
+- unavailableReason fields when present
+failureFinding:
+- category = EXECUTION_EVIDENCE_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- preserve available git status / diff / snapshot artifacts
+- record unavailableReason for missing snapshot components
+- rerun through a new Run if required state evidence cannot be reconstructed deterministically
+```
+
+```text
+ruleId: COMMAND_TRUTH_REQUIRES_HARNESS_VISIBLE_CHANNEL
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- Execution Harness
+- HarnessObservation commands
+- command proxy log
+- sandbox log
+- container exec log
+- Harness-executed verification command log
+- Run Plan effectivePolicy
+inputs:
+- effectivePolicy commandExecution permission
+- HarnessObservation.commands.authority
+- HarnessObservation.commands.commandLogRef
+- HarnessObservation.commands.commandsObserved
+- HarnessObservation.commands.commandsExecutedByHarness
+- AdapterResult providerReportedCommands when present
+- Project Profile policies.commands
+- Project Profile policies.harness
+preconditions:
+- HarnessObservation artifact exists
+- effectivePolicy has been computed
+condition:
+- command truth is recognized only when commands.authority is HARNESS_OBSERVED or HARNESS_EXECUTED
+- HARNESS_OBSERVED command truth must come from a Harness-visible channel such as command proxy, sandbox log, or container exec log
+- HARNESS_EXECUTED command truth must come from Execution Harness direct command execution
+- PROVIDER_REPORTED_ONLY commands are not command truth
+- AdapterResult providerReportedCommands are not command truth
+- provider transcript claims are not command truth
+- command policy compliance cannot be satisfied from PROVIDER_REPORTED_ONLY
+- verification command evidence cannot be satisfied from PROVIDER_REPORTED_ONLY
+- VERIFIED cannot be calculated from PROVIDER_REPORTED_ONLY command claims
+allowedEffect:
+- Core normalizer may use HARNESS_OBSERVED and HARNESS_EXECUTED command evidence for command policy, verification, and Run Summary fields
+- Review may inspect PROVIDER_REPORTED_ONLY commands as hints with degraded authority
+deniedEffect:
+- command policy compliance is unknown or blocked when command truth is required but only provider-reported commands exist
+- verification evidence is unsatisfied when it depends on provider-reported command claims only
+- automatic VERIFIED calculation is blocked when required command evidence is PROVIDER_REPORTED_ONLY
+evidence:
+- runId
+- harnessObservation path or hash
+- command authority
+- commandLogRef
+- commandsObserved
+- commandsExecutedByHarness
+- providerReportedCommandsRef when present
+- command evidence degradation reason when present
+failureFinding:
+- category = EXECUTION_EVIDENCE_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- rerun through Harness-visible command channel
+- run verification through Execution Harness
+- record PROVIDER_REPORTED_ONLY as degraded evidence, not truth
+```
+
+```text
+ruleId: COMMAND_EXECUTION_REQUIRES_OBSERVABLE_AUTHORITY_OR_DEGRADED_POLICY
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- Run Plan effectivePolicy
+- Project Profile policies.harness
+- Project Profile policies.commands
+- HarnessObservation commands
+- Run Summary normalizer
+inputs:
+- effectivePolicy commandExecution permission
+- task or Run requested command capability
+- commands.authority
+- policies.harness allowDegradedCommandObservation when present
+- computed risk
+- requiredGates.resultReview
+preconditions:
+- Run Planning is evaluating execution feasibility or Core normalizer is evaluating command evidence
+- effectivePolicy has been computed
+condition:
+- if commandExecution is false, adapter / agent must not be granted command execution capability
+- if commandExecution is true, final command truth requires commands.authority = HARNESS_OBSERVED or HARNESS_EXECUTED
+- if commandExecution is true and no Harness-visible command channel exists, Run Planning is blocked by default
+- degraded command observation may be allowed only by explicit policy
+- degraded command observation uses commands.authority = PROVIDER_REPORTED_ONLY or NONE
+- degraded command observation cannot lower risk
+- degraded command observation requires risk HIGH or higher when command execution may have occurred outside Harness-visible channel
+- degraded command observation requires human resultReview
+- degraded command observation blocks automatic VERIFIED calculation
+allowedEffect:
+- Run Planning may proceed with commandExecution only when Harness-visible command channel exists or explicit degraded policy allows it
+- Core normalizer may mark command observation as DEGRADED when explicit policy allows degraded execution
+deniedEffect:
+- Execution Harness must not call AgentAdapter with command execution capability when required observable authority is absent and degraded policy is not explicit
+- Run Summary must not claim command truth from degraded evidence
+- Review / Close must not auto-verify from degraded command evidence
+evidence:
+- runPlanId
+- runId
+- effectivePolicy commandExecution
+- command authority
+- degraded policy reference when present
+- computed risk
+- resultReview requirement
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- use command proxy, sandbox, container, or Harness-executed command path
+- disable commandExecution capability
+- explicitly accept degraded command observation policy with HIGH risk and human review
+```
+
+```text
+ruleId: S2_RUN_ATTEMPT_ALWAYS_LEAVES_THREE_ARTIFACTS
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- Run Trace directory
+- AdapterRequest
+- HarnessObservation
+- AdapterResult
+- Execution Harness lifecycle log when available
+inputs:
+- runId
+- runPlanId
+- runTracePath
+- prompt artifact
+- adapter launch result
+- stdout / stderr capture result
+- pre-run workspace observation
+- post-run workspace observation
+- diff / changed files capture result
+- command observation result
+preconditions:
+- Run Trace directory has been created
+- AdapterRequest artifact has been created
+condition:
+- every Run attempt that reaches AdapterRequest creation leaves an AdapterRequest artifact
+- every Run attempt that reaches AdapterRequest creation leaves a HarnessObservation artifact
+- every Run attempt that reaches AdapterRequest creation leaves an AdapterResult artifact or synthetic AdapterResult artifact
+- adapter launch failure produces synthetic AdapterResult with adapterExecutionStatus = ADAPTER_FAILED and adapterError.code = LAUNCH_FAILED
+- adapter timeout produces synthetic AdapterResult with adapterExecutionStatus = TIMEOUT and adapterError.code = TIMEOUT
+- malformed adapter output produces synthetic AdapterResult with adapterExecutionStatus = ADAPTER_FAILED and adapterError.code = MALFORMED_ADAPTER_OUTPUT
+- HarnessObservation records unavailableReason for any required observation field that cannot be collected
+- adapter failure does not erase HarnessObservation
+- Harness observation failure does not erase AdapterResult
+- AdapterResult and HarnessObservation do not replace each other
+allowedEffect:
+- Run Summary normalization may inspect the three artifacts and calculate derived result fields from available evidence
+- Review may inspect the three artifacts before making a Review Decision
+deniedEffect:
+- Run Summary normalization is blocked for missing required artifact references
+- Review / Close cannot calculate VERIFIED from this Run when any of the three artifacts is missing
+evidence:
+- runId
+- runPlanId
+- runTracePath
+- adapterRequest path or hash
+- harnessObservation path or hash
+- adapterResult path or hash
+- adapterExecutionStatus
+- synthetic flag
+- adapterError.code when synthetic
+- unavailableReason fields when observation failed
+failureFinding:
+- category = EXECUTION_EVIDENCE_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- preserve all existing raw artifacts
+- create synthetic AdapterResult only when failure condition is known from Harness evidence
+- record unavailableReason for missing HarnessObservation fields
+- rerun through a new Run if any required artifact cannot be reconstructed deterministically
+```
+
+```text
+ruleId: ADAPTER_REQUEST_AND_RESULT_ARE_RUN_TRACE_ARTIFACTS
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- Run Trace directory
+- AdapterRequest
+- AdapterResult
+- HarnessObservation
+- prompt artifact
+- stdout / stderr artifacts
+- changed files or diff evidence
+- command observation evidence
+inputs:
+- runId
+- runTracePath
+- adapterRequest artifact
+- adapterResult artifact
+- harnessObservation artifact
+- prompt artifact
+- stdout artifact
+- stderr artifact
+- diff or changed-files evidence
+- command log or command observation unavailable reason
+preconditions:
+- Run Trace directory has been created
+- selectedAgentAdapter is resolved
+condition:
+- AdapterRequest artifact exists before provider execution starts
+- AdapterResult artifact exists after provider execution completes or fails
+- HarnessObservation artifact exists after provider execution completes or fails
+- prompt artifact is referenced by AdapterRequest
+- stdout and stderr artifacts are referenced by HarnessObservation or Run Trace
+- changed-files or diff evidence is stored in HarnessObservation or explicitly recorded as unavailable with failure reason
+- command observation evidence is stored in HarnessObservation or explicitly recorded as unavailable with failure reason
+- artifact paths are inside the Run Trace or allowed workspace evidence location
+allowedEffect:
+- Run Summary normalization may read AdapterRequest, AdapterResult, and HarnessObservation as evidence inputs
+- Review may inspect AdapterRequest, AdapterResult, HarnessObservation, prompt, stdio, and diff evidence
+deniedEffect:
+- Run Summary normalization is blocked
+- Review / Close cannot calculate VERIFIED from this Run
+evidence:
+- runId
+- runTracePath
+- adapterRequest path or hash
+- adapterResult path or hash
+- harnessObservation path or hash
+- prompt path or hash
+- stdoutRef
+- stderrRef
+- diffRef or changedFiles
+- commandLogRef or commands unavailableReason
+failureFinding:
+- category = EXECUTION_EVIDENCE_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- preserve existing raw artifacts
+- create missing synthetic AdapterResult when failure condition is known
+- rerun only through a new Run when required evidence cannot be reconstructed deterministically
 ```
 
 ### 5.2 Project Profile 구조 FINAL RULE

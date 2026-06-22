@@ -134,6 +134,22 @@ AI-native 개발 오케스트레이션 CLI다.
 - 큰 설계 틀이 확정될 때마다 architecture snapshot 이미지를 생성해 `docs/assets/`에 저장하고, 문서에서 참조한다.
 - `docs/final-model-architecture.md`는 architecture snapshot을 읽는 방법과 각 layer의 책임을 설명한다.
 - Local Overlay는 `.codefleet/local.json`이며 `RESTRICT_ONLY`로만 병합된다.
+- 목표 루프 기준 우선순위는 S2 Adapter seam -> S4 Review record -> S3 Verification seam -> S1 Task Spec 최소 schema -> S5 Export seam -> Guards 순서로 재정렬했다.
+- S2 Adapter seam 최종 계약은 `AdapterRequest -> AgentAdapter -> AdapterResult`로 고정했다.
+- AdapterRequest와 AdapterResult는 provider-agnostic Run Trace durable artifact이며, adapter output은 evidence이지 final decision이 아니다.
+- Codex adapter는 최종 아키텍처 자체가 아니라 S2 최종 계약 아래의 첫 concrete transport 구현으로 취급한다.
+- AdapterRequest와 AdapterResult는 Run Trace artifact로 저장되어야 하며, Review Decision / VERIFIED / Objective Queue progression을 직접 만들 수 없다.
+- AdapterResult는 provider execution report일 뿐이며 changed-files truth, command execution truth, policy violation truth를 소유하지 않는다.
+- HarnessObservation을 Run Trace durable artifact로 추가하고, changed files / diff / command log / policy violation evidence의 권위는 Execution Harness가 소유하도록 고정했다.
+- Core normalizer는 AdapterResult 단독이 아니라 AdapterResult + HarnessObservation + verification evidence를 기준으로 Run Summary를 계산한다.
+- S2 Run attempt lifecycle을 고정했다. AdapterRequest 생성까지 도달한 모든 Run attempt는 AdapterRequest, HarnessObservation, AdapterResult 또는 synthetic AdapterResult 세 artifact를 반드시 남긴다.
+- Adapter failure는 HarnessObservation을 지우지 않고, Harness observation failure는 AdapterResult를 지우지 않는다. 두 artifact는 서로 대체할 수 없다.
+- preRunStateRef와 postRunStateRef는 HarnessWorkspaceSnapshot을 참조하도록 고정했다.
+- HarnessWorkspaceSnapshot은 git status, git diff, scoped file snapshot, state hash를 역할별로 분리한다. git status는 changed-file list evidence, git diff는 human-reviewable content evidence, scoped file snapshot은 Git이 놓치는 파일과 path policy evidence, state hash는 integrity / replay / corruption evidence다.
+- Run delta는 postRunState - preRunState로 해석한다. pre-run workspace가 clean일 필요는 없다.
+- Command observation authority를 NONE / PROVIDER_REPORTED_ONLY / HARNESS_OBSERVED / HARNESS_EXECUTED로 분리했다.
+- Command truth는 HARNESS_OBSERVED 또는 HARNESS_EXECUTED에서만 나온다. Provider transcript와 AdapterResult providerReportedCommands는 degraded evidence / hint이며 command policy compliance, verification evidence, VERIFIED 계산을 만족시킬 수 없다.
+- final에서 commandExecution=true이면 Harness-visible command channel이 필요하다. 없으면 기본 block이고, explicit degraded policy가 있을 때만 HIGH 이상 risk + human resultReview + automatic VERIFIED 금지 조건으로 진행할 수 있다.
 ```
 
 ## 현재 규칙 기준
@@ -183,22 +199,24 @@ same workspace state
 다음 논의 주제:
 
 ```text
-Project Profile defaults.run.isolationMode 세부 스키마
+S4 Review record 최소 형태
 ```
 
 이유:
 
 ```text
-Project Profile의 schemaVersion, project, workspace 경계는 확정했다.
-defaults 논의 전에 최종 모델 계층, 실행 단계, source/derived/evidence/decision 경계도 확정했다.
-다음은 Task가 생략했을 때 적용되는 defaults block을 FINAL MODEL 기준으로 확정해야 한다.
-defaults는 flat 구조가 아니라 `defaults.task`와 `defaults.run`으로 분리하는 방향으로 정리했다.
-defaults.task.agentRole, defaults.task.harnessMode, defaults.task.requiredGates의 REQUIRE_EXPLICIT 처리 원칙은 정리했다.
-defaults.task.workflow의 절차 템플릿 원칙도 정리했다.
-defaults.run.agentAdapter의 A+ 구조도 정리했다.
-다음은 Run Planning에서 어떤 isolationMode를 기본 선택할지 정해야 한다.
+목표 루프 관점에서 S2 Adapter seam 최종 계약을 먼저 고정했다.
+S2는 AdapterRequest -> AgentAdapter -> AdapterResult 계약이며, AdapterRequest와 AdapterResult는 Run Trace durable artifact다.
+S2 증거 권위는 AdapterResult가 아니라 HarnessObservation에 있다. AdapterResult의 provider-reported observations는 참고 정보이고, diff / changed-files / command evidence / policy violation truth는 Execution Harness가 직접 관측한다.
+S2 Run attempt lifecycle도 고정했다. AdapterRequest 생성 이후에는 실패하더라도 AdapterRequest, HarnessObservation, AdapterResult 또는 synthetic AdapterResult가 남아야 한다.
+preRunStateRef / postRunStateRef의 실체는 HarnessWorkspaceSnapshot으로 고정했다.
+command observation의 진실성도 고정했다. Command truth는 Harness-visible channel에서만 나오고, provider-reported commands는 degraded evidence다.
+다음 병목은 실행 결과를 사람이 어떻게 수용 / 거절 / 재시도 판단으로 남기는지다.
+Review record가 없으면 AdapterResult와 Run Trace는 evidence로만 남고, VERIFIED / Close / carry-forward를 계산할 수 없다.
 
-- defaults.run.isolationMode
+- S4 Review record 최소 형태
+- RUN_REVIEW_DECIDED decision event 필드
+- VERIFIED 계산에 필요한 최소 evidence reference
 ```
 
 현재 확정한 Project Profile 구조:
@@ -267,6 +285,21 @@ repairBehavior
 7. Run Summary export adapter schema
 8. Workspace discovery
 9. Review model
+10. v0.1 / v0.2 / final implementation slicing
+```
+
+목표 루프 기준 남은 우선순위:
+
+```text
+1. S4 Review record 최소 형태
+2. S3 Verification seam 실행 / 기록 방식
+3. S1 Task Spec 최소 schema
+4. S5 Run Summary / Export seam
+5. defaults.run.isolationMode
+6. policy block internal schema
+7. Harness enforcement details
+8. AgentRole / Guardrail taxonomy
+9. Workspace discovery
 10. v0.1 / v0.2 / final implementation slicing
 ```
 
