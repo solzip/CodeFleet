@@ -100,7 +100,9 @@ S2  Adapter seam   ║     approved Revision ─▶ 외부 AI 도구 ─▶ 출�
     고정: Run attempt는 AdapterRequest + HarnessObservation + AdapterResult를 남김
     고정: pre/post state는 HarnessWorkspaceSnapshot(git status/diff + scoped snapshot + hash)
     고정: command truth는 HARNESS_OBSERVED / HARNESS_EXECUTED만 인정
-    빈칸: v0.2 Codex transport 구현, scope enforcement 수준, HarnessObservation wiring
+    고정: path violation은 pre/post delta + normalized path + denied 우선 정책으로 판정
+    고정: v0.2 Codex transport slice는 final 계약 아래의 VERSION_PLAN
+    빈칸: v0.2 구현, scope enforcement 수준, HarnessObservation wiring
     이유: 목표 문장의 "AI 에이전트에게 위임"이 물리적으로 일어나는 유일한 지점.
           이게 없으면 SPINE 아래 절반이 전부 안 돈다.
 
@@ -232,7 +234,6 @@ S2는 `AdapterRequest -> AgentAdapter -> AdapterResult` 최종 계약이 고정�
 1. S4 Review record 최소 형태 확정        ← 다음 병목
 2. S3 Verification seam 기록 방식 확정
 3. S1 Task Spec 최소 schema 정리
-4. S2 v0.2 Codex transport 구현 절단면 확정
-5. 위 항목으로 SPINE 한 바퀴 수동 검증
-6. 그 다음 GUARDS를 한 겹씩 덧댐
+4. 위 항목으로 SPINE 한 바퀴 수동 검증
+5. 그 다음 GUARDS를 한 겹씩 덧댐
 ```

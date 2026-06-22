@@ -6045,6 +6045,56 @@ HARNESS_EXECUTED
 
 최종 모델에서 command execution truth는 provider transcript가 아니라 Harness-visible command channel에서만 나온다. Provider-reported command는 저장할 수 있지만 verification, command policy compliance, VERIFIED 계산을 만족시키는 증거로 사용할 수 없다.
 
+Path policy evaluation:
+
+```text
+PathPolicyEvaluation
+= HarnessWorkspaceSnapshot의 pre/post delta에서 나온 각 path change에 대한 policy 판정
+= adapter report가 아니라 Harness-owned path evidence에서 계산한다
+= allowedPaths / deniedPaths / workspace boundary / path kind / change kind를 함께 판정한다
+```
+
+PathPolicyEvaluation 최소 필드:
+
+```yaml
+schemaVersion: "1.0"
+runId: ""
+originalPath: ""
+normalizedPath: ""
+realPath: ""
+changeKind: "ADD | MODIFY | DELETE | RENAME | TYPECHANGE | SYMLINK"
+pathKind: "FILE | DIR | SYMLINK | SUBMODULE | NESTED_REPO | UNKNOWN"
+withinWorkspace: true
+matchedAllowedPath: ""
+matchedDeniedPath: ""
+violation: false
+violationCode: ""
+```
+
+Path policy 판정 순서:
+
+```text
+1. originalPath를 workspaceRoot 기준 normalized relative path로 변환한다.
+2. absolute path, drive escape, UNC path, `..` escape를 검사한다.
+3. lstat / realpath / snapshot evidence로 pathKind와 real target을 확인한다.
+4. deniedPaths match를 먼저 검사한다.
+5. allowedPaths match를 검사한다.
+6. changeKind별 source / target 추가 검사를 수행한다.
+7. violationCode를 기록한다.
+```
+
+핵심 원칙:
+
+```text
+deniedPaths wins over allowedPaths.
+generated / untracked / gitignored files are still path policy subjects.
+delete checks deleted source path.
+rename checks both source and target paths.
+symlink checks both link path and target path.
+nested repo and submodule changes require explicit allow.
+stateHash is not path violation evidence by itself.
+```
+
 Synthetic AdapterResult:
 
 ```text
@@ -6187,6 +6237,52 @@ harness observation failure:
 Adapter failure does not erase HarnessObservation.
 Harness observation failure does not erase AdapterResult.
 Neither artifact can replace the other.
+```
+
+S2 v0.2 Codex transport slice는 VERSION_PLAN이다.
+
+v0.2 Codex adapter는 최종 S2 아키텍처 자체가 아니라, `AdapterRequest -> AgentAdapter -> AdapterResult` 계약 아래의 첫 concrete transport 구현이다. v0.2 구현 편의를 이유로 provider-specific 설정, provider transcript, command claims, path claims를 Core truth로 승격하지 않는다.
+
+v0.2 Codex transport does:
+
+```text
+- selectedAgentAdapter = codex
+- prompt artifact를 생성한다.
+- AdapterRequest artifact를 최소 형태로 생성한다.
+- Codex transport는 prompt 본문을 stdin으로 넘긴다.
+- 기본 transport command는 local adapter registry / local config의 command + args를 사용한다.
+- cwd는 Run Plan workingDirectory 또는 v0.x task projectPath를 사용한다.
+- stdout.log / stderr.log를 Harness가 capture한다.
+- git status / git diff 기반 HarnessWorkspaceSnapshot 최소 형태를 생성한다.
+- HarnessObservation 최소 형태를 생성한다.
+- adapter-result.json 또는 synthetic adapter-result.json을 생성한다.
+- command observation authority는 NONE 또는 PROVIDER_REPORTED_ONLY로 기록한다.
+- commandLogRef unavailableReason은 COMMAND_CHANNEL_NOT_HARNESS_VISIBLE을 허용한다.
+- path policy는 normalized path escape, allowedPaths / deniedPaths, delete / rename source-target 최소 검사를 우선 구현한다.
+- symlink / nested repo / submodule은 감지 가능한 경우 warning 또는 violation으로 기록한다.
+```
+
+v0.2 Codex transport does not:
+
+```text
+- final Harness sandbox enforcement를 제공하지 않는다.
+- command proxy / sandbox log / container exec log를 제공하지 않는다.
+- provider transcript를 command truth로 사용하지 않는다.
+- provider-reported changed files를 changed-files truth로 사용하지 않는다.
+- full path policy enforcement를 제공하지 않는다.
+- symlink target, case-insensitive collision, gitignored snapshot coverage를 완전하게 보장하지 않는다.
+- automatic VERIFIED decision을 만들지 않는다.
+- Review Decision을 AdapterResult에서 만들지 않는다.
+- Project Profile에 Codex command path, token, model, provider CLI option, transcript parser를 저장하지 않는다.
+```
+
+v0.2 degraded evidence rule:
+
+```text
+If Codex may have executed commands outside a Harness-visible channel,
+command evidence authority = PROVIDER_REPORTED_ONLY or NONE.
+This cannot satisfy verification, command policy compliance, or automatic VERIFIED calculation.
+Human resultReview is required for accepting such Run results.
 ```
 
 AgentAdapter Invocation FINAL RULES:
@@ -6568,6 +6664,390 @@ repairBehavior:
 - use command proxy, sandbox, container, or Harness-executed command path
 - disable commandExecution capability
 - explicitly accept degraded command observation policy with HIGH risk and human review
+```
+
+```text
+ruleId: V0_2_CODEX_SLICE_MUST_NOT_WEAKEN_FINAL_S2_CONTRACT
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- S2 final contract
+- AdapterRequest
+- AdapterResult
+- HarnessObservation
+- HarnessWorkspaceSnapshot
+- v0.2 Codex transport VERSION_PLAN
+inputs:
+- selectedAgentAdapter
+- local adapter registry
+- AdapterRequest artifact
+- AdapterResult artifact
+- HarnessObservation artifact
+- HarnessWorkspaceSnapshot artifacts
+- command observation authority
+- path policy evaluation result
+preconditions:
+- v0.2 Codex transport implementation is selected
+- Run has reached AdapterRequest creation
+condition:
+- v0.2 Codex transport is treated as transport implementation, not as Core architecture
+- v0.2 still writes AdapterRequest, HarnessObservation, and AdapterResult artifacts
+- provider-specific Codex command path, model, token, CLI option, and transcript parser remain outside Project Profile
+- provider transcript is not command truth
+- provider-reported changed files are not changed-files truth
+- command authority is NONE, PROVIDER_REPORTED_ONLY, HARNESS_OBSERVED, or HARNESS_EXECUTED
+- if no Harness-visible command channel exists, command authority is NONE or PROVIDER_REPORTED_ONLY
+- automatic VERIFIED is blocked when required evidence is degraded
+- Review Decision is not created from AdapterResult
+allowedEffect:
+- v0.2 may implement a smaller S2 slice while preserving final contract boundaries
+- Core may mark unsupported final features as unavailable or degraded
+deniedEffect:
+- v0.2 implementation must not store provider-specific execution detail in Project Profile
+- v0.2 implementation must not claim command truth from provider report
+- v0.2 implementation must not auto-verify from degraded evidence
+evidence:
+- runId
+- selectedAgentAdapter
+- adapterRequest path or hash
+- adapterResult path or hash
+- harnessObservation path or hash
+- command authority
+- degraded evidence fields when present
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- move provider-specific settings to local adapter registry or adapter layer
+- downgrade provider-reported observations to degraded evidence
+- require human Review Decision for degraded runs
+```
+
+```text
+ruleId: PATHS_ARE_WORKSPACE_RELATIVE_AND_CANONICAL
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- Execution Harness
+- HarnessWorkspaceSnapshot
+- HarnessObservation policyChecks
+- Project Profile policies.files
+- Run Plan effectivePolicy
+inputs:
+- workspaceRoot
+- workingDirectory
+- changed paths from Run delta
+- original path strings
+- normalized path strings
+- realpath / lstat / snapshot evidence
+- effectivePolicy allowedPaths
+- effectivePolicy deniedPaths
+preconditions:
+- HarnessWorkspaceSnapshot preRunStateRef and postRunStateRef exist
+- Run delta has been computed
+condition:
+- every changed path is evaluated as a workspace-relative normalized path
+- absolute paths are rejected as policy targets
+- drive-qualified paths are rejected as policy targets
+- UNC paths are rejected as policy targets
+- `..` path escape outside workspaceRoot is rejected
+- realpath escape outside workspaceRoot is rejected
+- original path casing and raw path string are preserved as evidence
+allowedEffect:
+- PathPolicyEvaluation may continue to allowedPaths / deniedPaths matching
+deniedEffect:
+- changed path is recorded as path violation
+- Run Summary normalization records path policy failure
+evidence:
+- runId
+- originalPath
+- normalizedPath
+- realPath when available
+- workspaceRoot
+- violationCode
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- move change inside workspace
+- remove absolute / escaped path from task scope
+- rerun through a new Run after path correction
+```
+
+```text
+ruleId: DENIED_PATHS_OVERRIDE_ALLOWED_PATHS
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- Run Plan effectivePolicy
+- Project Profile policies.files
+- HarnessObservation policyChecks
+- PathPolicyEvaluation
+inputs:
+- normalizedPath
+- realPath when available
+- effectivePolicy allowedPaths
+- effectivePolicy deniedPaths
+- path matcher result
+preconditions:
+- PATHS_ARE_WORKSPACE_RELATIVE_AND_CANONICAL passed for the path
+condition:
+- deniedPaths are evaluated before allowedPaths
+- any deniedPaths match creates a violation even when allowedPaths also match
+- absence of allowedPaths match creates a violation unless policy explicitly allows the path class
+allowedEffect:
+- path change may be accepted only when no deniedPaths match and an allowed policy permits it
+deniedEffect:
+- denied path change is recorded as DENIED_PATH_CHANGED
+- not-allowed path change is recorded as PATH_OUTSIDE_ALLOWED_PATHS
+evidence:
+- runId
+- normalizedPath
+- matchedAllowedPath
+- matchedDeniedPath
+- violationCode
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- remove denied path change
+- narrow task scope
+- update Project Profile policy only through review
+```
+
+```text
+ruleId: SYMLINK_TARGET_MUST_NOT_ESCAPE_PATH_POLICY
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- HarnessWorkspaceSnapshot
+- scoped file snapshot
+- lstat / realpath evidence
+- effectivePolicy files policy
+- PathPolicyEvaluation
+inputs:
+- symlink link path
+- symlink target path
+- normalized link path
+- target realPath when resolvable
+- effectivePolicy allowedPaths
+- effectivePolicy deniedPaths
+preconditions:
+- changed path is a symlink or symlink target can affect changed path resolution
+- PATHS_ARE_WORKSPACE_RELATIVE_AND_CANONICAL has evaluated the link path
+condition:
+- symlink link path must be allowed
+- symlink target must be resolvable or recorded as violation
+- symlink target realPath must remain inside workspaceRoot
+- symlink target must not match deniedPaths
+- symlink target must match allowedPaths when target is inside workspace policy scope
+allowedEffect:
+- symlink change may be accepted only when link and target both satisfy path policy
+deniedEffect:
+- symlink change is recorded as path violation
+evidence:
+- runId
+- symlink path
+- symlink target
+- target realPath when available
+- matchedAllowedPath
+- matchedDeniedPath
+- violationCode
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- remove unsafe symlink
+- point symlink target inside allowed workspace scope
+- explicitly deny broken or unverifiable symlink targets
+```
+
+```text
+ruleId: CASE_INSENSITIVE_PATH_MATCH_USES_CANONICAL_KEY
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- Execution Harness filesystem capability detection
+- HarnessWorkspaceSnapshot
+- effectivePolicy files policy
+- PathPolicyEvaluation
+inputs:
+- workspace filesystem case sensitivity
+- original path casing
+- normalized path
+- case-folded comparison key when applicable
+- effectivePolicy allowedPaths
+- effectivePolicy deniedPaths
+preconditions:
+- changed path has been normalized
+- filesystem case sensitivity has been detected or declared
+condition:
+- case-insensitive filesystems use case-folded comparison keys for policy matching
+- original path casing is preserved as evidence
+- deniedPaths matching uses the same filesystem sensitivity semantics as allowedPaths
+- case-only rename is recorded as evidence
+- case collision is recorded as finding
+allowedEffect:
+- policy matching may proceed using canonical comparison key
+deniedEffect:
+- denied match on case-insensitive filesystem is recorded as CASE_INSENSITIVE_DENY_MATCH
+- path collision is recorded as CASE_COLLISION_DETECTED
+evidence:
+- runId
+- filesystem case sensitivity
+- originalPath
+- canonicalComparisonKey
+- matchedAllowedPath
+- matchedDeniedPath
+- violationCode or warningCode
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- rename paths to non-conflicting names
+- correct policy casing or path patterns
+- rerun after case collision is resolved
+```
+
+```text
+ruleId: GENERATED_UNTRACKED_AND_GITIGNORED_FILES_ARE_POLICY_SUBJECTS
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- HarnessWorkspaceSnapshot
+- scoped file snapshot
+- git status evidence
+- effectivePolicy files policy
+- PathPolicyEvaluation
+inputs:
+- generated file paths when known
+- untracked file paths
+- gitignored file paths inside snapshot coverage
+- effectivePolicy allowedPaths
+- effectivePolicy deniedPaths
+- scoped file snapshot coverage
+preconditions:
+- scoped file snapshot has been collected or unavailableReason recorded
+- Run delta has been computed
+condition:
+- generated files do not bypass path policy
+- untracked files do not bypass path policy
+- gitignored files inside scoped snapshot coverage do not bypass path policy
+- generated / untracked / gitignored files matching deniedPaths are violations
+- generated / untracked / gitignored files outside allowedPaths are violations unless explicitly allowed by policy
+allowedEffect:
+- generated / untracked / gitignored changes may be accepted only when allowed by effective files policy
+deniedEffect:
+- unauthorized generated / untracked / gitignored changes are recorded as path violations
+evidence:
+- runId
+- path
+- file class
+- snapshot coverage
+- matchedAllowedPath
+- matchedDeniedPath
+- violationCode
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- remove unauthorized generated output
+- add explicit generated output policy through review
+- extend scoped snapshot coverage when evidence is insufficient
+```
+
+```text
+ruleId: DELETE_AND_RENAME_CHECK_SOURCE_AND_TARGET
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- HarnessWorkspaceSnapshot
+- git status evidence
+- scoped file snapshot
+- PathPolicyEvaluation
+- effectivePolicy files policy
+inputs:
+- changeKind
+- delete source path
+- rename source path
+- rename target path
+- effectivePolicy allowedPaths
+- effectivePolicy deniedPaths
+preconditions:
+- Run delta has identified delete or rename change
+- source and target paths have been normalized when present
+condition:
+- DELETE evaluates the deleted source path
+- RENAME evaluates both source path and target path
+- source path matching deniedPaths creates violation
+- target path matching deniedPaths creates violation
+- target path outside allowedPaths creates violation
+- rename cannot be used to move denied content into allowed scope without violation
+allowedEffect:
+- delete or rename may be accepted only when all relevant paths satisfy effective files policy
+deniedEffect:
+- delete or rename is recorded as path violation
+evidence:
+- runId
+- changeKind
+- sourcePath
+- targetPath
+- matchedAllowedPath
+- matchedDeniedPath
+- violationCode
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- revert unauthorized delete or rename
+- restrict task scope
+- update policy only through review when intended
+```
+
+```text
+ruleId: NESTED_REPO_AND_SUBMODULE_REQUIRE_EXPLICIT_ALLOW
+status: FINAL
+scope: RUN
+sourceOfTruth:
+- HarnessWorkspaceSnapshot
+- scoped file snapshot
+- git status evidence
+- effectivePolicy files policy
+- Project Profile workspace components
+inputs:
+- pathKind
+- nested .git directory evidence
+- gitfile evidence
+- submodule status evidence
+- changed paths under nested repo or submodule
+- explicit policy allow when present
+preconditions:
+- scoped file snapshot or git status evidence can identify nested repo / submodule boundary
+condition:
+- nested repo changes are blocked by default
+- submodule pointer changes require explicit allow
+- submodule internal file changes are not treated as current workspace evidence by default
+- nested .git directory or gitfile boundary is recorded as NESTED_REPO or SUBMODULE
+- explicit allow must identify the nested repo or submodule boundary
+allowedEffect:
+- nested repo or submodule change may be accepted only when explicit policy allows the boundary and change kind
+deniedEffect:
+- nested repo or submodule change is recorded as path violation
+evidence:
+- runId
+- path
+- pathKind
+- boundaryPath
+- submodule or nested repo evidence
+- explicit allow reference when present
+- violationCode
+failureFinding:
+- category = POLICY_ENFORCEMENT_INTEGRITY
+- severity = WARNING
+repairBehavior:
+- remove nested repo / submodule modification
+- model the repo as a separate workspace or component
+- add explicit policy only through review
 ```
 
 ```text

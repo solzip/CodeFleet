@@ -150,6 +150,16 @@ AI-native 개발 오케스트레이션 CLI다.
 - Command observation authority를 NONE / PROVIDER_REPORTED_ONLY / HARNESS_OBSERVED / HARNESS_EXECUTED로 분리했다.
 - Command truth는 HARNESS_OBSERVED 또는 HARNESS_EXECUTED에서만 나온다. Provider transcript와 AdapterResult providerReportedCommands는 degraded evidence / hint이며 command policy compliance, verification evidence, VERIFIED 계산을 만족시킬 수 없다.
 - final에서 commandExecution=true이면 Harness-visible command channel이 필요하다. 없으면 기본 block이고, explicit degraded policy가 있을 때만 HIGH 이상 risk + human resultReview + automatic VERIFIED 금지 조건으로 진행할 수 있다.
+- PathPolicyEvaluation은 HarnessWorkspaceSnapshot pre/post delta에서 나온 각 path change를 기준으로 계산한다.
+- 모든 path는 workspace-relative normalized path로 평가하고, deniedPaths는 allowedPaths보다 항상 우선한다.
+- symlink는 link path와 target realpath를 모두 검사한다. generated / untracked / gitignored 파일도 path policy 대상이다.
+- delete는 source path를 검사하고, rename은 source와 target을 모두 검사한다.
+- case-insensitive filesystem에서는 case-folded comparison key로 match하되 원본 casing을 evidence로 보존한다.
+- nested repo / submodule 변경은 explicit allow 없이는 차단한다.
+- S2 v0.2 Codex transport slice는 VERSION_PLAN으로 정의했다. final S2 계약 자체가 아니라 첫 concrete transport 구현이다.
+- v0.2 Codex slice는 prompt stdin, local adapter command/args, stdout/stderr capture, git status/diff 기반 최소 HarnessWorkspaceSnapshot, HarnessObservation, AdapterResult를 만든다.
+- v0.2 Codex slice는 sandbox enforcement, command proxy, full path policy enforcement, provider transcript truth, automatic VERIFIED를 제공하지 않는다.
+- v0.2에서 command channel이 Harness-visible이 아니면 command authority는 NONE 또는 PROVIDER_REPORTED_ONLY이고, verification / command compliance / automatic VERIFIED를 만족할 수 없다.
 ```
 
 ## 현재 규칙 기준
@@ -211,6 +221,7 @@ S2 증거 권위는 AdapterResult가 아니라 HarnessObservation에 있다. Ada
 S2 Run attempt lifecycle도 고정했다. AdapterRequest 생성 이후에는 실패하더라도 AdapterRequest, HarnessObservation, AdapterResult 또는 synthetic AdapterResult가 남아야 한다.
 preRunStateRef / postRunStateRef의 실체는 HarnessWorkspaceSnapshot으로 고정했다.
 command observation의 진실성도 고정했다. Command truth는 Harness-visible channel에서만 나오고, provider-reported commands는 degraded evidence다.
+S2 v0.2 Codex transport slice도 VERSION_PLAN으로 명시했다. v0.2는 final 계약을 약화하지 않고, command/path evidence가 부족한 부분은 unavailable 또는 degraded로 기록한다.
 다음 병목은 실행 결과를 사람이 어떻게 수용 / 거절 / 재시도 판단으로 남기는지다.
 Review record가 없으면 AdapterResult와 Run Trace는 evidence로만 남고, VERIFIED / Close / carry-forward를 계산할 수 없다.
 
