@@ -31,7 +31,7 @@
 - 사람이나 LLM의 감, 추론, 추측으로 판정하지 않는다.
 - 아직 확정되지 않은 내용은 DESIGN CANDIDATE 또는 VERSION_PLAN으로 분리한다.
 
-바로 다음 논의 주제는 Verification 실행 정책 구현이다.
+바로 다음 논의 주제는 Workspace discovery다.
 ```
 
 ## 제품 정의
@@ -134,7 +134,7 @@ AI-native 개발 오케스트레이션 CLI다.
 - 큰 설계 틀이 확정될 때마다 architecture snapshot 이미지를 생성해 `docs/assets/`에 저장하고, 문서에서 참조한다.
 - `docs/final-model-architecture.md`는 architecture snapshot을 읽는 방법과 각 layer의 책임을 설명한다.
 - Local Overlay는 `.codefleet/local.json`이며 `RESTRICT_ONLY`로만 병합된다.
-- 목표 루프 기준 우선순위는 S2 Adapter seam -> S4 Review record -> S3 Verification seam -> S1 Task Spec 최소 schema -> run-plan.json -> S2 artifact layout -> run-summary/verification/local review artifact layout -> 최소 CLI flow -> SPINE 수동 검증 계약 -> S5 Export seam -> Project Profile defaults/policies -> Harness enforcement -> AgentRole / Guardrail taxonomy 순서로 먼저 고정했고, 현재 다음 병목은 Verification 실행 정책 구현이다.
+- 목표 루프 기준 우선순위는 S2 Adapter seam -> S4 Review record -> S3 Verification seam -> S1 Task Spec 최소 schema -> run-plan.json -> S2 artifact layout -> run-summary/verification/local review artifact layout -> 최소 CLI flow -> SPINE 수동 검증 계약 -> S5 Export seam -> Project Profile defaults/policies -> Harness enforcement -> AgentRole / Guardrail taxonomy -> Verification 실행 정책 순서로 먼저 고정했고, 현재 다음 병목은 Workspace discovery다.
 - S2 Adapter seam 최종 계약은 `AdapterRequest -> AgentAdapter -> AdapterResult`로 고정했다.
 - AdapterRequest와 AdapterResult는 provider-agnostic Run Trace Evidence artifact이며, adapter output은 evidence이지 final decision이 아니다.
 - Codex adapter는 최종 아키텍처 자체가 아니라 S2 최종 계약 아래의 첫 concrete transport 구현으로 취급한다.
@@ -174,7 +174,7 @@ AI-native 개발 오케스트레이션 CLI다.
 - v0.2 local review artifact 경로는 `.codefleet/runs/<runId>/review-decision.local.json`이며 final decision truth가 아니라 Objective ledger migration input이다.
 - S3 VerificationEvidence는 Run Trace Evidence의 Harness-owned artifact다.
 - observedCheck는 PASS / FAIL / SKIP / NONE이고 VerificationEvidence에서 파생한다.
-- verificationGateResult는 SATISFIED / NOT_SATISFIED / WAIVED_ALLOWED이고 CodeFleet이 requiredGates.verification, observedCheck, waiver policy로 계산한다.
+- verificationGateResult는 SATISFIED / NOT_SATISFIED / WAIVED_ALLOWED이고, verificationGateReason은 NOT_REQUIRED / PASS / WAIVER / FAILED / MISSING / BLOCKED / UNAVAILABLE이다. 둘 다 CodeFleet이 requiredGates.verification, observedCheck, waiver policy로 계산한다.
 - provider-reported verification은 degraded evidence / review hint이며 observedCheck PASS source가 될 수 없다.
 - v0.2 prompt-only verification은 VERSION_PLAN이고, Harness-visible evidence가 없으면 required verification을 SATISFIED로 만들 수 없다.
 - S1 Task Revision minimum contract를 고정했다. Task Revision은 source-only immutable execution contract이고 S2/S3/S4가 공유하는 최소 입력이다.
@@ -194,7 +194,8 @@ AI-native 개발 오케스트레이션 CLI다.
 - Project Profile defaults.run.isolationMode와 policies block internal schema를 고정했다. policies는 portable policy source이고 effectivePolicy, Run Plan, local runtime state, credential, execution log를 담을 수 없다.
 - Harness enforcement 상세 계약을 고정했다. Draft / Execution / Verification / Export Harness를 분리하고, command / path / isolation evidence boundary는 Harness-owned evidence만 truth로 인정한다.
 - AgentRole / Guardrail taxonomy를 고정했다. AgentRole은 permission grant가 아니라 classification / max capability input이며, Guardrail은 Project Profile / Local Overlay보다 권한을 넓힐 수 없는 Task-local restriction source다.
-- S1-S5, Project Profile, Harness enforcement, AgentRole / Guardrail taxonomy 최소 계약은 고정됐지만 구현 절단면과 실제 end-to-end runtime validation은 남아 있다.
+- Verification 실행 정책을 고정했다. Harness-owned command evidence만 PASS authority이고, provider-reported verification은 degraded evidence / review hint일 뿐 required verification을 만족시킬 수 없다.
+- S1-S5, Project Profile, Harness enforcement, AgentRole / Guardrail taxonomy, Verification 실행 정책 최소 계약은 고정됐지만 구현 절단면과 실제 end-to-end runtime validation은 남아 있다.
 - 프로젝트/목표 진행 방향은 `.codefleet/objectives/<objectiveId>/ledger.jsonl`과 `objective.json`이 담당한다.
 - durable file은 lifecycle 단계에 도달하면 반드시 남아야 한다. 단, durable은 반드시 git commit된다는 뜻이 아니며 공유 / redaction / export 정책은 별도다.
 ```
@@ -246,7 +247,7 @@ same workspace state
 다음 논의 주제:
 
 ```text
-Verification 실행 정책 구현
+Workspace discovery
 ```
 
 이유:
@@ -260,7 +261,7 @@ preRunStateRef / postRunStateRef의 실체는 HarnessWorkspaceSnapshot으로 고
 command observation의 진실성도 고정했다. Command truth는 Harness-visible channel에서만 나오고, provider-reported commands는 degraded evidence다.
 S2 v0.2 Codex transport slice도 VERSION_PLAN으로 명시했다. v0.2는 final 계약을 약화하지 않고, command/path evidence가 부족한 부분은 unavailable 또는 degraded로 기록한다.
 S4 Review record 최소 형태도 고정했다. RUN_REVIEW_DECIDED는 Objective ledger durable decision event이고, ReviewEvidenceBundle을 필수 참조한다.
-S3 Verification seam도 고정했다. VerificationEvidence는 Run Trace Evidence의 Harness-owned artifact이고, observedCheck / verificationGateResult의 직접 입력이다.
+S3 Verification seam도 고정했다. VerificationEvidence는 Run Trace Evidence의 Harness-owned artifact이고, observedCheck / verificationGateResult / verificationGateReason의 직접 입력이다.
 provider-reported verification은 degraded evidence이며 observedCheck PASS source가 될 수 없다.
 v0.2 prompt-only verification은 final 계약 아래의 VERSION_PLAN이고, Harness-visible evidence가 없으면 required verification을 SATISFIED로 만들 수 없다.
 S1 Task Spec 최소 schema도 고정했다. Task Revision은 source-only immutable execution contract이고, Run Plan / AdapterRequest / VerificationEvidence / ReviewEvidenceBundle의 공통 입력이다.
@@ -273,9 +274,10 @@ SPINE 한 바퀴 수동 검증 계약도 고정했다.
 S5 Run Summary / Export seam도 고정했다.
 Project Profile defaults / policy block 세부 스키마도 고정했다.
 Harness enforcement 상세 계약도 고정했다.
-AgentRole / Guardrail taxonomy도 고정했다. 다음 병목은 Verification 실행 정책 구현이다.
+AgentRole / Guardrail taxonomy도 고정했다.
+Verification 실행 정책도 고정했다. 다음 병목은 Workspace discovery다.
 
-- Verification 실행 정책 구현
+- Workspace discovery
 ```
 
 현재 확정한 Project Profile 구조:
@@ -335,18 +337,16 @@ repairBehavior
 ## 남은 설계 항목
 
 ```text
-1. Verification execution policy implementation
-2. Workspace discovery
-3. Review model
-4. v0.1 / v0.2 / final implementation slicing
+1. Workspace discovery
+2. Review model
+3. v0.1 / v0.2 / final implementation slicing
 ```
 
 목표 루프 기준 남은 우선순위:
 
 ```text
-1. Verification 실행 정책 구현
-2. Workspace discovery
-3. v0.1 / v0.2 / final implementation slicing
+1. Workspace discovery
+2. v0.1 / v0.2 / final implementation slicing
 ```
 
 ## 저장소 메모

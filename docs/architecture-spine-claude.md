@@ -79,7 +79,7 @@ Evidence / Trace       [S] 🟡   실행 증거       ◀══ SEAM S3: Verific
 [닫힘] derived state (VERIFIED 등)  →  carry-forward(승인된 결정/요약)  →  다음 Objective
 ```
 
-이 척추에서 색을 정직하게 읽으면: **S1-S5 최소 계약, Project Profile defaults/policies 계약, Harness enforcement 계약, AgentRole / Guardrail taxonomy는 고정됐고, 아직 구현 절단면은 🟡 상태다.** 목표 기준 진짜 남은 일은 Verification 실행 구현, Workspace discovery, v0.1 / v0.2 / final implementation slicing이다.
+이 척추에서 색을 정직하게 읽으면: **S1-S5 최소 계약, Project Profile defaults/policies 계약, Harness enforcement 계약, AgentRole / Guardrail taxonomy, Verification 실행 정책은 고정됐고, 아직 구현 절단면은 🟡 상태다.** 목표 기준 진짜 남은 일은 Workspace discovery, v0.1 / v0.2 / final implementation slicing이다.
 
 ---
 
@@ -111,14 +111,16 @@ S2  Adapter seam   ║     approved Revision ─▶ 외부 AI 도구 ─▶ 출�
           이게 없으면 SPINE 아래 절반이 전부 안 돈다.
 
 S3  Verification seam     검증 명령 실행 ─▶ VerificationEvidence ─▶ observedCheck
-    상태: 🟡  ★ 최종 계약은 고정, concrete execution 구현은 남음
+    상태: 🟡  ★ 최종 계약과 실행 정책은 고정, concrete command runner 구현은 남음
     고정: VerificationEvidence는 Run Trace의 Harness-owned artifact
     고정: observedCheck = PASS / FAIL / SKIP / NONE
     고정: verificationGateResult = SATISFIED / NOT_SATISFIED / WAIVED_ALLOWED
-    고정: PASS는 HARNESS_EXECUTED 또는 충분한 HARNESS_OBSERVED evidence에서만 나옴
+    고정: verificationGateReason = NOT_REQUIRED / PASS / WAIVER / FAILED / MISSING / BLOCKED / UNAVAILABLE
+    고정: PASS는 HARNESS_EXECUTED 또는 8.2.2 channel-integrity를 만족한 HARNESS_OBSERVED evidence에서만 나옴
     고정: provider-reported verification은 degraded evidence이며 PASS source가 아님
     고정: v0.2 prompt-only verification은 final 계약 아래의 VERSION_PLAN
-    빈칸: v0.2 기록 구현, Harness-executed command runner, waiver CLI/UI
+    고정: Verification execution policy는 VERIFICATION_EXECUTION_IS_HARNESS_OWNED_EVIDENCE
+    빈칸: v0.2 기록 구현, Harness-executed command runner implementation, waiver CLI/UI
 
 S4  Review seam     ◆    Run 결과 ─▶ 사람 수용/거절 기록 ─▶ VERIFIED 계산
     상태: 🟡  (최소 계약 고정, 구현 남음)
@@ -135,7 +137,7 @@ S5  Export seam           Run Trace ─▶ Run Summary(sanitized) ─▶ Notion 
     고정: adapter별 field allowlist와 raw evidence export 금지
 ```
 
-핵심: **S1(Task Revision 최소 계약), S2(Adapter), S3(Verification), S4(Review), S5(Export), Project Profile defaults/policies 최소 계약, Harness enforcement 최소 계약, AgentRole / Guardrail taxonomy는 고정됐다.** 다만 구현 절단면과 실제 end-to-end runtime validation은 남아 있다. 다음 병목은 Verification 실행 정책 구현이다.
+핵심: **S1(Task Revision 최소 계약), S2(Adapter), S3(Verification), S4(Review), S5(Export), Project Profile defaults/policies 최소 계약, Harness enforcement 최소 계약, AgentRole / Guardrail taxonomy, Verification 실행 정책은 고정됐다.** 다만 구현 절단면과 실제 end-to-end runtime validation은 남아 있다. 다음 병목은 Workspace discovery다.
 
 ---
 
@@ -202,7 +204,7 @@ S5  Export seam           Run Trace ─▶ Run Summary(sanitized) ─▶ Notion 
 필수:
   - Task Spec 최소 구체 schema      (S1 최소 계약 고정됨)
   - Adapter 최종 계약 + 호출 프로토콜 1종 (S2)  ★ 최종 계약 고정됨
-  - 최소 Verification 실행 정책 확정값
+  - Workspace discovery 확정값
   - Run Trace 수집 (diff/stdout)     (S3 최소: VerificationEvidence 기록)
   - Review record 최소 형태          (S4)
 
@@ -214,7 +216,7 @@ S5  Export seam           Run Trace ─▶ Run Summary(sanitized) ─▶ Notion 
 ```
 
 즉 **"지금 한 줄로 정하면 가장 목표에 가까운 것" = S1/S2/S3/S4 계약을 v0.2 artifact layout과 CLI flow로 연결하는 것.**
-S1은 `Task Revision minimum contract`, S2는 `AdapterRequest -> AgentAdapter -> AdapterResult`, S3는 `VerificationEvidence -> observedCheck -> verificationGateResult`, S4는 `RUN_REVIEW_DECIDED + ReviewEvidenceBundle` 최소 계약이 고정됐다.
+S1은 `Task Revision minimum contract`, S2는 `AdapterRequest -> AgentAdapter -> AdapterResult`, S3는 `VerificationEvidence -> observedCheck -> verificationGateResult / verificationGateReason`, S4는 `RUN_REVIEW_DECIDED + ReviewEvidenceBundle` 최소 계약이 고정됐다.
 
 ---
 
@@ -237,7 +239,6 @@ S1은 `Task Revision minimum contract`, S2는 `AdapterRequest -> AgentAdapter ->
 ## 다음에 할 일 (이 지도 기준)
 
 ```text
-1. Verification 실행 정책 구현   ← 다음 병목
-2. Workspace discovery
-3. v0.1 / v0.2 / final implementation slicing
+1. Workspace discovery   ← 다음 병목
+2. v0.1 / v0.2 / final implementation slicing
 ```

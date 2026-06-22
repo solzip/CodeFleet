@@ -1525,6 +1525,7 @@ findingRefs: []
 observedResultSnapshot: ""
 observedCheckSnapshot: ""
 verificationGateResult: "SATISFIED | NOT_SATISFIED | WAIVED_ALLOWED"
+verificationGateReason: "NOT_REQUIRED | PASS | WAIVER | FAILED | MISSING | BLOCKED | UNAVAILABLE"
 computedRisk: "LOW | MEDIUM | HIGH | UNKNOWN"
 commandEvidenceAuthority: "NONE | PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED | HARNESS_EXECUTED"
 pathViolationSummary:
@@ -2084,19 +2085,19 @@ verificationGateResult 계산:
 
 ```text
 verification.required == false
--> SATISFIED
+-> SATISFIED, verificationGateReason = NOT_REQUIRED
 
 verification.required == true + observedCheck == PASS
--> SATISFIED
+-> SATISFIED, verificationGateReason = PASS
 
 verification.required == true + observedCheck in {FAIL, NONE}
--> NOT_SATISFIED
+-> NOT_SATISFIED, verificationGateReason = FAILED | MISSING
 
 verification.required == true + observedCheck == SKIP + valid waiver decision
--> WAIVED_ALLOWED
+-> WAIVED_ALLOWED, verificationGateReason = WAIVER
 
 verification.required == true + observedCheck == SKIP + no valid waiver decision
--> NOT_SATISFIED
+-> NOT_SATISFIED, verificationGateReason = BLOCKED | UNAVAILABLE
 ```
 
 규칙:
@@ -2106,6 +2107,7 @@ verification.required == true + observedCheck == SKIP + no valid waiver decision
 - PASS는 evidence에서만 나온다.
 - WAIVED는 policy가 허용한 경우에만 가능하다.
 - WAIVED는 actorKind, actorId, reason, risk condition, approver evidence를 가져야 한다.
+- verificationGateReason은 `NOT_REQUIRED | PASS | WAIVER | FAILED | MISSING | BLOCKED | UNAVAILABLE` 중 하나다.
 - requiredGates.verification.required=true이고 observedCheck != PASS이면 기본적으로 VERIFIED가 될 수 없다.
 ```
 
@@ -2128,30 +2130,51 @@ VerificationEvidence
 
 ```yaml
 schemaVersion: "1.0"
+documentKind: "VERIFICATION_EVIDENCE"
+verificationAttemptId: "verify-001"
 runId: ""
 runPlanId: ""
-verificationAttemptId: ""
-verificationPlanRef: ""
-verificationPlanHash: ""
+runPlanHash: ""
+taskRevisionRef:
+  path: ""
+  hash: ""
+verificationPlanRef:
+  path: ".codefleet/runs/<runId>/run-plan.json#/verificationPlan"
+  hash: ""
 authority: "NONE | PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED | HARNESS_EXECUTED | WAIVED_BY_POLICY"
 observedCheck: "PASS | FAIL | SKIP | NONE"
 verificationGateResult: "SATISFIED | NOT_SATISFIED | WAIVED_ALLOWED"
-commands:
+verificationGateReason: "NOT_REQUIRED | PASS | WAIVER | FAILED | MISSING | BLOCKED | UNAVAILABLE"
+attempts:
   - commandId: ""
     command: []
     cwd: ""
-    authority: "PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED | HARNESS_EXECUTED"
+    authority: "NONE | PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED | HARNESS_EXECUTED"
+    decision: "ALLOWED | BLOCKED | UNAVAILABLE"
     startedAt: ""
     endedAt: ""
     exitCode: null
-    stdoutRef: ""
-    stderrRef: ""
-    logRef: ""
+    stdoutRef:
+      path: ""
+      hash: ""
+    stderrRef:
+      path: ""
+      hash: ""
+    logRef:
+      path: ""
+      hash: ""
     result: "PASS | FAIL | SKIP | NONE"
+    blockedReason: ""
     unavailableReason: ""
-providerReportedVerificationRef: ""
-waiverRef: ""
+providerReportedVerificationRef:
+  path: ""
+  hash: ""
+  degraded: true
+waiverRef:
+  path: ""
+  hash: ""
 failureFindingRefs: []
+createdAt: ""
 ```
 
 observedCheck 계산:
@@ -5166,6 +5189,7 @@ result:
 check:
   observedCheck: "PASS | FAIL | SKIP | NONE"
   verificationGateResult: "SATISFIED | NOT_SATISFIED | WAIVED_ALLOWED"
+  verificationGateReason: "NOT_REQUIRED | PASS | WAIVER | FAILED | MISSING | BLOCKED | UNAVAILABLE"
   derivedFromVerificationAttemptIds: []
 evidenceAuthority:
   commandEvidenceAuthority: "NONE | PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED | HARNESS_EXECUTED"
@@ -5232,42 +5256,47 @@ schemaVersion: "1.0"
 documentKind: "VERIFICATION_EVIDENCE"
 verificationAttemptId: "verify-001"
 runId: ""
-runPlanRef:
-  path: ".codefleet/runs/<runId>/run-plan.json"
+runPlanId: ""
+runPlanHash: ""
+taskRevisionRef:
+  path: ""
   hash: ""
 verificationPlanRef:
-  path: ".codefleet/runs/<runId>/run-plan.json#verificationPlan"
+  path: ".codefleet/runs/<runId>/run-plan.json#/verificationPlan"
   hash: ""
-attemptNumber: 1
 authority: "NONE | PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED | HARNESS_EXECUTED | WAIVED_BY_POLICY"
-requiredByGate: false
-commandEvidence:
-  commandId: ""
-  command: []
-  cwd: ""
-  exitCode: null
-  startedAt: ""
-  endedAt: ""
-  stdoutRef:
-    path: ""
-    hash: ""
-  stderrRef:
-    path: ""
-    hash: ""
+observedCheck: "PASS | FAIL | SKIP | NONE"
+verificationGateResult: "SATISFIED | NOT_SATISFIED | WAIVED_ALLOWED"
+verificationGateReason: "NOT_REQUIRED | PASS | WAIVER | FAILED | MISSING | BLOCKED | UNAVAILABLE"
+attempts:
+  - commandId: ""
+    command: []
+    cwd: ""
+    authority: "NONE | PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED | HARNESS_EXECUTED"
+    decision: "ALLOWED | BLOCKED | UNAVAILABLE"
+    startedAt: ""
+    endedAt: ""
+    exitCode: null
+    stdoutRef:
+      path: ""
+      hash: ""
+    stderrRef:
+      path: ""
+      hash: ""
+    logRef:
+      path: ""
+      hash: ""
+    result: "PASS | FAIL | SKIP | NONE"
+    blockedReason: ""
+    unavailableReason: ""
 providerReportedVerificationRef:
   path: ""
   hash: ""
-  unavailableReason: ""
-observedCheck: "PASS | FAIL | SKIP | NONE"
-verificationGateResult: "SATISFIED | NOT_SATISFIED | WAIVED_ALLOWED"
-unavailableReason: ""
-waiver:
-  allowed: false
-  policyRef:
-    path: ""
-    hash: ""
-  reason: ""
-policyViolations: []
+  degraded: true
+waiverRef:
+  path: ""
+  hash: ""
+failureFindingRefs: []
 createdAt: ""
 ```
 
@@ -5280,6 +5309,7 @@ VerificationEvidence rules:
 - observedCheck PASS requires HARNESS_EXECUTED or sufficiently trustworthy HARNESS_OBSERVED evidence with a passing required check.
 - verificationGateResult SATISFIED requires observedCheck PASS for required verification.
 - verificationGateResult WAIVED_ALLOWED requires an explicit policy waiver and normally pairs with observedCheck SKIP.
+- verificationGateReason records whether the gate was satisfied by NOT_REQUIRED, PASS, WAIVER, FAILED, MISSING, BLOCKED, or UNAVAILABLE.
 - command policy violation prevents that attempt from being a PASS source.
 - The latest or effective verification attempt is selected by Run Summary policy; old attempts are not edited.
 ```
@@ -5316,6 +5346,7 @@ reviewEvidenceBundleRef:
 observedResultSnapshot: "DONE | FAILED | BLOCKED | CANCELED | UNKNOWN"
 observedCheckSnapshot: "PASS | FAIL | SKIP | NONE"
 verificationGateResult: "SATISFIED | NOT_SATISFIED | WAIVED_ALLOWED"
+verificationGateReason: "NOT_REQUIRED | PASS | WAIVER | FAILED | MISSING | BLOCKED | UNAVAILABLE"
 computedRisk: "LOW | MEDIUM | HIGH | UNKNOWN"
 pathViolationSummary:
   hasViolation: false
@@ -8699,7 +8730,7 @@ inputs:
 - runId
 - runPlanId
 - verificationPlanRef
-- verificationPlanHash
+- verificationPlanRef hash
 - requiredGates.verification
 - Harness-executed verification command logs
 - Harness-visible command observations when available
@@ -8714,9 +8745,9 @@ condition:
 - if verification is required, Execution Harness creates VerificationEvidence even when no command could be run
 - VerificationEvidence is stored as a durable Run Trace Evidence artifact
 - observedCheck is derived from VerificationEvidence, not from human input
-- verificationGateResult is derived by CodeFleet from requiredGates.verification, observedCheck, and waiver policy
+- verificationGateResult and verificationGateReason are derived by CodeFleet from requiredGates.verification, observedCheck, and waiver policy
 - HARNESS_EXECUTED verification evidence may satisfy observedCheck PASS when the command matches verificationPlan and exits successfully
-- HARNESS_OBSERVED verification evidence may satisfy observedCheck PASS only when the Harness-visible channel records command, cwd, exitCode, and log ref for a verificationPlan command
+- HARNESS_OBSERVED verification evidence may satisfy observedCheck PASS only when the Harness-visible channel satisfies 8.2.2 channel-integrity conditions and records normalized command, cwd, exitCode, and log ref for a verificationPlan command
 - PROVIDER_REPORTED_ONLY verification is degraded evidence and cannot satisfy observedCheck PASS
 - WAIVED_BY_POLICY does not mean PASS; it may only produce observedCheck SKIP plus verificationGateResult WAIVED_ALLOWED
 - verification command evidence with command policy violation cannot satisfy observedCheck PASS
@@ -12258,6 +12289,7 @@ result:
 check:
   observedCheck: "PASS | FAIL | SKIP | NONE"
   verificationGateResult: "SATISFIED | NOT_SATISFIED | WAIVED_ALLOWED"
+  verificationGateReason: "NOT_REQUIRED | PASS | WAIVER | FAILED | MISSING | BLOCKED | UNAVAILABLE"
 changedFiles:
   - path: "workspace-relative/path"
     changeKind: "ADDED | MODIFIED | DELETED | RENAMED | UNKNOWN"
@@ -12775,19 +12807,96 @@ final:
 
 Verification은 "AI가 했다"가 아니라 "검증까지 추적했다"를 만들기 위한 개념이다.
 
-현재 상태:
+Verification 실행 정책은 S3 seam의 runtime policy다. 이 정책은 `verification.commands`를 실행 권한으로 보지 않고, Run Plan의 `verificationPlan`과 Harness-owned command evidence를 통해서만 PASS를 만든다.
+
+Verification source chain:
 
 ```text
-FINAL RULE:
-- Verification result는 Run Trace에 남는다.
-- required verification이 실패하면 Run-derived State는 DONE 또는 VERIFIED가 될 수 없다.
-- command를 실제로 실행하지 않은 경우 result는 PASSED가 아니라 NOT_RUN이다.
+Task Revision verification.commands
+= source-only verification intent / candidate
 
-DESIGN CANDIDATE:
-- 아래 command 목록은 도메인별 기본 후보이며 최종 allowlist는 Project Profile schema 논의에서 확정한다.
+Run Plan verificationPlan
+= derived immutable execution plan
+= selected commands, cwd, required flag, policy refs, expected authority를 가진다.
+
+Verification Harness
+= verificationPlan을 command policy와 Harness-visible channel로 실행 또는 관측한다.
+
+VerificationEvidence
+= Run Trace 안의 Harness-owned durable evidence
+= observedCheck / verificationGateResult의 직접 입력이다.
 ```
 
-예시:
+검증 실행 authority:
+
+```text
+HARNESS_EXECUTED
+- Verification Harness가 직접 명령을 실행한다.
+- 최종 모델의 기본 PASS source다.
+
+HARNESS_OBSERVED
+- Harness-visible channel이 외부 실행의 command / cwd / exitCode / log refs를 관측한다.
+- 충분한 integrity evidence가 있으면 PASS source가 될 수 있다.
+- 최소 조건은 8.2.2 Harness-visible command channel의 `HARNESS_OBSERVED` 인정 조건과 동일하다.
+- verificationPlan command와 normalized command / cwd가 일치해야 한다.
+
+PROVIDER_REPORTED_ONLY
+- AgentAdapter 또는 provider transcript가 검증 실행을 보고한다.
+- degraded evidence / review hint일 뿐 PASS source가 아니다.
+
+WAIVED_BY_POLICY
+- 검증이 통과된 것이 아니다.
+- valid waiver가 있으면 observedCheck는 SKIP이고 verificationGateResult만 WAIVED_ALLOWED가 될 수 있다.
+
+NONE
+- 검증 실행 증거가 없다.
+- required verification을 만족시킬 수 없다.
+```
+
+Harness-executed verification pipeline:
+
+```text
+1. run-plan.json 존재와 hash 확인
+2. Run Plan verificationPlan load
+3. effectivePolicy.requiredGates.verification 확인
+4. command normalize
+5. cwd normalize
+6. policies.commands / Task guardrails / Local Overlay meet 결과 확인
+7. deniedCommands 우선 match
+8. allowedCommands match
+9. destructive command taxonomy match
+10. destructive / production command이면 explicit durable command approval 확인
+11. Harness-visible command channel 확인
+12. command attempt 실행 또는 차단 기록
+13. stdoutRef / stderrRef / logRef / exitCode 기록
+14. VerificationEvidence 생성
+15. observedCheck 계산
+16. verification waiver policy와 waiver decision 확인
+17. verificationGateResult / verificationGateReason 계산
+```
+
+Command result mapping:
+
+```text
+exitCode == 0 + required checks all passed + no command/path/policy violation
+-> command result PASS
+
+exitCode != 0
+-> command result FAIL
+
+command blocked by policy or unavailable runtime
+-> command result SKIP with unavailableReason / blockedReason
+
+no verificationPlan and verification.required == false
+-> observedCheck NONE, verificationGateResult SATISFIED, verificationGateReason NOT_REQUIRED
+
+no verificationPlan and verification.required == true
+-> observedCheck NONE, verificationGateResult NOT_SATISFIED, verificationGateReason MISSING
+```
+
+도메인별 command 후보는 Project Profile `policies.commands.allowedCommands` 또는 Task Revision verification intent에 들어갈 수 있지만, 최종 실행 권한은 Run Plan effectivePolicy가 결정한다.
+
+일반 후보:
 
 ```text
 Backend:
@@ -12815,19 +12924,155 @@ Terraform:
 
 `terraform apply`는 기본 금지다.
 
-Verification 실행 방식은 VERSION_PLAN이다.
+v0.2 prompt-only degraded evidence:
 
 ```text
-v0.x:
-- prompt에 검증 지시를 포함할 수 있다.
-- provider-reported verification은 degraded evidence로 저장한다.
-- Harness-visible command evidence가 없으면 observedCheck PASS를 만들지 않는다.
-- required verification이 있으나 검증을 실행하지 못하면 observedCheck SKIP 또는 NONE으로 기록한다.
+v0.2는 prompt-only verification instruction을 사용할 수 있다.
+provider가 "테스트를 실행했다"고 보고하면 providerReportedVerificationRef에 저장할 수 있다.
+그러나 Harness-visible command evidence가 없으면 observedCheck를 PASS로 계산하지 않는다.
+required verification이 있는데 Harness evidence가 없으면 observedCheck는 SKIP 또는 NONE이다.
+valid waiver가 없는 한 verificationGateResult는 NOT_SATISFIED다.
+```
+
+VerificationEvidence execution artifact:
+
+```yaml
+schemaVersion: "1.0"
+documentKind: "VERIFICATION_EVIDENCE"
+verificationAttemptId: "verify-001"
+runId: ""
+runPlanId: ""
+runPlanHash: ""
+taskRevisionRef:
+  path: ""
+  hash: ""
+verificationPlanRef:
+  path: ".codefleet/runs/<runId>/run-plan.json#/verificationPlan"
+  hash: ""
+authority: "NONE | PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED | HARNESS_EXECUTED | WAIVED_BY_POLICY"
+observedCheck: "PASS | FAIL | SKIP | NONE"
+verificationGateResult: "SATISFIED | NOT_SATISFIED | WAIVED_ALLOWED"
+verificationGateReason: "NOT_REQUIRED | PASS | WAIVER | FAILED | MISSING | BLOCKED | UNAVAILABLE"
+attempts:
+  - commandId: ""
+    command: []
+    cwd: ""
+    authority: "NONE | PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED | HARNESS_EXECUTED"
+    decision: "ALLOWED | BLOCKED | UNAVAILABLE"
+    startedAt: ""
+    endedAt: ""
+    exitCode: null
+    stdoutRef:
+      path: ""
+      hash: ""
+    stderrRef:
+      path: ""
+      hash: ""
+    logRef:
+      path: ""
+      hash: ""
+    result: "PASS | FAIL | SKIP | NONE"
+    blockedReason: ""
+    unavailableReason: ""
+providerReportedVerificationRef:
+  path: ""
+  hash: ""
+  degraded: true
+waiverRef:
+  path: ""
+  hash: ""
+failureFindingRefs: []
+createdAt: ""
+```
+
+Artifact rules:
+
+```text
+- verificationAttemptId는 Run 안에서 verify-001, verify-002처럼 단조 증가한다.
+- VerificationEvidence는 Verification Harness가 생성한다.
+- AdapterResult는 providerReportedVerificationRef의 source가 될 수 있지만 VerificationEvidence를 대체하지 않는다.
+- VerificationEvidence가 없으면 run-summary.json은 unavailableReason을 기록해야 한다.
+- VerificationEvidence hash mismatch는 EXECUTION_EVIDENCE_INTEGRITY finding이다.
+```
+
+Verification execution final rule:
+
+```yaml
+ruleId: VERIFICATION_EXECUTION_IS_HARNESS_OWNED_EVIDENCE
+status: FINAL
+scope: VERIFICATION
+sourceOfTruth:
+  - Task Revision verification intent
+  - run-plan.json verificationPlan
+  - Run Plan effectivePolicy
+  - Project Profile policies.commands
+  - Project Profile policies.verification
+  - Local Overlay restrictions
+  - Harness-visible command channel evidence
+  - VerificationEvidence
+inputs:
+  - approved Task Revision
+  - run-plan.json
+  - verificationPlan
+  - effectivePolicy
+  - command policy
+  - waiver policy
+preconditions:
+  - run-plan.json exists and hash is fixed
+  - verificationPlan has been derived before verification execution
+  - Verification Harness has command execution or observation authority, or records unavailable/degraded evidence
+condition:
+  - Task Revision verification.commands are execution intent, not command permission.
+  - Verification commands must pass command policy preflight.
+  - HARNESS_EXECUTED and HARNESS_OBSERVED satisfying 8.2.2 channel-integrity conditions are the only PASS authorities.
+  - PROVIDER_REPORTED_ONLY must not produce observedCheck PASS.
+  - blocked or unavailable verification command produces SKIP or NONE, not PASS.
+  - observedCheck is derived from VerificationEvidence.
+  - verification waiver is evaluated only after observedCheck is SKIP or NONE; it is not command execution approval.
+  - verificationGateResult and verificationGateReason are derived from requiredGates.verification, observedCheck, and valid waiver policy.
+allowedEffect:
+  - Verification Harness may execute or observe allowed verification commands.
+  - Run Summary may reference VerificationEvidence and derived observedCheck / verificationGateResult / verificationGateReason.
+  - ReviewEvidenceBundle may freeze VerificationEvidence refs/hash and derived verification gate fields for review.
+deniedEffect:
+  - AdapterResult must not create PASS directly.
+  - Provider transcript must not satisfy required verification.
+  - Verification Harness must not widen command/path/environment policy to run verification.
+  - VERIFIED and queue progression must not use degraded verification evidence as satisfied verification.
+evidence:
+  - verificationAttemptId
+  - runId
+  - runPlanId
+  - runPlanHash
+  - effectivePolicyHash
+  - command attempt refs
+  - stdoutRef / stderrRef / logRef hashes
+  - providerReportedVerificationRef when present
+  - waiverRef when present
+  - observedCheck
+  - verificationGateResult
+  - verificationGateReason
+failureFinding:
+  category: EXECUTION_EVIDENCE_INTEGRITY
+  severity: WARNING
+repairBehavior:
+  - rerun verification through Harness-visible command channel
+  - add valid waiver only when policy allows waiver
+  - create a new Run when immutable verification evidence is invalid
+```
+
+VERSION_PLAN:
+
+```text
+v0.2:
+- prompt-only verification instruction is allowed as degraded evidence.
+- provider-reported verification may be stored but cannot satisfy required verification.
+- codefleet verify may create VerificationEvidence with authority NONE, PROVIDER_REPORTED_ONLY, or HARNESS_EXECUTED depending on local capability.
+- missing command runner support is recorded as unavailableReason.
 
 final:
-- Harness가 Project Profile allowlist, effectivePolicy, Run Plan verificationPlan을 통과한 verification command를 직접 실행한다.
-- command / cwd / exitCode / stdoutRef / stderrRef / logRef / result를 VerificationEvidence에 기록한다.
-- observedCheck와 verificationGateResult는 VerificationEvidence에서 파생한다.
+- Verification Harness executes or observes verification commands through Harness-visible command channel.
+- observedCheck and verificationGateResult are always computed from VerificationEvidence and policy.
 ```
 
 ## 14. 현재 구현과의 관계
@@ -12922,23 +13167,18 @@ v0.1 구현 내용:
 - Harness enforcement는 Draft / Execution / Verification / Export Harness 경계와 command / path / isolation evidence boundary로 고정한다는 원칙
 - AgentRole은 permission grant가 아니라 classification / max capability input이라는 원칙
 - Guardrail은 Task-local restriction source이며 Project Profile / Local Overlay보다 권한을 넓힐 수 없다는 원칙
+- Verification execution policy는 Harness-owned command evidence만 PASS authority로 인정한다는 원칙
 ```
 
 다음으로 논의할 항목:
 
 ```text
-1. Verification 실행 정책 구현
-   - v0.2 prompt-only degraded evidence 처리
-   - Harness-executed verification command 실행
-   - VerificationEvidence artifact 구현
-   - observedCheck / verificationGateResult 계산 구현
-
-2. Workspace discovery
+1. Workspace discovery
    - 현재 cwd 기준
    - 부모 디렉터리 탐색
    - 명시적 --workspace 옵션
 
-3. Review 모델 구현
+2. Review 모델 구현
    - AI review.md
    - human review note
    - approval 기록
