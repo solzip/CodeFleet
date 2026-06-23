@@ -13301,6 +13301,173 @@ v0.1 구현 내용:
 
 > 현재 v0.1 구현은 최종 아키텍처가 아니라 seed implementation이다. 앞으로의 설계는 이 문서의 Core / Workspace / Profile / Objective / Task Queue / Mutation Engine / Task Draft / Harness / Run Trace / Run Summary 개념을 기준으로 재정렬한다.
 
+### 14.1 v0.1 / v0.2 / final implementation slicing
+
+Implementation slicing은 VERSION_PLAN이다. 버전별 구현 범위를 나누기 위한 계획이며, final 계약을 바꾸는 source of truth가 아니다.
+
+Slicing 원칙:
+
+```text
+- v0.1은 현재 seed implementation을 보존한다.
+- v0.2는 final 내부 boundary를 처음으로 durable artifact로 드러내는 최소 구현이다.
+- v0.2 사용자-facing command는 짧게 유지할 수 있지만, 내부 artifact boundary는 final 모델 이름과 책임을 따른다.
+- v0.2에서 구현하지 못하는 final 책임은 success로 가장하지 않고 unavailable / degraded / migration input으로 기록한다.
+- final은 v0.2 artifact를 source-of-truth로 승격하지 않고, 필요한 경우 ledger / review / harness artifact로 migration한다.
+```
+
+현재 v0.1 seed:
+
+```text
+Commands:
+- codefleet init
+- codefleet task validate <task-id>
+- codefleet prompt <task-id>
+- codefleet run <task-id>
+- codefleet status
+- codefleet runs
+
+Files:
+- .codefleet/config.json
+- .codefleet/tasks/<taskId>.yaml
+- .codefleet/prompts/<taskId>.md
+- .codefleet/runs/<runId>/task.yaml
+- .codefleet/runs/<runId>/prompt.md
+- .codefleet/runs/<runId>/stdout.log
+- .codefleet/runs/<runId>/stderr.log
+- .codefleet/runs/<runId>/git-diff.patch
+- .codefleet/runs/<runId>/result.json
+
+Known boundary:
+- result.json is a v0.1 run result summary, not final Run Summary.
+- task.yaml copy is a v0.1 execution input snapshot, not immutable Task Revision lineage.
+- git-diff.patch is useful evidence, but not full HarnessWorkspaceSnapshot.
+- current config.json is v0.1 config, not full Project Profile.
+```
+
+v0.2 minimum target:
+
+```text
+Workspace:
+- implement final-compatible workspace discovery result
+- support EXPLICIT and PARENT_SEARCH discovery modes
+- freeze portable discovery refs/hash in run-plan.json
+- keep absolute realpath in Harness evidence only
+
+Task:
+- accept current YAML task as v0.2 Task Revision input when it passes minimum validation
+- keep final Task Revision schema as the target shape
+- record unavailable/migration fields instead of inventing approval or lineage truth
+
+Run Planning:
+- create .codefleet/runs/<runId>/run-plan.json before adapter execution
+- freeze sourceRefs, workspace.discovery, selectedAgentAdapter, effectivePolicy, computedRisk, verificationPlan, artifactPlan
+- keep run-plan.json immutable after hashing
+
+Execution:
+- create adapter-request.json before provider execution
+- create harness-observation.json for every Run attempt that reaches AdapterRequest
+- create adapter-result.json or synthetic AdapterResult
+- record missing command/path evidence as unavailable or degraded, not PASS
+
+Summary / Verification:
+- create run-summary.json as derived artifact, not decision truth
+- create VerificationEvidence when verification is requested or required, even when the only honest authority is NONE or PROVIDER_REPORTED_ONLY
+- provider-reported verification may be stored but cannot satisfy required verification
+
+Review:
+- normal v0.2 review creates ReviewEvidenceBundle when review is decided
+- if ReviewEvidenceBundle cannot be created, record unavailableReason as degraded negative pass, not acceptance evidence
+- when Objective ledger is not implemented, write review-decision.local.json as finalDecisionTruth false and migrationTarget RUN_REVIEW_DECIDED
+- do not calculate final VERIFIED from local review artifact alone
+```
+
+v0.2 explicit non-goals:
+
+```text
+- full Objective ledger replay
+- full Mutation Engine
+- full Task Draft edit/review UI
+- full policy merge UI
+- full sandbox prevention for every isolation mode
+- automatic VERIFIED / queue progression from degraded evidence
+- external export adapters beyond sanitized local artifacts
+```
+
+Recommended implementation order:
+
+```text
+1. Workspace discovery helper
+   - selected workspace result
+   - configRef / localOverlayRef hash
+   - portable refs vs local realpath split
+
+2. run-plan.json creation
+   - derive minimal sourceRefs / workspace.discovery / selectedAgentAdapter / effectivePolicy / artifactPlan
+   - keep current `codefleet run <taskId>` as shorthand for run plan + run execute
+
+3. S2 artifact split
+   - adapter-request.json
+   - harness-observation.json
+   - adapter-result.json or synthetic AdapterResult
+
+4. run-summary.json normalization
+   - derive from AdapterRequest / HarnessObservation / AdapterResult
+   - mark missing Harness truth as unavailable/degraded
+
+5. VerificationEvidence
+   - support authority NONE / PROVIDER_REPORTED_ONLY / HARNESS_EXECUTED
+   - compute observedCheck and verificationGateResult conservatively
+
+6. local review migration path
+   - ReviewEvidenceBundle
+   - review-decision.local.json
+   - no final VERIFIED without ledger-backed RUN_REVIEW_DECIDED
+```
+
+Implementation slicing rule:
+
+```yaml
+ruleId: IMPLEMENTATION_SLICING_MUST_PRESERVE_FINAL_BOUNDARIES
+status: FINAL
+scope: VERSION_PLAN
+sourceOfTruth:
+  - final architecture contracts
+  - v0.1 current implementation evidence
+  - v0.2 VERSION_PLAN
+inputs:
+  - current CLI command surface
+  - current .codefleet artifact layout
+  - final durable file map
+  - final S1-S5 seam contracts
+preconditions:
+  - feature is being assigned to v0.1, v0.2, or final
+condition:
+  - v0.2 may omit a final capability only by recording unavailable, degraded, or migration input semantics.
+  - v0.2 must not rename a final source/evidence/decision boundary into a different responsibility.
+  - v0.2 shorthand commands must persist final boundary artifacts separately.
+  - v0.2 local artifacts must not be treated as final source of truth when final requires ledger-backed decisions.
+allowedEffect:
+  - implementation work may be split into small local CLI milestones
+  - v0.2 may keep current user-facing command names while adding internal durable boundaries
+deniedEffect:
+  - v0.2 must not mark degraded provider claims as Harness truth
+  - v0.2 must not calculate final VERIFIED without effective Review Decision and verification gate semantics
+  - v0.2 must not make result.json, review-decision.local.json, or provider transcript replace final artifacts
+evidence:
+  - version slice label
+  - implemented command list
+  - artifact list
+  - unavailable/degraded/migration markers
+  - contract refs for affected seams
+failureFinding:
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
+repairBehavior:
+  - move the feature to a later slice
+  - record unsupported capability as unavailable/degraded
+  - add the missing durable boundary before enabling the shorthand command
+```
+
 ## 15. 논의 상태와 남은 항목
 
 현재까지 고정한 항목:
@@ -13372,20 +13539,16 @@ v0.1 구현 내용:
 - Guardrail은 Task-local restriction source이며 Project Profile / Local Overlay보다 권한을 넓힐 수 없다는 원칙
 - Verification execution policy는 Harness-owned command evidence만 PASS authority로 인정한다는 원칙
 - Workspace discovery는 explicit --workspace 또는 nearest-parent .codefleet/config.json으로 단일 workspace를 결정하고, portable refs/hash와 local realpath evidence를 분리하는 Core invariant라는 원칙
+- v0.1 / v0.2 / final implementation slicing은 final boundary를 약화하지 않고 unavailable / degraded / migration input으로 미구현 책임을 표현한다는 원칙
 ```
 
 다음으로 논의할 항목:
 
 ```text
-1. Review 모델 구현
+1. Review model v0.2 구현 세부
    - AI review.md
    - human review note
    - approval 기록
-
-2. v0.1 / v0.2 / final implementation slicing
-   - Workspace discovery v0.2 구현 범위
-   - S1-S5 최소 루프 구현 순서
-   - final 계약 대비 unavailable/degraded evidence 처리
 ```
 
 ## 16. 다음 세션에서 이어갈 때

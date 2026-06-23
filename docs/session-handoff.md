@@ -31,7 +31,7 @@
 - 사람이나 LLM의 감, 추론, 추측으로 판정하지 않는다.
 - 아직 확정되지 않은 내용은 DESIGN CANDIDATE 또는 VERSION_PLAN으로 분리한다.
 
-바로 다음 논의 주제는 v0.1 / v0.2 / final implementation slicing이다.
+바로 다음 논의 주제는 Review model v0.2 구현 세부다.
 ```
 
 ## 제품 정의
@@ -134,7 +134,7 @@ AI-native 개발 오케스트레이션 CLI다.
 - 큰 설계 틀이 확정될 때마다 architecture snapshot 이미지를 생성해 `docs/assets/`에 저장하고, 문서에서 참조한다.
 - `docs/final-model-architecture.md`는 architecture snapshot을 읽는 방법과 각 layer의 책임을 설명한다.
 - Local Overlay는 `.codefleet/local.json`이며 `RESTRICT_ONLY`로만 병합된다.
-- 목표 루프 기준 우선순위는 S2 Adapter seam -> S4 Review record -> S3 Verification seam -> S1 Task Spec 최소 schema -> run-plan.json -> S2 artifact layout -> run-summary/verification/local review artifact layout -> 최소 CLI flow -> SPINE 수동 검증 계약 -> S5 Export seam -> Project Profile defaults/policies -> Harness enforcement -> AgentRole / Guardrail taxonomy -> Verification 실행 정책 -> Workspace discovery 순서로 먼저 고정했고, 현재 다음 병목은 v0.1 / v0.2 / final implementation slicing이다.
+- 목표 루프 기준 우선순위는 S2 Adapter seam -> S4 Review record -> S3 Verification seam -> S1 Task Spec 최소 schema -> run-plan.json -> S2 artifact layout -> run-summary/verification/local review artifact layout -> 최소 CLI flow -> SPINE 수동 검증 계약 -> S5 Export seam -> Project Profile defaults/policies -> Harness enforcement -> AgentRole / Guardrail taxonomy -> Verification 실행 정책 -> Workspace discovery -> v0.1 / v0.2 / final implementation slicing 순서로 먼저 고정했고, 현재 다음 병목은 Review model v0.2 구현 세부다.
 - S2 Adapter seam 최종 계약은 `AdapterRequest -> AgentAdapter -> AdapterResult`로 고정했다.
 - AdapterRequest와 AdapterResult는 provider-agnostic Run Trace Evidence artifact이며, adapter output은 evidence이지 final decision이 아니다.
 - Codex adapter는 최종 아키텍처 자체가 아니라 S2 최종 계약 아래의 첫 concrete transport 구현으로 취급한다.
@@ -247,7 +247,7 @@ same workspace state
 다음 논의 주제:
 
 ```text
-v0.1 / v0.2 / final implementation slicing
+Review model v0.2 구현 세부
 ```
 
 이유:
@@ -277,9 +277,10 @@ Harness enforcement 상세 계약도 고정했다.
 AgentRole / Guardrail taxonomy도 고정했다.
 Verification 실행 정책도 고정했다.
 Workspace discovery도 고정했다. explicit --workspace 또는 nearest-parent .codefleet/config.json으로 단일 workspace를 결정하고, portable refs/hash와 local realpath evidence를 분리한다. Project Profile은 workspaceRoot를 선택하거나 저장하지 않는다.
-다음 병목은 v0.1 / v0.2 / final implementation slicing이다.
+v0.1 / v0.2 / final implementation slicing도 고정했다. v0.2는 final boundary를 약화하지 않고 unavailable / degraded / migration input으로 미구현 책임을 표현한다.
+다음 병목은 Review model v0.2 구현 세부다.
 
-- v0.1 / v0.2 / final implementation slicing
+- Review model v0.2 구현 세부
 ```
 
 현재 확정한 Project Profile 구조:
@@ -339,14 +340,13 @@ repairBehavior
 ## 남은 설계 항목
 
 ```text
-1. Review model
-2. v0.1 / v0.2 / final implementation slicing
+1. Review model v0.2 구현 세부
 ```
 
 목표 루프 기준 남은 우선순위:
 
 ```text
-1. v0.1 / v0.2 / final implementation slicing
+1. Review model v0.2 구현 세부
 ```
 
 ## 저장소 메모
