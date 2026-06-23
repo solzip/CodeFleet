@@ -5530,6 +5530,197 @@ Local review rules:
 - migrated RUN_REVIEW_DECIDED must retain or supersede reviewDecisionId and reviewEvidenceBundleHash.
 ```
 
+Review model v0.2 implementation detail is VERSION_PLAN. It defines the first
+manual implementation of the already-fixed S4 contract; it does not reopen the
+final Review Decision authority model.
+
+`codefleet review <runId>` v0.2 behavior:
+
+```text
+Purpose:
+- collect a human review decision for one Run
+- freeze the evidence context into ReviewEvidenceBundle when possible
+- write review-decision.local.json as migration input while Objective ledger is absent
+
+Inputs:
+- runId
+- decision: ACCEPTED | REJECTED | NEEDS_CHANGES
+- reason
+- actorId, defaulting to local user identity when available
+- optional review note text or review note file
+- optional aiReviewRef as reviewer hint only
+
+Required existing artifacts:
+- run-plan.json
+- run-summary.json or explicit unavailableReason
+- adapter-request.json when execution reached AdapterRequest
+- harness-observation.json when execution reached AdapterRequest
+- adapter-result.json or synthetic AdapterResult when execution reached AdapterRequest
+- VerificationEvidence when verification was requested or required
+
+Outputs:
+- .codefleet/reviews/<reviewDecisionId>/evidence-bundle.json when evidence refs can be frozen
+- .codefleet/reviews/<reviewDecisionId>/review-note.md when human note is provided
+- .codefleet/reviews/<reviewDecisionId>/ai-review.md when AI review output is stored
+- .codefleet/runs/<runId>/review-decision.local.json while Objective ledger is absent
+```
+
+Review decision CLI contract:
+
+```text
+Minimal v0.2 command:
+
+codefleet review <runId> --decision <ACCEPTED|REJECTED|NEEDS_CHANGES> --reason <text>
+
+Optional:
+
+--note <text>
+--note-file <path>
+--actor <actorId>
+--ai-review-file <path>
+--supersedes <localReviewId>
+```
+
+If interactive input is implemented later, it must produce the same fields as the
+explicit non-interactive command. The non-interactive command is the durable
+contract for automation and tests.
+
+Human review note:
+
+```yaml
+documentKind: "HUMAN_REVIEW_NOTE"
+reviewDecisionId: ""
+runId: ""
+actorKind: "HUMAN"
+actorId: ""
+decision: "ACCEPTED | REJECTED | NEEDS_CHANGES"
+reason: ""
+note: ""
+createdAt: ""
+```
+
+Human review note rules:
+
+```text
+- human review note is reviewer explanation, not evidence truth.
+- human review note cannot change observedResultSnapshot, observedCheckSnapshot, verificationGateResult, computedRisk, or pathViolationSummary.
+- human review note may be referenced by review-decision.local.json and future RUN_REVIEW_DECIDED as reviewNoteRef.
+- missing human review note is allowed when reason is present.
+```
+
+AI review output:
+
+```yaml
+documentKind: "AI_REVIEW_HINT"
+reviewDecisionId: ""
+runId: ""
+adapterId: ""
+promptRef:
+  path: ""
+  hash: ""
+outputRef:
+  path: ""
+  hash: ""
+degraded: true
+createdAt: ""
+```
+
+AI review rules:
+
+```text
+- AI review output is reviewer hint only.
+- AI review output cannot be actorKind HUMAN.
+- AI review output cannot create ACCEPTED / REJECTED / NEEDS_CHANGES by itself in v0.2.
+- AI review output cannot lower computedRisk or satisfy resultReview.required.
+- AI review output may be stored in ReviewEvidenceBundle as aiReviewHintRef with degraded true.
+```
+
+v0.2 ReviewEvidenceBundle additions:
+
+```yaml
+reviewNoteRef:
+  path: ".codefleet/reviews/<reviewDecisionId>/review-note.md"
+  hash: ""
+  unavailableReason: ""
+aiReviewHintRef:
+  path: ".codefleet/reviews/<reviewDecisionId>/ai-review.md"
+  hash: ""
+  degraded: true
+  unavailableReason: ""
+bundleStatus: "COMPLETE | DEGRADED"
+degradedReason: ""
+```
+
+v0.2 local degraded review:
+
+```text
+If ReviewEvidenceBundle cannot be created, codefleet review may create a degraded local review attempt record only when it clearly marks:
+- finalDecisionTruth = false
+- decision = NEEDS_CHANGES or REJECTED
+- bundleStatus = DEGRADED
+- unavailableReason
+- acceptanceEvidence = false
+
+A degraded local review attempt cannot produce ACCEPTED, VERIFIED, queue progression, or carry-forward acceptance evidence.
+```
+
+Review model v0.2 rule:
+
+```yaml
+ruleId: REVIEW_MODEL_V02_IS_LOCAL_MIGRATION_PATH
+status: FINAL
+scope: VERSION_PLAN
+sourceOfTruth:
+  - S4 Review Decision final rules
+  - ReviewEvidenceBundle layout
+  - review-decision.local.json layout
+  - v0.2 implementation slicing
+inputs:
+  - runId
+  - decision
+  - reason
+  - actorId
+  - run-summary.json
+  - Run Trace artifact refs
+  - VerificationEvidence refs
+preconditions:
+  - codefleet review was invoked for a concrete runId
+  - decision is ACCEPTED, REJECTED, or NEEDS_CHANGES
+  - reason is present
+condition:
+  - normal v0.2 review creates ReviewEvidenceBundle before writing review-decision.local.json.
+  - review-decision.local.json has finalDecisionTruth false and migrationTarget RUN_REVIEW_DECIDED.
+  - review-decision.local.json references ReviewEvidenceBundle when bundleStatus is COMPLETE.
+  - human note and AI review output are optional refs, not evidence truth.
+  - AI review output is degraded reviewer hint only.
+  - degraded local review cannot be ACCEPTED and cannot be used as acceptance evidence.
+allowedEffect:
+  - v0.2 may preserve local review decision data for later Objective ledger migration.
+  - review tooling may show local review status as migration-ready or degraded.
+deniedEffect:
+  - v0.2 review must not append final RUN_REVIEW_DECIDED unless Objective ledger support exists.
+  - v0.2 review must not calculate final VERIFIED from review-decision.local.json.
+  - v0.2 review must not mutate Run Trace artifacts.
+  - v0.2 review must not treat AI review output as human approval.
+evidence:
+  - reviewDecisionId
+  - localReviewId
+  - runId
+  - decision
+  - reason
+  - actorId
+  - ReviewEvidenceBundle ref/hash or unavailableReason
+  - reviewNoteRef when present
+  - aiReviewHintRef when present
+failureFinding:
+  category: REVIEW_INTEGRITY
+  severity: WARNING
+repairBehavior:
+  - recreate ReviewEvidenceBundle from deterministic refs when possible
+  - rerun review command with explicit human decision and reason
+  - migrate to RUN_REVIEW_DECIDED when Objective ledger support exists
+```
+
 ```text
 ruleId: RUN_SUMMARY_VERIFICATION_AND_LOCAL_REVIEW_LAYOUT_FIXED
 status: FINAL
@@ -13540,15 +13731,17 @@ repairBehavior:
 - Verification execution policy는 Harness-owned command evidence만 PASS authority로 인정한다는 원칙
 - Workspace discovery는 explicit --workspace 또는 nearest-parent .codefleet/config.json으로 단일 workspace를 결정하고, portable refs/hash와 local realpath evidence를 분리하는 Core invariant라는 원칙
 - v0.1 / v0.2 / final implementation slicing은 final boundary를 약화하지 않고 unavailable / degraded / migration input으로 미구현 책임을 표현한다는 원칙
+- Review model v0.2 구현 세부는 local migration path이며, human note와 AI review hint는 evidence truth가 아니고 degraded review는 acceptance evidence가 될 수 없다는 원칙
+- v0.2 implementation kickoff has connected workspace discovery, run-plan.json creation, and the S2 adapter-request / harness-observation / adapter-result artifact split to runtime without treating unavailable or degraded evidence as final truth
 ```
 
 다음으로 논의할 항목:
 
 ```text
-1. Review model v0.2 구현 세부
-   - AI review.md
-   - human review note
-   - approval 기록
+1. v0.2 run-summary normalization
+   - derive from AdapterRequest / HarnessObservation / AdapterResult
+   - preserve unavailable / degraded evidence boundaries
+   - keep final decision outside Run Summary
 ```
 
 ## 16. 다음 세션에서 이어갈 때

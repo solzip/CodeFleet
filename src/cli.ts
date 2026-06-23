@@ -5,30 +5,36 @@ import { initProject, loadConfig } from "./config.ts";
 import { renderPrompt } from "./prompt.ts";
 import { runTask, listRuns } from "./run.ts";
 import { formatValidationErrors, loadTask, loadTaskForValidation } from "./task.ts";
+import { discoverWorkspace, type WorkspaceDiscovery } from "./workspace.ts";
+
+interface CliOptions {
+  workspace?: string;
+}
 
 async function main(argv: string[]): Promise<number> {
-  const [command, ...args] = argv;
-  const rootDir = process.cwd();
+  const parsed = parseGlobalOptions(argv);
+  const [command, ...args] = parsed.args;
+  const cwd = process.cwd();
 
   try {
     switch (command) {
       case "init":
-        await handleInit(rootDir);
+        await handleInit(cwd, parsed.options);
         return 0;
       case "run":
-        await handleRun(rootDir, requireArg(args[0], "task-id"));
+        await handleRun(cwd, parsed.options, requireArg(args[0], "task-id"));
         return 0;
       case "prompt":
-        await handlePrompt(rootDir, requireArg(args[0], "task-id"));
+        await handlePrompt(cwd, parsed.options, requireArg(args[0], "task-id"));
         return 0;
       case "task":
-        await handleTask(rootDir, args);
+        await handleTask(cwd, parsed.options, args);
         return 0;
       case "status":
-        await handleStatus(rootDir);
+        await handleStatus(cwd, parsed.options);
         return 0;
       case "runs":
-        await handleRuns(rootDir);
+        await handleRuns(cwd, parsed.options);
         return 0;
       case "help":
       case "--help":
@@ -45,25 +51,33 @@ async function main(argv: string[]): Promise<number> {
   }
 }
 
-async function handleInit(rootDir: string): Promise<void> {
+async function handleInit(cwd: string, options: CliOptions): Promise<void> {
+  const rootDir = options.workspace === undefined ? cwd : path.resolve(cwd, options.workspace);
   const result = await initProject(rootDir);
   console.log("CodeFleet initialized.");
   console.log(`directory: ${path.relative(rootDir, result.codefleetDir) || "."}`);
   console.log(`config: ${result.createdConfig ? "created" : "already exists"}`);
 }
 
-async function handleRun(rootDir: string, taskId: string): Promise<void> {
-  const execution = await runTask(rootDir, taskId);
+async function handleRun(cwd: string, options: CliOptions, taskId: string): Promise<void> {
+  const discovery = await workspaceDiscovery(cwd, options);
+  const rootDir = discovery.selectedWorkspaceRootRealPath;
+  const execution = await runTask(rootDir, taskId, discovery);
   console.log("CodeFleet run complete.");
   console.log(`runId: ${execution.result.runId}`);
   console.log(`taskId: ${execution.result.taskId}`);
   console.log(`agent: ${execution.result.agent}`);
   console.log(`status: ${execution.result.status}`);
   console.log(`runDir: ${path.relative(rootDir, execution.runDir)}`);
+  console.log(`runPlan: ${execution.result.runPlanPath}`);
+  console.log(`adapterRequest: ${execution.result.adapterRequestPath}`);
+  console.log(`harnessObservation: ${execution.result.harnessObservationPath}`);
+  console.log(`adapterResult: ${execution.result.adapterResultPath}`);
   console.log(`result: ${execution.result.resultPath}`);
 }
 
-async function handlePrompt(rootDir: string, taskId: string): Promise<void> {
+async function handlePrompt(cwd: string, options: CliOptions, taskId: string): Promise<void> {
+  const rootDir = await workspaceRoot(cwd, options);
   await loadConfig(rootDir);
   const { task } = await loadTask(rootDir, taskId);
   const promptDir = path.join(rootDir, ".codefleet", "prompts");
@@ -73,7 +87,8 @@ async function handlePrompt(rootDir: string, taskId: string): Promise<void> {
   console.log(`Prompt written: ${path.relative(rootDir, promptPath)}`);
 }
 
-async function handleTask(rootDir: string, args: string[]): Promise<void> {
+async function handleTask(cwd: string, options: CliOptions, args: string[]): Promise<void> {
+  const rootDir = await workspaceRoot(cwd, options);
   const [subcommand, taskId] = args;
   if (subcommand !== "validate") {
     throw new Error("Usage: codefleet task validate <task-id>");
@@ -93,7 +108,9 @@ async function handleTask(rootDir: string, args: string[]): Promise<void> {
   }
 }
 
-async function handleStatus(rootDir: string): Promise<void> {
+async function handleStatus(cwd: string, options: CliOptions): Promise<void> {
+  const discovery = await discoverWorkspace({ cwd, workspace: options.workspace });
+  const rootDir = discovery.selectedWorkspaceRootRealPath;
   const config = await loadConfig(rootDir);
   const tasks = await listYamlFiles(path.join(rootDir, ".codefleet", "tasks"));
   const runs = await listRuns(rootDir);
@@ -102,11 +119,14 @@ async function handleStatus(rootDir: string): Promise<void> {
   console.log(`version: ${config.version}`);
   console.log(`defaultAgent: ${config.defaultAgent}`);
   console.log(`mode: ${config.mode}`);
+  console.log(`workspace: ${discovery.workspaceId}`);
+  console.log(`discovery: ${discovery.discoveryMode}`);
   console.log(`tasks: ${tasks.length}`);
   console.log(`runs: ${runs.length}`);
 }
 
-async function handleRuns(rootDir: string): Promise<void> {
+async function handleRuns(cwd: string, options: CliOptions): Promise<void> {
+  const rootDir = await workspaceRoot(cwd, options);
   await loadConfig(rootDir);
   const runs = await listRuns(rootDir);
   if (runs.length === 0) {
@@ -117,6 +137,43 @@ async function handleRuns(rootDir: string): Promise<void> {
   for (const run of runs) {
     console.log(`${run.runId}  ${run.status}  ${run.taskId}  ${run.agent}`);
   }
+}
+
+async function workspaceRoot(cwd: string, options: CliOptions): Promise<string> {
+  return (await workspaceDiscovery(cwd, options)).selectedWorkspaceRootRealPath;
+}
+
+async function workspaceDiscovery(cwd: string, options: CliOptions): Promise<WorkspaceDiscovery> {
+  return discoverWorkspace({ cwd, workspace: options.workspace });
+}
+
+function parseGlobalOptions(argv: string[]): { args: string[]; options: CliOptions } {
+  const args: string[] = [];
+  const options: CliOptions = {};
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const value = argv[index];
+    if (value === "--workspace") {
+      const workspace = argv[index + 1];
+      if (workspace === undefined || workspace.startsWith("--")) {
+        throw new Error("Missing required value for --workspace");
+      }
+      options.workspace = workspace;
+      index += 1;
+      continue;
+    }
+    if (value.startsWith("--workspace=")) {
+      const workspace = value.slice("--workspace=".length);
+      if (workspace.length === 0) {
+        throw new Error("Missing required value for --workspace");
+      }
+      options.workspace = workspace;
+      continue;
+    }
+    args.push(value);
+  }
+
+  return { args, options };
 }
 
 async function listYamlFiles(dir: string): Promise<string[]> {
@@ -140,16 +197,17 @@ function printHelp(): void {
   console.log(`CodeFleet v0.1
 
 Usage:
-  codefleet init
-  codefleet run <task-id>
-  codefleet prompt <task-id>
-  codefleet task validate <task-id>
-  codefleet status
-  codefleet runs
+  codefleet [--workspace <path>] init
+  codefleet [--workspace <path>] run <task-id>
+  codefleet [--workspace <path>] prompt <task-id>
+  codefleet [--workspace <path>] task validate <task-id>
+  codefleet [--workspace <path>] status
+  codefleet [--workspace <path>] runs
 
 Notes:
   Run 'codefleet init' before other commands.
   Tasks are read from .codefleet/tasks/<task-id>.yaml.
+  Commands discover .codefleet/config.json from the current directory or --workspace.
 `);
 }
 

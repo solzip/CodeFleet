@@ -63,6 +63,10 @@ export interface RunResultFile {
   status: RunStatus;
   startedAt: string;
   finishedAt: string;
+  runPlanPath?: string;
+  adapterRequestPath?: string;
+  harnessObservationPath?: string;
+  adapterResultPath?: string;
   promptPath: string;
   stdoutLogPath: string;
   stderrLogPath: string;
