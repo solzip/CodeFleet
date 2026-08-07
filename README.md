@@ -206,4 +206,6 @@ See `docs/architecture.md` for a text-based architecture overview with diagrams 
 
 ## Concept Foundation
 
-See `docs/concept-foundation.md` for the current product definition, Core/Workspace/Profile/Harness concepts, and the agreed long-term orchestration direction.
+See `docs/concept-foundation.md` for the canonical product definition, Core/Workspace/Profile/Harness concepts, and the fixed orchestration direction.
+
+See `docs/design-progress.md` for the order in which the design was fixed and which step is currently in progress.

@@ -11,9 +11,19 @@ on another machine. The canonical design source is always
 ```text
 1. docs/concept-foundation.md
 2. docs/session-handoff.md
-3. docs/architecture-spine-claude.md
-4. docs/architecture-structure-claude.md
-5. docs/architecture.md and README only as current implementation references
+3. docs/design-progress.md
+4. docs/architecture-spine-claude.md
+5. docs/architecture-structure-claude.md
+6. docs/architecture.md and README only as current implementation references
+```
+
+Document roles:
+
+```text
+docs/concept-foundation.md   fixed design content itself (canonical)
+docs/design-progress.md      fixed order and current position
+docs/session-handoff.md      minimum state for the next session
+README.md                    current implementation usage
 ```
 
 Do not start from implementation alone. First check the final goal, boundaries,
