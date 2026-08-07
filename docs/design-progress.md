@@ -190,7 +190,21 @@ FINAL RULE 74개
         - risk policy rule expression
         - agentRoles 내부 role taxonomy
         - profile rule id 네이밍 체계
-[ ] 81. 0.13 상태 목록 최종 재감사
+[ ] 81. 정합성 최종 재감사
+        - 0.13 상태 목록 재확인
+        - authority 필드명 분리 또는 "서로 다른 enum" 명시
+          (verification 5값 / command 4값 / changedFiles 3값)
+        - 규칙 블록 fence 통일 (현재 text 50개 / yaml 23개)
+```
+
+79번 직후 정합성 감사에서 결함 5건을 찾았고 3건을 즉시 고쳤다.
+
+```text
+고침: SanitizedRunSummary에 없는 redactionSummary 경로를 tier가 참조하던 문제
+고침: Project Profile에 export 블록이 없는데 Profile 제한 권한을 주장하던 문제
+고침: FINAL RULE 4개가 preconditions / allowedEffect / evidence를 빠뜨린 문제
+남김: authority 동명 enum 3종 구분 미표기        -> 81번
+남김: 규칙 블록 fence 표기 불일치                -> 81번
 ```
 
 논의 순서 이유:

@@ -6466,16 +6466,30 @@ inputs:
 - verificationEvidenceRefs
 - runSummaryRef
 - reviewEvidenceBundleRef
+preconditions:
+- the Run reached AdapterRequest so S2 artifacts exist
+- artifact layout validation has started for this Run
 condition:
 - run-summary.json contains normalized execution fields plus refs/hash for its evidence inputs
 - VerificationEvidence attempt ids are monotonic within a Run
 - VerificationEvidence hash is the canonical content hash of the attempt artifact
 - local review artifact is explicitly marked finalDecisionTruth false
 - local review artifact contains migrationTarget RUN_REVIEW_DECIDED
+allowedEffect:
+- Run Summary may present normalized derived fields for fast reads
+- VerificationEvidence may record authority NONE with an unavailableReason
+- local review artifact may be created as migration input before Objective ledger support exists
 deniedEffect:
 - Run Summary cannot replace Run Trace Evidence
 - VerificationEvidence cannot be replaced by provider-reported verification
 - local review artifact cannot replace RUN_REVIEW_DECIDED
+evidence:
+- runId
+- runSummaryRef path and hash
+- verificationAttemptId list
+- verificationEvidence hash
+- local review finalDecisionTruth value
+- migrationTarget value
 failureFinding:
 - category = POLICY_ENFORCEMENT_INTEGRITY
 - severity = WARNING
@@ -6597,17 +6611,30 @@ inputs:
 - objectiveId
 - effectivePolicy
 - existing durable artifacts
+preconditions:
+- a CodeFleet CLI command that touches a final boundary has been invoked
+- workspace discovery resolved a single workspace
 condition:
 - v0.2 shorthand commands expand into final internal boundaries
 - each internal boundary leaves its own durable artifact or explicit blocked evidence
 - CLI resume starts from the latest complete durable boundary
 - review and objective status read normalized evidence but do not mutate Run Trace
+allowedEffect:
+- v0.2 may keep short user-facing command names while writing final boundary artifacts
+- CLI may resume from the latest complete durable boundary instead of rerunning the whole Run
+- read-only status commands may report derived state without taking the mutation lock
 deniedEffect:
 - codefleet run must not skip run-plan.json
 - codefleet verify must not create observedCheck PASS from provider-reported verification alone
 - codefleet review must not replace RUN_REVIEW_DECIDED with review-decision.local.json in the final model
 - codefleet objective status must not append decisions
 - codefleet objective reconcile must not invent evidence
+evidence:
+- command name
+- runId
+- boundary artifact paths and hashes
+- resume boundary used
+- blocked or unavailable reason when a boundary was not produced
 failureFinding:
 - category = POLICY_ENFORCEMENT_INTEGRITY
 - severity = WARNING
@@ -6784,16 +6811,29 @@ inputs:
 - durable artifact paths
 - durable artifact hashes
 - derived objective status output
+preconditions:
+- a manual SPINE validation pass has been started against one Objective and Run
+- the durable artifacts under check already exist or are recorded as unavailable
 condition:
 - every S1/S2/S3/S4 boundary is represented by a durable artifact or explicit unavailableReason
 - every derived state is explainable from refs/hash
 - VERIFIED is derived only from effective review plus satisfied or waived verification gate
 - unsafe or degraded evidence produces a deterministic refusal reason
+allowedEffect:
+- a manual pass may be recorded as PASS when every checklist item resolves from refs and hashes
+- a manual pass may be recorded as BLOCKED with the specific unresolved boundary named
 deniedEffect:
 - manual pass must not treat provider transcript as Harness truth
 - manual pass must not treat Run Summary as Review Decision
 - manual pass must not treat review-decision.local.json as final ledger truth
 - manual pass must not pass by visual inspection alone
+evidence:
+- objectiveId
+- runId
+- checked boundary list
+- artifact path and hash per boundary
+- unavailableReason per missing boundary
+- pass or blocked result with reason
 failureFinding:
 - category = POLICY_ENFORCEMENT_INTEGRITY
 - severity = WARNING
@@ -14020,11 +14060,16 @@ artifactRefs:
     pathKind: "CODEFLEET_RELATIVE | WORKSPACE_RELATIVE"
     exportable: true
     hash: ""
+redactionSummary:
+  totalMatches: 0
+  blockedExport: false
 redactionReportRef:
   path: ".codefleet/runs/<runId>/exports/redaction-report.json"
   hash: ""
 createdAt: ""
 ```
+
+`redactionSummary`는 redaction-report.json의 `summary` 블록에서 복사한 export 가능한 요약값이다. export adapter payload는 redaction 관련 정보로 이 두 값만 받을 수 있고, `redactionReportRef`는 로컬 audit용 참조이므로 외부 payload에 포함되지 않는다.
 
 redaction-report.json 최소 필드:
 
@@ -14169,6 +14214,8 @@ target은 tier에서 더 좁힐 수만 있다.
 
 `schemaVersion`과 `documentKind`는 envelope 필드이며 모든 tier에 존재한다. `artifactRefs[].exportable`은 필터 입력이지 export 대상 필드가 아니므로 어떤 tier에도 포함되지 않는다.
 
+tier 정의와 target 선언은 Core가 소유한다. `policies` 키는 `PROFILE_POLICY_BLOCK_KEYS_FIXED`가 정확히 아홉 개로 고정했고 그중 export 블록이 없으므로, Project Profile과 Local Overlay는 field allowlist를 좁히는 수단을 갖지 않는다. Profile이 export에 관여하는 경로는 `policies.redaction`뿐이며, 이는 허용된 필드 안의 내용을 제거·상대화·해시하는 content 수준 통제이지 필드 수준 통제가 아니다.
+
 모든 tier가 공통으로 금지하는 것:
 
 ```text
@@ -14240,37 +14287,35 @@ scope: EXPORT
 sourceOfTruth:
   - Core exposure tier definitions
   - Core target tier declarations
-  - Project Profile redaction policy restrictions
-  - Local Overlay restrictions
 inputs:
   - export target
   - declared tier
   - tier allowedFieldPaths
   - targetNarrowing
-  - profile and overlay restrictions
 preconditions:
   - an export attempt has selected a target adapter.
 condition:
   - every export target declares exactly one exposure tier.
   - tier allowlists satisfy PUBLIC subset of INTERNAL_SHARED subset of LOCAL_PRIVATE.
   - a target may remove field paths from its tier and can never add one.
-  - Project Profile and Local Overlay may restrict the resolved allowlist and can never widen it.
+  - the field allowlist is Core-owned and has no Project Profile or Local Overlay representation.
   - the resolved allowlist is computed before the adapter payload is built.
 allowedEffect:
   - several targets may share one tier without duplicating the field list.
   - a new target may be added by declaring a tier only.
   - a target may declare targetNarrowing to drop tier fields for that target alone.
+  - Project Profile redaction policy may still remove content from an allowed field.
 deniedEffect:
   - CodeFleet cannot define a per-target allowlist that bypasses tier nesting.
   - CodeFleet cannot let a more public tier carry a field a less public tier lacks.
   - CodeFleet cannot widen a resolved allowlist at runtime.
   - CodeFleet cannot export a field absent from the resolved allowlist.
+  - CodeFleet cannot read a field allowlist override from Project Profile or Local Overlay.
 evidence:
   - export target
   - declared tier
   - resolved allowedFieldPaths
   - applied targetNarrowing
-  - applied profile and overlay restrictions
 failureFinding:
   category: POLICY_ENFORCEMENT_INTEGRITY
   severity: CORRUPTION
@@ -14371,17 +14416,31 @@ inputs:
 - redaction policy
 - export target
 - adapter field allowlist
+preconditions:
+- run-summary.json exists for the Run
+- an export target has been selected
 condition:
 - sanitized-run-summary.json is created from run-summary.json with forbidden content removed
 - summary.md is created from sanitized-run-summary.json
 - redaction-report.json records all redaction, drop, relativize, and hash actions
 - export adapters consume only sanitized artifacts
 - blocked redaction prevents external transmission
+allowedEffect:
+- a failed export may be retried by creating a new exportAttempt
+- sanitized artifacts may be regenerated after a redaction policy correction
+- a sanitized summary may be attached to carry-forward context
 deniedEffect:
 - S5 must not export raw Run Trace Evidence
 - S5 must not export provider transcript raw text
 - S5 must not turn export success into Review Decision or VERIFIED
 - S5 must not widen target adapter field allowlist at runtime
+evidence:
+- runId
+- export target and resolved tier
+- sanitizedRunSummaryRef path and hash
+- redactionReportRef path and hash
+- exportAttemptId and result
+- blockedReasons when export was blocked
 failureFinding:
 - category = EXECUTION_EVIDENCE_INTEGRITY
 - severity = WARNING
