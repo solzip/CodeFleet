@@ -34,8 +34,12 @@ Important criteria:
 - Do not decide by human intuition, LLM inference, or guesswork.
 - Anything not fixed must remain DESIGN CANDIDATE or VERSION_PLAN.
 
-The next implementation topic is v0.2 local review.
-The next design topic is Mutation Engine minimum contract.
+Design is being completed first. Implementation resumes only after the
+remaining design items are fixed.
+
+The next design topic is Verification command allowlist / commands policy
+matcher syntax.
+The next implementation topic is v0.2 local review, held until design is done.
 ```
 
 ## Product Definition
@@ -51,8 +55,16 @@ execution through logs, diffs, tests, and review evidence.
 ## Progress
 
 ```text
-Final model / concept design: about 78%
+Final model / concept design: about 85%
 Implementation: about 25-35%
+```
+
+Remaining design items:
+
+```text
+1. Verification command allowlist / commands policy matcher syntax
+2. Run Summary export adapter field allowlist schema
+3. Remaining 5.3 DESIGN CANDIDATE syntax items
 ```
 
 Current implementation status:
@@ -95,6 +107,7 @@ S2 Adapter seam
 -> Objective ledger RUN_REVIEW_DECIDED migration path
 -> Objective ledger minimum replay / snapshot model
 -> v0.2 implementation kickoff
+-> Mutation Engine minimum contract
 ```
 
 Important fixed boundaries:
@@ -122,26 +135,39 @@ Important fixed boundaries:
 - Objective ledger replay deterministically rebuilds objective.json from ledger seq order, Task ledger approval, Run Trace, Run Summary, and ReviewEvidenceBundle.
 - Partial replay is diagnostic only and cannot produce VERIFIED, NEXT, queue progression, or Objective closure.
 - objective.json is a COMPLETE/BLOCKED read model, not source truth.
+- Mutation Engine phases run M0 RESOLVE to M7 RELEASE, and M4 ledger append is the single commit point.
+- Failure before M4 leaves no durable change; failure at rebuild or postcheck keeps the ledger event and reports snapshot failure only.
+- mutationId is derived deterministically from mutationKind, target identity, targetHash, and semantic payload, never from time, order, actorId, or reason text.
+- The mutation lock is a single fail-fast workspace lock, is never auto-broken when stale, and is not held across Run execution.
+- Corrective events are only for a structurally valid ledger with a wrong decision; snapshot mismatch is rebuild, structural damage is source repair.
 ```
 
 ## Current Bottleneck
 
 ```text
-v0.2 local review implementation
+Verification command allowlist / commands policy matcher syntax
 ```
 
 Why this is next:
 
 ```text
-Workspace discovery, run-plan creation, S2 artifact split, run-summary normalization, and minimal VerificationEvidence now exist in runtime.
-The local review migration design now defines deterministic ReviewEvidenceBundle assembly, local ACCEPTED gates, and derived migration statuses.
-Objective ledger migration design now defines how MIGRATION_READY local reviews become RUN_REVIEW_DECIDED events without becoming prior final truth.
-The next implementation boundary is codefleet review.
-review-decision.local.json must stay migration input, not final ledger truth.
-No local review artifact may produce VERIFIED or queue progression by itself.
+Design is being completed before further implementation.
+Mutation Engine minimum contract is now fixed, so command phase, idempotency, lock, and repair boundaries no longer block other design items.
+commands policy matcher syntax is shared by the Verification command allowlist and the files policy glob matcher, so it comes first.
+Export adapter field allowlist can proceed independently because the S5 boundary is already fixed.
 ```
 
-Expected next implementation slice:
+Expected next design slice:
+
+```text
+1. Define deterministic command matching syntax.
+2. Define how an allowlist entry maps to Harness-visible command channel evidence.
+3. Define what an unmatched command produces (degraded versus denied).
+4. Then define per-adapter export field allowlist and redaction-report behavior.
+5. Then close the remaining 5.3 DESIGN CANDIDATE syntax items.
+```
+
+Held implementation slice (resumes after design is fixed):
 
 ```text
 1. Define minimal ReviewEvidenceBundle type.

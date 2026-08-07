@@ -293,7 +293,7 @@ All correction is explicit.
 
 ```json
 {
-  "mutationId": "mut_task-001_rev2_approve_20260529_001",
+  "mutationId": "mut_9f2c41ab7d0e5813",
   "eventId": "evt_20260529_103000_001",
   "seq": 12,
   "type": "TASK_APPROVED",
@@ -363,6 +363,368 @@ Rollback 대신 명시적 보정 이벤트를 사용한다.
 - terminal state는 일반 명령으로 되살리지 않음
 - rollback 대신 explicit invalidation / reopen / repair 이벤트 사용
 - validate가 cross-file 충돌 감지
+```
+
+#### Mutation Engine minimum contract
+
+여기까지는 Mutation Engine의 책임과 원칙이다. 아래는 그 원칙을 실행 가능한 최소 계약으로 고정한 것이다. 계약은 세 부분으로 나뉜다.
+
+```text
+1. command phase 경계와 commit point
+2. mutationId 멱등성과 동시 write 처리
+3. corrective event가 필요한 경우와 read model rebuild로 끝나는 경우
+```
+
+##### 1. Command phase 경계
+
+Mutation command는 다음 8단계를 순서대로 수행한다. 단계는 건너뛸 수 없고 순서를 바꿀 수 없다.
+
+```text
+M0 RESOLVE     mutation intent -> mutationId 계산       (lock 없음, durable 변화 없음)
+M1 ACQUIRE     workspace mutation lock 획득
+M2 PRECHECK    현재 상태 validate + transition 허용 여부 확인
+M3 IDEMPOTENCY 같은 mutationId가 ledger에 이미 있는지 확인
+M4 APPEND      ledger event atomic append               <- COMMIT POINT
+M5 REBUILD     objective.json rebuild
+M6 POSTCHECK   rebuild 결과 validate
+M7 RELEASE     lock 해제
+```
+
+`M4`가 commit point다. 이 경계가 실패 의미를 결정한다.
+
+```text
+M4 이전 실패
+- durable 변화가 없다.
+- 명령을 실패시키고 상태를 그대로 둔다.
+- corrective event를 만들지 않는다.
+
+M4 이후 실패 (M5 / M6)
+- ledger event는 이미 durable하고 유효하다.
+- ledger를 되돌리거나 수정하지 않는다.
+- mutation 자체는 성공으로 기록되고, snapshot 단계만 실패로 보고한다.
+- 이 실패는 READ_MODEL_DRIFT이며 rebuild 대상이다.
+```
+
+M4 이후 실패에서 ledger를 되돌리지 않는 이유는 `No silent rollback`, `No ledger rewrite`, `Explicit repair only` 세 원칙이 이미 고정돼 있기 때문이다. snapshot 재생성 실패는 결정이 틀렸다는 증거가 아니라 derived artifact가 아직 만들어지지 않았다는 증거다.
+
+`M7`은 M2부터 M6까지 어디서 실패해도 반드시 실행한다. lock을 잡은 프로세스가 비정상 종료해서 M7을 실행하지 못한 경우는 stale lock으로 처리하며, 자동으로 해제하지 않는다.
+
+```yaml
+ruleId: MUTATION_COMMAND_PHASES_ARE_FIXED
+status: FINAL
+scope: MUTATION
+sourceOfTruth:
+  - mutation command intent
+  - .codefleet/objectives/<objectiveId>/ledger.jsonl
+  - workspace mutation lock state
+inputs:
+  - mutation kind
+  - target identity
+  - mutationId
+  - current validated state
+  - transition rule set
+preconditions:
+  - command is a state-changing command listed as Mutation Engine 대상.
+condition:
+  - phases run in M0 -> M7 order without skipping or reordering.
+  - M4 ledger append is the single commit point of a mutation.
+  - failure before M4 leaves no durable change.
+  - failure at M5 or M6 keeps the appended ledger event and reports snapshot failure only.
+  - M7 runs on every exit path after M1 succeeds.
+allowedEffect:
+  - CodeFleet may report a mutation as applied when M4 succeeded and M5/M6 failed.
+  - CodeFleet may require an explicit rebuild command after M5/M6 failure.
+deniedEffect:
+  - CodeFleet cannot remove or edit a ledger event appended at M4.
+  - CodeFleet cannot roll back a mutation because rebuild failed.
+  - CodeFleet cannot append at M4 before M2 and M3 pass.
+  - CodeFleet cannot report success when M4 did not run.
+evidence:
+  - mutationId
+  - failedPhase
+  - appendedEventId when M4 succeeded
+  - lastSeq
+  - rebuild result
+failureFinding:
+  category: STATE_TRANSITION_INTEGRITY
+  severity: WARNING
+repairBehavior:
+  - rerun rebuild when M5 or M6 failed and source replay is valid
+  - create SNAPSHOT_CONSISTENCY finding when rebuild keeps failing
+```
+
+##### 2. mutationId 멱등성
+
+mutationId는 시각이나 실행 순서가 아니라 mutation intent에서 결정론적으로 계산한다.
+
+```text
+mutationId = "mut_" + sha256(
+    mutationKind
+  + target identity
+  + targetHash
+  + semantic payload
+)[0:16]
+```
+
+각 입력의 의미:
+
+```text
+mutationKind
+= TASK_APPROVE, QUEUE_SKIP, RELATION_ACCEPT 같은 mutation 종류
+
+target identity
+= objectiveId / taskId / taskRevision / objectiveQueueItemId 등 대상 식별자
+
+targetHash
+= 승인·수락 대상의 내용 hash (revisionHash 등)
+
+semantic payload
+= 결과 상태를 바꾸는 인자만 포함한다
+```
+
+`semantic payload`에서 제외하는 것:
+
+```text
+- reason 자유 텍스트
+- actorId
+- 실행 시각
+- CLI 출력 형식 옵션
+```
+
+reason 텍스트를 제외하는 이유는 같은 결정을 문구만 고쳐 다시 실행할 때 중복 mutation이 생기는 것을 막기 위해서다. reason은 ledger event에는 기록하지만 mutationId 계산에는 넣지 않는다.
+
+같은 intent를 반복 실행하면 M3에서 no-op으로 끝난다.
+
+```text
+already applied: mut_9f2c41ab7d0e5813
+no new ledger event appended
+```
+
+내용이 다른 mutation은 semantic payload가 달라 mutationId가 달라지므로 정상적으로 별개 event가 된다.
+
+```yaml
+ruleId: MUTATION_ID_IS_INTENT_DERIVED_AND_IDEMPOTENT
+status: FINAL
+scope: MUTATION
+sourceOfTruth:
+  - mutation intent fields
+  - ledger event mutationId index
+inputs:
+  - mutationKind
+  - target identity
+  - targetHash
+  - semantic payload
+preconditions:
+  - mutation kind defines its semantic payload field set.
+condition:
+  - mutationId is computed deterministically from mutationKind, target identity, targetHash, and semantic payload.
+  - mutationId excludes wall-clock time, execution order, actorId, and free-text reason.
+  - a mutationId already present in the ledger results in a no-op at M3.
+  - a mutation whose semantic payload differs produces a different mutationId.
+allowedEffect:
+  - repeated identical commands may report already-applied without appending.
+  - the same mutation may be replayed on another machine with the same result.
+deniedEffect:
+  - CodeFleet cannot append a second ledger event for an existing mutationId.
+  - CodeFleet cannot treat a reason-text edit as a new mutation.
+  - CodeFleet cannot derive mutationId from timestamp or sequence counter.
+evidence:
+  - mutationId
+  - mutationKind
+  - target identity
+  - targetHash
+  - semantic payload field list
+  - existing eventId when no-op
+failureFinding:
+  category: LEDGER_INTEGRITY
+  severity: CORRUPTION
+repairBehavior:
+  - append corrective event when a duplicate mutation was already applied
+  - restore ledger from source when mutationId index is inconsistent
+```
+
+##### 3. 동시 write 처리
+
+lock은 workspace-level 단일 lock이고, 획득은 atomic exclusive create로 수행한다.
+
+```text
+.codefleet/locks/workspace.lock
+```
+
+lock 파일은 holder identity를 담는다.
+
+```yaml
+schemaVersion: "1.0"
+documentKind: "MUTATION_LOCK"
+holder:
+  pid: 0
+  host: ""
+  startedAt: ""
+mutationId: ""
+mutationKind: ""
+```
+
+대기 정책은 fail-fast다.
+
+```text
+- lock이 이미 잡혀 있으면 대기하지 않고 즉시 실패한다.
+- 실패 시 holder identity를 그대로 보여준다.
+- 재시도는 사용자가 결정한다.
+```
+
+fail-fast를 택한 이유는 대기가 "누가 왜 잡고 있는지"를 감추기 때문이다. 로컬 단일 사용자 CLI에서는 즉시 실패하고 holder를 보여주는 쪽이 진단에 낫다.
+
+stale lock은 자동으로 깨지 않는다.
+
+```text
+- holder process가 죽어도 CodeFleet은 lock을 자동 해제하지 않는다.
+- codefleet lock status가 holder와 경과 시간을 보여준다.
+- codefleet lock break는 사람이 실행하는 명시적 명령이다.
+```
+
+Run 실행은 mutation lock을 잡지 않는다.
+
+```text
+- Run 실행은 Mutation이 아니라 Run Trace 생성이다.
+- Run은 Mutation Engine 대상 명령 목록에 없다.
+- 에이전트 실행은 길게 걸리므로 lock을 잡으면 모든 상태 변경이 막힌다.
+- Run 전후에 필요한 ledger event만 각각 짧게 lock을 잡는다.
+```
+
+```yaml
+ruleId: MUTATION_LOCK_IS_FAIL_FAST_AND_EXCLUDES_RUN_EXECUTION
+status: FINAL
+scope: MUTATION
+sourceOfTruth:
+  - .codefleet/locks/workspace.lock
+  - Mutation Engine command list
+inputs:
+  - lock file existence
+  - holder identity
+  - requested mutationKind
+preconditions:
+  - command requires a state change through Mutation Engine.
+condition:
+  - mutation lock is a single workspace-level lock acquired by atomic exclusive create.
+  - lock file records holder pid, host, startedAt, mutationId, and mutationKind.
+  - acquisition failure returns immediately with holder identity and does not wait.
+  - stale lock is never released automatically.
+  - Run execution runs outside the mutation lock.
+allowedEffect:
+  - read-only commands may run without the lock.
+  - an explicit human lock break command may remove a stale lock.
+  - ledger events before and after a Run may each take the lock briefly.
+deniedEffect:
+  - CodeFleet cannot hold the mutation lock across agent execution.
+  - CodeFleet cannot auto-break a lock because the holder looks dead.
+  - CodeFleet cannot run two mutations concurrently in one workspace.
+  - CodeFleet cannot silently retry a failed acquisition.
+evidence:
+  - lock file path
+  - holder pid / host / startedAt
+  - requested mutationId
+  - acquisition result
+failureFinding:
+  category: STATE_TRANSITION_INTEGRITY
+  severity: WARNING
+repairBehavior:
+  - report holder identity and let the user retry
+  - require explicit lock break for a confirmed stale lock
+```
+
+##### 4. Corrective event와 rebuild의 경계
+
+이미 고정된 ledger replay failure class가 판정 기준이다.
+
+```text
+READ_MODEL_DRIFT
+= source는 유효한데 objective.json만 replay 결과와 다름
+-> rebuild만 수행한다. corrective event를 append하지 않는다.
+
+REFERENCE_FAILURE
+= event가 없는 revision / run / bundle을 가리킴
+-> 참조 대상 복구를 우선한다. 복구 불가하고 event 결정 자체가 틀렸으면 corrective event를 append한다.
+
+POLICY_EVALUATION_FAILURE
+= 필요한 Project Profile / gate policy를 읽을 수 없음
+-> corrective event도 rebuild도 아니다. policy source를 복구한다.
+
+LEDGER_STRUCTURAL_FAILURE
+= parse 실패 / eventId 중복 / seq 끊김 / objectiveId 불일치
+-> 자동으로 아무것도 하지 않는다. source repair가 먼저다.
+```
+
+한 줄 판정 규칙:
+
+```text
+Corrective event is for a valid ledger with a wrong decision.
+Rebuild is for a valid source with a stale snapshot.
+A structurally broken ledger gets neither.
+```
+
+한국어:
+
+```text
+corrective event는 ledger가 구조적으로 멀쩡한데 내용 결정이 틀렸을 때만 append한다.
+snapshot만 틀렸으면 rebuild한다.
+ledger 구조가 깨졌으면 둘 다 하지 않고 source repair를 먼저 한다.
+```
+
+corrective event가 필요한 경우와 RepairKind 대응:
+
+```text
+잘못된 approval        -> APPEND_CORRECTIVE_EVENT (TASK_APPROVAL_INVALIDATED)
+잘못된 relation accept -> APPEND_CORRECTIVE_EVENT (TASK_RELATION_INVALIDATED)
+잘못된 carry-forward   -> APPEND_CORRECTIVE_EVENT (CARRY_FORWARD_REVOKED)
+snapshot drift         -> REBUILD_DERIVED
+없는 참조 대상          -> RESTORE_SOURCE, 실패 시 APPEND_CORRECTIVE_EVENT
+읽을 수 없는 policy     -> RESTORE_SOURCE 또는 UPDATE_POLICY
+깨진 ledger 구조        -> RESTORE_SOURCE
+```
+
+```yaml
+ruleId: CORRECTIVE_EVENT_REQUIRES_VALID_LEDGER_AND_WRONG_DECISION
+status: FINAL
+scope: MUTATION
+sourceOfTruth:
+  - ledger replay failure class
+  - ledger structural validation result
+  - reference resolution result
+inputs:
+  - failureClass
+  - ledger parse result
+  - seq contiguity result
+  - reference resolution result
+  - snapshot comparison result
+preconditions:
+  - replay or validation has produced a classified failure.
+condition:
+  - READ_MODEL_DRIFT is repaired by rebuild only.
+  - REFERENCE_FAILURE prefers source restore and allows a corrective event only when the event decision itself is wrong.
+  - POLICY_EVALUATION_FAILURE is repaired by policy source restore or explicit policy update.
+  - LEDGER_STRUCTURAL_FAILURE allows neither rebuild nor corrective event until the source is repaired.
+allowedEffect:
+  - rebuild may regenerate objective.json when source replay is valid.
+  - an explicit human repair command may append a corrective event.
+deniedEffect:
+  - CodeFleet cannot append a corrective event to fix a snapshot mismatch.
+  - CodeFleet cannot rebuild over a structurally broken ledger.
+  - CodeFleet cannot infer which event was wrong.
+  - CodeFleet cannot append a corrective event without an explicit human command.
+evidence:
+  - failureClass
+  - checkId
+  - affectedSeq
+  - affectedQueueItemId
+  - missingRef when present
+  - chosen repairKind
+failureFinding:
+  category: LEDGER_INTEGRITY
+  severity: CORRUPTION
+repairBehavior:
+  - rebuild derived snapshot when source replay is valid
+  - restore missing source when the reference target is recoverable
+  - append explicit corrective event when the ledger is valid but the decision was wrong
 ```
 
 Transition validation은 상위 상태 도메인을 7개로 구분한다.
@@ -4651,6 +5013,7 @@ PASS:
 - QUEUE_REORDERED의 보수적 future order semantics
 - ledger event 최소 세트와 "ledger는 결정 로그" 원칙
 - 확정 규칙 작성 기준
+- Mutation Engine minimum contract (phase 경계 / mutationId 멱등성 / lock / corrective event 경계)
 
 PASS_AFTER_REINFORCEMENT:
 - Risk 판단 원칙
@@ -4658,15 +5021,31 @@ PASS_AFTER_REINFORCEMENT:
 - Safe Orchestration isolation 조건
 - Run Summary sanitization boundary
 
-NOT_FINAL_YET:
+RESOLVED_AFTER_THIS_LIST_WAS_WRITTEN:
 - Project Profile 최종 JSON schema
+  -> PROFILE_TOP_LEVEL_KEYS_FIXED / PROFILE_POLICY_BLOCK_KEYS_FIXED /
+     PROJECT_PROFILE_POLICY_BLOCK_INTERNAL_SCHEMA로 고정됨
 - Harness runtime implementation slicing
-- Verification command allowlist
-- Run Summary export adapter별 schema
+  -> 8.3에서 VERSION_PLAN으로 남기기로 결정됨
 - Workspace discovery 버전별 구현 범위
+  -> WORKSPACE_DISCOVERY_RESOLVES_SINGLE_WORKSPACE_CONTRACT로 계약 고정,
+     구현 범위는 VERSION_PLAN으로 남김
+
+NOT_FINAL_YET:
+- Verification command allowlist
+  -> VERIFICATION_EXECUTION_IS_HARNESS_OWNED_EVIDENCE는 authority만 고정했고
+     commands matcher 문법은 미정이다.
+- Run Summary export adapter별 field allowlist schema
+  -> S5_EXPORT_SEAM_USES_SANITIZED_SUMMARY_ONLY는 boundary만 고정했고
+     adapter별 field allowlist는 미정이다.
+- 5.3의 DESIGN CANDIDATE 문법 항목
+  -> files glob matcher / commands matcher / risk rule expression /
+     redaction pattern language / agentRoles 내부 taxonomy / profile rule id 네이밍
 ```
 
 `NOT_FINAL_YET` 항목은 확정 규칙이 아니다. 이 항목들은 다음 논의에서 같은 기준으로 하나씩 FINAL RULE로 승격하거나 VERSION_PLAN으로 남긴다.
+
+`RESOLVED_AFTER_THIS_LIST_WAS_WRITTEN`은 이 목록을 쓴 뒤에 뒤쪽 절에서 고정되거나 VERSION_PLAN으로 확정된 항목이다. 이 목록이 뒤쪽 FINAL RULE보다 오래된 상태를 보여주지 않도록 매번 함께 갱신한다.
 
 ## 1. 최종 지향 정의
 
@@ -14324,16 +14703,41 @@ repairBehavior:
 - review migration conflict는 file timestamp나 local file order가 아니라 ledger append order, ReviewEvidenceBundle hash, explicit supersedes/invalidates reference로만 해결한다는 원칙
 - Objective ledger replay는 ledger seq order / Task ledger approval / Run Trace / Run Summary / ReviewEvidenceBundle을 기준으로 objective.json read model을 결정론적으로 재생성하며, partial replay는 VERIFIED / NEXT / Queue progression / Objective closure를 만들 수 없다는 원칙
 - objective.json은 source truth가 아니라 `COMPLETE | BLOCKED` replay status를 가진 rebuildable snapshot이고, drift는 source validation이 통과할 때만 rebuild로 복구한다는 원칙
-- v0.2 implementation kickoff has connected workspace discovery, run-plan.json creation, and the S2 adapter-request / harness-observation / adapter-result artifact split to runtime without treating unavailable or degraded evidence as final truth
+- v0.2 implementation kickoff has connected workspace discovery, run-plan.json creation, the S2 adapter-request / harness-observation / adapter-result artifact split, run-summary normalization, and minimal VerificationEvidence to runtime without treating unavailable or degraded evidence as final truth
+- Mutation Engine command phase는 M0 RESOLVE부터 M7 RELEASE까지 고정이며 M4 ledger append가 단일 commit point라는 원칙
+- M4 이전 실패는 durable 변화를 남기지 않고, M4 이후 rebuild / postcheck 실패는 ledger를 되돌리지 않고 snapshot 실패로만 보고한다는 원칙
+- mutationId는 mutationKind / target identity / targetHash / semantic payload에서 결정론적으로 계산하며 시각, 실행 순서, actorId, reason 자유 텍스트를 포함하지 않는다는 원칙
+- mutation lock은 workspace 단일 lock이고 fail-fast이며 stale lock을 자동 해제하지 않고 Run 실행은 lock 밖에서 수행한다는 원칙
+- corrective event는 ledger가 구조적으로 유효한데 결정이 틀렸을 때만 append하고, snapshot 불일치는 rebuild로, 구조 손상은 source repair로 처리한다는 원칙
 ```
 
 다음으로 논의할 항목:
 
 ```text
-1. Mutation Engine minimum contract
-   - define lock -> validate -> append -> rebuild -> validate command boundary
-   - define mutationId idempotency and concurrent write handling
-   - define when corrective events are required versus read model rebuild
+1. Verification command allowlist / commands policy matcher 문법
+   - define deterministic command matching syntax
+   - define how an allowlist entry maps to Harness-visible command channel evidence
+   - define what an unmatched command produces (degraded versus denied)
+
+2. Run Summary export adapter별 field allowlist schema
+   - define per-adapter field allowlist shape
+   - define how redaction-report records dropped fields
+   - define what an unknown adapter field produces
+
+3. 5.3의 나머지 DESIGN CANDIDATE 문법 항목
+   - files policy glob matcher 문법
+   - risk policy rule expression 문법
+   - redaction policy pattern language
+   - agentRoles 내부 role taxonomy
+   - profile rule id 네이밍 체계
+```
+
+논의 순서 이유:
+
+```text
+- commands matcher 문법은 Verification allowlist와 files glob matcher가 공유하는 기반이므로 먼저 고정한다.
+- export field allowlist는 S5 경계가 이미 고정돼 있어 matcher 문법과 독립적으로 진행할 수 있다.
+- 나머지 문법 항목은 위 두 개가 고정된 뒤 같은 형식을 따라간다.
 ```
 
 ## 16. 다음 세션에서 이어갈 때
