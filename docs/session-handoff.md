@@ -47,7 +47,7 @@ Important criteria:
 Design is being completed first. Implementation resumes only after the
 remaining design items are fixed.
 
-The next design topic is Run Summary export adapter field allowlist schema.
+The next design topic is files policy glob matcher syntax.
 The next implementation topic is v0.2 local review, held until design is done.
 ```
 
@@ -64,16 +64,15 @@ execution through logs, diffs, tests, and review evidence.
 ## Progress
 
 ```text
-Final model / concept design: about 88%
+Final model / concept design: about 91%
 Implementation: about 25-35%
 ```
 
 Remaining design items:
 
 ```text
-1. Run Summary export adapter field allowlist schema
-2. files policy glob matcher syntax
-3. Remaining 5.3 DESIGN CANDIDATE syntax items
+1. files policy glob matcher syntax
+2. Remaining 5.3 DESIGN CANDIDATE syntax items
 ```
 
 Current implementation status:
@@ -118,6 +117,7 @@ S2 Adapter seam
 -> v0.2 implementation kickoff
 -> Mutation Engine minimum contract
 -> Command normalization and matcher syntax
+-> Export adapter field allowlist tiers
 ```
 
 Important fixed boundaries:
@@ -154,31 +154,34 @@ Important fixed boundaries:
 - Command matching is argv prefix or exact token comparison with no regex and no glob; allowedCommands match case-sensitively and deniedCommands / destructiveCommands match case-insensitively so both directions resolve to the more restrictive outcome.
 - verificationPlan commands have no separate allowlist syntax and must pass policies.commands as-is.
 - Destructive command approval is granted per categoryId with cwd and runId scope, never per raw command string.
+- Export field allowlists resolve from PUBLIC / INTERNAL_SHARED / LOCAL_PRIVATE exposure tiers that must nest, not from per-target lists.
+- A target may narrow its tier but can never add a field path, and Profile and Local Overlay cannot widen it either.
+- Export field paths name leaves explicitly with no wildcard; an intermediate node path does not cover its children.
+- A field absent from the resolved allowlist is dropped and recorded as SCHEMA_UNKNOWN_FIELD in redaction-report.
 ```
 
 ## Current Bottleneck
 
 ```text
-Run Summary export adapter field allowlist schema
+files policy glob matcher syntax
 ```
 
 Why this is next:
 
 ```text
 Design is being completed before further implementation.
-Mutation Engine minimum contract and commands policy matcher syntax are now fixed.
-Export adapter field allowlist can proceed independently because the S5 boundary is already fixed.
-files policy glob matcher follows, inheriting the determinism standard and case asymmetry fixed by command matching.
+Mutation Engine contract, commands policy matcher syntax, and export field allowlist tiers are now fixed.
+files policy glob matcher inherits the determinism standard and case asymmetry fixed by command matching, so it is the last structural syntax item.
+The remaining 5.3 items follow the same shape once path matching is fixed.
 ```
 
 Expected next design slice:
 
 ```text
-1. Define per-adapter export field allowlist shape.
-2. Define how redaction-report records dropped fields.
-3. Define what an unknown adapter field produces.
-4. Then define files policy glob matcher syntax.
-5. Then close the remaining 5.3 DESIGN CANDIDATE syntax items.
+1. Decide whether path matching reuses the argv-style token model or needs a bounded glob subset.
+2. Define deterministic matching for allowedPaths / deniedPaths.
+3. Keep case asymmetry consistent with command matching.
+4. Then close the remaining 5.3 DESIGN CANDIDATE syntax items.
 ```
 
 Held implementation slice (resumes after design is fixed):

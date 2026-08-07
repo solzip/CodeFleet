@@ -5015,6 +5015,7 @@ PASS:
 - 확정 규칙 작성 기준
 - Mutation Engine minimum contract (phase 경계 / mutationId 멱등성 / lock / corrective event 경계)
 - Command normalization / matcher 문법 / destructive category 승인 단위
+- Export adapter field allowlist (exposure tier / leaf field path / unknown field 처리)
 
 PASS_AFTER_REINFORCEMENT:
 - Risk 판단 원칙
@@ -5033,9 +5034,6 @@ RESOLVED_AFTER_THIS_LIST_WAS_WRITTEN:
      구현 범위는 VERSION_PLAN으로 남김
 
 NOT_FINAL_YET:
-- Run Summary export adapter별 field allowlist schema
-  -> S5_EXPORT_SEAM_USES_SANITIZED_SUMMARY_ONLY는 boundary만 고정했고
-     adapter별 field allowlist는 미정이다.
 - 5.3의 나머지 DESIGN CANDIDATE 문법 항목
   -> files glob matcher / risk rule expression / redaction pattern language /
      agentRoles 내부 taxonomy / profile rule id 네이밍
@@ -13930,7 +13928,7 @@ rules:
   - ruleId: ""
     sourceFile: ".codefleet/runs/<runId>/..."
     sourceFilePathKind: "CODEFLEET_RELATIVE | WORKSPACE_RELATIVE"
-    matchKind: "SECRET | TOKEN | RAW_LOG | RAW_DIFF | INTERNAL_URL | LOCAL_ABSOLUTE_PATH | ENV_DUMP | CUSTOM"
+    matchKind: "SECRET | TOKEN | RAW_LOG | RAW_DIFF | INTERNAL_URL | LOCAL_ABSOLUTE_PATH | ENV_DUMP | SCHEMA_UNKNOWN_FIELD | CUSTOM"
     action: "REDACTED | DROPPED | RELATIVIZED | HASHED"
     count: 0
     severity: "INFO | WARNING | CORRUPTION"
@@ -13972,19 +13970,136 @@ createdAt: ""
 
 Adapter별 field 제한:
 
+target별 목록을 따로 나열하지 않는다. target이 서로 다른 이유는 취향이 아니라 노출 범위이므로, 노출 범위를 exposure tier로 정의하고 target은 tier를 선언한다.
+
 ```text
-MARKDOWN / DIARY:
-- allowed: title, summary, result, check, changedFiles, verificationResults, decisions, risks, nextActions, artifactRefs, redaction summary
-- denied: raw stdout/stderr, raw git diff, env dump, secret match text, provider transcript 원문
-
-NOTION:
-- allowed: title, summary, compact outcome checklist, verification summary, decisions, risks, nextActions, workspace-relative artifact refs
-- denied: local absolute paths unless allowLocalPathExport == true, internal URLs unless allowPublicUrlExport == true, raw logs/diff/transcript
-
-ISSUE / PR_COMMENT:
-- allowed: problem/result summary, changed file names, verification status, follow-up actions, public-safe refs
-- denied: local run paths by default, internal hostnames by default, large evidence tables, raw command output
+LOCAL_PRIVATE     로컬 파일. 실행한 사람의 머신에만 남는다.
+INTERNAL_SHARED   팀이 보는 내부 문서.
+PUBLIC            공개될 수 있는 트래커.
 ```
+
+tier는 포함관계를 이룬다.
+
+```text
+PUBLIC ⊆ INTERNAL_SHARED ⊆ LOCAL_PRIVATE
+```
+
+이 포함관계는 검사 가능한 불변식이다. 더 공개적인 tier가 덜 공개적인 tier보다 넓은 필드를 갖는 정의는 유효하지 않다.
+
+Tier 정의:
+
+```yaml
+exposureTiers:
+  PUBLIC:
+    allowedFieldPaths:
+      - "title"
+      - "summary"
+      - "result.value"
+      - "result.displayLabel"
+      - "check.observedCheck"
+      - "check.verificationGateResult"
+      - "check.verificationGateReason"
+      - "changedFiles[].path"
+      - "nextActions[]"
+      - "redactionSummary.totalMatches"
+      - "redactionSummary.blockedExport"
+
+  INTERNAL_SHARED:
+    extendsTier: "PUBLIC"
+    addedFieldPaths:
+      - "changedFiles[].changeKind"
+      - "verificationResults[].commandLabel"
+      - "verificationResults[].authority"
+      - "verificationResults[].passed"
+      - "decisions[]"
+      - "risks[]"
+      - "artifactRefs[].kind"
+      - "artifactRefs[].path"
+      - "artifactRefs[].pathKind"
+
+  LOCAL_PRIVATE:
+    extendsTier: "INTERNAL_SHARED"
+    addedFieldPaths:
+      - "runId"
+      - "sanitizedSummaryId"
+      - "createdAt"
+      - "verificationResults[].exitCode"
+      - "artifactRefs[].hash"
+      - "runSummaryRef.path"
+      - "runSummaryRef.hash"
+      - "reviewEvidenceBundleRef.path"
+      - "reviewEvidenceBundleRef.hash"
+      - "reviewEvidenceBundleRef.unavailableReason"
+      - "redactionReportRef.path"
+      - "redactionReportRef.hash"
+```
+
+Target 선언:
+
+```yaml
+targets:
+  MARKDOWN:   { tier: "LOCAL_PRIVATE" }
+  DIARY:      { tier: "LOCAL_PRIVATE" }
+  NOTION:     { tier: "INTERNAL_SHARED" }
+  ISSUE:      { tier: "PUBLIC" }
+  PR_COMMENT: { tier: "PUBLIC" }
+```
+
+target은 tier에서 더 좁힐 수만 있다.
+
+```yaml
+  DIARY:
+    tier: "LOCAL_PRIVATE"
+    targetNarrowing:
+      - "artifactRefs[].hash"
+```
+
+`schemaVersion`과 `documentKind`는 envelope 필드이며 모든 tier에 존재한다. `artifactRefs[].exportable`은 필터 입력이지 export 대상 필드가 아니므로 어떤 tier에도 포함되지 않는다.
+
+모든 tier가 공통으로 금지하는 것:
+
+```text
+- raw stdout / stderr
+- raw git diff
+- provider transcript 원문
+- env dump
+- secret match text
+- local absolute path
+```
+
+이 항목들은 애초에 SanitizedRunSummary에 존재하지 않으므로 tier 목록에 나타나지 않는다. tier는 sanitized artifact 안에서 무엇을 내보낼지만 정한다.
+
+이전 산문 목록에는 포함관계 위반이 하나 있었다. NOTION은 변경 파일 관련 필드를 언급하지 않았는데 더 공개적인 ISSUE는 `changed file names`를 허용했다. 공개 트래커에 쓸 수 있는 필드를 내부 문서에 쓰지 못할 이유가 없으므로 `changedFiles[].path`를 PUBLIC tier에 두어 세 tier 모두가 갖도록 보정한다.
+
+Field path 표기:
+
+```text
+"field"              최상위 scalar
+"parent.child"       중첩 object의 leaf
+"list[]"             scalar 원소 배열 전체
+"list[].child"       object 원소 배열의 특정 leaf
+```
+
+leaf까지 명시하고 와일드카드를 쓰지 않는다.
+
+```text
+- "*" 같은 와일드카드와 패턴 언어를 도입하지 않는다.
+- "changedFiles"처럼 중간 노드만 쓰는 표기는 유효하지 않다.
+- 배열 원소의 필드는 반드시 list[].child 형태로 개별 지정한다.
+```
+
+와일드카드를 금지하는 이유는 allowlist의 목적 자체에 있다. SanitizedRunSummary에 필드가 추가될 때 와일드카드는 그 필드를 자동으로 통과시킨다. allowlist는 정확히 그것을 막기 위한 장치이므로, 자동 통과를 허용하면 존재 의미가 사라진다.
+
+Allowlist에 없는 필드 처리:
+
+```text
+- allowlist에 없는 필드는 DROPPED로 처리한다.
+- redaction-report.json에 matchKind SCHEMA_UNKNOWN_FIELD로 기록한다.
+- severity는 WARNING이다.
+- blockedExport는 redaction policy가 요구할 때만 true가 된다.
+```
+
+`CUSTOM`으로 뭉뚱그리지 않고 전용 matchKind를 두는 이유는 이것이 스키마가 allowlist보다 앞서 나갔다는 신호이기 때문이다. SanitizedRunSummary에 필드를 추가하고 tier 갱신을 잊으면 값은 조용히 누락된다. 전용 matchKind가 있으면 redaction-report만 보고 그 상황을 식별할 수 있다.
 
 S5 규칙:
 
@@ -14001,6 +14116,129 @@ S5 규칙:
 - adapterPayloadRef is CODEFLEET_RELATIVE local evidence and is never copied into external payload as a local path.
 - external payload must not contain local absolute paths. If allowLocalPathExport is true, the exported value must still be explicitly marked as public-safe or relativized.
 - redaction-report sourceRefs may point to local evidence for audit, but exported adapter payload may include only redaction summary counts and blocked reasons.
+- target adapter field allowlist is resolved from an exposure tier, not from a per-target list.
+- a target may narrow its tier further but can never add a field path.
+```
+
+```yaml
+ruleId: EXPORT_FIELD_ALLOWLIST_IS_CORE_OWNED_EXPOSURE_TIER
+status: FINAL
+scope: EXPORT
+sourceOfTruth:
+  - Core exposure tier definitions
+  - Core target tier declarations
+  - Project Profile redaction policy restrictions
+  - Local Overlay restrictions
+inputs:
+  - export target
+  - declared tier
+  - tier allowedFieldPaths
+  - targetNarrowing
+  - profile and overlay restrictions
+preconditions:
+  - an export attempt has selected a target adapter.
+condition:
+  - every export target declares exactly one exposure tier.
+  - tier allowlists satisfy PUBLIC subset of INTERNAL_SHARED subset of LOCAL_PRIVATE.
+  - a target may remove field paths from its tier and can never add one.
+  - Project Profile and Local Overlay may restrict the resolved allowlist and can never widen it.
+  - the resolved allowlist is computed before the adapter payload is built.
+allowedEffect:
+  - several targets may share one tier without duplicating the field list.
+  - a new target may be added by declaring a tier only.
+  - a target may declare targetNarrowing to drop tier fields for that target alone.
+deniedEffect:
+  - CodeFleet cannot define a per-target allowlist that bypasses tier nesting.
+  - CodeFleet cannot let a more public tier carry a field a less public tier lacks.
+  - CodeFleet cannot widen a resolved allowlist at runtime.
+  - CodeFleet cannot export a field absent from the resolved allowlist.
+evidence:
+  - export target
+  - declared tier
+  - resolved allowedFieldPaths
+  - applied targetNarrowing
+  - applied profile and overlay restrictions
+failureFinding:
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: CORRUPTION
+repairBehavior:
+  - block external export until the tier definition satisfies nesting
+  - regenerate the adapter payload from the corrected resolved allowlist
+```
+
+```yaml
+ruleId: EXPORT_FIELD_PATH_IS_EXPLICIT_LEAF_WITHOUT_WILDCARD
+status: FINAL
+scope: EXPORT
+sourceOfTruth:
+  - exposure tier allowedFieldPaths
+  - SanitizedRunSummary schema
+inputs:
+  - field path entries
+  - sanitized run summary structure
+preconditions:
+  - a resolved allowlist is being applied to a sanitized run summary.
+condition:
+  - field paths address leaves using field, parent.child, list[], and list[].child forms.
+  - field paths contain no wildcard and no pattern language.
+  - an intermediate node path without a leaf is invalid.
+  - array element fields are enumerated individually.
+allowedEffect:
+  - a new sanitized field may be exported after it is added to a tier explicitly.
+deniedEffect:
+  - CodeFleet cannot admit a field by matching a prefix or a pattern.
+  - CodeFleet cannot treat an intermediate node path as covering its children.
+  - CodeFleet cannot export a newly added schema field without an explicit tier entry.
+evidence:
+  - resolved allowedFieldPaths
+  - exported field paths
+  - dropped field paths
+failureFinding:
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: CORRUPTION
+repairBehavior:
+  - reject the tier definition that contains a wildcard or intermediate node path
+  - add the missing leaf entry to the owning tier
+```
+
+```yaml
+ruleId: EXPORT_SCHEMA_UNKNOWN_FIELD_IS_DROPPED_AND_REPORTED
+status: FINAL
+scope: EXPORT
+sourceOfTruth:
+  - resolved allowlist
+  - sanitized run summary content
+  - redaction-report.json
+inputs:
+  - sanitized field paths present in the artifact
+  - resolved allowedFieldPaths
+  - redaction policy
+preconditions:
+  - adapter payload construction has started.
+condition:
+  - a present field path absent from the resolved allowlist is dropped from the payload.
+  - the drop is recorded in redaction-report with matchKind SCHEMA_UNKNOWN_FIELD and action DROPPED.
+  - the recorded severity is WARNING.
+  - blockedExport becomes true only when redaction policy requires it.
+allowedEffect:
+  - export may proceed with the unknown field omitted.
+  - redaction-report may be used to detect that the schema moved ahead of the tier definitions.
+deniedEffect:
+  - CodeFleet cannot pass an unknown field through to the adapter payload.
+  - CodeFleet cannot record an unknown field drop as CUSTOM.
+  - CodeFleet cannot omit the drop from redaction-report.
+evidence:
+  - dropped field path
+  - matchKind
+  - action
+  - count
+  - export target and resolved tier
+failureFinding:
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
+repairBehavior:
+  - add the field path to the owning tier when the field is intended for export
+  - keep the drop when the field is not intended for export
 ```
 
 ```text
@@ -14956,22 +15194,21 @@ repairBehavior:
 - command matcher는 정규식 / glob 없이 argv prefix 또는 exact 토큰 비교이며, allowedCommands는 case-sensitive, deniedCommands / destructiveCommands는 case-insensitive로 매칭해 항상 더 제한적인 쪽으로 판정한다는 원칙
 - verificationPlan command는 별도 allowlist 문법을 갖지 않고 policies.commands 판정을 그대로 통과해야 한다는 원칙
 - destructive command의 승인 단위는 개별 명령 문자열이 아니라 categoryId이며 durable approval은 categoryId / cwd / runId 범위로 기록된다는 원칙
+- export adapter field allowlist는 target별 목록이 아니라 PUBLIC / INTERNAL_SHARED / LOCAL_PRIVATE exposure tier에서 해석되며 tier는 포함관계를 이룬다는 원칙
+- target은 선언한 tier를 더 좁힐 수만 있고 field path를 추가할 수 없으며 Project Profile / Local Overlay도 넓힐 수 없다는 원칙
+- export field path는 와일드카드 없이 leaf까지 명시하며 중간 노드 경로는 하위 필드를 덮지 않는다는 원칙
+- allowlist에 없는 필드는 DROPPED로 처리하고 redaction-report에 SCHEMA_UNKNOWN_FIELD로 기록한다는 원칙
 ```
 
 다음으로 논의할 항목:
 
 ```text
-1. Run Summary export adapter별 field allowlist schema
-   - define per-adapter field allowlist shape
-   - define how redaction-report records dropped fields
-   - define what an unknown adapter field produces
-
-2. files policy glob matcher 문법
+1. files policy glob matcher 문법
    - decide whether path matching reuses the argv-style token model or needs a bounded glob subset
    - define deterministic matching for allowedPaths / deniedPaths
    - keep the case asymmetry consistent with command matching
 
-3. 5.3의 나머지 DESIGN CANDIDATE 문법 항목
+2. 5.3의 나머지 DESIGN CANDIDATE 문법 항목
    - risk policy rule expression 문법
    - redaction policy pattern language
    - agentRoles 내부 role taxonomy
@@ -14981,8 +15218,8 @@ repairBehavior:
 논의 순서 이유:
 
 ```text
-- export field allowlist는 S5 경계가 이미 고정돼 있어 독립적으로 진행할 수 있다.
 - files glob matcher는 command matcher가 정한 결정론 기준과 case 비대칭 원칙을 그대로 이어받는다.
+- redaction pattern language는 files glob matcher가 고정된 뒤 같은 형식을 따라간다.
 - 나머지 문법 항목은 위 둘이 고정된 뒤 같은 형식을 따라간다.
 ```
 

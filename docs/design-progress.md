@@ -19,14 +19,14 @@ README.md                    현재 구현 사용법
 
 ```text
 Phase 0-9    완료      76단계
-Phase 10     진행 중   5단계 중 1단계 완료, 남은 설계 4단계 (전부 문법 계층)
+Phase 10     진행 중   5단계 중 2단계 완료, 남은 설계 3단계 (전부 문법 계층)
 Phase 11     대기      설계 확정 후 구현 재개
 ```
 
 ```text
-전체 84단계 중 77단계 완료
-FINAL RULE 70개
-설계 진행도: 약 88%
+전체 84단계 중 78단계 완료
+FINAL RULE 73개
+설계 진행도: 약 91%
 구현 진행도: 약 25-35%
 ```
 
@@ -177,8 +177,11 @@ FINAL RULE 70개
         - command normalization (argv only, shell 경유 금지)
         - matcher (argv prefix / exact, 정규식·glob 없음, case 비대칭)
         - destructive command categoryId 승인 단위
-[ ] 78. Run Summary export adapter별 field allowlist schema             <- 다음, 미착수
-[ ] 79. files policy glob matcher 문법
+[x] 78. Run Summary export adapter별 field allowlist schema
+        - exposure tier (PUBLIC / INTERNAL_SHARED / LOCAL_PRIVATE) + target 선언
+        - leaf field path, 와일드카드 없음
+        - 미지 필드 DROP + SCHEMA_UNKNOWN_FIELD 기록
+[ ] 79. files policy glob matcher 문법                                  <- 다음, 미착수
 [ ] 80. 나머지 DESIGN CANDIDATE 문법 항목
         - risk policy rule expression
         - redaction policy pattern language
@@ -191,7 +194,7 @@ FINAL RULE 70개
 
 ```text
 - 77은 Verification allowlist와 files glob matcher가 공유하는 기반이라 먼저 고정했다.
-- 78은 S5 경계가 이미 고정돼 있어 matcher 문법과 독립적으로 진행할 수 있다.
+- 78은 S5 경계가 이미 고정돼 있어 matcher 문법과 독립적으로 먼저 끝냈다.
 - 79는 77이 정한 결정론 기준과 case 비대칭 원칙을 그대로 이어받는다.
 - 80은 위 항목들이 고정된 뒤 같은 형식을 따라간다.
 ```
@@ -212,7 +215,7 @@ Phase 10은 "그 판정을 어떤 표기로 쓰는가"를 정한다.
 [ ] 84. 이후 final 슬라이스
 ```
 
-81번의 상세 슬라이스는 `docs/session-handoff.md`의 held implementation slice에 있다.
+82번의 상세 슬라이스는 `docs/session-handoff.md`의 held implementation slice에 있다.
 
 ---
 
