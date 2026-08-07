@@ -15,6 +15,106 @@ export interface RunExecution {
   result: RunResultFile;
 }
 
+type VerificationAuthority = "NONE" | "PROVIDER_REPORTED_ONLY" | "HARNESS_OBSERVED" | "HARNESS_EXECUTED" | "WAIVED_BY_POLICY";
+type ObservedCheck = "PASS" | "FAIL" | "SKIP" | "NONE";
+type VerificationGateResult = "SATISFIED" | "NOT_SATISFIED" | "WAIVED_ALLOWED";
+type VerificationGateReason = "NOT_REQUIRED" | "PASS" | "WAIVER" | "FAILED" | "MISSING" | "BLOCKED" | "UNAVAILABLE";
+
+interface UnavailableRef {
+  unavailableReason: string;
+  degraded?: boolean;
+}
+
+interface VerificationAttempt {
+  commandId: string;
+  command: string[];
+  cwdRef: string;
+  authority: VerificationAuthority;
+  decision: "ALLOWED" | "BLOCKED" | "UNAVAILABLE";
+  startedAt: string;
+  endedAt: string;
+  exitCode: number | null;
+  stdoutRef: FileRef | UnavailableRef;
+  stderrRef: FileRef | UnavailableRef;
+  logRef: FileRef | UnavailableRef;
+  result: ObservedCheck;
+  blockedReason: string;
+  unavailableReason: string;
+}
+
+interface VerificationEvidence {
+  schemaVersion: "0.2";
+  documentKind: "VERIFICATION_EVIDENCE";
+  verificationAttemptId: string;
+  runId: string;
+  runPlanId: string;
+  taskRevisionRef: FileRef;
+  runPlanRef: FileRef;
+  harnessObservationRef: FileRef;
+  verificationPlanRef: FileRef;
+  effectivePolicyHash: string;
+  authority: VerificationAuthority;
+  observedCheck: ObservedCheck;
+  verificationGateResult: VerificationGateResult;
+  verificationGateReason: VerificationGateReason;
+  attempts: VerificationAttempt[];
+  providerReportedVerificationRef: UnavailableRef;
+  waiverRef: UnavailableRef;
+  failureFindingRefs: FileRef[];
+  unavailableReason: string;
+  createdAt: string;
+}
+
+interface RunSummary {
+  schemaVersion: "0.2";
+  documentKind: "RUN_SUMMARY";
+  finalDecisionTruth: false;
+  runId: string;
+  runPlanId: string;
+  taskId: string;
+  createdAt: string;
+  normalization: {
+    status: "COMPLETE" | "PARTIAL" | "BLOCKED";
+    unavailableReasons: string[];
+  };
+  inputs: {
+    runPlanRef: FileRef;
+    adapterRequestRef: FileRef;
+    harnessObservationRef: FileRef;
+    adapterResultRef: FileRef;
+    verificationEvidenceRefs: FileRef[];
+    verificationEvidenceRef: FileRef | UnavailableRef;
+  };
+  result: {
+    value: string;
+    derivedFrom: string[];
+  };
+  check: {
+    observedCheck: ObservedCheck;
+    verificationGateResult: VerificationGateResult;
+    verificationGateReason: VerificationGateReason;
+    derivedFromVerificationAttemptIds: string[];
+  };
+  evidenceAuthority: {
+    commandEvidenceAuthority: string;
+    changedFilesAuthority: string;
+  };
+  policy: {
+    computedRisk: string;
+    pathViolationSummary: {
+      evaluated: boolean;
+      hasViolation: boolean;
+      violationRefs: FileRef[];
+      unavailableReason: string;
+    };
+  };
+  safeguards: {
+    canProduceVerified: false;
+    acceptanceEvidence: false;
+    degradedReasons: string[];
+  };
+}
+
 export async function runTask(
   rootDir: string,
   taskId: string,
@@ -36,6 +136,8 @@ export async function runTask(
   const adapterRequestPath = path.join(runDir, "adapter-request.json");
   const harnessObservationPath = path.join(runDir, "harness-observation.json");
   const adapterResultPath = path.join(runDir, "adapter-result.json");
+  const runSummaryPath = path.join(runDir, "run-summary.json");
+  const verificationDir = path.join(runDir, "verification");
   const stdoutLogPath = path.join(runDir, "stdout.log");
   const stderrLogPath = path.join(runDir, "stderr.log");
   const diffPath = path.join(runDir, "git-diff.patch");
@@ -50,8 +152,8 @@ export async function runTask(
     adapterRequestPath: toRelativePath(rootDir, adapterRequestPath),
     harnessObservationPath: toRelativePath(rootDir, harnessObservationPath),
     adapterResultPath: toRelativePath(rootDir, adapterResultPath),
-    runSummaryPath: toRelativePath(rootDir, path.join(runDir, "run-summary.json")),
-    verificationDir: toRelativePath(rootDir, path.join(runDir, "verification"))
+    runSummaryPath: toRelativePath(rootDir, runSummaryPath),
+    verificationDir: toRelativePath(rootDir, verificationDir)
   };
   const capabilities = {
     fileEdit: config.mode === "execute",
@@ -224,6 +326,7 @@ export async function runTask(
     artifactRefs: [stdoutRef, stderrRef, diffRef]
   };
   await writeJson(harnessObservationPath, harnessObservation);
+  const harnessObservationRef = await fileRef(rootDir, harnessObservationPath);
 
   const adapterResult = {
     schemaVersion: "0.2",
@@ -245,8 +348,44 @@ export async function runTask(
     adapterError: adapterError(agentResult)
   };
   await writeJson(adapterResultPath, adapterResult);
+  const adapterResultRef = await fileRef(rootDir, adapterResultPath);
+
+  await mkdir(verificationDir, { recursive: true });
+  const verificationAttemptId = await nextVerificationAttemptId(verificationDir);
+  const verificationEvidencePath = path.join(verificationDir, `${verificationAttemptId}.json`);
+  const verificationEvidence = buildVerificationEvidence({
+    verificationAttemptId,
+    runId,
+    runPlanId,
+    createdAt: formatDateTimeWithOffset(new Date()),
+    runPlan,
+    runPlanRef,
+    sourceTaskRef,
+    harnessObservationRef
+  });
+  assertVerificationEvidence(verificationEvidence);
+  await writeJson(verificationEvidencePath, verificationEvidence);
+  const verificationEvidenceRef = await fileRef(rootDir, verificationEvidencePath);
 
   const finishedAt = new Date();
+  const runSummary = buildRunSummary({
+    runId,
+    runPlanId,
+    taskId: task.id,
+    createdAt: formatDateTimeWithOffset(finishedAt),
+    runPlanRef,
+    adapterRequestRef,
+    harnessObservationRef,
+    adapterResultRef,
+    agentResult,
+    runPlan,
+    harnessObservation,
+    verificationEvidenceRef,
+    verificationEvidence
+  });
+  assertRunSummary(runSummary);
+  await writeJson(runSummaryPath, runSummary);
+
   const result: RunResultFile = {
     runId,
     taskId: task.id,
@@ -258,6 +397,7 @@ export async function runTask(
     adapterRequestPath: toRelativePath(rootDir, adapterRequestPath),
     harnessObservationPath: toRelativePath(rootDir, harnessObservationPath),
     adapterResultPath: toRelativePath(rootDir, adapterResultPath),
+    runSummaryPath: toRelativePath(rootDir, runSummaryPath),
     promptPath: toRelativePath(rootDir, promptPath),
     stdoutLogPath: toRelativePath(rootDir, stdoutLogPath),
     stderrLogPath: toRelativePath(rootDir, stderrLogPath),
@@ -295,6 +435,317 @@ export async function listRuns(rootDir: string): Promise<RunResultFile[]> {
   }
 
   return results;
+}
+
+function buildRunSummary(input: {
+  runId: string;
+  runPlanId: string;
+  taskId: string;
+  createdAt: string;
+  runPlanRef: FileRef;
+  adapterRequestRef: FileRef;
+  harnessObservationRef: FileRef;
+  adapterResultRef: FileRef;
+  agentResult: AgentRunResult;
+  runPlan: Record<string, unknown>;
+  harnessObservation: Record<string, unknown>;
+  verificationEvidenceRef: FileRef | null;
+  verificationEvidence: VerificationEvidence | null;
+}): RunSummary {
+  const unavailableReasons = runSummaryUnavailableReasons(input);
+  const verificationRequired = isVerificationRequired(input.runPlan);
+  const observedCheck = typeof input.verificationEvidence?.observedCheck === "string" ? input.verificationEvidence.observedCheck : "NONE";
+  const verificationGateResult = typeof input.verificationEvidence?.verificationGateResult === "string"
+    ? input.verificationEvidence.verificationGateResult
+    : verificationRequired ? "NOT_SATISFIED" : "SATISFIED";
+  const verificationGateReason = typeof input.verificationEvidence?.verificationGateReason === "string"
+    ? input.verificationEvidence.verificationGateReason
+    : verificationRequired ? "MISSING" : "NOT_REQUIRED";
+  const verificationAttemptId = typeof input.verificationEvidence?.verificationAttemptId === "string"
+    ? input.verificationEvidence.verificationAttemptId
+    : null;
+
+  return {
+    schemaVersion: "0.2",
+    documentKind: "RUN_SUMMARY",
+    finalDecisionTruth: false,
+    runId: input.runId,
+    runPlanId: input.runPlanId,
+    taskId: input.taskId,
+    createdAt: input.createdAt,
+    normalization: {
+      status: unavailableReasons.length > 0 ? "PARTIAL" : "COMPLETE",
+      unavailableReasons
+    },
+    inputs: {
+      runPlanRef: input.runPlanRef,
+      adapterRequestRef: input.adapterRequestRef,
+      harnessObservationRef: input.harnessObservationRef,
+      adapterResultRef: input.adapterResultRef,
+      verificationEvidenceRefs: input.verificationEvidenceRef === null ? [] : [input.verificationEvidenceRef],
+      verificationEvidenceRef: input.verificationEvidenceRef ?? {
+        unavailableReason: "VERIFICATION_EVIDENCE_NOT_AVAILABLE"
+      }
+    },
+    result: {
+      value: normalizedRunResult(input.agentResult),
+      derivedFrom: [input.adapterResultRef.path]
+    },
+    check: {
+      observedCheck,
+      verificationGateResult,
+      verificationGateReason,
+      derivedFromVerificationAttemptIds: verificationAttemptId === null ? [] : [verificationAttemptId]
+    },
+    evidenceAuthority: {
+      commandEvidenceAuthority: commandEvidenceAuthority(input.harnessObservation),
+      changedFilesAuthority: changedFilesAuthority(input.harnessObservation)
+    },
+    policy: {
+      computedRisk: ((input.runPlan.computedRisk as Record<string, unknown> | undefined)?.level as string | undefined) ?? "UNKNOWN",
+      pathViolationSummary: {
+        evaluated: false,
+        hasViolation: false,
+        violationRefs: [],
+        unavailableReason: "PATH_POLICY_EVALUATION_NOT_IMPLEMENTED_V02"
+      }
+    },
+    safeguards: {
+      canProduceVerified: false,
+      acceptanceEvidence: false,
+      degradedReasons: [
+        "RUN_SUMMARY_IS_DERIVED_NOT_DECISION_TRUTH",
+        "PROVIDER_REPORTED_OBSERVATIONS_ARE_NOT_CORE_TRUTH"
+      ]
+    }
+  };
+}
+
+function runSummaryUnavailableReasons(input: {
+  agentResult: AgentRunResult;
+  harnessObservation: Record<string, unknown>;
+  verificationEvidence: VerificationEvidence | null;
+}): string[] {
+  const reasons = new Set<string>();
+  const workspace = input.harnessObservation.workspace as Record<string, unknown> | undefined;
+  addUnavailableReason(reasons, workspace?.preRunStateRef);
+  addUnavailableReason(reasons, workspace?.postRunStateRef);
+  addUnavailableReason(reasons, input.harnessObservation.changes);
+  addUnavailableReason(reasons, input.harnessObservation.commands);
+  const commands = input.harnessObservation.commands as Record<string, unknown> | undefined;
+  addUnavailableReason(reasons, commands?.commandLogRef);
+  addUnavailableReason(reasons, commands?.providerReportedCommandsRef);
+  const policyChecks = input.harnessObservation.policyChecks as Record<string, unknown> | undefined;
+  addUnavailableReason(reasons, policyChecks?.pathPolicyEvaluationRef);
+  addUnavailableReason(reasons, input.verificationEvidence);
+  if (input.verificationEvidence === null) {
+    reasons.add("VERIFICATION_EVIDENCE_NOT_AVAILABLE");
+  }
+  if (input.agentResult.status === "DRY_RUN") {
+    reasons.add("DRY_RUN_NOT_EXECUTED");
+  }
+  return Array.from(reasons).sort();
+}
+
+function addUnavailableReason(reasons: Set<string>, value: unknown): void {
+  if (typeof value !== "object" || value === null) {
+    return;
+  }
+  const reason = (value as Record<string, unknown>).unavailableReason;
+  if (typeof reason === "string" && reason.length > 0) {
+    reasons.add(reason);
+  }
+}
+
+function buildVerificationEvidence(input: {
+  verificationAttemptId: string;
+  runId: string;
+  runPlanId: string;
+  createdAt: string;
+  runPlan: Record<string, unknown>;
+  runPlanRef: FileRef;
+  sourceTaskRef: FileRef;
+  harnessObservationRef: FileRef;
+}): VerificationEvidence {
+  const verificationPlan = input.runPlan.verificationPlan ?? {};
+  const unavailableReason = verificationUnavailableReason(input.runPlan);
+  return {
+    schemaVersion: "0.2",
+    documentKind: "VERIFICATION_EVIDENCE",
+    verificationAttemptId: input.verificationAttemptId,
+    runId: input.runId,
+    runPlanId: input.runPlanId,
+    taskRevisionRef: input.sourceTaskRef,
+    runPlanRef: input.runPlanRef,
+    harnessObservationRef: input.harnessObservationRef,
+    verificationPlanRef: {
+      path: `${input.runPlanRef.path}#/verificationPlan`,
+      contentHash: hashJson(verificationPlan),
+      present: true
+    },
+    effectivePolicyHash: effectivePolicyHash(input.runPlan),
+    authority: "NONE",
+    observedCheck: "NONE",
+    verificationGateResult: isVerificationRequired(input.runPlan) ? "NOT_SATISFIED" : "SATISFIED",
+    verificationGateReason: isVerificationRequired(input.runPlan) ? "MISSING" : "NOT_REQUIRED",
+    attempts: [
+      {
+        commandId: "verification-unavailable",
+        command: [],
+        cwdRef: "",
+        authority: "NONE",
+        decision: "UNAVAILABLE",
+        startedAt: input.createdAt,
+        endedAt: input.createdAt,
+        exitCode: null,
+        stdoutRef: {
+          unavailableReason: "COMMAND_NOT_EXECUTED"
+        },
+        stderrRef: {
+          unavailableReason: "COMMAND_NOT_EXECUTED"
+        },
+        logRef: {
+          unavailableReason
+        },
+        result: "NONE",
+        blockedReason: "",
+        unavailableReason
+      }
+    ],
+    providerReportedVerificationRef: {
+      unavailableReason: "PROVIDER_REPORTED_VERIFICATION_NOT_IMPLEMENTED_V02",
+      degraded: true
+    },
+    waiverRef: {
+      unavailableReason: "VERIFICATION_WAIVER_NOT_PRESENT"
+    },
+    failureFindingRefs: [],
+    unavailableReason,
+    createdAt: input.createdAt
+  };
+}
+
+async function nextVerificationAttemptId(verificationDir: string): Promise<string> {
+  let entries: string[];
+  try {
+    entries = await readdir(verificationDir);
+  } catch {
+    return "verify-001";
+  }
+
+  const last = entries
+    .map((entry) => entry.match(/^verify-(\d{3})\.json$/))
+    .filter((match): match is RegExpMatchArray => match !== null)
+    .map((match) => Number(match[1]))
+    .reduce((max, value) => Math.max(max, value), 0);
+
+  return `verify-${String(last + 1).padStart(3, "0")}`;
+}
+
+function verificationUnavailableReason(runPlan: Record<string, unknown>): string {
+  const commands = verificationPlanCommands(runPlan);
+  if (commands.length === 0) {
+    return "NO_VERIFICATION_COMMANDS_CONFIGURED";
+  }
+  return "COMMAND_CHANNEL_NOT_HARNESS_VISIBLE";
+}
+
+function verificationPlanCommands(runPlan: Record<string, unknown>): unknown[] {
+  const commands = (runPlan.verificationPlan as Record<string, unknown> | undefined)?.commands;
+  return Array.isArray(commands) ? commands : [];
+}
+
+function assertVerificationEvidence(value: VerificationEvidence): void {
+  const errors: string[] = [];
+  if (value.schemaVersion !== "0.2") {
+    errors.push("schemaVersion must be 0.2");
+  }
+  if (value.documentKind !== "VERIFICATION_EVIDENCE") {
+    errors.push("documentKind must be VERIFICATION_EVIDENCE");
+  }
+  if (!/^verify-\d{3}$/.test(value.verificationAttemptId)) {
+    errors.push("verificationAttemptId must be verify-NNN");
+  }
+  if (value.authority === "NONE" && value.observedCheck === "PASS") {
+    errors.push("authority NONE cannot produce observedCheck PASS");
+  }
+  if (value.verificationGateResult === "SATISFIED" && value.verificationGateReason !== "NOT_REQUIRED" && value.observedCheck !== "PASS") {
+    errors.push("SATISFIED requires PASS unless verification is not required");
+  }
+  if (value.attempts.length === 0) {
+    errors.push("attempts must include an explicit unavailable attempt when verification is not executed");
+  }
+  for (const attempt of value.attempts) {
+    if (attempt.authority === "NONE" && attempt.result === "PASS") {
+      errors.push(`attempt ${attempt.commandId} has authority NONE but result PASS`);
+    }
+    if (attempt.decision === "UNAVAILABLE" && attempt.unavailableReason.length === 0) {
+      errors.push(`attempt ${attempt.commandId} is UNAVAILABLE without unavailableReason`);
+    }
+  }
+  if (value.unavailableReason.length === 0 && value.authority === "NONE") {
+    errors.push("authority NONE requires unavailableReason");
+  }
+  if (errors.length > 0) {
+    throw new Error(`Invalid VerificationEvidence: ${errors.join("; ")}`);
+  }
+}
+
+function assertRunSummary(value: RunSummary): void {
+  const errors: string[] = [];
+  if (value.schemaVersion !== "0.2") {
+    errors.push("schemaVersion must be 0.2");
+  }
+  if (value.documentKind !== "RUN_SUMMARY") {
+    errors.push("documentKind must be RUN_SUMMARY");
+  }
+  if (value.finalDecisionTruth !== false) {
+    errors.push("RunSummary cannot be final decision truth");
+  }
+  if (value.check.observedCheck === "PASS" && value.evidenceAuthority.commandEvidenceAuthority === "NONE") {
+    errors.push("command authority NONE cannot produce observedCheck PASS");
+  }
+  if (value.safeguards.canProduceVerified || value.safeguards.acceptanceEvidence) {
+    errors.push("RunSummary cannot produce VERIFIED or acceptance evidence");
+  }
+  if (value.inputs.verificationEvidenceRefs.length > 0 && value.check.derivedFromVerificationAttemptIds.length === 0) {
+    errors.push("verification evidence refs require derived attempt ids");
+  }
+  if (errors.length > 0) {
+    throw new Error(`Invalid RunSummary: ${errors.join("; ")}`);
+  }
+}
+
+function isVerificationRequired(runPlan: Record<string, unknown>): boolean {
+  return Boolean(
+    (((runPlan.effectivePolicy as Record<string, unknown> | undefined)?.requiredGates as Record<string, unknown> | undefined)
+      ?.verification as Record<string, unknown> | undefined)?.required
+  );
+}
+
+function effectivePolicyHash(runPlan: Record<string, unknown>): string {
+  const policyHash = (runPlan.effectivePolicy as Record<string, unknown> | undefined)?.policyHash;
+  return typeof policyHash === "string" ? policyHash : "";
+}
+
+function normalizedRunResult(result: AgentRunResult): string {
+  if (result.status === "SUCCEEDED") {
+    return "DONE";
+  }
+  if (result.status === "FAILED") {
+    return "FAILED";
+  }
+  return "UNKNOWN";
+}
+
+function commandEvidenceAuthority(harnessObservation: Record<string, unknown>): string {
+  const commands = harnessObservation.commands as Record<string, unknown> | undefined;
+  return typeof commands?.authority === "string" ? commands.authority : "NONE";
+}
+
+function changedFilesAuthority(harnessObservation: Record<string, unknown>): string {
+  const changes = harnessObservation.changes as Record<string, unknown> | undefined;
+  return typeof changes?.unavailableReason === "string" && changes.unavailableReason.length > 0 ? "NONE" : "HARNESS_OBSERVED";
 }
 
 async function runAgentSafely(agentName: string, input: AgentRunInput): Promise<AgentRunResult> {

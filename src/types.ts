@@ -67,6 +67,7 @@ export interface RunResultFile {
   adapterRequestPath?: string;
   harnessObservationPath?: string;
   adapterResultPath?: string;
+  runSummaryPath?: string;
   promptPath: string;
   stdoutLogPath: string;
   stderrLogPath: string;

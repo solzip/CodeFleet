@@ -40,6 +40,8 @@ test("runTask writes run-plan and S2 artifacts before legacy result", async () =
   const adapterRequest = await readJson(path.join(execution.runDir, "adapter-request.json"));
   const harnessObservation = await readJson(path.join(execution.runDir, "harness-observation.json"));
   const adapterResult = await readJson(path.join(execution.runDir, "adapter-result.json"));
+  const verificationEvidence = await readJson(path.join(execution.runDir, "verification", "verify-001.json"));
+  const runSummary = await readJson(path.join(execution.runDir, "run-summary.json"));
   const legacyResult = await readJson(path.join(execution.runDir, "result.json"));
 
   assert.equal(runPlan.documentKind, "RUN_PLAN");
@@ -69,7 +71,86 @@ test("runTask writes run-plan and S2 artifacts before legacy result", async () =
   assert.equal(adapterResult.documentKind, "ADAPTER_RESULT");
   assert.equal(adapterResult.synthetic, true);
   assert.equal(adapterResult.adapterExecutionStatus, "NOT_EXECUTED");
+  assert.equal(verificationEvidence.documentKind, "VERIFICATION_EVIDENCE");
+  assert.equal(verificationEvidence.verificationAttemptId, "verify-001");
+  assert.equal(verificationEvidence.authority, "NONE");
+  assert.equal(verificationEvidence.observedCheck, "NONE");
+  assert.equal(verificationEvidence.verificationGateResult, "NOT_SATISFIED");
+  assert.equal(verificationEvidence.verificationGateReason, "MISSING");
+  assert.equal(verificationEvidence.unavailableReason, "NO_VERIFICATION_COMMANDS_CONFIGURED");
+  assert.deepEqual(verificationEvidence.attempts, [
+    {
+      commandId: "verification-unavailable",
+      command: [],
+      cwdRef: "",
+      authority: "NONE",
+      decision: "UNAVAILABLE",
+      startedAt: verificationEvidence.createdAt,
+      endedAt: verificationEvidence.createdAt,
+      exitCode: null,
+      stdoutRef: {
+        unavailableReason: "COMMAND_NOT_EXECUTED"
+      },
+      stderrRef: {
+        unavailableReason: "COMMAND_NOT_EXECUTED"
+      },
+      logRef: {
+        unavailableReason: "NO_VERIFICATION_COMMANDS_CONFIGURED"
+      },
+      result: "NONE",
+      blockedReason: "",
+      unavailableReason: "NO_VERIFICATION_COMMANDS_CONFIGURED"
+    }
+  ]);
+  assert.equal(
+    (verificationEvidence.verificationPlanRef as { path: string }).path,
+    `${execution.result.runPlanPath}#/verificationPlan`
+  );
+  assert.equal(runSummary.documentKind, "RUN_SUMMARY");
+  assert.equal(runSummary.finalDecisionTruth, false);
+  assert.equal((runSummary.result as { value: string }).value, "UNKNOWN");
+  assert.deepEqual(runSummary.check, {
+    observedCheck: "NONE",
+    verificationGateResult: "NOT_SATISFIED",
+    verificationGateReason: "MISSING",
+    derivedFromVerificationAttemptIds: ["verify-001"]
+  });
+  const runSummaryInputs = runSummary.inputs as {
+    runPlanRef: { path: string };
+    adapterRequestRef: { contentHash: string };
+    verificationEvidenceRef: { path: string; contentHash: string };
+    verificationEvidenceRefs: Array<{ path: string; contentHash: string }>;
+  };
+  assert.equal(runSummaryInputs.runPlanRef.path, execution.result.runPlanPath);
+  assert.equal(
+    runSummaryInputs.adapterRequestRef.contentHash,
+    hashFile(JSON.stringify(adapterRequest, null, 2) + "\n")
+  );
+  assert.match(runSummaryInputs.verificationEvidenceRef.path, /^\.codefleet\/runs\/.+\/verification\/verify-001\.json$/);
+  assert.equal(
+    runSummaryInputs.verificationEvidenceRef.contentHash,
+    hashFile(JSON.stringify(verificationEvidence, null, 2) + "\n")
+  );
+  assert.deepEqual(runSummaryInputs.verificationEvidenceRefs, [runSummaryInputs.verificationEvidenceRef]);
+  assert.equal(
+    (runSummary.evidenceAuthority as { commandEvidenceAuthority: string }).commandEvidenceAuthority,
+    "NONE"
+  );
+  assert.equal((runSummary.policy as { computedRisk: string }).computedRisk, "UNKNOWN");
+  const pathViolationSummary = (runSummary.policy as {
+    pathViolationSummary: { evaluated: boolean; unavailableReason: string };
+  }).pathViolationSummary;
+  assert.equal(pathViolationSummary.evaluated, false);
+  assert.equal(pathViolationSummary.unavailableReason, "PATH_POLICY_EVALUATION_NOT_IMPLEMENTED_V02");
+  const normalization = runSummary.normalization as { status: string; unavailableReasons: string[] };
+  assert.equal(normalization.status, "PARTIAL");
+  assert.ok(normalization.unavailableReasons.includes("COMMAND_CHANNEL_NOT_HARNESS_VISIBLE"));
+  assert.ok(normalization.unavailableReasons.includes("NO_VERIFICATION_COMMANDS_CONFIGURED"));
+  assert.ok(normalization.unavailableReasons.includes("PATH_POLICY_EVALUATION_NOT_IMPLEMENTED_V02"));
+  assert.ok(!normalization.unavailableReasons.includes("VERIFICATION_EVIDENCE_NOT_IMPLEMENTED_V02"));
+  assert.equal((runSummary.safeguards as { canProduceVerified: boolean }).canProduceVerified, false);
   assert.equal(legacyResult.adapterResultPath, execution.result.adapterResultPath);
+  assert.equal(legacyResult.runSummaryPath, execution.result.runSummaryPath);
 });
 
 test("runTask rejects projectPath outside the workspace before S2 artifacts", async () => {
@@ -171,6 +252,8 @@ test("runTask preserves S2 artifacts when adapter creation fails", async () => {
   const adapterRequest = await readJson(path.join(execution.runDir, "adapter-request.json"));
   const harnessObservation = await readJson(path.join(execution.runDir, "harness-observation.json"));
   const adapterResult = await readJson(path.join(execution.runDir, "adapter-result.json"));
+  const verificationEvidence = await readJson(path.join(execution.runDir, "verification", "verify-001.json"));
+  const runSummary = await readJson(path.join(execution.runDir, "run-summary.json"));
   const legacyResult = await readJson(path.join(execution.runDir, "result.json"));
 
   assert.equal(execution.result.status, "FAILED");
@@ -180,6 +263,11 @@ test("runTask preserves S2 artifacts when adapter creation fails", async () => {
   assert.equal(adapterResult.adapterId, "missing-adapter");
   assert.equal(adapterResult.synthetic, true);
   assert.equal(adapterResult.adapterExecutionStatus, "ADAPTER_FAILED");
+  assert.equal(verificationEvidence.authority, "NONE");
+  assert.equal(verificationEvidence.verificationGateResult, "NOT_SATISFIED");
+  assert.equal((runSummary.result as { value: string }).value, "FAILED");
+  assert.equal((runSummary.check as { verificationGateResult: string }).verificationGateResult, "NOT_SATISFIED");
+  assert.equal((runSummary.safeguards as { acceptanceEvidence: boolean }).acceptanceEvidence, false);
   const adapterError = adapterResult.adapterError as { code: string; message: string };
   assert.equal(adapterError.code, "LAUNCH_FAILED");
   assert.match(adapterError.message, /Unsupported agent: missing-adapter/);
@@ -192,4 +280,8 @@ async function readJson(filePath: string): Promise<Record<string, unknown>> {
 
 function hashJson(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function hashFile(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
 }
