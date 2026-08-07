@@ -5565,6 +5565,83 @@ Outputs:
 - .codefleet/runs/<runId>/review-decision.local.json while Objective ledger is absent
 ```
 
+ReviewEvidenceBundle assembly order:
+
+```text
+1. Resolve the Run directory from the concrete runId.
+2. Load run-summary.json first.
+3. Read S2 artifact refs from run-summary.json inputs:
+   - runPlanRef
+   - adapterRequestRef
+   - harnessObservationRef
+   - adapterResultRef
+   - verificationEvidenceRefs
+4. Verify referenced artifact hashes when the ref has a hash.
+5. Copy observed result/check/gate snapshots only from Run Summary normalized fields.
+6. Copy computedRisk, commandEvidenceAuthority, and pathViolationSummary only from Run Summary normalized fields.
+7. Add human review note and AI review hint refs only after evidence snapshots are frozen.
+8. Write evidence-bundle.json before review-decision.local.json.
+```
+
+Assembly rules:
+
+```text
+- codefleet review must not re-normalize AdapterResult, HarnessObservation, or VerificationEvidence independently of Run Summary.
+- If Run Summary is missing, ACCEPTED is forbidden; only degraded REJECTED or NEEDS_CHANGES local attempt may be recorded.
+- If a required ref hash mismatches, ACCEPTED is forbidden and bundleStatus must be DEGRADED or the command must fail without writing a decision.
+- Missing optional human note or AI review hint does not degrade the bundle.
+- VerificationEvidence may be unavailable only when Run Summary already records the unavailable reason.
+- Provider-reported output may be referenced as degraded hint, but it cannot improve observedCheck, verificationGateResult, computedRisk, or pathViolationSummary.
+- ReviewEvidenceBundle creation is append-only by reviewDecisionId; superseding a prior local decision creates a new reviewDecisionId and references the old localReviewId.
+```
+
+Local review ACCEPTED gate:
+
+```text
+ACCEPTED is allowed in v0.2 only when all of the following are true:
+- ReviewEvidenceBundle exists.
+- bundleStatus is COMPLETE.
+- run-summary.json hash and required S2 artifact hashes are valid.
+- observedResultSnapshot is a successful normalized result.
+- pathViolationSummary.hasViolation is false or an explicit allowed waiver is recorded in the bundle.
+- verificationGateResult is SATISFIED or WAIVED_ALLOWED.
+
+If any condition is not met, codefleet review must either:
+- record REJECTED / NEEDS_CHANGES, or
+- fail before writing review-decision.local.json.
+```
+
+This v0.2 ACCEPTED gate does not create final VERIFIED. It only prevents a local
+migration artifact from overstating a bad or incomplete Run. Final VERIFIED still
+requires ledger-backed `RUN_REVIEW_DECIDED` plus the final gate interpretation.
+
+Local review derived status:
+
+```text
+MIGRATION_READY
+= review-decision.local.json exists
++ finalDecisionTruth is false
++ migrationTarget is RUN_REVIEW_DECIDED
++ ReviewEvidenceBundle exists
++ ReviewEvidenceBundle hash matches
++ local decision is not superseded by a later localReviewId
+
+DEGRADED_RECORDED
+= local review attempt exists but cannot become acceptance evidence
++ decision is REJECTED or NEEDS_CHANGES
++ unavailableReason or bundleStatus DEGRADED is present
+
+MIGRATION_BLOCKED
+= local artifact exists but final migration cannot proceed until repaired
++ missing ReviewEvidenceBundle, hash mismatch, missing reason, invalid actor, or invalid decision fields
+
+SUPERSEDED
+= a later local review references this localReviewId through supersedesLocalReviewId
+```
+
+These statuses are derived display / migration states only. They are not Queue
+State, Run-derived State, Objective State, or final Review Decision state.
+
 Review decision CLI contract:
 
 ```text
@@ -5691,6 +5768,8 @@ condition:
   - normal v0.2 review creates ReviewEvidenceBundle before writing review-decision.local.json.
   - review-decision.local.json has finalDecisionTruth false and migrationTarget RUN_REVIEW_DECIDED.
   - review-decision.local.json references ReviewEvidenceBundle when bundleStatus is COMPLETE.
+  - ReviewEvidenceBundle is assembled from Run Summary refs in deterministic order.
+  - ACCEPTED local review requires COMPLETE bundle, valid hashes, successful normalized result, satisfied or waived verification gate, and no unresolved path violation.
   - human note and AI review output are optional refs, not evidence truth.
   - AI review output is degraded reviewer hint only.
   - degraded local review cannot be ACCEPTED and cannot be used as acceptance evidence.
@@ -5709,6 +5788,7 @@ evidence:
   - decision
   - reason
   - actorId
+  - local review derived status
   - ReviewEvidenceBundle ref/hash or unavailableReason
   - reviewNoteRef when present
   - aiReviewHintRef when present
@@ -5719,6 +5799,276 @@ repairBehavior:
   - recreate ReviewEvidenceBundle from deterministic refs when possible
   - rerun review command with explicit human decision and reason
   - migrate to RUN_REVIEW_DECIDED when Objective ledger support exists
+```
+
+```yaml
+ruleId: LOCAL_REVIEW_MIGRATION_STATUS_IS_DERIVED
+status: FINAL
+scope: VERSION_PLAN
+sourceOfTruth:
+  - review-decision.local.json
+  - ReviewEvidenceBundle
+  - Run Summary refs and hashes
+  - local review supersession references
+inputs:
+  - localReviewId
+  - reviewDecisionId
+  - finalDecisionTruth
+  - migrationTarget
+  - decision
+  - reason
+  - reviewEvidenceBundleRef
+  - reviewEvidenceBundleHash
+  - bundleStatus
+  - unavailableReason
+  - supersedesLocalReviewId
+preconditions:
+  - Objective ledger RUN_REVIEW_DECIDED is not implemented for this path
+  - codefleet review is evaluating a local review artifact
+condition:
+  - MIGRATION_READY is derived only from a non-superseded local artifact with finalDecisionTruth false, migrationTarget RUN_REVIEW_DECIDED, valid ReviewEvidenceBundle ref/hash, valid decision fields, and present reason.
+  - DEGRADED_RECORDED is derived only from REJECTED or NEEDS_CHANGES with explicit degraded or unavailable evidence.
+  - MIGRATION_BLOCKED is derived when required migration fields or hashes are invalid.
+  - SUPERSEDED is derived when a later local artifact references supersedesLocalReviewId.
+allowedEffect:
+  - CLI may show local review migration readiness.
+  - final migration tooling may select MIGRATION_READY local artifacts as import candidates.
+deniedEffect:
+  - local review status cannot create DONE, FAILED, VERIFIED, NEXT, Queue progression, or Objective closure.
+  - MIGRATION_READY cannot be treated as RUN_REVIEW_DECIDED.
+  - SUPERSEDED local artifacts cannot be imported unless explicitly selected for audit repair.
+evidence:
+  - localReviewId
+  - reviewDecisionId
+  - derived local review status
+  - reviewEvidenceBundleHash
+  - superseding localReviewId when present
+failureFinding:
+  category: REVIEW_INTEGRITY
+  severity: WARNING
+repairBehavior:
+  - regenerate ReviewEvidenceBundle from deterministic Run Summary refs when possible
+  - create a superseding local review artifact
+  - migrate only after Objective ledger support exists
+```
+
+Objective ledger RUN_REVIEW_DECIDED migration path:
+
+```text
+Purpose:
+- convert v0.2 local review migration input into final Objective ledger decision events
+- preserve audit lineage from review-decision.local.json without treating the local file as prior final truth
+- keep final VERIFIED derivation dependent on ledger-backed RUN_REVIEW_DECIDED
+```
+
+Migration candidate:
+
+```text
+A local review artifact is a candidate only when its derived local status is MIGRATION_READY.
+
+MIGRATION_READY local review means:
+- review-decision.local.json has finalDecisionTruth false.
+- migrationTarget is RUN_REVIEW_DECIDED.
+- reviewDecisionId is present.
+- decision is ACCEPTED, REJECTED, or NEEDS_CHANGES.
+- reason is present.
+- ReviewEvidenceBundle exists and its hash matches the local artifact ref.
+- the local review artifact is not SUPERSEDED.
+```
+
+Migration is not a promotion in place. The final system appends a new Objective
+ledger `RUN_REVIEW_DECIDED` event. The event may preserve the same
+`reviewDecisionId` only if no Objective ledger event with that id already exists.
+If the id is already used, migration appends a new `reviewDecisionId` and records
+the original id in `migratedFromLocalReviewId` / `migrationSourceRef`.
+
+Migration import order:
+
+```text
+1. Load Objective ledger in append order.
+2. Derive existing effective Review Decisions for the target objectiveQueueItemId + taskId + taskRevision.
+3. Load the local review artifact and derive local review migration status.
+4. Reject import unless status is MIGRATION_READY.
+5. Verify reviewEvidenceBundleRef and reviewEvidenceBundleHash.
+6. Verify runSummaryRef and copied observed result/check/gate snapshots still match the bundle.
+7. Verify actorKind / actorId / decisionBasis still satisfy current resultReview gate or explicitly record migrationPolicyRef for the older policy snapshot used.
+8. Append RUN_REVIEW_DECIDED to the Objective ledger.
+9. Rebuild derived Objective / Queue state from ledger + Run Trace + ReviewEvidenceBundle.
+```
+
+Migration conflict handling:
+
+```text
+No existing effective review for the same identity:
+-> append RUN_REVIEW_DECIDED with the migrated decision.
+
+Existing effective review has the same reviewDecisionId and same bundle hash:
+-> do not append a duplicate; mark migration as already imported.
+
+Existing effective review has the same identity but different decision:
+-> import is blocked unless the new event explicitly supersedesReviewDecisionId or invalidatesReviewDecisionId.
+
+Existing effective review has same reviewDecisionId but different bundle hash:
+-> import is blocked with REVIEW_INTEGRITY finding.
+
+Local artifact is SUPERSEDED:
+-> do not import as effective decision. It may be imported only as audit repair metadata if final model later defines non-effective audit import.
+
+Local artifact is DEGRADED_RECORDED or MIGRATION_BLOCKED:
+-> do not append RUN_REVIEW_DECIDED. Repair the bundle/local artifact or rerun review.
+```
+
+Migration event fields:
+
+```yaml
+type: "RUN_REVIEW_DECIDED"
+reviewDecisionId: ""
+objectiveId: ""
+objectiveQueueItemId: ""
+taskId: ""
+taskRevision: 1
+runId: ""
+decision: "ACCEPTED | REJECTED | NEEDS_CHANGES"
+actorKind: "HUMAN | SYSTEM_POLICY | AGENT_REVIEWER"
+actorId: ""
+decisionBasis: ""
+reason: ""
+observedResultSnapshot: ""
+observedCheckSnapshot: ""
+verificationGateResult: ""
+verificationGateReason: ""
+reviewEvidenceBundleRef:
+  path: ""
+  hash: ""
+reviewNoteRef:
+  path: ""
+  hash: ""
+  unavailableReason: ""
+supersedesReviewDecisionId: ""
+invalidatesReviewDecisionId: ""
+migrationSource: "LOCAL_REVIEW_DECISION"
+migratedFromLocalReviewId: ""
+migrationSourceRef:
+  path: ".codefleet/runs/<runId>/review-decision.local.json"
+  hash: ""
+at: ""
+```
+
+The migration event copies decision snapshots from the verified local artifact
+and ReviewEvidenceBundle. It does not read provider transcript or raw logs to
+create better snapshots during migration.
+
+```yaml
+ruleId: LOCAL_REVIEW_IMPORT_APPENDS_LEDGER_DECISION
+status: FINAL
+scope: REVIEW
+sourceOfTruth:
+  - Objective ledger
+  - review-decision.local.json
+  - ReviewEvidenceBundle
+  - Run Summary
+inputs:
+  - localReviewId
+  - reviewDecisionId
+  - migrationTarget
+  - finalDecisionTruth
+  - decision
+  - reason
+  - actorKind
+  - actorId
+  - decisionBasis
+  - objectiveQueueItemId
+  - taskId
+  - taskRevision
+  - runId
+  - runSummaryRef
+  - reviewEvidenceBundleRef
+  - reviewEvidenceBundleHash
+  - local review derived status
+preconditions:
+  - Objective ledger support exists.
+  - local review derived status is MIGRATION_READY.
+  - ReviewEvidenceBundle hash is valid.
+  - target Objective and objectiveQueueItemId exist.
+condition:
+  - migration appends a new RUN_REVIEW_DECIDED event or detects an identical already-imported event.
+  - migration does not edit review-decision.local.json.
+  - migration does not edit ReviewEvidenceBundle.
+  - migration does not edit Run Trace artifacts.
+  - appended RUN_REVIEW_DECIDED records migrationSource LOCAL_REVIEW_DECISION and migrationSourceRef/hash.
+  - appended RUN_REVIEW_DECIDED preserves reviewDecisionId when no collision exists.
+  - reviewDecisionId collision with different bundle hash blocks migration.
+allowedEffect:
+  - migrated RUN_REVIEW_DECIDED may become the effective Review Decision after ledger replay.
+  - VERIFIED may be derived only after the migrated ledger event is effective and gates are satisfied.
+deniedEffect:
+  - MIGRATION_READY alone cannot produce VERIFIED.
+  - migration cannot import SUPERSEDED, DEGRADED_RECORDED, or MIGRATION_BLOCKED local artifacts as effective decisions.
+  - migration cannot repair evidence by reinterpreting provider transcript, stdout, stderr, or raw diff.
+  - migration cannot silently overwrite an existing effective Review Decision.
+evidence:
+  - objectiveId
+  - objectiveQueueItemId
+  - reviewDecisionId
+  - localReviewId
+  - migrationSourceRef
+  - migrationSourceHash
+  - reviewEvidenceBundleRef
+  - reviewEvidenceBundleHash
+  - appended eventId or alreadyImported eventId
+failureFinding:
+  category: REVIEW_INTEGRITY
+  severity: WARNING
+repairBehavior:
+  - create a superseding local review and import that artifact
+  - append a corrective RUN_REVIEW_DECIDED with supersedesReviewDecisionId or invalidatesReviewDecisionId
+  - rerun review when deterministic evidence refs cannot be validated
+```
+
+```yaml
+ruleId: REVIEW_DECISION_MIGRATION_CONFLICTS_ARE_EXPLICIT
+status: FINAL
+scope: REVIEW
+sourceOfTruth:
+  - Objective ledger append order
+  - ReviewEvidenceBundle hashes
+  - local review supersession references
+inputs:
+  - existing RUN_REVIEW_DECIDED events
+  - candidate reviewDecisionId
+  - candidate reviewEvidenceBundleHash
+  - candidate decision
+  - candidate supersedesReviewDecisionId
+  - candidate invalidatesReviewDecisionId
+  - candidate local review derived status
+preconditions:
+  - migration is evaluating a local review candidate.
+condition:
+  - identical already-imported decision is idempotent and appends no event.
+  - same reviewDecisionId with different ReviewEvidenceBundle hash is REVIEW_INTEGRITY and blocks import.
+  - conflicting effective decision for the same objectiveQueueItemId + taskId + taskRevision blocks import unless explicit supersedes or invalidates reference is present.
+  - supersedesReviewDecisionId and invalidatesReviewDecisionId must reference an existing ledger Review Decision, not only a localReviewId.
+  - local supersedesLocalReviewId is migration input only; it does not supersede a ledger event by itself.
+allowedEffect:
+  - migration can be retried safely.
+  - corrective ledger events can make a later Review Decision effective.
+deniedEffect:
+  - migration cannot choose the latest file timestamp as authority.
+  - migration cannot use local file order to supersede Objective ledger order.
+  - migration cannot import two effective ACCEPTED decisions for the same identity without explicit supersession semantics.
+evidence:
+  - candidate localReviewId
+  - candidate reviewDecisionId
+  - conflicting reviewDecisionId when present
+  - conflicting eventId when present
+  - conflict reason
+failureFinding:
+  category: REVIEW_INTEGRITY
+  severity: WARNING
+repairBehavior:
+  - rerun migration after appending explicit corrective Review Decision
+  - create a new local review that points to the intended supersession target
+  - mark old local artifact SUPERSEDED before retrying import
 ```
 
 ```text
@@ -10618,6 +10968,238 @@ Objective ledger event
 - Task 실행 시작/성공/실패는 ledger에 기록하지 않는다.
 ```
 
+Objective ledger replay / snapshot model:
+
+```text
+Objective ledger file:
+.codefleet/objectives/<objectiveId>/ledger.jsonl
+
+Objective snapshot file:
+.codefleet/objectives/<objectiveId>/objective.json
+
+The ledger is source of truth.
+The snapshot is a rebuildable read model.
+```
+
+Replay inputs:
+
+```text
+Required:
+- Objective ledger events in seq order
+- Task Revision refs and hashes referenced by relation / queue events
+- Task ledger approval state for referenced Task Revisions
+
+Conditional:
+- Run Trace refs for ACTIVE / DONE / FAILED derivation
+- Run Summary refs for normalized Run result/check fields
+- ReviewEvidenceBundle refs/hashes for effective Review Decision derivation
+- Project Profile queue policy for NEXT / auto-review interpretation
+```
+
+Replay order:
+
+```text
+1. Parse ledger.jsonl as JSONL.
+2. Validate eventId uniqueness.
+3. Validate seq starts at 1 and is contiguous.
+4. Validate every event objectiveId matches the containing Objective.
+5. Apply Objective lifecycle events.
+6. Apply relation / queue decision events.
+7. Validate referenced Task Revisions and Task ledger approval state.
+8. Read Run Trace and Run Summary only to derive ACTIVE / DONE / FAILED.
+9. Read RUN_REVIEW_DECIDED + ReviewEvidenceBundle to derive VERIFIED.
+10. Compute NEXT from queue policy after stored and derived states are known.
+11. Emit objective.json as a read model.
+12. Validate emitted objective.json against replay result.
+```
+
+Snapshot minimum fields:
+
+```yaml
+schemaVersion: "1.0"
+documentKind: "OBJECTIVE_SNAPSHOT"
+sourceLedgerRef:
+  path: ".codefleet/objectives/<objectiveId>/ledger.jsonl"
+  hash: ""
+objectiveId: ""
+status: "OPEN | CLOSED | CANCELED"
+kind: "SEQUENCE | WORKSTREAM | ONE_OFF"
+queue:
+  - objectiveQueueItemId: ""
+    taskId: ""
+    taskRevision: 1
+    taskRevisionHash: ""
+    storedState: "WAITING | BLOCKED | SKIPPED | CANCELED"
+    derivedState: "NEXT | ACTIVE | DONE | FAILED | VERIFIED | NONE"
+    effectiveReviewDecisionId: ""
+cursor:
+  objectiveQueueItemId: ""
+  derived: true
+replay:
+  replayStatus: "COMPLETE | BLOCKED"
+  lastSeq: 0
+  sourceHash: ""
+  generatedAt: ""
+  unavailableReasons: []
+```
+
+Snapshot rules:
+
+```text
+- objective.json never stores source truth for NEXT, ACTIVE, DONE, FAILED, or VERIFIED.
+- objective.json may display derivedState for fast reads.
+- If objective.json conflicts with replay, replay wins.
+- If replay is BLOCKED, objective.json must not claim fresh COMPLETE state.
+- Snapshot rebuild must be deterministic for the same source files and rule set.
+- Snapshot generatedAt is metadata only and cannot decide state recency.
+```
+
+Partial replay:
+
+```text
+Partial replay is allowed only for diagnostics.
+Partial replay cannot produce a fresh objective.json.
+Partial replay cannot produce VERIFIED, NEXT, or Objective closure.
+Partial replay must return replayStatus BLOCKED with structured findings.
+```
+
+Effective Review Decision replay:
+
+```text
+For each objectiveQueueItemId + taskId + taskRevision:
+1. Load RUN_REVIEW_DECIDED events in ledger seq order.
+2. Reject events whose actor does not satisfy resultReview gate.
+3. Reject events whose ReviewEvidenceBundle is missing or hash-invalid.
+4. Apply invalidatesReviewDecisionId references.
+5. Apply supersedesReviewDecisionId references.
+6. Among remaining effective decisions for the same identity, choose the latest by ledger seq.
+7. VERIFIED is derived only when the latest effective decision is ACCEPTED and verification gate semantics allow it.
+```
+
+Ledger replay failure classes:
+
+```text
+LEDGER_STRUCTURAL_FAILURE
+= JSONL parse failure, duplicate eventId, non-contiguous seq, wrong objectiveId
+= replay stops and source repair is required
+
+REFERENCE_FAILURE
+= event references missing Task Revision, missing Task approval state, missing Run, or missing ReviewEvidenceBundle
+= replay may continue for unaffected items but snapshot is BLOCKED
+
+POLICY_EVALUATION_FAILURE
+= required Project Profile / gate policy cannot be loaded
+= NEXT / VERIFIED derivation is blocked
+
+READ_MODEL_DRIFT
+= objective.json exists but does not match deterministic replay
+= source is valid; rebuild objective.json
+```
+
+```yaml
+ruleId: OBJECTIVE_LEDGER_REPLAY_IS_SOURCE_OF_SNAPSHOT
+status: FINAL
+scope: OBJECTIVE
+sourceOfTruth:
+  - .codefleet/objectives/<objectiveId>/ledger.jsonl
+  - Task ledger approval state
+  - Task Revision refs/hashes
+  - Run Trace artifacts
+  - Run Summary artifacts
+  - ReviewEvidenceBundle
+inputs:
+  - objectiveId
+  - ledger events
+  - task revision refs
+  - task approval decisions
+  - run refs
+  - review decision refs
+  - queue policy
+preconditions:
+  - objective ledger file exists.
+  - validation rule set is known.
+condition:
+  - replay reads ledger events in seq order.
+  - replay validates eventId uniqueness and contiguous seq before deriving state.
+  - replay derives objective.json from ledger and referenced authoritative artifacts.
+  - objective.json is treated as read model only.
+  - replay BLOCKED prevents fresh snapshot write unless the output is explicitly marked BLOCKED.
+allowedEffect:
+  - CodeFleet may rebuild objective.json from replay.
+  - CodeFleet may report derived Objective / Queue state from replay.
+deniedEffect:
+  - objective.json cannot override ledger replay.
+  - snapshot timestamp cannot decide current state.
+  - partial replay cannot produce VERIFIED, NEXT, Queue progression, or Objective closure.
+evidence:
+  - sourceLedgerRef
+  - sourceLedgerHash
+  - lastSeq
+  - replayStatus
+  - generated snapshot hash
+failureFinding:
+  category: SNAPSHOT_CONSISTENCY
+  severity: WARNING
+repairBehavior:
+  - rebuild objective.json when source replay is valid
+  - create CORRUPTION finding when source replay is invalid
+```
+
+```yaml
+ruleId: OBJECTIVE_LEDGER_REPLAY_FAILURES_BLOCK_DERIVED_PROGRESS
+status: FINAL
+scope: OBJECTIVE
+sourceOfTruth:
+  - Objective ledger validation findings
+  - reference validation findings
+  - policy evaluation findings
+inputs:
+  - parse result
+  - seq validation result
+  - reference validation result
+  - policy evaluation result
+  - partial replay result
+preconditions:
+  - CodeFleet is deriving Objective / Queue state.
+condition:
+  - LEDGER_STRUCTURAL_FAILURE blocks all Objective derived state.
+  - REFERENCE_FAILURE blocks affected queue item derived state and may allow unaffected item diagnostics only.
+  - POLICY_EVALUATION_FAILURE blocks NEXT and VERIFIED derivation for affected scope.
+  - READ_MODEL_DRIFT allows rebuild only when source replay is valid.
+allowedEffect:
+  - validation may emit structured findings.
+  - diagnostics may show partial replay with blocked reason.
+deniedEffect:
+  - CodeFleet cannot continue queue progression from partial replay.
+  - CodeFleet cannot infer missing ledger events.
+  - CodeFleet cannot synthesize missing ReviewEvidenceBundle or Task approval.
+  - CodeFleet cannot lower corruption severity because a snapshot looks plausible.
+evidence:
+  - failureClass
+  - checkId
+  - objectiveId
+  - affectedSeq
+  - affectedQueueItemId
+  - missingRef when present
+failureFinding:
+  - failureClass: LEDGER_STRUCTURAL_FAILURE
+    category: LEDGER_INTEGRITY
+    severity: CORRUPTION
+  - failureClass: REFERENCE_FAILURE
+    category: REFERENCE_INTEGRITY
+    severity: CORRUPTION
+  - failureClass: POLICY_EVALUATION_FAILURE
+    category: POLICY_ENFORCEMENT_INTEGRITY
+    severity: WARNING
+  - failureClass: READ_MODEL_DRIFT
+    category: SNAPSHOT_CONSISTENCY
+    severity: WARNING
+repairBehavior:
+  - restore missing source file when available
+  - append explicit corrective ledger event when the source event is wrong but ledger remains structurally valid
+  - rebuild read model only after source validation passes
+```
+
 실행 이벤트는 Objective ledger에 넣지 않는다.
 
 ```text
@@ -10748,6 +11330,10 @@ RUN_REVIEW_DECIDED
 - reviewNoteRef optional
 - supersedesReviewDecisionId optional
 - invalidatesReviewDecisionId optional
+- migrationSource optional
+- migratedFromLocalReviewId optional
+- migrationSourceRef optional
+- migrationSourceHash optional
 ```
 
 `reason`이 필수인 이벤트:
@@ -13732,16 +14318,22 @@ repairBehavior:
 - Workspace discovery는 explicit --workspace 또는 nearest-parent .codefleet/config.json으로 단일 workspace를 결정하고, portable refs/hash와 local realpath evidence를 분리하는 Core invariant라는 원칙
 - v0.1 / v0.2 / final implementation slicing은 final boundary를 약화하지 않고 unavailable / degraded / migration input으로 미구현 책임을 표현한다는 원칙
 - Review model v0.2 구현 세부는 local migration path이며, human note와 AI review hint는 evidence truth가 아니고 degraded review는 acceptance evidence가 될 수 없다는 원칙
+- v0.2 local review는 Run Summary refs에서 ReviewEvidenceBundle을 결정론적으로 조립하고, COMPLETE bundle / valid hashes / successful normalized result / satisfied-or-waived verification gate / unresolved path violation 없음 조건에서만 ACCEPTED local artifact를 허용한다는 원칙
+- local review의 MIGRATION_READY / DEGRADED_RECORDED / MIGRATION_BLOCKED / SUPERSEDED는 derived migration status일 뿐이며 RUN_REVIEW_DECIDED, VERIFIED, Queue progression을 대체하지 않는다는 원칙
+- Objective ledger RUN_REVIEW_DECIDED migration은 MIGRATION_READY local artifact를 제자리 승격하지 않고 migrationSourceRef/hash를 가진 새 ledger event append 또는 identical already-imported 판정으로 처리한다는 원칙
+- review migration conflict는 file timestamp나 local file order가 아니라 ledger append order, ReviewEvidenceBundle hash, explicit supersedes/invalidates reference로만 해결한다는 원칙
+- Objective ledger replay는 ledger seq order / Task ledger approval / Run Trace / Run Summary / ReviewEvidenceBundle을 기준으로 objective.json read model을 결정론적으로 재생성하며, partial replay는 VERIFIED / NEXT / Queue progression / Objective closure를 만들 수 없다는 원칙
+- objective.json은 source truth가 아니라 `COMPLETE | BLOCKED` replay status를 가진 rebuildable snapshot이고, drift는 source validation이 통과할 때만 rebuild로 복구한다는 원칙
 - v0.2 implementation kickoff has connected workspace discovery, run-plan.json creation, and the S2 adapter-request / harness-observation / adapter-result artifact split to runtime without treating unavailable or degraded evidence as final truth
 ```
 
 다음으로 논의할 항목:
 
 ```text
-1. v0.2 run-summary normalization
-   - derive from AdapterRequest / HarnessObservation / AdapterResult
-   - preserve unavailable / degraded evidence boundaries
-   - keep final decision outside Run Summary
+1. Mutation Engine minimum contract
+   - define lock -> validate -> append -> rebuild -> validate command boundary
+   - define mutationId idempotency and concurrent write handling
+   - define when corrective events are required versus read model rebuild
 ```
 
 ## 16. 다음 세션에서 이어갈 때
