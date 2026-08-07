@@ -47,9 +47,9 @@ Important criteria:
 Design is complete as of the final consistency re-audit. Implementation
 has resumed.
 
-Design is complete. codefleet review is implemented. The next topic is the
-manual SPINE validation pass.
-The next implementation topic is the manual SPINE validation pass.
+Design is complete and the first SPINE pass is done. The next topic is the
+final slices, starting with path policy evaluation.
+The next implementation topic is path policy evaluation.
 ```
 
 ## Product Definition
@@ -93,6 +93,7 @@ Current implementation status:
 - codefleet run creates VerificationEvidence with authority NONE when required verification cannot be run by the Harness.
 - VerificationEvidence distinguishes NO_VERIFICATION_COMMANDS_CONFIGURED from COMMAND_CHANNEL_NOT_HARNESS_VISIBLE.
 - Legacy result.json is still kept for v0.x compatibility.
+- Changed-files evidence comes from git status with untracked files included, since an agent creating a new file must not be invisible.
 - codefleet review assembles ReviewEvidenceBundle from Run Summary refs and re-verifies every referenced artifact hash.
 - codefleet review writes review-decision.local.json with finalDecisionTruth false and migrationTarget RUN_REVIEW_DECIDED.
 - ACCEPTED is refused unless the bundle is COMPLETE, hashes are valid, the normalized result is DONE, the verification gate is satisfied or waived, and no path violation is unresolved.
@@ -197,25 +198,28 @@ Important fixed boundaries:
 ## Current Bottleneck
 
 ```text
-manual SPINE validation pass
+path policy evaluation
 ```
 
 Why this is next:
 
 ```text
-Every v0.2 implementation slice is done: workspace discovery, run-plan, the S2
-artifact split, run-summary normalization, VerificationEvidence, and local review.
-What has never been exercised is one full pass across S1 to S4 against the fixed
-evidence checklist, so the remaining risk is integration, not missing code.
+The first SPINE pass recorded BLOCKED with S3 and final S4 named, and it found
+one real defect: changed-files evidence omitted untracked files while claiming the
+observation was complete. That is fixed.
+
+Changed-files evidence is now trustworthy, which is exactly the input path policy
+evaluation needs. Until it runs, pathViolationSummary stays evaluated:false and no
+ACCEPTED local review is possible, so this unblocks the acceptance path.
 ```
 
 Next implementation slice:
 
 ```text
-1. Run one full pass: init, task validate, prompt, run, review.
-2. Check every S1 to S4 boundary against MANUAL_SPINE_PASS_IS_EVIDENCE_CHECKLIST.
-3. Record each boundary as a durable artifact ref/hash or an explicit unavailableReason.
-4. Report the pass as PASS or BLOCKED with the unresolved boundary named.
+1. Derive allowedPaths / deniedPaths from Task scope and guardrails in run-plan.
+2. Evaluate changed files against them using the fixed bounded glob subset.
+3. Record violations in HarnessObservation and pathViolationSummary.
+4. Add tests proving an out-of-scope untracked file is recorded as a violation.
 ```
 
 ## Repository Note

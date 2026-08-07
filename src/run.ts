@@ -799,8 +799,15 @@ async function captureGitDiff(projectPath: string): Promise<{ content: string; u
   };
 }
 
+// `git diff --name-only` reports tracked modifications only, so an agent that
+// creates a new file would leave no trace in changed-files evidence. Untracked
+// files are policy subjects, so changed-files truth must include them.
 async function captureGitChangedFiles(projectPath: string): Promise<{ files: string[]; unavailableReason?: string }> {
-  const result = await runProcess("git", ["-c", `safe.directory=${projectPath}`, "diff", "--name-only", "--", "."], projectPath);
+  const result = await runProcess(
+    "git",
+    ["-c", `safe.directory=${projectPath}`, "status", "--porcelain=v1", "--untracked-files=all", "--", "."],
+    projectPath
+  );
   if (result.code !== 0) {
     return {
       files: [],
@@ -808,12 +815,57 @@ async function captureGitChangedFiles(projectPath: string): Promise<{ files: str
     };
   }
 
-  return {
-    files: result.stdout
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0)
-  };
+  const files = new Set<string>();
+  for (const line of result.stdout.split(/\r?\n/)) {
+    if (line.length < 4) {
+      continue;
+    }
+    const entry = parsePorcelainEntry(line);
+    if (entry === null) {
+      continue;
+    }
+    for (const value of entry) {
+      files.add(value);
+    }
+  }
+
+  return { files: [...files].sort() };
+}
+
+// Porcelain v1 line: XY <path> or XY <old> -> <new> for renames and copies.
+// Both sides of a rename are recorded because delete and create are each a
+// policy subject on their own.
+function parsePorcelainEntry(line: string): string[] | null {
+  const status = line.slice(0, 2);
+  const rest = line.slice(3).trim();
+  if (rest.length === 0) {
+    return null;
+  }
+
+  const paths = rest.includes(" -> ") ? rest.split(" -> ") : [rest];
+  const cleaned = paths
+    .map((value) => unquoteGitPath(value.trim()))
+    .filter((value) => value.length > 0 && !isCodefleetMetadataPath(value));
+
+  return cleaned.length > 0 && status.trim().length > 0 ? cleaned : null;
+}
+
+function unquoteGitPath(value: string): string {
+  if (!value.startsWith("\"") || !value.endsWith("\"") || value.length < 2) {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value) as string;
+  } catch {
+    return value.slice(1, -1);
+  }
+}
+
+// CodeFleet's own run artifacts are written during the Run and are not agent
+// changes, so they are excluded from changed-files evidence.
+function isCodefleetMetadataPath(value: string): boolean {
+  return value === ".codefleet" || value.startsWith(".codefleet/");
 }
 
 function runProcess(command: string, args: string[], cwd: string): Promise<{ code: number | null; stdout: string; stderr: string }> {

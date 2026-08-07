@@ -285,3 +285,77 @@ function hashJson(value: unknown): string {
 function hashFile(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
+
+test("changed-files evidence includes untracked files created during the Run", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-untracked-"));
+  await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await writeFile(path.join(root, "src", "tracked.js"), "export const a = 1;\n", "utf8");
+  await writeFile(path.join(root, ".gitignore"), ".codefleet/\n", "utf8");
+
+  const git = async (args: string[]): Promise<void> => {
+    const { spawnSync } = await import("node:child_process");
+    spawnSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", ...args], { cwd: root });
+  };
+  await git(["init"]);
+  await git(["add", "-A"]);
+  await git(["commit", "-m", "init"]);
+
+  // Stand in for an agent that edits a tracked file and creates a new one
+  // outside the task scope.
+  const agentPath = path.join(root, "agent.mjs");
+  await writeFile(
+    agentPath,
+    [
+      'import { writeFileSync, mkdirSync } from "node:fs";',
+      `writeFileSync("src/tracked.js", ${JSON.stringify("export const a = 2;\n")});`,
+      'mkdirSync("infra", { recursive: true });',
+      `writeFileSync("infra/deploy.sh", ${JSON.stringify("echo deploy\n")});`,
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "config.json"),
+    `${JSON.stringify({
+      version: "0.1.0",
+      defaultAgent: "codex",
+      mode: "execute",
+      agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
+      workspace: { id: "untracked-test" }
+    })}\n`,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "tasks", "sample.yaml"),
+    [
+      "id: sample",
+      "title: Sample task",
+      "projectPath: .",
+      "goal: Exercise untracked change evidence",
+      "scope:",
+      "  include: [src]",
+      "  exclude: [secrets]",
+      "constraints: []",
+      "doneCriteria: [Artifacts exist]",
+      "workflow: [Edit files]",
+      "status: READY",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  const execution = await runTask(root, "sample");
+  const observation = await readJson(path.join(execution.runDir, "harness-observation.json"));
+  const changes = observation.changes as { changedFiles: string[]; unavailableReason: string };
+
+  assert.ok(changes.changedFiles.includes("src/tracked.js"), "tracked modification must be reported");
+  assert.ok(
+    changes.changedFiles.includes("infra/deploy.sh"),
+    "an untracked file created outside task scope must be reported"
+  );
+  assert.ok(
+    changes.changedFiles.every((file) => !file.startsWith(".codefleet/")),
+    "CodeFleet's own run artifacts are not agent changes"
+  );
+});

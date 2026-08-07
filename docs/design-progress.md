@@ -24,7 +24,7 @@ Phase 11     대기      설계 확정 후 구현 재개
 ```
 
 ```text
-전체 87단계 중 85단계 완료
+전체 87단계 중 86단계 완료
 FINAL RULE 82개
 설계 진행도: 100% (미고정 항목 없음)
 구현 진행도: 약 40-50% (v0.2 슬라이스 6/6 완료)
@@ -293,7 +293,12 @@ Phase 10에서 반복된 판단 기준:
         - ReviewEvidenceBundle 결정론적 조립 + 참조 아티팩트 hash 재검증
         - review-decision.local.json (finalDecisionTruth false)
         - ACCEPTED 5조건 게이트, 파생 migration status
-[ ] 86. SPINE 한 바퀴 수동 검증                                        <- 다음, 미착수
+[x] 86. SPINE 한 바퀴 수동 검증
+        - execute 모드로 실제 파일 변경을 일으키는 agent로 한 바퀴
+        - 판정 BLOCKED (S3 command channel, S4 final ledger 미구현)
+        - changed-files 증거가 untracked 파일을 누락하던 결함 발견 및 수정
+        - 기록: docs/spine-pass-2026-08-07.md
+[ ] 87. 이후 final 슬라이스                                            <- 다음, 미착수
 [ ] 87. 이후 final 슬라이스
 ```
 
