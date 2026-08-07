@@ -47,7 +47,7 @@ Important criteria:
 Design is being completed first. Implementation resumes only after the
 remaining design items are fixed.
 
-The next design topic is agentRoles role taxonomy.
+The next design topic is the profile rule id naming scheme.
 The next implementation topic is v0.2 local review, held until design is done.
 ```
 
@@ -64,16 +64,15 @@ execution through logs, diffs, tests, and review evidence.
 ## Progress
 
 ```text
-Final model / concept design: about 96%
+Final model / concept design: about 97%
 Implementation: about 25-35%
 ```
 
 Remaining design items:
 
 ```text
-1. agentRoles role taxonomy
-2. profile rule id naming scheme
-3. final consistency re-audit
+1. profile rule id naming scheme
+2. final consistency re-audit
 ```
 
 Current implementation status:
@@ -122,6 +121,7 @@ S2 Adapter seam
 -> Files policy glob matcher syntax
 -> Redaction pattern language
 -> Risk rule expression syntax
+-> AgentRole field decomposition
 ```
 
 Important fixed boundaries:
@@ -172,30 +172,32 @@ Important fixed boundaries:
 - Risk rules carry no matching language of their own; matchTarget selects the files glob matcher, the command argv matcher, the redaction regex subset, or a declarative field predicate.
 - Risk rule conditions combine as a flat allOf; OR is expressed by separate rules since computedRisk is a max, and NOT is denied so a failed match cannot lower risk.
 - UNKNOWN risk is an unresolved state off the LOW < MEDIUM < HIGH axis, never rewritten to HIGH, and it blocks progression that needs a concrete level.
+- A Core AgentRole owns only defaultMaxMode, deniedCommandCategories, and roleGuidance, and never restates a restriction owned by Guardrail global rules or harnessMode.
+- roleGuidance is prompt-only text never read during policy evaluation; restrictions a machine cannot decide belong there.
+- The per-role restriction list is a diagnosticOnly read model computed from role fields and global rules; enforcement always reads effectivePolicy.
 ```
 
 ## Current Bottleneck
 
 ```text
-agentRoles role taxonomy
+profile rule id naming scheme
 ```
 
 Why this is next:
 
 ```text
 Design is being completed before further implementation.
-Every judgement-logic syntax item is now fixed: commands, files, export field allowlist, redaction, and risk rules.
-Only naming-level items remain, then the final consistency re-audit.
-agentRoles taxonomy sits on the already-fixed rule that AgentRole is classification and max capability input, never a permission grant.
+Every judgement-logic item is now fixed: commands, files, export field allowlist, redaction, risk rules, and agent roles.
+The rule id naming scheme is the last design item and does not affect any judgement.
+The final consistency re-audit follows, then implementation resumes.
 ```
 
 Expected next design slice:
 
 ```text
-1. Define the role id set and its max capability mapping.
-2. Keep AgentRole as classification, never a permission grant.
-3. Then define the profile rule id naming scheme.
-4. Then run the final consistency re-audit.
+1. Define a stable naming scheme for policy rule ids.
+2. Decide whether the existing ruleIds already satisfy it.
+3. Then run the final consistency re-audit.
 ```
 
 Held implementation slice (resumes after design is fixed):

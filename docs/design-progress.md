@@ -19,14 +19,14 @@ README.md                    현재 구현 사용법
 
 ```text
 Phase 0-9    완료      76단계
-Phase 10     진행 중   8단계 중 5단계 완료, 남은 설계 3단계
+Phase 10     진행 중   8단계 중 6단계 완료, 남은 설계 2단계
 Phase 11     대기      설계 확정 후 구현 재개
 ```
 
 ```text
-전체 87단계 중 81단계 완료
-FINAL RULE 79개
-설계 진행도: 약 96%
+전체 87단계 중 82단계 완료
+FINAL RULE 81개
+설계 진행도: 약 97%
 구현 진행도: 약 25-35%
 ```
 
@@ -193,8 +193,11 @@ FINAL RULE 79개
         - matchTarget이 기존 matcher 3종 + 선언적 predicate 중 선택, 새 언어 없음
         - AND는 평면 allOf / OR은 rule 분리 / NOT은 표현 불가
         - UNKNOWN은 HIGH가 아니라 severity 축 밖의 미해결 상태 (기존 모순 해소)
-[ ] 82. agentRoles 내부 role taxonomy                                  <- 다음, 미착수
-[ ] 83. profile rule id 네이밍 체계
+[x] 82. agentRoles 내부 role taxonomy
+        - forbiddenByDefault 산문을 defaultMaxMode / deniedCommandCategories / roleGuidance로 분해
+        - 전역 Guardrail·harnessMode가 이미 소유한 제약은 role에서 제거
+        - role 단위 금지 목록은 diagnosticOnly 파생 read model로
+[ ] 83. profile rule id 네이밍 체계                                    <- 다음, 미착수
 [ ] 84. 정합성 최종 재감사
         - 0.13 상태 목록 재확인
         - authority 필드명 분리 또는 "서로 다른 enum" 명시
@@ -229,7 +232,8 @@ FINAL RULE 79개
 - 79의 case 처리는 CASE_INSENSITIVE_PATH_MATCH_USES_CANONICAL_KEY가 이미 고정해 두어 새로 정하지 않았다.
 - 80은 남은 문법 중 유일하게 외부로 나가는 데이터를 직접 통제하므로 먼저 고정했다.
 - 81은 판정 로직이라 명명 규칙보다 먼저 고정했고, 매칭은 77 / 79 / 80을 재사용해 새 언어를 만들지 않았다.
-- 82 이후는 명명 규칙이라 판정에 영향을 주지 않는다.
+- 82는 role 목록이 이미 고정돼 있어 forbiddenByDefault 산문 하나만 남아 있었고, 삭제가 아니라 파생 read model로 풀었다.
+- 83은 명명 규칙이라 판정에 영향을 주지 않는다.
 ```
 
 남은 설계의 성격:

@@ -5211,6 +5211,7 @@ PASS:
 - Files policy glob matcher 문법 (제한된 * / ** 부분집합)
 - Redaction pattern language (선형 시간 정규식 부분집합 / action 강도 순서 / 실패 시 export 차단)
 - Risk rule 표현 문법 (기존 matcher 재사용 / 평면 AND / NOT 금지 / UNKNOWN 의미)
+- AgentRole 필드 분해 (defaultMaxMode / deniedCommandCategories / roleGuidance) 와 파생 진단 뷰
 
 PASS_AFTER_REINFORCEMENT:
 - Risk 판단 원칙
@@ -5230,7 +5231,7 @@ RESOLVED_AFTER_THIS_LIST_WAS_WRITTEN:
 
 NOT_FINAL_YET:
 - 5.3의 나머지 DESIGN CANDIDATE 문법 항목
-  -> agentRoles 내부 taxonomy / profile rule id 네이밍
+  -> profile rule id 네이밍
 ```
 
 `NOT_FINAL_YET` 항목은 확정 규칙이 아니다. 이 항목들은 다음 논의에서 같은 기준으로 하나씩 FINAL RULE로 승격하거나 VERSION_PLAN으로 남긴다.
@@ -11054,7 +11055,6 @@ repairBehavior:
 
 ```text
 DESIGN CANDIDATE:
-- agentRoles 내부 role taxonomy
 - profile rule id 세부 네이밍 체계
 
 FIXED:
@@ -11072,6 +11072,9 @@ FIXED:
   -> RISK_RULE_REUSES_FIXED_MATCHERS
   -> RISK_RULE_CONJUNCTION_IS_FLAT_AND_NEGATION_IS_DENIED
   -> UNKNOWN_RISK_IS_UNRESOLVED_STATE_NOT_HIGH_SEVERITY
+- agentRoles 내부 role taxonomy
+  -> AGENT_ROLE_DECLARES_ONLY_WHAT_IT_NARROWS
+  -> ROLE_EFFECTIVE_RESTRICTIONS_IS_DIAGNOSTIC_READ_MODEL
 ```
 
 ```text
@@ -14891,44 +14894,122 @@ IAC_ENGINEER
 DOCS_WRITER
 ```
 
+Core AgentRole이 소유하는 필드는 셋이다.
+
+```yaml
+defaultMaxMode: "DRY_RUN | SUGGEST_ONLY | WORKSPACE_EDIT | COMMAND_EXEC"
+deniedCommandCategories: []
+roleGuidance: ""
+```
+
+```text
+defaultMaxMode
+= role이 기여하는 capability 상한
+= effectivePolicy meet의 입력
+
+deniedCommandCategories
+= 이 role로 실행할 때 durable approval이 있어도 허용되지 않는 destructive categoryId 목록
+= policies.commands.destructiveCommands의 categoryId를 그대로 참조한다
+
+roleGuidance
+= AdapterRequest prompt에만 들어가는 비규범 텍스트
+= 정책 판정에 사용하지 않는다
+```
+
 역할별 의미와 기본 상한:
 
 ```text
 BACKEND_IMPLEMENTER
 - API, 서비스 로직, DTO, 예외 처리, 테스트 구현
 - defaultMaxMode: WORKSPACE_EDIT
-- forbiddenByDefault: infra mutation, production access, destructive command
+- deniedCommandCategories: INFRA_APPLY, CLOUD_RESOURCE_MUTATION
 
 BACKEND_REVIEWER
 - 코드 리뷰, 사이드이펙트 점검, 구조 검토
 - defaultMaxMode: SUGGEST_ONLY
-- forbiddenByDefault: file edit, command execution, destructive command
+- deniedCommandCategories: (없음. SUGGEST_ONLY가 이미 명령 실행을 막는다)
 
 BACKEND_REFACTORER
 - 중복 제거, 계층 분리, 유지보수성 개선
 - defaultMaxMode: WORKSPACE_EDIT
-- forbiddenByDefault: behavior change outside Task scope, public API contract change unless explicitly scoped, destructive command
+- deniedCommandCategories: INFRA_APPLY, CLOUD_RESOURCE_MUTATION
+- roleGuidance: Task scope 밖의 동작 변경과 명시적으로 scope되지 않은 public API 계약 변경을 하지 않는다
 
 INFRA_OPERATOR
 - systemd, Nginx, Docker, 배포 스크립트 작업
 - defaultMaxMode: COMMAND_EXEC
-- forbiddenByDefault: production mutation, service restart/stop, deployment mutation unless explicitly approved
+- deniedCommandCategories: SERVICE_LIFECYCLE, DEPLOYMENT_MUTATION
 
 INFRA_DEBUGGER
 - 로그 분석, 장애 원인 추정, 재현 절차 정리
 - defaultMaxMode: SUGGEST_ONLY
-- forbiddenByDefault: file edit, production mutation, service restart/stop, destructive command
+- deniedCommandCategories: (없음. SUGGEST_ONLY가 이미 명령 실행을 막는다)
 
 IAC_ENGINEER
 - Terraform, AWS, VPC, RDS, EC2, Security Group 작업
 - defaultMaxMode: COMMAND_EXEC
-- forbiddenByDefault: terraform apply/destroy, cloud resource mutation, production mutation unless explicitly approved
+- deniedCommandCategories: INFRA_APPLY, INFRA_DESTROY, CLOUD_RESOURCE_MUTATION
 
 DOCS_WRITER
 - README, 운영 문서, 장애 대응 문서 작성
 - defaultMaxMode: WORKSPACE_EDIT
-- forbiddenByDefault: non-doc source edit, command execution, destructive command
+- deniedCommandCategories: INFRA_APPLY, CLOUD_RESOURCE_MUTATION, SERVICE_LIFECYCLE
+- roleGuidance: 문서가 아닌 소스 파일을 수정하지 않는다
 ```
+
+이전 `forbiddenByDefault` 산문에는 네 가지 성격이 섞여 있었고 그중 셋은 이미 다른 곳이 소유하고 있었다.
+
+```text
+file edit / command execution
+= defaultMaxMode가 이미 표현한다. SUGGEST_ONLY는 둘 다 막는다.
+
+production mutation / production access
+= Guardrail 규칙이 전역으로 고정했다.
+  Project Profile 허용 + Task scope + durable approval이 없으면 금지다.
+
+destructive command
+= destructiveCommands categoryId와 durable approval이 소유한다.
+
+Task scope 밖 동작 변경 / public API 계약 변경
+= 기계가 판정할 수 없다. roleGuidance로 옮긴다.
+```
+
+role이 전역 규칙을 다시 선언하지 않는 이유는 `AGENT_ROLE_IS_CLASSIFICATION_NOT_PERMISSION_GRANT`가 이미 role-derived capability를 effectivePolicy의 upper bound input으로만 규정했기 때문이다. role은 자기가 좁히는 것만 선언한다.
+
+##### roleEffectiveRestrictions
+
+"이 role은 무엇이 금지인가"를 한눈에 보려면 role 필드와 전역 규칙을 합쳐야 한다. 이 합친 결과는 손으로 쓰지 않고 계산한다.
+
+```yaml
+roleEffectiveRestrictions:
+  roleId: ""
+  maxMode: ""
+  deniedCommandCategories: []
+  globalRestrictions: []
+  computedFrom:
+    - "Core AgentRole fields"
+    - "Guardrail global rules"
+    - "harnessMode semantics"
+  diagnosticOnly: true
+```
+
+이것은 `objective.json`, `effectivePolicy`, `run-summary.json`과 같은 계층의 파생물이다. source truth가 아니다.
+
+```text
+- roleEffectiveRestrictions는 계산된 read model이다.
+- 손으로 작성하거나 편집하지 않는다.
+- 계산 결과와 저장된 값이 다르면 READ_MODEL_DRIFT다.
+```
+
+그리고 이것은 Run 없이 계산되는 부분 평가다. Task guardrails와 Run option이 빠져 있으므로 effectivePolicy가 아니다.
+
+```text
+roleEffectiveRestrictions는 진단용이다.
+정책 판정의 근거가 될 수 없다.
+실제 차단은 언제나 effectivePolicy가 수행한다.
+```
+
+이 취급은 `Partial replay is diagnostic only`와 같은 원칙이다. 불완전한 입력으로 계산된 뷰는 보여줄 수 있지만 결정을 만들 수 없다.
 
 AgentRole은 Project Profile에서 allowlist로 제한한다.
 
@@ -14948,6 +15029,8 @@ policies:
         baseRole: "DOCS_WRITER"
         description: ""
         maxMode: "WORKSPACE_EDIT"
+        deniedCommandCategories: []
+        roleGuidance: ""
 ```
 
 Custom role 규칙:
@@ -14956,9 +15039,12 @@ Custom role 규칙:
 - custom role id는 CUSTOM_[A-Z0-9_]+ 형식이어야 한다.
 - custom role은 반드시 Core AgentRole 하나를 baseRole로 가져야 한다.
 - custom role maxMode는 baseRole defaultMaxMode보다 넓을 수 없다.
-- custom role은 baseRole forbiddenByDefault를 해제할 수 없다.
+- custom role deniedCommandCategories는 baseRole deniedCommandCategories의 superset이어야 한다.
+- custom role roleGuidance는 자유롭게 바꿀 수 있다. 정책 판정에 쓰이지 않기 때문이다.
 - custom role은 Project Profile 안에서만 정의되며 Task Revision 안에서 inline 정의할 수 없다.
 ```
+
+superset 조건이 이전의 `baseRole forbiddenByDefault를 해제할 수 없다`를 대체한다. 산문 비교가 아니라 categoryId 집합 비교이므로 기계로 검사된다.
 
 AgentRole final rule:
 
@@ -15010,6 +15096,94 @@ repairBehavior:
   - choose an allowed Core AgentRole
   - add a valid custom role to Project Profile
   - set defaults.task.agentRole to REQUIRE_EXPLICIT when no safe default exists
+```
+
+```yaml
+ruleId: AGENT_ROLE_DECLARES_ONLY_WHAT_IT_NARROWS
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+  - Core AgentRole fields
+  - Guardrail global rules
+  - harnessMode semantics
+  - policies.commands.destructiveCommands categoryId set
+inputs:
+  - defaultMaxMode
+  - deniedCommandCategories
+  - roleGuidance
+  - baseRole fields when the role is custom
+preconditions:
+  - roles policy validation has started.
+condition:
+  - a Core AgentRole owns exactly defaultMaxMode, deniedCommandCategories, and roleGuidance.
+  - deniedCommandCategories reference destructiveCommands categoryIds and introduce no new identifier space.
+  - a role does not restate a restriction already owned by Guardrail global rules or harnessMode semantics.
+  - roleGuidance is prompt text only and is never read during policy evaluation.
+  - a custom role deniedCommandCategories set is a superset of its baseRole set.
+  - a custom role maxMode does not exceed its baseRole defaultMaxMode.
+allowedEffect:
+  - Harness may place roleGuidance into AdapterRequest prompt text.
+  - Review may use roleGuidance as context when judging whether a run stayed in scope.
+  - a custom role may change roleGuidance freely.
+deniedEffect:
+  - CodeFleet cannot evaluate roleGuidance as a policy condition.
+  - CodeFleet cannot let a role widen a global restriction by omitting it.
+  - CodeFleet cannot accept a custom role that drops a baseRole denied category.
+  - CodeFleet cannot introduce role-local command category identifiers.
+evidence:
+  - roleId
+  - defaultMaxMode
+  - deniedCommandCategories
+  - baseRole and its category set when custom
+  - effectivePolicyHash
+failureFinding:
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
+repairBehavior:
+  - move an unenforceable restriction into roleGuidance
+  - add the missing baseRole categories to the custom role
+  - reference an existing destructiveCommands categoryId instead of a new identifier
+```
+
+```yaml
+ruleId: ROLE_EFFECTIVE_RESTRICTIONS_IS_DIAGNOSTIC_READ_MODEL
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+  - Core AgentRole fields
+  - Guardrail global rules
+  - harnessMode semantics
+inputs:
+  - resolved roleId
+  - role fields
+  - global restriction set
+preconditions:
+  - a role-level restriction view has been requested outside Run Planning.
+condition:
+  - roleEffectiveRestrictions is computed from role fields and global rules, never hand-written.
+  - roleEffectiveRestrictions is marked diagnosticOnly.
+  - roleEffectiveRestrictions omits Task guardrails and Run options, so it is a partial evaluation.
+  - a stored roleEffectiveRestrictions that differs from recomputation is READ_MODEL_DRIFT.
+  - enforcement always reads effectivePolicy, never roleEffectiveRestrictions.
+allowedEffect:
+  - CodeFleet may display the combined restriction view for one role without a Run.
+  - CodeFleet may rebuild the view whenever role fields or global rules change.
+deniedEffect:
+  - CodeFleet cannot block or allow an action based on roleEffectiveRestrictions.
+  - CodeFleet cannot treat roleEffectiveRestrictions as source truth.
+  - CodeFleet cannot hand-edit roleEffectiveRestrictions.
+evidence:
+  - roleId
+  - computedFrom source list
+  - computed maxMode and denied categories
+  - diagnosticOnly flag
+  - drift comparison result when a stored copy exists
+failureFinding:
+  category: SNAPSHOT_CONSISTENCY
+  severity: WARNING
+repairBehavior:
+  - rebuild the view from role fields and global rules
+  - remove any hand-written copy
 ```
 
 역할은 너무 많이 만들면 안 된다. Core taxonomy는 작게 유지하고, 프로젝트 특화 역할은 custom role로 제한적으로 둔다.
@@ -15794,19 +15968,19 @@ repairBehavior:
 - risk rule은 자기 매칭 언어를 갖지 않고 matchTarget이 files glob / command argv / redaction 정규식 부분집합 / 선언적 field predicate 중 하나를 선택한다는 원칙
 - risk rule 조건 결합은 평면 allOf이고 OR은 rule 분리로 표현하며 NOT은 매칭 실패를 통한 risk lowering 우회를 막기 위해 표현할 수 없다는 원칙
 - UNKNOWN risk는 HIGH가 아니라 severity 축 밖의 미해결 상태이며 concrete risk를 요구하는 자동 진행을 차단한다는 원칙
+- Core AgentRole은 defaultMaxMode / deniedCommandCategories / roleGuidance만 소유하고 전역 Guardrail 규칙이나 harnessMode 의미를 다시 선언하지 않는다는 원칙
+- roleGuidance는 prompt 전용 비규범 텍스트이며 정책 판정에 읽히지 않고, 기계가 판정할 수 없는 제약은 여기로 옮긴다는 원칙
+- role 단위 금지 목록은 role 필드와 전역 규칙에서 계산하는 diagnosticOnly read model이며 손으로 쓰지 않고 실제 차단은 언제나 effectivePolicy가 수행한다는 원칙
 ```
 
 다음으로 논의할 항목:
 
 ```text
-1. agentRoles 내부 role taxonomy
-   - define the role id set and its max capability mapping
-   - keep AgentRole as classification, never a permission grant
-
-2. profile rule id 네이밍 체계
+1. profile rule id 네이밍 체계
    - define a stable naming scheme for policy rule ids
+   - decide whether the existing ruleIds already satisfy it
 
-3. 정합성 최종 재감사
+2. 정합성 최종 재감사
    - re-check the 0.13 status list
    - separate the three enums all named authority, or state that they differ
    - unify rule block fences
@@ -15815,8 +15989,7 @@ repairBehavior:
 논의 순서 이유:
 
 ```text
-- agentRoles taxonomy는 이미 고정된 classification 원칙 위에서 id 집합만 정하면 된다.
-- rule id 네이밍은 판정에 영향을 주지 않으므로 그 다음이다.
+- rule id 네이밍은 판정에 영향을 주지 않으므로 마지막 설계 항목이다.
 - 최종 재감사는 모든 항목이 고정된 뒤에 한 번에 수행한다.
 ```
 
