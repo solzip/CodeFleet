@@ -47,7 +47,7 @@ Important criteria:
 Design is being completed first. Implementation resumes only after the
 remaining design items are fixed.
 
-The next design topic is the profile rule id naming scheme.
+All design items are fixed. The next topic is the final consistency re-audit.
 The next implementation topic is v0.2 local review, held until design is done.
 ```
 
@@ -64,15 +64,14 @@ execution through logs, diffs, tests, and review evidence.
 ## Progress
 
 ```text
-Final model / concept design: about 97%
+Final model / concept design: about 99%
 Implementation: about 25-35%
 ```
 
 Remaining design items:
 
 ```text
-1. profile rule id naming scheme
-2. final consistency re-audit
+1. final consistency re-audit
 ```
 
 Current implementation status:
@@ -122,6 +121,7 @@ S2 Adapter seam
 -> Redaction pattern language
 -> Risk rule expression syntax
 -> AgentRole field decomposition
+-> Policy rule id rules
 ```
 
 Important fixed boundaries:
@@ -175,29 +175,32 @@ Important fixed boundaries:
 - A Core AgentRole owns only defaultMaxMode, deniedCommandCategories, and roleGuidance, and never restates a restriction owned by Guardrail global rules or harnessMode.
 - roleGuidance is prompt-only text never read during policy evaluation; restrictions a machine cannot decide belong there.
 - The per-role restriction list is a diagnosticOnly read model computed from role fields and global rules; enforcement always reads effectivePolicy.
+- Policy rule ids match [A-Z][A-Z0-9_]* and are unique across the combined Core and Project Profile id space.
+- Rule origin is recorded in definedByRef as path and hash, never encoded as an id prefix, so promoting a rule between origins never changes its id.
+- Rule ids are permanent; a retired id is never reassigned, so past evidence stays resolvable.
 ```
 
 ## Current Bottleneck
 
 ```text
-profile rule id naming scheme
+final consistency re-audit
 ```
 
 Why this is next:
 
 ```text
-Design is being completed before further implementation.
-Every judgement-logic item is now fixed: commands, files, export field allowlist, redaction, risk rules, and agent roles.
-The rule id naming scheme is the last design item and does not affect any judgement.
-The final consistency re-audit follows, then implementation resumes.
+Every design item is now fixed. Nothing remains as DESIGN CANDIDATE.
+Two items were deferred from the earlier audit and are the main content of this pass.
+After the re-audit, implementation resumes with codefleet review.
 ```
 
-Expected next design slice:
+Expected next slice:
 
 ```text
-1. Define a stable naming scheme for policy rule ids.
-2. Decide whether the existing ruleIds already satisfy it.
-3. Then run the final consistency re-audit.
+1. Re-check the 0.13 status list against the fixed rules.
+2. Separate the three enums all named authority, or state explicitly that they differ.
+3. Unify rule block fences.
+4. Then resume implementation with codefleet review.
 ```
 
 Held implementation slice (resumes after design is fixed):

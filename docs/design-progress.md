@@ -19,14 +19,14 @@ README.md                    현재 구현 사용법
 
 ```text
 Phase 0-9    완료      76단계
-Phase 10     진행 중   8단계 중 6단계 완료, 남은 설계 2단계
+Phase 10     진행 중   8단계 중 7단계 완료, 남은 것은 재감사 1단계
 Phase 11     대기      설계 확정 후 구현 재개
 ```
 
 ```text
-전체 87단계 중 82단계 완료
-FINAL RULE 81개
-설계 진행도: 약 97%
+전체 87단계 중 83단계 완료
+FINAL RULE 82개
+설계 진행도: 약 99%
 구현 진행도: 약 25-35%
 ```
 
@@ -197,8 +197,12 @@ FINAL RULE 81개
         - forbiddenByDefault 산문을 defaultMaxMode / deniedCommandCategories / roleGuidance로 분해
         - 전역 Guardrail·harnessMode가 이미 소유한 제약은 role에서 제거
         - role 단위 금지 목록은 diagnosticOnly 파생 read model로
-[ ] 83. profile rule id 네이밍 체계                                    <- 다음, 미착수
-[ ] 84. 정합성 최종 재감사
+[x] 83. profile rule id 네이밍 체계
+        - 형식 [A-Z][A-Z0-9_]* (81/81 이미 준수)
+        - Core + Profile 합친 id 공간에서 전역 유일
+        - 출처는 접두사가 아니라 definedByRef path/hash로 기록
+        - id는 영구 식별자, 재사용 금지
+[ ] 84. 정합성 최종 재감사                                             <- 다음, 미착수
         - 0.13 상태 목록 재확인
         - authority 필드명 분리 또는 "서로 다른 enum" 명시
           (verification 5값 / command 4값 / changedFiles 3값)
@@ -233,7 +237,7 @@ FINAL RULE 81개
 - 80은 남은 문법 중 유일하게 외부로 나가는 데이터를 직접 통제하므로 먼저 고정했다.
 - 81은 판정 로직이라 명명 규칙보다 먼저 고정했고, 매칭은 77 / 79 / 80을 재사용해 새 언어를 만들지 않았다.
 - 82는 role 목록이 이미 고정돼 있어 forbiddenByDefault 산문 하나만 남아 있었고, 삭제가 아니라 파생 read model로 풀었다.
-- 83은 명명 규칙이라 판정에 영향을 주지 않는다.
+- 83은 형식이 이미 지켜지고 있어 실제로 빈 곳은 Core / Profile 공유 id 공간의 출처 표기뿐이었고, 접두사가 아니라 ref 필드로 풀었다.
 ```
 
 남은 설계의 성격:

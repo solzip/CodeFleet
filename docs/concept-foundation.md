@@ -5212,6 +5212,7 @@ PASS:
 - Redaction pattern language (선형 시간 정규식 부분집합 / action 강도 순서 / 실패 시 export 차단)
 - Risk rule 표현 문법 (기존 matcher 재사용 / 평면 AND / NOT 금지 / UNKNOWN 의미)
 - AgentRole 필드 분해 (defaultMaxMode / deniedCommandCategories / roleGuidance) 와 파생 진단 뷰
+- Policy rule id 규칙 (형식 / 전역 유일 / definedByRef 출처 기록 / 영구 식별자)
 
 PASS_AFTER_REINFORCEMENT:
 - Risk 판단 원칙
@@ -5230,8 +5231,7 @@ RESOLVED_AFTER_THIS_LIST_WAS_WRITTEN:
      구현 범위는 VERSION_PLAN으로 남김
 
 NOT_FINAL_YET:
-- 5.3의 나머지 DESIGN CANDIDATE 문법 항목
-  -> profile rule id 네이밍
+- (없음. 남은 항목은 정합성 재감사뿐이다.)
 ```
 
 `NOT_FINAL_YET` 항목은 확정 규칙이 아니다. 이 항목들은 다음 논의에서 같은 기준으로 하나씩 FINAL RULE로 승격하거나 VERSION_PLAN으로 남긴다.
@@ -11051,11 +11051,112 @@ repairBehavior:
 - remove derived policy state from config.json if present
 ```
 
+### 5.2.1 Policy rule id 규칙
+
+Project Profile 안의 `ruleId`, `checkId`, `categoryId`는 하나의 식별자 규칙을 공유한다.
+
+형식:
+
+```text
+[A-Z][A-Z0-9_]*
+```
+
+이 형식은 이미 문서 전체에서 지켜지고 있다. 새로 도입하는 제약이 아니라 기존 관행을 규칙으로 올린 것이다.
+
+출처는 접두사가 아니라 필드로 기록한다.
+
+```yaml
+ruleId: ""
+definedByRef:
+  path: ""
+  hash: ""
+```
+
+```text
+- id는 해당 id 공간 전체에서 유일하다. 중복이면 Project Profile 검증 실패다.
+- Core가 정의한 id와 Project Profile이 정의한 id는 같은 공간을 공유한다.
+- 어느 쪽이 정의했는지는 definedByRef가 기록한다.
+- 증거에는 ruleId와 definedByRef를 함께 남긴다.
+```
+
+출처를 id 문자열에 인코딩하지 않는 이유가 셋 있다.
+
+```text
+1. 출처가 바뀔 때 id가 바뀌지 않아야 한다.
+   Project Profile 규칙이 Core 기본 규칙으로 승격되면 definedByRef만 바뀐다.
+   접두사 방식이면 id를 바꿔야 하고, 과거 증거의 id가 아무것도 가리키지 못하게 된다.
+
+2. 중복 검사가 관례가 아니라 직접 검사가 된다.
+   접두사 방식은 접두사를 올바르게 붙였다는 전제를 먼저 믿어야 한다.
+   유일성을 직접 검사하면 그 전제가 필요 없다.
+
+3. path/hash ref는 이 문서의 기본 어휘다.
+   runSummaryRef, migrationSourceRef, approvalRef, policyRefs가 모두 같은 모양이다.
+   hash가 함께 있으므로 어느 버전의 규칙이 적용됐는지까지 복원된다.
+```
+
+id는 영구 식별자다.
+
+```text
+- 한번 사용한 id는 다른 의미로 재사용하지 않는다.
+- 규칙 이름을 바꾸려면 새 id를 만든다. 기존 id는 은퇴시킬 수 있지만 재사용하지 않는다.
+- 은퇴한 id를 참조하는 과거 증거는 그대로 유효하다.
+```
+
+`ruleId`는 redaction-report, finding, risk evidence에 증거로 기록된다. 증거는 불변이므로 id도 그 증거가 살아 있는 동안 같은 의미를 유지해야 한다.
+
+id가 무엇을 검사하는지 읽히게 쓰는 것은 권장 사항이며 규칙이 아니다. `LEDGER_SEQ_CONTIGUOUS`나 `RUN_REVISION_EXISTS` 같은 형태가 바람직하지만 기계가 판정할 수 없으므로 검증 조건에 넣지 않는다.
+
+`custom role id`의 `CUSTOM_[A-Z0-9_]+` 형식은 그대로 유지한다. 이는 role id 공간에만 적용되는 기존 규칙이며 다른 id 공간으로 일반화하지 않는다. custom role은 `baseRole` 필드로 출처와 상속 관계를 이미 구조적으로 표현하고 있다.
+
+```yaml
+ruleId: POLICY_RULE_ID_IS_UNIQUE_WITH_REF_RECORDED_ORIGIN
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+  - Core rule set definitions
+  - <workspaceRoot>/.codefleet/config.json policies
+  - evidence artifacts recording ruleId
+inputs:
+  - declared ruleId / checkId / categoryId values
+  - Core-defined id set
+  - Project Profile defined id set
+  - definedByRef path and hash
+preconditions:
+  - Project Profile validation reached policy rule validation.
+condition:
+  - policy rule ids match [A-Z][A-Z0-9_]* .
+  - an id is unique across its whole id space, including Core and Project Profile definitions together.
+  - origin is recorded in definedByRef with path and hash, never encoded as an id prefix.
+  - evidence recording a ruleId also records its definedByRef.
+  - an id is never reused for a different meaning, and a retired id is not reassigned.
+allowedEffect:
+  - a Project Profile rule may be promoted into the Core rule set by changing definedByRef only.
+  - past evidence referencing a retired id stays resolvable.
+  - readable id wording is encouraged as guidance.
+deniedEffect:
+  - CodeFleet cannot resolve a duplicate id by preferring one origin over another.
+  - CodeFleet cannot infer rule origin from the id string.
+  - CodeFleet cannot reassign a retired id to a different rule.
+  - CodeFleet cannot require id wording as a validation condition.
+evidence:
+  - ruleId
+  - definedByRef path and hash
+  - id space name
+  - duplicate id list when validation failed
+failureFinding:
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: CORRUPTION
+repairBehavior:
+  - rename the newly added rule to a free id
+  - record the correct definedByRef instead of renaming an existing id
+```
+
 ### 5.3 DESIGN CANDIDATE / VERSION_PLAN 분리
 
 ```text
 DESIGN CANDIDATE:
-- profile rule id 세부 네이밍 체계
+- (없음. 5.3의 문법 항목은 모두 고정됐다.)
 
 FIXED:
 - commands policy command matcher 문법
@@ -11075,6 +11176,8 @@ FIXED:
 - agentRoles 내부 role taxonomy
   -> AGENT_ROLE_DECLARES_ONLY_WHAT_IT_NARROWS
   -> ROLE_EFFECTIVE_RESTRICTIONS_IS_DIAGNOSTIC_READ_MODEL
+- profile rule id 네이밍 체계
+  -> POLICY_RULE_ID_IS_UNIQUE_WITH_REF_RECORDED_ORIGIN
 ```
 
 ```text
@@ -15971,27 +16074,21 @@ repairBehavior:
 - Core AgentRole은 defaultMaxMode / deniedCommandCategories / roleGuidance만 소유하고 전역 Guardrail 규칙이나 harnessMode 의미를 다시 선언하지 않는다는 원칙
 - roleGuidance는 prompt 전용 비규범 텍스트이며 정책 판정에 읽히지 않고, 기계가 판정할 수 없는 제약은 여기로 옮긴다는 원칙
 - role 단위 금지 목록은 role 필드와 전역 규칙에서 계산하는 diagnosticOnly read model이며 손으로 쓰지 않고 실제 차단은 언제나 effectivePolicy가 수행한다는 원칙
+- policy rule id는 [A-Z][A-Z0-9_]* 형식이고 Core와 Project Profile 정의를 합친 id 공간 전체에서 유일하다는 원칙
+- rule 출처는 id 접두사가 아니라 definedByRef path/hash로 기록하며, 출처가 바뀌어도 id는 바뀌지 않는다는 원칙
+- rule id는 영구 식별자이고 은퇴한 id를 다른 의미로 재사용하지 않으며 과거 증거가 계속 해석된다는 원칙
 ```
 
 다음으로 논의할 항목:
 
 ```text
-1. profile rule id 네이밍 체계
-   - define a stable naming scheme for policy rule ids
-   - decide whether the existing ruleIds already satisfy it
-
-2. 정합성 최종 재감사
+1. 정합성 최종 재감사
    - re-check the 0.13 status list
    - separate the three enums all named authority, or state that they differ
    - unify rule block fences
 ```
 
-논의 순서 이유:
-
-```text
-- rule id 네이밍은 판정에 영향을 주지 않으므로 마지막 설계 항목이다.
-- 최종 재감사는 모든 항목이 고정된 뒤에 한 번에 수행한다.
-```
+모든 설계 항목이 고정됐다. 남은 것은 재감사뿐이며, 재감사가 끝나면 구현을 순차적으로 재개한다.
 
 ## 16. 다음 세션에서 이어갈 때
 
