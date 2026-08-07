@@ -19,14 +19,14 @@ README.md                    현재 구현 사용법
 
 ```text
 Phase 0-9    완료      76단계
-Phase 10     진행 중   8단계 중 7단계 완료, 남은 것은 재감사 1단계
+Phase 10     완료      8단계 전부 완료
 Phase 11     대기      설계 확정 후 구현 재개
 ```
 
 ```text
-전체 87단계 중 83단계 완료
+전체 87단계 중 84단계 완료
 FINAL RULE 82개
-설계 진행도: 약 99%
+설계 진행도: 100% (미고정 항목 없음)
 구현 진행도: 약 25-35%
 ```
 
@@ -34,6 +34,22 @@ FINAL RULE 82개
 
 ```text
 설계를 먼저 모두 확정한 뒤 구현을 순차적으로 재개한다.
+설계는 84번에서 완료됐다. 이제 Phase 11 구현으로 넘어간다.
+```
+
+최종 검증 결과:
+
+```text
+FINAL RULE            82개
+YAML 파싱 실패        0
+필수 섹션 누락        0
+id 형식 위반          0
+id 중복               0
+status != FINAL       0
+taxonomy 밖 category  0
+taxonomy 밖 severity  0
+DESIGN CANDIDATE      0
+NOT_FINAL_YET         0
 ```
 
 ---
@@ -170,7 +186,7 @@ FINAL RULE 82개
 
 ---
 
-## Phase 10. 남은 문법 계층 (현재 위치)
+## Phase 10. 남은 문법 계층 (완료)
 
 ```text
 [x] 77. Verification command allowlist / commands policy matcher 문법
@@ -202,11 +218,11 @@ FINAL RULE 82개
         - Core + Profile 합친 id 공간에서 전역 유일
         - 출처는 접두사가 아니라 definedByRef path/hash로 기록
         - id는 영구 식별자, 재사용 금지
-[ ] 84. 정합성 최종 재감사                                             <- 다음, 미착수
-        - 0.13 상태 목록 재확인
-        - authority 필드명 분리 또는 "서로 다른 enum" 명시
-          (verification 5값 / command 4값 / changedFiles 3값)
-        - 규칙 블록 fence 통일 (현재 text 50개 / yaml 26개)
+[x] 84. 정합성 최종 재감사
+        - dangling categoryId 정의 (Core destructive category 7종)
+        - definedByRef를 redaction / risk / destructive entry 스키마에 반영
+        - authority 3종이 서로 다른 enum임을 명시
+        - 규칙 블록 fence 통일 후 82개 전부 YAML 파싱 검증
 ```
 
 79번 직후 정합성 감사에서 결함 5건을 찾았고 3건을 즉시 고쳤다.
@@ -219,12 +235,24 @@ FINAL RULE 82개
 남김: 규칙 블록 fence 표기 불일치                -> 84번
 ```
 
-81번에서 모순 1건을 추가로 찾아 고쳤다.
+81번에서 모순 1건, 84번에서 결함 2건을 추가로 찾아 고쳤다.
 
 ```text
 고침: UNKNOWN risk를 0.8은 HIGH로 접고 병합 규칙은 severity 축 밖이라고 해
       정면으로 상충하던 문제. computedRisk enum과 gate 조건 세 곳이
       모두 별도 상태 편이라 0.8을 수정했다.
+고침: 82번이 role에서 참조한 categoryId 5종이 어디에도 정의돼 있지 않던 문제.
+      Core destructive category 7종을 정의했다.
+고침: 83번의 definedByRef가 규칙에만 있고 실제 entry 스키마에 없던 문제.
+```
+
+fence 통일이 잠재 결함을 하나 더 드러냈다.
+
+```text
+규칙 블록 4개가 YAML로 파싱되지 않았다.
+백틱으로 시작하는 스칼라 2건, 콜론으로 끝나고 다음 줄로 이어지는 스칼라 2건.
+text fence였을 때는 아무도 파싱하지 않아 드러나지 않던 문제다.
+이제 82개 전부 기계로 추출 가능하다.
 ```
 
 논의 순서 이유:
@@ -244,14 +272,24 @@ FINAL RULE 82개
 
 ```text
 Phase 1-9는 "무엇이 진실인가"를 정했다.
-Phase 10은 "그 판정을 어떤 표기로 쓰는가"를 정한다.
-구조, 경계, 권한은 이미 끝났고 남은 것은 표기 계층이다.
+Phase 10은 "그 판정을 어떤 표기로 쓰는가"를 정했다.
+설계는 여기서 끝났다.
 ```
 
-## Phase 11. 구현 재개 (설계 확정 후)
+Phase 10에서 반복된 판단 기준:
 
 ```text
-[ ] 85. codefleet review (v0.2 local review)   <- 유일하게 남은 v0.2 구현 슬라이스
+- 허용을 결정하는 matcher는 패턴 언어를 두지 않는다. (77, 78, 79)
+- 제거를 결정하는 matcher는 패턴 언어를 두되 선형 시간을 문법으로 보장한다. (80)
+- 새 matcher를 만들지 않고 이미 고정된 것을 재사용한다. (81, 82)
+- 합친 뷰가 필요하면 손으로 쓰지 않고 파생 read model로 만든다. (82)
+- 출처는 문자열 접두사가 아니라 ref 필드로 기록한다. (83)
+```
+
+## Phase 11. 구현 재개 (현재 위치)
+
+```text
+[ ] 85. codefleet review (v0.2 local review)   <- 다음, 미착수
 [ ] 86. SPINE 한 바퀴 수동 검증
 [ ] 87. 이후 final 슬라이스
 ```

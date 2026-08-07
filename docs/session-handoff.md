@@ -44,11 +44,11 @@ Important criteria:
 - Do not decide by human intuition, LLM inference, or guesswork.
 - Anything not fixed must remain DESIGN CANDIDATE or VERSION_PLAN.
 
-Design is being completed first. Implementation resumes only after the
-remaining design items are fixed.
+Design is complete as of the final consistency re-audit. Implementation
+has resumed.
 
-All design items are fixed. The next topic is the final consistency re-audit.
-The next implementation topic is v0.2 local review, held until design is done.
+Design is complete. The next topic is implementation: codefleet review.
+The next implementation topic is v0.2 local review.
 ```
 
 ## Product Definition
@@ -64,14 +64,20 @@ execution through logs, diffs, tests, and review evidence.
 ## Progress
 
 ```text
-Final model / concept design: about 99%
+Final model / concept design: complete
 Implementation: about 25-35%
 ```
 
-Remaining design items:
+Design verification result:
 
 ```text
-1. final consistency re-audit
+FINAL RULE            82
+YAML parse failures   0
+missing sections      0
+id format violations  0
+duplicate ids         0
+DESIGN CANDIDATE      0
+NOT_FINAL_YET         0
 ```
 
 Current implementation status:
@@ -122,6 +128,7 @@ S2 Adapter seam
 -> Risk rule expression syntax
 -> AgentRole field decomposition
 -> Policy rule id rules
+-> Final consistency re-audit
 ```
 
 Important fixed boundaries:
@@ -178,32 +185,26 @@ Important fixed boundaries:
 - Policy rule ids match [A-Z][A-Z0-9_]* and are unique across the combined Core and Project Profile id space.
 - Rule origin is recorded in definedByRef as path and hash, never encoded as an id prefix, so promoting a rule between origins never changes its id.
 - Rule ids are permanent; a retired id is never reassigned, so past evidence stays resolvable.
+- The three fields named authority are three different enums: verification 5 values, command 4, changedFiles 3. Implementations must not merge them into one type.
+- Core owns seven destructive command categories: INFRA_APPLY, INFRA_DESTROY, CLOUD_RESOURCE_MUTATION, SERVICE_LIFECYCLE, DEPLOYMENT_MUTATION, DATA_DESTRUCTION, VCS_HISTORY_REWRITE.
 ```
 
 ## Current Bottleneck
 
 ```text
-final consistency re-audit
+v0.2 local review implementation
 ```
 
 Why this is next:
 
 ```text
-Every design item is now fixed. Nothing remains as DESIGN CANDIDATE.
-Two items were deferred from the earlier audit and are the main content of this pass.
-After the re-audit, implementation resumes with codefleet review.
+Design is complete and verified. Nothing remains as DESIGN CANDIDATE or NOT_FINAL_YET.
+codefleet review is the last v0.2 implementation slice.
+review-decision.local.json must stay migration input, not final ledger truth.
+No local review artifact may produce VERIFIED or queue progression by itself.
 ```
 
-Expected next slice:
-
-```text
-1. Re-check the 0.13 status list against the fixed rules.
-2. Separate the three enums all named authority, or state explicitly that they differ.
-3. Unify rule block fences.
-4. Then resume implementation with codefleet review.
-```
-
-Held implementation slice (resumes after design is fixed):
+Next implementation slice:
 
 ```text
 1. Define minimal ReviewEvidenceBundle type.

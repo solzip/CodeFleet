@@ -1932,7 +1932,7 @@ Final source of truth remains the Objective ledger durable decision event.
 
 S4 Review Decision FINAL RULES:
 
-```text
+```yaml
 ruleId: RUN_REVIEW_DECIDED_IS_DURABLE_DECISION_EVENT
 status: FINAL
 scope: REVIEW
@@ -1986,15 +1986,15 @@ evidence:
 - reviewEvidenceBundleRef
 - reviewEvidenceBundleHash
 failureFinding:
-- category = REVIEW_INTEGRITY
-- severity = WARNING
+  category: REVIEW_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - append a corrective Review Decision event
 - recreate ReviewEvidenceBundle only when deterministic evidence refs are available
 - rerun through a new Run when evidence cannot be reconstructed
 ```
 
-```text
+```yaml
 ruleId: REVIEW_DECISION_REQUIRES_FROZEN_EVIDENCE_BUNDLE
 status: FINAL
 scope: REVIEW
@@ -2050,15 +2050,15 @@ evidence:
 - missing evidence unavailableReason fields
 - referenced artifact hashes
 failureFinding:
-- category = REVIEW_INTEGRITY
-- severity = WARNING
+  category: REVIEW_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - rebuild ReviewEvidenceBundle from immutable Run Trace refs when deterministic
 - append corrective Review Decision if reviewed evidence was wrong
 - rerun through a new Run when required evidence is unavailable
 ```
 
-```text
+```yaml
 ruleId: REVIEW_DECISION_ACTOR_MUST_SATISFY_RESULT_REVIEW_GATE
 status: FINAL
 scope: REVIEW
@@ -2093,14 +2093,14 @@ evidence:
 - allowedActors
 - effectiveness result
 failureFinding:
-- category = REVIEW_INTEGRITY
-- severity = WARNING
+  category: REVIEW_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - append a valid Review Decision by an allowed actor
 - update requiredGates only through Task / Profile review flow
 ```
 
-```text
+```yaml
 ruleId: LATEST_EFFECTIVE_REVIEW_DECISION_IS_LEDGER_DERIVED
 status: FINAL
 scope: REVIEW
@@ -2146,14 +2146,14 @@ evidence:
 - ledger order evidence
 - effectiveness calculation result
 failureFinding:
-- category = REVIEW_INTEGRITY
-- severity = WARNING
+  category: REVIEW_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - append corrective Review Decision event
 - repair invalid references through explicit review correction
 ```
 
-```text
+```yaml
 ruleId: REVIEW_EVIDENCE_ABSENCE_AND_HASH_MISMATCH_HAVE_DIFFERENT_EFFECTS
 status: FINAL
 scope: REVIEW
@@ -2193,15 +2193,15 @@ evidence:
 - hash mismatch refs
 - evidence absence finding ids
 failureFinding:
-- category = REVIEW_INTEGRITY
-- severity = WARNING
+  category: REVIEW_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - restore missing raw evidence from backup when available
 - append corrective Review Decision if reviewed evidence was wrong
 - rerun through a new Run when evidence cannot be trusted
 ```
 
-```text
+```yaml
 ruleId: VERIFIED_REQUIRES_ACCEPTED_REVIEW_AND_SATISFIED_GATES
 status: FINAL
 scope: REVIEW
@@ -2246,8 +2246,8 @@ evidence:
 - verificationGateResult
 - normalized Run result
 failureFinding:
-- category = REVIEW_INTEGRITY
-- severity = WARNING
+  category: REVIEW_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - require accepted Review Decision with valid evidence
 - satisfy or waive verification gate according to policy
@@ -2348,7 +2348,7 @@ computedRisk unknown
 
 SYSTEM_POLICY Review Decision FINAL RULE:
 
-```text
+```yaml
 ruleId: SYSTEM_POLICY_AUTO_REVIEW_DECISION_IS_BOUNDED
 status: FINAL
 scope: REVIEW
@@ -2414,8 +2414,8 @@ evidence:
 - reviewEvidenceBundleRef
 - reviewEvidenceBundleHash
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - require HUMAN Review Decision or fix the unmet evidence / policy condition
 ```
@@ -2903,6 +2903,9 @@ riskRules:
         anyOf: []
     riskLevel: "LOW | MEDIUM | HIGH"
     requiredGates: {}
+    definedByRef:
+      path: ""
+      hash: ""
 ```
 
 한 condition은 자기 `matchTarget`에 해당하는 키만 갖는다.
@@ -5824,7 +5827,7 @@ v0.2 review without Objective ledger
 -> .codefleet/runs/<runId>/review-decision.local.json
 ```
 
-```text
+```yaml
 ruleId: CODEFLEET_DURABLE_FILE_MAP_IS_LAYERED_CONTRACT
 status: FINAL
 scope: WORKSPACE
@@ -5871,8 +5874,8 @@ evidence:
 - lifecycle stage reached
 - missing artifact list
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - create the missing artifact if the lifecycle stage has not crossed an immutable boundary
 - otherwise create a new lifecycle event / new Run / new Review Decision rather than editing immutable evidence
@@ -6641,7 +6644,7 @@ repairBehavior:
   - mark old local artifact SUPERSEDED before retrying import
 ```
 
-```text
+```yaml
 ruleId: RUN_SUMMARY_VERIFICATION_AND_LOCAL_REVIEW_LAYOUT_FIXED
 status: FINAL
 scope: RUN_ARTIFACTS
@@ -6685,8 +6688,8 @@ evidence:
 - local review finalDecisionTruth value
 - migrationTarget value
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - rebuild Run Summary from durable evidence when possible
 - create missing VerificationEvidence with unavailableReason when required verification reached an immutable boundary
@@ -6784,7 +6787,7 @@ Minimum CLI smoke path before full manual SPINE validation:
 5. `codefleet objective status` can derive VERIFIED only from effective Review Decision plus satisfied or waived verification gate.
 ```
 
-```text
+```yaml
 ruleId: MINIMUM_CLI_FLOW_PRESERVES_FINAL_BOUNDARIES
 status: FINAL
 scope: CLI
@@ -6830,8 +6833,8 @@ evidence:
 - resume boundary used
 - blocked or unavailable reason when a boundary was not produced
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - rerun the missing internal boundary when still mutable
 - create explicit unavailable / blocked evidence when an immutable boundary was reached
@@ -6987,7 +6990,7 @@ Manual evidence checklist:
 - derived status output showing VERIFIED or the exact refusal reason
 ```
 
-```text
+```yaml
 ruleId: MANUAL_SPINE_PASS_IS_EVIDENCE_CHECKLIST
 status: FINAL
 scope: SPINE_VALIDATION
@@ -7029,8 +7032,8 @@ evidence:
 - unavailableReason per missing boundary
 - pass or blocked result with reason
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - rerun the missing internal CLI boundary when mutable
 - create explicit unavailableReason when evidence is permanently unavailable
@@ -7563,7 +7566,7 @@ run-summary.json 있음 + verification evidence 없음
 = 같은 run-plan.json의 verificationPlan 기준으로 검증 가능
 ```
 
-```text
+```yaml
 ruleId: RUN_PLAN_IS_IMMUTABLE_RESUME_BOUNDARY
 status: FINAL
 scope: RUN
@@ -7630,8 +7633,8 @@ evidence:
 - effectivePolicy hash
 - verificationPlan hash
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - if AdapterRequest has not been created, create a new Run Plan by starting a new Run
 - if immutable Run artifacts already exist, do not edit run-plan.json; create a new Run
@@ -8130,7 +8133,7 @@ verification.required true + check SKIP
 
 Required Gates FINAL RULES:
 
-```text
+```yaml
 ruleId: PROFILE_DEFAULTS_REQUIRED_GATES_SCHEMA
 status: FINAL
 scope: POLICY
@@ -8170,13 +8173,13 @@ evidence:
 - defaults.task.requiredGates JSON pointer
 - invalid or missing key when present
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - manual Project Profile defaults correction is required
 ```
 
-```text
+```yaml
 ruleId: TASK_REVISION_REQUIRED_GATES_ARE_CONCRETE
 status: FINAL
 scope: TASK_REVISION
@@ -8219,13 +8222,13 @@ evidence:
 - unresolved required fields
 - selected requiredGates objects
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - ask the user to resolve requiredGates in the bundled review step
 ```
 
-```text
+```yaml
 ruleId: EFFECTIVE_REQUIRED_GATES_MERGE_BY_DIMENSION
 status: FINAL
 scope: POLICY
@@ -8276,8 +8279,8 @@ evidence:
 - merged effectivePolicy.requiredGates
 - computedRisk
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - rebuild Run Plan from source policies and Task Revision
 - correct invalid source policy before execution
@@ -8321,7 +8324,7 @@ autoAdvanceOnDone
 
 Auto Advance Policy FINAL RULE:
 
-```text
+```yaml
 ruleId: PROFILE_POLICY_AUTO_ADVANCE_ON_DONE_IS_BOOLEAN
 status: FINAL
 scope: POLICY
@@ -8356,8 +8359,8 @@ evidence:
 - source values
 - effectivePolicy.autoAdvanceOnDone
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - set policies.autoAdvanceOnDone to true or false
 - remove relax-only override from Local Overlay, Task guardrails, or Run Options
@@ -8435,7 +8438,7 @@ REVIEW  -> RunSummary.type REVIEW 가능
 
 Workflow FINAL RULES:
 
-```text
+```yaml
 ruleId: PROFILE_DEFAULTS_TASK_WORKFLOW_SCHEMA
 status: FINAL
 scope: POLICY
@@ -8464,13 +8467,13 @@ evidence:
 - defaults.task.workflow JSON pointer
 - invalid stage value when present
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - manual Project Profile defaults correction is required
 ```
 
-```text
+```yaml
 ruleId: TASK_WORKFLOW_IS_DRAFT_TEMPLATE_NOT_EXECUTION_POLICY
 status: FINAL
 scope: TASK
@@ -8504,8 +8507,8 @@ evidence:
 - workflow.stages
 - attempted policy, gate, lifecycle, or summary effect when present
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - remove policy-like workflow effect
 - move permission or gate behavior to policies, requiredGates, or Run Planning rules
@@ -8633,7 +8636,7 @@ defaults.run.agentAdapter REQUIRE_EXPLICIT and no allowed+available adapter exis
 
 AgentAdapter FINAL RULES:
 
-```text
+```yaml
 ruleId: PROFILE_POLICY_AGENT_ADAPTERS_BLOCK
 status: FINAL
 scope: POLICY
@@ -8661,15 +8664,15 @@ evidence:
 - allowedAdapters
 - invalid adapter entry when present
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - remove provider-specific execution detail from Project Profile
 - move local execution settings to .codefleet/local.json or adapter registry
 - correct allowedAdapters to stable AdapterId values
 ```
 
-```text
+```yaml
 ruleId: PROFILE_DEFAULTS_RUN_AGENT_ADAPTER_SCHEMA
 status: FINAL
 scope: POLICY
@@ -8698,14 +8701,14 @@ evidence:
 - policies.agentAdapters.allowedAdapters
 - invalid default adapter value when present
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - set defaults.run.agentAdapter to REQUIRE_EXPLICIT or an allowed AdapterId
 - move provider-specific execution detail to local config or adapter layer
 ```
 
-```text
+```yaml
 ruleId: RUN_PLAN_AGENT_ADAPTER_RESOLUTION
 status: FINAL
 scope: RUN
@@ -8745,8 +8748,8 @@ evidence:
 - locallyAvailable
 - adapterResolution
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - choose an allowed and locally available adapter
 - install or configure the selected adapter locally
@@ -8799,7 +8802,7 @@ Rules:
 - automatic downgrade from CONTAINER / TEMP_WORKSPACE / GIT_WORKTREE to NONE is forbidden.
 ```
 
-```text
+```yaml
 ruleId: PROFILE_DEFAULTS_RUN_ISOLATION_MODE_SCHEMA
 status: FINAL
 scope: POLICY
@@ -8833,8 +8836,8 @@ evidence:
 - isolation selection source
 - local availability check result
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - set defaults.run.isolationMode to REQUIRE_EXPLICIT or an allowed isolation mode
 - move local runtime details to .codefleet/local.json or runtime registry
@@ -9069,7 +9072,7 @@ policies.agentRoles.customRoles
 = profile-defined only; Local Overlay may remove or restrict custom roles but must not add wider roles
 ```
 
-```text
+```yaml
 ruleId: PROJECT_PROFILE_POLICY_BLOCK_INTERNAL_SCHEMA
 status: FINAL
 scope: POLICY
@@ -9101,8 +9104,8 @@ evidence:
 - validated policy block names
 - invalid field paths when present
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - remove unsupported policy fields
 - move local-only state to .codefleet/local.json or runtime registry
@@ -9544,7 +9547,7 @@ v0.2 degrade 규칙:
 - v0.2라도 artifact 이름과 source / evidence / decision 경계는 final 계약을 따른다.
 ```
 
-```text
+```yaml
 ruleId: S2_MINIMUM_ARTIFACT_LAYOUT_IS_FIXED
 status: FINAL
 scope: RUN
@@ -9602,8 +9605,8 @@ evidence:
 - adapterExecutionStatus
 - synthetic flag
 failureFinding:
-- category = EXECUTION_EVIDENCE_INTEGRITY
-- severity = WARNING
+  category: EXECUTION_EVIDENCE_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - if adapter execution has not started, rebuild adapter-request.json from run-plan.json
 - if adapter execution failed before structured result, create synthetic adapter-result.json from Harness evidence
@@ -9737,7 +9740,7 @@ Human resultReview is required for accepting such Run results.
 
 AgentAdapter Invocation FINAL RULES:
 
-```text
+```yaml
 ruleId: ADAPTER_REQUEST_IS_PROVIDER_AGNOSTIC
 status: FINAL
 scope: RUN
@@ -9777,14 +9780,14 @@ evidence:
 - adapterRequest path or hash
 - effectivePolicy hash
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - rebuild AdapterRequest from Run Plan and Task Revision
 - move provider-specific settings to local adapter registry or adapter layer
 ```
 
-```text
+```yaml
 ruleId: ADAPTER_CANNOT_EXPAND_CAPABILITIES
 status: FINAL
 scope: RUN
@@ -9821,15 +9824,15 @@ evidence:
 - adapterRequest path or hash
 - capability comparison result
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - rebuild AdapterRequest from effectivePolicy
 - remove adapter-layer permission expansion
 - require Project Profile or Task Revision review for any intended permission change
 ```
 
-```text
+```yaml
 ruleId: ADAPTER_RESULT_IS_EVIDENCE_NOT_DECISION
 status: FINAL
 scope: RUN
@@ -9879,14 +9882,14 @@ evidence:
 - adapterResult path or hash
 - normalization result
 failureFinding:
-- category = EXECUTION_EVIDENCE_INTEGRITY
-- severity = WARNING
+  category: EXECUTION_EVIDENCE_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - normalize adapter output through adapter layer
 - store raw provider output only as Run Trace Evidence artifact
 ```
 
-```text
+```yaml
 ruleId: HARNESS_OBSERVATION_OWNS_EXECUTION_EVIDENCE
 status: FINAL
 scope: RUN
@@ -9940,8 +9943,8 @@ evidence:
 - commandLogRef or commands unavailableReason
 - policy violation check result
 failureFinding:
-- category = EXECUTION_EVIDENCE_INTEGRITY
-- severity = WARNING
+  category: EXECUTION_EVIDENCE_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - preserve raw stdout / stderr / provider artifacts
 - create synthetic AdapterResult when adapter failure is known
@@ -9949,7 +9952,7 @@ repairBehavior:
 - rerun through a new Run if required HarnessObservation evidence is missing
 ```
 
-```text
+```yaml
 ruleId: HARNESS_WORKSPACE_SNAPSHOT_IS_STATE_EVIDENCE
 status: FINAL
 scope: RUN
@@ -10007,15 +10010,15 @@ evidence:
 - stateHash values
 - unavailableReason fields when present
 failureFinding:
-- category = EXECUTION_EVIDENCE_INTEGRITY
-- severity = WARNING
+  category: EXECUTION_EVIDENCE_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - preserve available git status / diff / snapshot artifacts
 - record unavailableReason for missing snapshot components
 - rerun through a new Run if required state evidence cannot be reconstructed deterministically
 ```
 
-```text
+```yaml
 ruleId: COMMAND_TRUTH_REQUIRES_HARNESS_VISIBLE_CHANNEL
 status: FINAL
 scope: RUN
@@ -10066,15 +10069,15 @@ evidence:
 - providerReportedCommandsRef when present
 - command evidence degradation reason when present
 failureFinding:
-- category = EXECUTION_EVIDENCE_INTEGRITY
-- severity = WARNING
+  category: EXECUTION_EVIDENCE_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - rerun through Harness-visible command channel
 - run verification through Execution Harness
 - record PROVIDER_REPORTED_ONLY as degraded evidence, not truth
 ```
 
-```text
+```yaml
 ruleId: VERIFICATION_EVIDENCE_IS_HARNESS_OWNED
 status: FINAL
 scope: RUN
@@ -10130,15 +10133,15 @@ evidence:
 - verificationGateResult
 - waiverRef when used
 failureFinding:
-- category = EXECUTION_EVIDENCE_INTEGRITY
-- severity = WARNING
+  category: EXECUTION_EVIDENCE_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - rerun verification through Execution Harness
 - attach valid policy waiver when waiver is allowed
 - preserve provider-reported verification as degraded review hint only
 ```
 
-```text
+```yaml
 ruleId: COMMAND_EXECUTION_REQUIRES_OBSERVABLE_AUTHORITY_OR_DEGRADED_POLICY
 status: FINAL
 scope: RUN
@@ -10184,15 +10187,15 @@ evidence:
 - computed risk
 - resultReview requirement
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - use command proxy, sandbox, container, or Harness-executed command path
 - disable commandExecution capability
 - explicitly accept degraded command observation policy with HIGH risk and human review
 ```
 
-```text
+```yaml
 ruleId: V0_2_CODEX_SLICE_MUST_NOT_WEAKEN_FINAL_S2_CONTRACT
 status: FINAL
 scope: RUN
@@ -10241,15 +10244,15 @@ evidence:
 - command authority
 - degraded evidence fields when present
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - move provider-specific settings to local adapter registry or adapter layer
 - downgrade provider-reported observations to degraded evidence
 - require human Review Decision for degraded runs
 ```
 
-```text
+```yaml
 ruleId: PATHS_ARE_WORKSPACE_RELATIVE_AND_CANONICAL
 status: FINAL
 scope: RUN
@@ -10278,7 +10281,7 @@ condition:
 - absolute paths are rejected as policy targets
 - drive-qualified paths are rejected as policy targets
 - UNC paths are rejected as policy targets
-- `..` path escape outside workspaceRootRef is rejected
+- "`..` path escape outside workspaceRootRef is rejected"
 - realpath escape outside selectedWorkspaceRootRealPath is rejected
 - original path casing and raw path string are preserved as evidence
 allowedEffect:
@@ -10295,15 +10298,15 @@ evidence:
 - selectedWorkspaceRootRealPath
 - violationCode
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - move change inside workspace
 - remove absolute / escaped path from task scope
 - rerun through a new Run after path correction
 ```
 
-```text
+```yaml
 ruleId: DENIED_PATHS_OVERRIDE_ALLOWED_PATHS
 status: FINAL
 scope: RUN
@@ -10336,15 +10339,15 @@ evidence:
 - matchedDeniedPath
 - violationCode
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - remove denied path change
 - narrow task scope
 - update Project Profile policy only through review
 ```
 
-```text
+```yaml
 ruleId: SYMLINK_TARGET_MUST_NOT_ESCAPE_PATH_POLICY
 status: FINAL
 scope: RUN
@@ -10383,15 +10386,15 @@ evidence:
 - matchedDeniedPath
 - violationCode
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - remove unsafe symlink
 - point symlink target inside allowed workspace scope
 - explicitly deny broken or unverifiable symlink targets
 ```
 
-```text
+```yaml
 ruleId: CASE_INSENSITIVE_PATH_MATCH_USES_CANONICAL_KEY
 status: FINAL
 scope: RUN
@@ -10430,8 +10433,8 @@ evidence:
 - matchedDeniedPath
 - violationCode or warningCode
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - rename paths to non-conflicting names
 - correct policy casing or path patterns
@@ -10519,11 +10522,11 @@ preconditions:
 condition:
   - patterns use only literal segments, single-segment `*`, and whole-segment `**`.
   - patterns contain no `?`, character class, brace expansion, negation, extglob, or regular expression.
-  - `**` occupies a whole path segment and never appears adjacent to other characters inside a segment.
-  - `*` never matches across a path separator.
+  - "`**` occupies a whole path segment and never appears adjacent to other characters inside a segment."
+  - "`*` never matches across a path separator."
   - matching is whole-path and never expands a prefix into an implicit subtree.
   - a pattern without a wildcard is an exact normalized path match.
-  - `dir/**` matches file paths under dir at any depth and does not match the directory entry itself.
+  - "`dir/**` matches file paths under dir at any depth and does not match the directory entry itself."
   - matching uses the canonical comparison key fixed by CASE_INSENSITIVE_PATH_MATCH_USES_CANONICAL_KEY.
 allowedEffect:
   - a subtree may be selected by writing an explicit `/**` suffix.
@@ -10549,7 +10552,7 @@ repairBehavior:
   - express exclusion through deniedPaths instead of negation
 ```
 
-```text
+```yaml
 ruleId: GENERATED_UNTRACKED_AND_GITIGNORED_FILES_ARE_POLICY_SUBJECTS
 status: FINAL
 scope: RUN
@@ -10588,15 +10591,15 @@ evidence:
 - matchedDeniedPath
 - violationCode
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - remove unauthorized generated output
 - add explicit generated output policy through review
 - extend scoped snapshot coverage when evidence is insufficient
 ```
 
-```text
+```yaml
 ruleId: DELETE_AND_RENAME_CHECK_SOURCE_AND_TARGET
 status: FINAL
 scope: RUN
@@ -10636,15 +10639,15 @@ evidence:
 - matchedDeniedPath
 - violationCode
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - revert unauthorized delete or rename
 - restrict task scope
 - update policy only through review when intended
 ```
 
-```text
+```yaml
 ruleId: NESTED_REPO_AND_SUBMODULE_REQUIRE_EXPLICIT_ALLOW
 status: FINAL
 scope: RUN
@@ -10682,15 +10685,15 @@ evidence:
 - explicit allow reference when present
 - violationCode
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - remove nested repo / submodule modification
 - model the repo as a separate workspace or component
 - add explicit policy only through review
 ```
 
-```text
+```yaml
 ruleId: S2_RUN_ATTEMPT_ALWAYS_LEAVES_THREE_ARTIFACTS
 status: FINAL
 scope: RUN
@@ -10743,8 +10746,8 @@ evidence:
 - adapterError.code when synthetic
 - unavailableReason fields when observation failed
 failureFinding:
-- category = EXECUTION_EVIDENCE_INTEGRITY
-- severity = WARNING
+  category: EXECUTION_EVIDENCE_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - preserve all existing raw artifacts
 - create synthetic AdapterResult only when failure condition is known from Harness evidence
@@ -10752,7 +10755,7 @@ repairBehavior:
 - rerun through a new Run if any required artifact cannot be reconstructed deterministically
 ```
 
-```text
+```yaml
 ruleId: ADAPTER_REQUEST_AND_RESULT_ARE_RUN_TRACE_ARTIFACTS
 status: FINAL
 scope: RUN
@@ -10806,8 +10809,8 @@ evidence:
 - diffRef or changedFiles
 - commandLogRef or commands unavailableReason
 failureFinding:
-- category = EXECUTION_EVIDENCE_INTEGRITY
-- severity = WARNING
+  category: EXECUTION_EVIDENCE_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - preserve existing raw artifacts
 - create missing synthetic AdapterResult when failure condition is known
@@ -10816,7 +10819,7 @@ repairBehavior:
 
 ### 5.2 Project Profile 구조 FINAL RULE
 
-```text
+```yaml
 ruleId: PROFILE_CONFIG_IS_WORKSPACE_CONTRACT
 status: FINAL
 scope: POLICY
@@ -10846,13 +10849,13 @@ evidence:
 - workspaceRoot
 - validationRuleSetVersion
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = CORRUPTION
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: CORRUPTION
 repairBehavior:
 - manual edit of .codefleet/config.json or CodeFleet version/schema migration is required
 ```
 
-```text
+```yaml
 ruleId: PROFILE_TOP_LEVEL_KEYS_FIXED
 status: FINAL
 scope: POLICY
@@ -10864,8 +10867,7 @@ inputs:
 preconditions:
 - PROFILE_CONFIG_IS_WORKSPACE_CONTRACT passed
 condition:
-- top-level keys are exactly:
-  schemaVersion, project, workspace, defaults, policies, references, localPolicy
+- "top-level keys are exactly schemaVersion, project, workspace, defaults, policies, references, localPolicy"
 allowedEffect:
 - Project Profile block-level validation may continue
 - policy merge may read declared top-level blocks
@@ -10878,13 +10880,13 @@ evidence:
 - missingKeys
 - unexpectedKeys
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = CORRUPTION
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: CORRUPTION
 repairBehavior:
 - manual Project Profile schema correction is required
 ```
 
-```text
+```yaml
 ruleId: PROFILE_POLICY_BLOCK_KEYS_FIXED
 status: FINAL
 scope: POLICY
@@ -10897,8 +10899,7 @@ preconditions:
 - PROFILE_TOP_LEVEL_KEYS_FIXED passed
 - policies is an object
 condition:
-- policies keys are exactly:
-  harness, agentAdapters, files, commands, risk, verification, redaction, carryForward, agentRoles
+- "policies keys are exactly harness, agentAdapters, files, commands, risk, verification, redaction, carryForward, agentRoles"
 allowedEffect:
 - policy block validators may run
 - policy merge may read the validated policies block
@@ -10911,13 +10912,13 @@ evidence:
 - missingPolicyKeys
 - unexpectedPolicyKeys
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = CORRUPTION
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: CORRUPTION
 repairBehavior:
 - manual Project Profile policy block correction is required
 ```
 
-```text
+```yaml
 ruleId: PROFILE_DOES_NOT_STORE_RUNTIME_OR_LOCAL_STATE
 status: FINAL
 scope: POLICY
@@ -10951,8 +10952,8 @@ evidence:
 - matchedValueKind
 - pathValue
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = CORRUPTION
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: CORRUPTION
 repairBehavior:
 - move runtime evidence to Run Trace
 - move execution summary to Run Summary
@@ -10960,7 +10961,7 @@ repairBehavior:
 - remove secrets and rotate exposed credentials outside CodeFleet
 ```
 
-```text
+```yaml
 ruleId: PROFILE_LOCAL_OVERLAY_RESTRICT_ONLY
 status: FINAL
 scope: POLICY
@@ -10997,15 +10998,15 @@ evidence:
 - beforeEffectivePolicyHash
 - afterEffectivePolicyHash
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = WARNING
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - remove relaxing Local Overlay keys
 - move unsupported local values outside CodeFleet
 - update localPolicy.allowedLocalKeys only through Project Profile review
 ```
 
-```text
+```yaml
 ruleId: PROFILE_EFFECTIVE_POLICY_IS_DERIVED
 status: FINAL
 scope: POLICY
@@ -11044,8 +11045,8 @@ evidence:
 - mergeOrder
 - policyOrderTablesVersion
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = CORRUPTION
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: CORRUPTION
 repairBehavior:
 - rebuild effectivePolicy from source policies
 - remove derived policy state from config.json if present
@@ -12818,7 +12819,7 @@ Run Plan / AdapterRequest capabilities.deniedPaths
 
 따라서 Task Revision은 최종 `allowedPaths / deniedPaths` 권한 결과를 직접 소유하지 않는다. Task Revision은 path intent와 restriction source를 제공하고, Run Planning이 effectivePolicy를 통해 최종 allowed / denied capability snapshot을 만든다.
 
-```text
+```yaml
 ruleId: TASK_REVISION_MINIMUM_CONTRACT_IS_SOURCE_ONLY
 status: FINAL
 scope: TASK_REVISION
@@ -12863,8 +12864,8 @@ evidence:
 - needsReview
 - forbidden field findings
 failureFinding:
-- category = POLICY_ENFORCEMENT_INTEGRITY
-- severity = CORRUPTION
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: CORRUPTION
 repairBehavior:
 - edit Task Draft and create a new Task Revision
 - remove derived / decision / evidence / provider-local values from the Task source
@@ -13408,6 +13409,29 @@ Export Harness
 
 ### 8.2.2 Harness-visible command channel
 
+이 문서에는 `authority`라는 이름의 필드가 세 개 있고 값 집합이 서로 다르다. 같은 enum이 아니다.
+
+```text
+verification authority   5값  NONE | PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED | HARNESS_EXECUTED | WAIVED_BY_POLICY
+                              VerificationEvidence 최상위 authority
+
+command authority        4값  NONE | PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED | HARNESS_EXECUTED
+                              commandAttempt, HarnessObservation commandEvidence,
+                              SanitizedRunSummary verificationResults[]
+
+changedFiles authority   3값  NONE | PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED
+                              changedFilesAuthority
+```
+
+값 집합이 다른 이유는 각 대상이 취할 수 있는 상태가 다르기 때문이다.
+
+```text
+- 명령은 waive될 수 없다. 검증 게이트가 waive되는 것이지 명령 실행이 waive되지 않는다.
+- 변경 파일 목록은 실행되는 것이 아니므로 HARNESS_EXECUTED가 성립하지 않는다.
+```
+
+구현에서 이 셋을 하나의 타입으로 합치면 안 된다. 합치면 `changedFilesAuthority = HARNESS_EXECUTED`나 `commandAuthority = WAIVED_BY_POLICY` 같은 표현 불가능한 상태가 타입상 허용된다.
+
 명령 증거의 authority는 다음 넷 중 하나다.
 
 ```text
@@ -13683,7 +13707,46 @@ destructiveCommands:
   - categoryId: ""
     argv: []
     matchMode: "PREFIX | EXACT"
+    definedByRef:
+      path: ""
+      hash: ""
 ```
+
+Core destructive command category 집합:
+
+```text
+INFRA_APPLY
+= 인프라 상태를 실제로 변경하는 적용 명령
+= terraform apply, kubectl apply 등
+
+INFRA_DESTROY
+= 인프라 자원을 파괴하는 명령
+= terraform destroy 등
+
+CLOUD_RESOURCE_MUTATION
+= 클라우드 자원을 생성 / 변경 / 삭제하는 provider CLI 명령
+= aws / gcloud / az 계열의 mutation 서브커맨드
+
+SERVICE_LIFECYCLE
+= 실행 중인 서비스를 중지 / 재시작 / 비활성화하는 명령
+= systemctl stop|restart|disable, docker stop 등
+
+DEPLOYMENT_MUTATION
+= 배포 상태를 변경하는 명령
+= 배포 스크립트 실행, 릴리스 승격, 롤백 등
+
+DATA_DESTRUCTION
+= 데이터를 되돌릴 수 없게 삭제하는 명령
+= drop database, 대량 삭제 스크립트 등
+
+VCS_HISTORY_REWRITE
+= 공유 이력을 다시 쓰는 명령
+= git push --force, git filter-branch 등
+```
+
+이 일곱 개가 Core가 소유하는 categoryId다. Project Profile은 새 category를 추가할 수 있고, 그때도 id는 전체 공간에서 유일해야 하며 출처는 `definedByRef`가 기록한다.
+
+AgentRole의 `deniedCommandCategories`는 이 집합의 categoryId만 참조한다. 새 식별자 공간을 만들지 않는다.
 
 ```text
 - categoryId는 durable approval이 참조하는 승인 단위다.
@@ -14305,6 +14368,9 @@ rules:
     pattern: ""
     action: "REDACTED | DROPPED | RELATIVIZED | HASHED"
     appliesTo: []
+    definedByRef:
+      path: ""
+      hash: ""
 ```
 
 `appliesTo`는 sanitized field path 목록이며 비어 있으면 sanitized 내용 전체에 적용한다. 표기는 export field allowlist와 같은 것을 쓴다. 새 경로 표기를 만들지 않는다.
@@ -14919,7 +14985,7 @@ repairBehavior:
   - keep the drop when the field is not intended for export
 ```
 
-```text
+```yaml
 ruleId: S5_EXPORT_SEAM_USES_SANITIZED_SUMMARY_ONLY
 status: FINAL
 scope: EXPORT
@@ -14962,8 +15028,8 @@ evidence:
 - exportAttemptId and result
 - blockedReasons when export was blocked
 failureFinding:
-- category = EXECUTION_EVIDENCE_INTEGRITY
-- severity = WARNING
+  category: EXECUTION_EVIDENCE_INTEGRITY
+  severity: WARNING
 repairBehavior:
 - regenerate sanitized artifacts from run-summary.json after policy correction
 - retry export by creating a new exportAttempt
