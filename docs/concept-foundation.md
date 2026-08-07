@@ -2795,7 +2795,10 @@ matchTarget
 = PATH | COMMAND | AGENT_ROLE | TASK_SCOPE | DIFF | FILE_CONTENT | RUN_EVIDENCE | HUMAN_OVERRIDE | LLM_SIGNAL
 
 matchCondition
-= glob / exact command / structured field predicate
+= matchTarget이 선택한 matcher의 condition
+= glob (PATH / TASK_SCOPE / DIFF), argv + matchMode (COMMAND),
+  pattern (FILE_CONTENT), field + anyOf (그 외)
+= 아래 risk rule 표현 문법 절에서 고정한다
 
 riskLevel
 = LOW | MEDIUM | HIGH
@@ -2825,7 +2828,8 @@ Risk 계산 불변식:
 
 ```text
 - 같은 Project Profile, Task Spec, Run evidence, rule set이면 같은 riskLevel이 계산된다.
-- riskLevel이 unknown이면 MEDIUM이 아니라 HIGH로 취급한다.
+- UNKNOWN은 HIGH가 아니다. LOW < MEDIUM < HIGH severity 축 위의 값이 아니라 미해결 상태다.
+- UNKNOWN은 concrete risk를 요구하는 모든 자동 진행을 차단한다.
 - risk rule 충돌 시 더 높은 riskLevel이 이긴다.
 - requiredGates 충돌 시 DecisionGate / EvidenceGate field별 더 엄격한 gate가 이긴다.
 ```
@@ -2844,6 +2848,194 @@ risk:
   humanOverride:
     raisedBy: user
     reason: production 영향 가능
+```
+
+#### Risk rule 표현 문법
+
+`matchCondition`은 `glob / exact command / structured field predicate`라고만 적혀 있었고 `structured field predicate`는 정의가 없었다. 아래가 그 정의다.
+
+risk rule은 자기만의 매칭 언어를 갖지 않는다. `matchTarget`이 이미 고정된 matcher 중 무엇을 쓸지 결정한다.
+
+```text
+PATH / TASK_SCOPE / DIFF        files policy glob matcher를 그대로 쓴다
+COMMAND                         command argv matcher를 그대로 쓴다
+FILE_CONTENT                    redaction의 선형 시간 정규식 부분집합을 그대로 쓴다
+AGENT_ROLE / RUN_EVIDENCE
+/ HUMAN_OVERRIDE / LLM_SIGNAL   선언적 field predicate를 쓴다
+```
+
+`FILE_CONTENT`에 정규식 부분집합을 허용하는 근거는 redaction과 같다. risk rule 매칭은 위험도를 올리는 판정이므로 과다 매칭이 안전한 실패이고, 선형 시간 부분집합이므로 신뢰할 수 없는 파일 내용 위에서도 매칭 시간이 보장된다.
+
+선언적 field predicate는 표현식이 아니다.
+
+```yaml
+field: ""
+anyOf: []
+```
+
+필드 이름과 허용 값 집합뿐이다. 비교 연산자, 산술, 함수 호출을 두지 않는다.
+
+조건 결합:
+
+```text
+AND  한 rule 안의 allOf 평면 목록으로 표현한다. 중첩하지 않는다.
+OR   rule을 여러 개 쓴다.
+NOT  표현할 수 없다.
+```
+
+`OR`을 문법에 두지 않는 이유는 `computedRisk`가 이미 모든 매칭의 max로 고정돼 있기 때문이다. rule을 나누면 그 자체가 OR이 되므로 문법을 늘릴 필요가 없다.
+
+`NOT`을 두지 않는 이유는 risk lowering 우회를 막기 위해서다. 부정을 허용하면 매칭 실패를 조건으로 낮은 riskLevel을 부여하는 rule을 쓸 수 있고, 이는 `LLM signal은 risk를 낮출 수 없다`와 `explicit exemption만 risk를 낮출 수 있다`를 문법으로 우회하는 경로가 된다. 낮추기는 exemption 통로로만 간다.
+
+Risk rule entry:
+
+```yaml
+riskRules:
+  - ruleId: ""
+    matchTarget: "PATH | COMMAND | AGENT_ROLE | TASK_SCOPE | DIFF | FILE_CONTENT | RUN_EVIDENCE | HUMAN_OVERRIDE | LLM_SIGNAL"
+    allOf:
+      - matchTarget: ""
+        glob: ""
+        argv: []
+        matchMode: "PREFIX | EXACT"
+        pattern: ""
+        field: ""
+        anyOf: []
+    riskLevel: "LOW | MEDIUM | HIGH"
+    requiredGates: {}
+```
+
+한 condition은 자기 `matchTarget`에 해당하는 키만 갖는다.
+
+```text
+PATH / TASK_SCOPE / DIFF   -> glob
+COMMAND                    -> argv, matchMode
+FILE_CONTENT               -> pattern
+그 외                       -> field, anyOf
+```
+
+해당하지 않는 키가 있으면 정책 검증 실패다.
+
+```yaml
+ruleId: RISK_RULE_REUSES_FIXED_MATCHERS
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+  - Project Profile risk rules
+  - files policy glob matcher contract
+  - command argv matcher contract
+  - redaction pattern subset contract
+inputs:
+  - matchTarget
+  - condition keys
+  - normalized path / normalized command / file content / evidence field values
+preconditions:
+  - risk computation has started for a Task Revision or Run.
+condition:
+  - matchTarget selects which already-fixed matcher applies to a condition.
+  - PATH, TASK_SCOPE, and DIFF conditions use the files policy glob matcher.
+  - COMMAND conditions use the command argv matcher and its matchMode.
+  - FILE_CONTENT conditions use the redaction linear-time regex subset.
+  - remaining match targets use a declarative field and anyOf predicate.
+  - a condition carries only the keys its matchTarget defines.
+  - risk rules introduce no matching language of their own.
+allowedEffect:
+  - a risk rule may combine conditions across different match targets.
+  - the same pattern shape may be reused between risk rules and policy matchers.
+deniedEffect:
+  - CodeFleet cannot define a fourth pattern language for risk matching.
+  - CodeFleet cannot accept comparison operators, arithmetic, or function calls in a predicate.
+  - CodeFleet cannot accept a condition carrying keys outside its matchTarget.
+evidence:
+  - ruleId
+  - matchTarget
+  - matched condition
+  - matched path / command / content offset / field value
+  - resulting riskLevel
+failureFinding:
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: CORRUPTION
+repairBehavior:
+  - rewrite the condition using the matcher its matchTarget selects
+  - split a multi-target condition into separate allOf entries
+```
+
+```yaml
+ruleId: RISK_RULE_CONJUNCTION_IS_FLAT_AND_NEGATION_IS_DENIED
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+  - Project Profile risk rules
+  - computedRisk max-severity calculation
+  - risk lowering rules
+inputs:
+  - allOf condition list
+  - matched condition results
+  - rule riskLevel
+preconditions:
+  - a risk rule is being evaluated against Task Revision or Run evidence.
+condition:
+  - conditions inside one rule combine as a flat allOf conjunction.
+  - allOf entries do not nest.
+  - disjunction is expressed by writing separate rules, since computedRisk is the max of all matches.
+  - negation is not expressible in a risk rule.
+  - a rule contributes its riskLevel only when every allOf condition matched.
+allowedEffect:
+  - several rules may match and the highest riskLevel wins.
+  - a rule may require conditions from different match targets at once.
+deniedEffect:
+  - CodeFleet cannot express a risk rule that fires on a failed match.
+  - CodeFleet cannot lower risk through an unmatched condition.
+  - CodeFleet cannot nest boolean structure inside a rule.
+evidence:
+  - ruleId
+  - allOf condition results
+  - whether the rule contributed
+  - contributing rule set for the computed max
+failureFinding:
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: CORRUPTION
+repairBehavior:
+  - split an OR intent into separate rules
+  - express a lowering intent through an explicit risk exemption instead of negation
+```
+
+```yaml
+ruleId: UNKNOWN_RISK_IS_UNRESOLVED_STATE_NOT_HIGH_SEVERITY
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+  - computedRisk value
+  - policies.risk.defaultLevel semantics
+  - required gate evaluation
+inputs:
+  - risk rule match results
+  - available evidence
+  - policy source requiring unknown-as-blocking when declared
+preconditions:
+  - risk computation has completed or failed to resolve a concrete level.
+condition:
+  - UNKNOWN is not a value on the LOW < MEDIUM < HIGH severity axis.
+  - UNKNOWN means no concrete risk could be determined from available evidence.
+  - UNKNOWN blocks every automatic progression that requires a concrete risk level.
+  - UNKNOWN is not rewritten to HIGH and is not rewritten to MEDIUM.
+allowedEffect:
+  - diagnostics may report UNKNOWN with the unresolved inputs named.
+  - a policy source may declare unknown-as-blocking explicitly.
+deniedEffect:
+  - CodeFleet cannot compare UNKNOWN against a concrete level as if it were higher or lower.
+  - CodeFleet cannot auto-advance a queue item whose computedRisk is UNKNOWN.
+  - CodeFleet cannot satisfy a concrete risk ceiling with UNKNOWN.
+evidence:
+  - computedRisk
+  - unresolved input list
+  - blocked progression reason
+failureFinding:
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: WARNING
+repairBehavior:
+  - supply the missing evidence and recompute risk
+  - add an explicit risk rule covering the unresolved case
 ```
 
 최종 원칙:
@@ -5018,6 +5210,7 @@ PASS:
 - Export adapter field allowlist (exposure tier / leaf field path / unknown field 처리)
 - Files policy glob matcher 문법 (제한된 * / ** 부분집합)
 - Redaction pattern language (선형 시간 정규식 부분집합 / action 강도 순서 / 실패 시 export 차단)
+- Risk rule 표현 문법 (기존 matcher 재사용 / 평면 AND / NOT 금지 / UNKNOWN 의미)
 
 PASS_AFTER_REINFORCEMENT:
 - Risk 판단 원칙
@@ -5037,7 +5230,7 @@ RESOLVED_AFTER_THIS_LIST_WAS_WRITTEN:
 
 NOT_FINAL_YET:
 - 5.3의 나머지 DESIGN CANDIDATE 문법 항목
-  -> risk rule expression / agentRoles 내부 taxonomy / profile rule id 네이밍
+  -> agentRoles 내부 taxonomy / profile rule id 네이밍
 ```
 
 `NOT_FINAL_YET` 항목은 확정 규칙이 아니다. 이 항목들은 다음 논의에서 같은 기준으로 하나씩 FINAL RULE로 승격하거나 VERSION_PLAN으로 남긴다.
@@ -8691,6 +8884,8 @@ policies:
     requireHarnessVisibleCommandChannel: true
     allowProviderReportedCommandTruth: false
   risk:
+    # riskRules entry: { ruleId, matchTarget, allOf: [], riskLevel, requiredGates }
+    # condition keys are selected by matchTarget; see the risk rule expression section
     defaultLevel: "UNKNOWN"
     maxWithoutIsolation: "MEDIUM"
     maxWithProviderReportedOnlyEvidence: "HIGH"
@@ -10859,7 +11054,6 @@ repairBehavior:
 
 ```text
 DESIGN CANDIDATE:
-- risk policy rule expression 세부 문법
 - agentRoles 내부 role taxonomy
 - profile rule id 세부 네이밍 체계
 
@@ -10874,6 +11068,10 @@ FIXED:
   -> REDACTION_PATTERN_IS_LINEAR_TIME_REGEX_SUBSET
   -> REDACTION_ACTION_STRICTNESS_ORDER_IS_FIXED
   -> REDACTION_RULE_FAILURE_BLOCKS_EXPORT
+- risk policy rule expression 문법
+  -> RISK_RULE_REUSES_FIXED_MATCHERS
+  -> RISK_RULE_CONJUNCTION_IS_FLAT_AND_NEGATION_IS_DENIED
+  -> UNKNOWN_RISK_IS_UNRESOLVED_STATE_NOT_HIGH_SEVERITY
 ```
 
 ```text
@@ -15593,29 +15791,33 @@ repairBehavior:
 - redaction action 강도는 DROPPED > REDACTED > HASHED > RELATIVIZED이며 HASHED는 동일성 상관관계를 남기므로 REDACTED보다 약하다는 원칙
 - 잘못된 redaction rule은 건너뛰지 않고 sanitization을 불완전으로 만들어 export를 차단한다는 원칙
 - redaction은 exposure tier 필터 이후에 적용하며 두 단계 결과를 같은 redaction-report에 기록한다는 원칙
+- risk rule은 자기 매칭 언어를 갖지 않고 matchTarget이 files glob / command argv / redaction 정규식 부분집합 / 선언적 field predicate 중 하나를 선택한다는 원칙
+- risk rule 조건 결합은 평면 allOf이고 OR은 rule 분리로 표현하며 NOT은 매칭 실패를 통한 risk lowering 우회를 막기 위해 표현할 수 없다는 원칙
+- UNKNOWN risk는 HIGH가 아니라 severity 축 밖의 미해결 상태이며 concrete risk를 요구하는 자동 진행을 차단한다는 원칙
 ```
 
 다음으로 논의할 항목:
 
 ```text
-1. risk policy rule expression 문법
-   - define deterministic risk rule evaluation without free-form expressions
-   - keep risk lowering restrictions and UNKNOWN semantics intact
-
-2. agentRoles 내부 role taxonomy
+1. agentRoles 내부 role taxonomy
    - define the role id set and its max capability mapping
    - keep AgentRole as classification, never a permission grant
 
-3. profile rule id 네이밍 체계
+2. profile rule id 네이밍 체계
    - define a stable naming scheme for policy rule ids
+
+3. 정합성 최종 재감사
+   - re-check the 0.13 status list
+   - separate the three enums all named authority, or state that they differ
+   - unify rule block fences
 ```
 
 논의 순서 이유:
 
 ```text
-- risk rule expression은 판정 로직이므로 명명 규칙보다 먼저 고정한다.
 - agentRoles taxonomy는 이미 고정된 classification 원칙 위에서 id 집합만 정하면 된다.
-- rule id 네이밍은 판정에 영향을 주지 않으므로 마지막이다.
+- rule id 네이밍은 판정에 영향을 주지 않으므로 그 다음이다.
+- 최종 재감사는 모든 항목이 고정된 뒤에 한 번에 수행한다.
 ```
 
 ## 16. 다음 세션에서 이어갈 때

@@ -47,7 +47,7 @@ Important criteria:
 Design is being completed first. Implementation resumes only after the
 remaining design items are fixed.
 
-The next design topic is risk policy rule expression syntax.
+The next design topic is agentRoles role taxonomy.
 The next implementation topic is v0.2 local review, held until design is done.
 ```
 
@@ -64,17 +64,16 @@ execution through logs, diffs, tests, and review evidence.
 ## Progress
 
 ```text
-Final model / concept design: about 95%
+Final model / concept design: about 96%
 Implementation: about 25-35%
 ```
 
 Remaining design items:
 
 ```text
-1. risk policy rule expression syntax
-2. agentRoles role taxonomy
-3. profile rule id naming scheme
-4. final consistency re-audit
+1. agentRoles role taxonomy
+2. profile rule id naming scheme
+3. final consistency re-audit
 ```
 
 Current implementation status:
@@ -122,6 +121,7 @@ S2 Adapter seam
 -> Export adapter field allowlist tiers
 -> Files policy glob matcher syntax
 -> Redaction pattern language
+-> Risk rule expression syntax
 ```
 
 Important fixed boundaries:
@@ -169,29 +169,32 @@ Important fixed boundaries:
 - Redaction action strictness is DROPPED > REDACTED > HASHED > RELATIVIZED; HASHED ranks below REDACTED because a hash preserves equality correlation.
 - A broken redaction rule is never skipped; it makes sanitization incomplete and blocks export.
 - Redaction runs after exposure tier filtering, and both stages record into the same redaction-report.
+- Risk rules carry no matching language of their own; matchTarget selects the files glob matcher, the command argv matcher, the redaction regex subset, or a declarative field predicate.
+- Risk rule conditions combine as a flat allOf; OR is expressed by separate rules since computedRisk is a max, and NOT is denied so a failed match cannot lower risk.
+- UNKNOWN risk is an unresolved state off the LOW < MEDIUM < HIGH axis, never rewritten to HIGH, and it blocks progression that needs a concrete level.
 ```
 
 ## Current Bottleneck
 
 ```text
-risk policy rule expression syntax
+agentRoles role taxonomy
 ```
 
 Why this is next:
 
 ```text
 Design is being completed before further implementation.
-Every matcher and pattern item is now fixed: commands, files, export field allowlist, and redaction.
-risk rule expression is the last remaining judgement-logic syntax item, so it comes before the naming-level items.
-agentRoles taxonomy and profile rule id naming follow, then the final consistency re-audit.
+Every judgement-logic syntax item is now fixed: commands, files, export field allowlist, redaction, and risk rules.
+Only naming-level items remain, then the final consistency re-audit.
+agentRoles taxonomy sits on the already-fixed rule that AgentRole is classification and max capability input, never a permission grant.
 ```
 
 Expected next design slice:
 
 ```text
-1. Define deterministic risk rule evaluation without free-form expressions.
-2. Keep risk lowering restrictions and UNKNOWN semantics intact.
-3. Then define agentRoles role taxonomy and profile rule id naming.
+1. Define the role id set and its max capability mapping.
+2. Keep AgentRole as classification, never a permission grant.
+3. Then define the profile rule id naming scheme.
 4. Then run the final consistency re-audit.
 ```
 

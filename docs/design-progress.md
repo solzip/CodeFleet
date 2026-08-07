@@ -19,14 +19,14 @@ README.md                    현재 구현 사용법
 
 ```text
 Phase 0-9    완료      76단계
-Phase 10     진행 중   8단계 중 4단계 완료, 남은 설계 4단계
+Phase 10     진행 중   8단계 중 5단계 완료, 남은 설계 3단계
 Phase 11     대기      설계 확정 후 구현 재개
 ```
 
 ```text
-전체 87단계 중 80단계 완료
-FINAL RULE 76개
-설계 진행도: 약 95%
+전체 87단계 중 81단계 완료
+FINAL RULE 79개
+설계 진행도: 약 96%
 구현 진행도: 약 25-35%
 ```
 
@@ -189,8 +189,11 @@ FINAL RULE 76개
         - 선형 시간 정규식 부분집합 (역참조 / 룩어라운드 금지)
         - action 강도 순서 DROPPED > REDACTED > HASHED > RELATIVIZED
         - 잘못된 rule은 건너뛰지 않고 export 차단
-[ ] 81. risk policy rule expression 문법                                <- 다음, 미착수
-[ ] 82. agentRoles 내부 role taxonomy
+[x] 81. risk policy rule expression 문법
+        - matchTarget이 기존 matcher 3종 + 선언적 predicate 중 선택, 새 언어 없음
+        - AND는 평면 allOf / OR은 rule 분리 / NOT은 표현 불가
+        - UNKNOWN은 HIGH가 아니라 severity 축 밖의 미해결 상태 (기존 모순 해소)
+[ ] 82. agentRoles 내부 role taxonomy                                  <- 다음, 미착수
 [ ] 83. profile rule id 네이밍 체계
 [ ] 84. 정합성 최종 재감사
         - 0.13 상태 목록 재확인
@@ -209,6 +212,14 @@ FINAL RULE 76개
 남김: 규칙 블록 fence 표기 불일치                -> 84번
 ```
 
+81번에서 모순 1건을 추가로 찾아 고쳤다.
+
+```text
+고침: UNKNOWN risk를 0.8은 HIGH로 접고 병합 규칙은 severity 축 밖이라고 해
+      정면으로 상충하던 문제. computedRisk enum과 gate 조건 세 곳이
+      모두 별도 상태 편이라 0.8을 수정했다.
+```
+
 논의 순서 이유:
 
 ```text
@@ -217,7 +228,8 @@ FINAL RULE 76개
 - 79는 기존 예시와 사용자 Task가 이미 ** 표기를 쓰고 있어 토큰 모델이 아니라 제한된 glob으로 갔다.
 - 79의 case 처리는 CASE_INSENSITIVE_PATH_MATCH_USES_CANONICAL_KEY가 이미 고정해 두어 새로 정하지 않았다.
 - 80은 남은 문법 중 유일하게 외부로 나가는 데이터를 직접 통제하므로 먼저 고정했다.
-- 81 이후는 판정 로직 -> 명명 규칙 순서로 간다.
+- 81은 판정 로직이라 명명 규칙보다 먼저 고정했고, 매칭은 77 / 79 / 80을 재사용해 새 언어를 만들지 않았다.
+- 82 이후는 명명 규칙이라 판정에 영향을 주지 않는다.
 ```
 
 남은 설계의 성격:
