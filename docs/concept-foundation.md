@@ -5016,6 +5016,7 @@ PASS:
 - Mutation Engine minimum contract (phase 경계 / mutationId 멱등성 / lock / corrective event 경계)
 - Command normalization / matcher 문법 / destructive category 승인 단위
 - Export adapter field allowlist (exposure tier / leaf field path / unknown field 처리)
+- Files policy glob matcher 문법 (제한된 * / ** 부분집합)
 
 PASS_AFTER_REINFORCEMENT:
 - Risk 판단 원칙
@@ -5035,7 +5036,7 @@ RESOLVED_AFTER_THIS_LIST_WAS_WRITTEN:
 
 NOT_FINAL_YET:
 - 5.3의 나머지 DESIGN CANDIDATE 문법 항목
-  -> files glob matcher / risk rule expression / redaction pattern language /
+  -> risk rule expression / redaction pattern language /
      agentRoles 내부 taxonomy / profile rule id 네이밍
 ```
 
@@ -10198,6 +10199,117 @@ repairBehavior:
 - rerun after case collision is resolved
 ```
 
+#### Files policy glob matcher
+
+`allowedPaths` / `deniedPaths` entry는 제한된 glob 부분집합이다. command matcher와 달리 토큰 배열을 쓰지 않는다. 경로 정책은 디렉터리 서브트리를 지정해야 하고, 이미 고정된 예시와 사용자 Task가 `src/main/java/**` 같은 표기를 쓰고 있기 때문이다.
+
+허용 문법:
+
+```text
+literal   경로 세그먼트 문자 그대로
+*         한 세그먼트 안에서만 매칭한다. / 를 넘지 않는다.
+**        0개 이상의 세그먼트 전체와 매칭한다.
+```
+
+금지 문법:
+
+```text
+?         단일 문자 와일드카드
+[abc]     문자 클래스와 범위
+{a,b}     중괄호 확장
+!         부정
+extglob   확장 glob
+정규식
+```
+
+금지 항목을 두는 이유는 표현력 대비 판정 위험이다. 문자 범위는 로케일에 따라 다르게 해석될 수 있고, 중괄호 확장은 구현마다 전개 순서가 다르다. 확정 규칙은 deterministic해야 하므로 두 문법 모두 배제한다. 금지 목록의 문법은 현재 고정된 예시 어디에서도 쓰이지 않으므로 표현력 손실이 없다.
+
+`**`는 세그먼트 전체를 차지해야 한다.
+
+```text
+유효:  src/**
+유효:  **/target/**
+유효:  **/.env
+유효:  src/**/test/*.java
+
+무효:  src**
+무효:  a**b
+무효:  **.java
+```
+
+세그먼트 경계를 강제하지 않으면 `a**b`가 세그먼트 내 와일드카드인지 경로 확장인지 모호해진다.
+
+매칭은 전체 경로 기준이며 암묵적 서브트리 확장이 없다.
+
+```text
+"src/main"     -> src/main/java/A.java 에 매칭되지 않는다
+"src/main/**"  -> src/main/java/A.java 에 매칭된다
+```
+
+와일드카드가 없는 패턴은 normalized path와의 정확한 일치다.
+
+`dir/**`는 디렉터리 엔트리 자체에 매칭되지 않는다.
+
+```text
+"src/**" 는 src 아래 모든 깊이의 파일 경로에 매칭한다.
+"src/**" 는 디렉터리 엔트리 src 에는 매칭하지 않는다.
+```
+
+정책 평가 대상은 changed path이고 changed path는 파일 경로이므로, 디렉터리 엔트리를 매칭 대상으로 두면 판정 결과가 애매해진다.
+
+부정 문법을 두지 않는 이유는 부정 경로가 이미 존재하기 때문이다. 제외는 `deniedPaths`로만 표현하며, `deniedPaths`는 `DENIED_PATHS_OVERRIDE_ALLOWED_PATHS`에 따라 `allowedPaths`보다 먼저 평가된다. 패턴 안에 `!`를 추가하면 부정 경로가 둘이 되고 우선순위를 새로 정의해야 한다.
+
+대소문자 처리는 이 절에서 정하지 않는다. `CASE_INSENSITIVE_PATH_MATCH_USES_CANONICAL_KEY`가 이미 고정했고, glob 매칭도 같은 canonical comparison key 위에서 수행한다. command matcher의 case 비대칭은 경로에 적용되지 않는다. 명령은 `argv[0]`이 PATH 탐색으로 해석되어 Harness가 대소문자 동작을 알 수 없지만, 경로는 Harness가 파일시스템 case sensitivity를 탐지하므로 allowed와 denied가 같은 진실 위에서 대칭으로 판정할 수 있다.
+
+```yaml
+ruleId: FILES_POLICY_MATCHER_IS_BOUNDED_GLOB_SUBSET
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+  - Project Profile policies.files allowedPaths / deniedPaths
+  - Task Revision guardrail path restrictions
+  - Local Overlay restrictions
+  - normalized workspace-relative path
+  - canonical comparison key
+inputs:
+  - pattern entries
+  - normalizedPath
+  - filesystem case sensitivity
+preconditions:
+  - path passed PATHS_ARE_WORKSPACE_RELATIVE_AND_CANONICAL.
+condition:
+  - patterns use only literal segments, single-segment `*`, and whole-segment `**`.
+  - patterns contain no `?`, character class, brace expansion, negation, extglob, or regular expression.
+  - `**` occupies a whole path segment and never appears adjacent to other characters inside a segment.
+  - `*` never matches across a path separator.
+  - matching is whole-path and never expands a prefix into an implicit subtree.
+  - a pattern without a wildcard is an exact normalized path match.
+  - `dir/**` matches file paths under dir at any depth and does not match the directory entry itself.
+  - matching uses the canonical comparison key fixed by CASE_INSENSITIVE_PATH_MATCH_USES_CANONICAL_KEY.
+allowedEffect:
+  - a subtree may be selected by writing an explicit `/**` suffix.
+  - several patterns may be listed when several shapes must match.
+deniedEffect:
+  - CodeFleet cannot introduce a wider pattern language into path matching.
+  - CodeFleet cannot treat an intermediate path as covering its subtree.
+  - CodeFleet cannot express exclusion through pattern negation.
+  - CodeFleet cannot accept a `**` that shares a segment with other characters.
+evidence:
+  - pattern entry
+  - normalizedPath
+  - canonicalComparisonKey
+  - matchedAllowedPath
+  - matchedDeniedPath
+  - match decision
+failureFinding:
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: CORRUPTION
+repairBehavior:
+  - reject the policy source that contains an unsupported pattern
+  - rewrite the pattern using literal segments, `*`, and whole-segment `**`
+  - express exclusion through deniedPaths instead of negation
+```
+
 ```text
 ruleId: GENERATED_UNTRACKED_AND_GITIGNORED_FILES_ARE_POLICY_SUBJECTS
 status: FINAL
@@ -10704,7 +10816,6 @@ repairBehavior:
 
 ```text
 DESIGN CANDIDATE:
-- files policy glob matcher 세부 문법
 - risk policy rule expression 세부 문법
 - redaction policy pattern language
 - agentRoles 내부 role taxonomy
@@ -10715,6 +10826,8 @@ FIXED:
   -> COMMAND_NORMALIZATION_IS_ARGV_BASED_AND_SHELL_FREE
   -> COMMAND_MATCHER_IS_ARGV_PREFIX_WITHOUT_PATTERN_LANGUAGE
   -> DESTRUCTIVE_COMMAND_CATEGORY_IS_APPROVAL_UNIT
+- files policy glob matcher 문법
+  -> FILES_POLICY_MATCHER_IS_BOUNDED_GLOB_SUBSET
 ```
 
 ```text
@@ -15198,29 +15311,34 @@ repairBehavior:
 - target은 선언한 tier를 더 좁힐 수만 있고 field path를 추가할 수 없으며 Project Profile / Local Overlay도 넓힐 수 없다는 원칙
 - export field path는 와일드카드 없이 leaf까지 명시하며 중간 노드 경로는 하위 필드를 덮지 않는다는 원칙
 - allowlist에 없는 필드는 DROPPED로 처리하고 redaction-report에 SCHEMA_UNKNOWN_FIELD로 기록한다는 원칙
+- files policy 경로 패턴은 literal / 단일 세그먼트 * / 전체 세그먼트 ** 만 허용하고 문자 클래스, 중괄호 확장, 부정, 정규식을 쓰지 않는다는 원칙
+- 경로 매칭은 전체 경로 기준이며 중간 경로가 서브트리를 암묵적으로 덮지 않고 dir/** 는 디렉터리 엔트리 자체에 매칭되지 않는다는 원칙
+- 경로 제외는 패턴 부정이 아니라 deniedPaths로만 표현하며 대소문자 판정은 CASE_INSENSITIVE_PATH_MATCH_USES_CANONICAL_KEY의 canonical key를 그대로 쓴다는 원칙
 ```
 
 다음으로 논의할 항목:
 
 ```text
-1. files policy glob matcher 문법
-   - decide whether path matching reuses the argv-style token model or needs a bounded glob subset
-   - define deterministic matching for allowedPaths / deniedPaths
-   - keep the case asymmetry consistent with command matching
+1. redaction policy pattern language
+   - decide whether secret / token detection can reuse a bounded literal matcher or genuinely needs expressions
+   - define what an unmatchable pattern produces
+   - keep blockedExport semantics unchanged
 
-2. 5.3의 나머지 DESIGN CANDIDATE 문법 항목
-   - risk policy rule expression 문법
-   - redaction policy pattern language
-   - agentRoles 내부 role taxonomy
-   - profile rule id 네이밍 체계
+2. risk policy rule expression 문법
+   - define deterministic risk rule evaluation without free-form expressions
+   - keep risk lowering restrictions intact
+
+3. agentRoles 내부 role taxonomy
+
+4. profile rule id 네이밍 체계
 ```
 
 논의 순서 이유:
 
 ```text
-- files glob matcher는 command matcher가 정한 결정론 기준과 case 비대칭 원칙을 그대로 이어받는다.
-- redaction pattern language는 files glob matcher가 고정된 뒤 같은 형식을 따라간다.
-- 나머지 문법 항목은 위 둘이 고정된 뒤 같은 형식을 따라간다.
+- redaction pattern language는 남은 문법 항목 중 유일하게 외부로 나가는 데이터를 직접 통제하므로 먼저 고정한다.
+- risk rule expression은 이미 고정된 risk lowering 제한 위에서만 정의하면 되므로 그 다음이다.
+- agentRoles taxonomy와 rule id 네이밍은 판정 로직이 아니라 명명 규칙이므로 마지막이다.
 ```
 
 ## 16. 다음 세션에서 이어갈 때

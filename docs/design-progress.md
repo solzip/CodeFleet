@@ -19,14 +19,14 @@ README.md                    현재 구현 사용법
 
 ```text
 Phase 0-9    완료      76단계
-Phase 10     진행 중   5단계 중 2단계 완료, 남은 설계 3단계 (전부 문법 계층)
+Phase 10     진행 중   5단계 중 3단계 완료, 남은 설계 2단계
 Phase 11     대기      설계 확정 후 구현 재개
 ```
 
 ```text
-전체 84단계 중 78단계 완료
-FINAL RULE 73개
-설계 진행도: 약 91%
+전체 84단계 중 79단계 완료
+FINAL RULE 74개
+설계 진행도: 약 94%
 구현 진행도: 약 25-35%
 ```
 
@@ -181,10 +181,13 @@ FINAL RULE 73개
         - exposure tier (PUBLIC / INTERNAL_SHARED / LOCAL_PRIVATE) + target 선언
         - leaf field path, 와일드카드 없음
         - 미지 필드 DROP + SCHEMA_UNKNOWN_FIELD 기록
-[ ] 79. files policy glob matcher 문법                                  <- 다음, 미착수
-[ ] 80. 나머지 DESIGN CANDIDATE 문법 항목
-        - risk policy rule expression
+[x] 79. files policy glob matcher 문법
+        - literal / 단일 세그먼트 * / 전체 세그먼트 ** 만 허용
+        - 전체 경로 매칭, 암묵적 서브트리 없음, dir/** 는 dir 자체 미매칭
+        - 부정 금지, case는 기존 canonical key 규칙 그대로
+[ ] 80. 나머지 DESIGN CANDIDATE 문법 항목                                <- 다음, 미착수
         - redaction policy pattern language
+        - risk policy rule expression
         - agentRoles 내부 role taxonomy
         - profile rule id 네이밍 체계
 [ ] 81. 0.13 상태 목록 최종 재감사
@@ -195,7 +198,8 @@ FINAL RULE 73개
 ```text
 - 77은 Verification allowlist와 files glob matcher가 공유하는 기반이라 먼저 고정했다.
 - 78은 S5 경계가 이미 고정돼 있어 matcher 문법과 독립적으로 먼저 끝냈다.
-- 79는 77이 정한 결정론 기준과 case 비대칭 원칙을 그대로 이어받는다.
+- 79는 기존 예시와 사용자 Task가 이미 ** 표기를 쓰고 있어 토큰 모델이 아니라 제한된 glob으로 갔다.
+- 79의 case 처리는 CASE_INSENSITIVE_PATH_MATCH_USES_CANONICAL_KEY가 이미 고정해 두어 새로 정하지 않았다.
 - 80은 위 항목들이 고정된 뒤 같은 형식을 따라간다.
 ```
 

@@ -47,7 +47,7 @@ Important criteria:
 Design is being completed first. Implementation resumes only after the
 remaining design items are fixed.
 
-The next design topic is files policy glob matcher syntax.
+The next design topic is redaction policy pattern language.
 The next implementation topic is v0.2 local review, held until design is done.
 ```
 
@@ -64,15 +64,16 @@ execution through logs, diffs, tests, and review evidence.
 ## Progress
 
 ```text
-Final model / concept design: about 91%
+Final model / concept design: about 94%
 Implementation: about 25-35%
 ```
 
 Remaining design items:
 
 ```text
-1. files policy glob matcher syntax
-2. Remaining 5.3 DESIGN CANDIDATE syntax items
+1. redaction policy pattern language
+2. risk policy rule expression syntax
+3. agentRoles role taxonomy and profile rule id naming
 ```
 
 Current implementation status:
@@ -118,6 +119,7 @@ S2 Adapter seam
 -> Mutation Engine minimum contract
 -> Command normalization and matcher syntax
 -> Export adapter field allowlist tiers
+-> Files policy glob matcher syntax
 ```
 
 Important fixed boundaries:
@@ -158,30 +160,33 @@ Important fixed boundaries:
 - A target may narrow its tier but can never add a field path, and Profile and Local Overlay cannot widen it either.
 - Export field paths name leaves explicitly with no wildcard; an intermediate node path does not cover its children.
 - A field absent from the resolved allowlist is dropped and recorded as SCHEMA_UNKNOWN_FIELD in redaction-report.
+- Path patterns allow only literal segments, single-segment `*`, and whole-segment `**`; no character class, brace expansion, negation, or regex.
+- Path matching is whole-path with no implicit subtree expansion, and `dir/**` does not match the directory entry itself.
+- Path exclusion is expressed only through deniedPaths, and path case handling stays on the already-fixed canonical comparison key.
 ```
 
 ## Current Bottleneck
 
 ```text
-files policy glob matcher syntax
+redaction policy pattern language
 ```
 
 Why this is next:
 
 ```text
 Design is being completed before further implementation.
-Mutation Engine contract, commands policy matcher syntax, and export field allowlist tiers are now fixed.
-files policy glob matcher inherits the determinism standard and case asymmetry fixed by command matching, so it is the last structural syntax item.
-The remaining 5.3 items follow the same shape once path matching is fixed.
+Mutation Engine contract, commands matcher syntax, export field allowlist tiers, and files glob matcher are now fixed.
+redaction pattern language is the only remaining syntax item that directly controls what leaves the machine, so it comes before the naming-level items.
+risk rule expression, agentRoles taxonomy, and profile rule id naming follow.
 ```
 
 Expected next design slice:
 
 ```text
-1. Decide whether path matching reuses the argv-style token model or needs a bounded glob subset.
-2. Define deterministic matching for allowedPaths / deniedPaths.
-3. Keep case asymmetry consistent with command matching.
-4. Then close the remaining 5.3 DESIGN CANDIDATE syntax items.
+1. Decide whether secret / token detection can reuse a bounded literal matcher or genuinely needs expressions.
+2. Define what an unmatchable pattern produces.
+3. Keep blockedExport semantics unchanged.
+4. Then close risk rule expression, agentRoles taxonomy, and rule id naming.
 ```
 
 Held implementation slice (resumes after design is fixed):
