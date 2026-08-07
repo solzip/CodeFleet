@@ -1,6 +1,6 @@
 # CodeFleet Session Handoff
 
-Last updated: 2026-06-23
+Last updated: 2026-08-07
 
 This is the compact handoff for continuing CodeFleet work in another session or
 on another machine. The canonical design source is always
@@ -47,8 +47,7 @@ Important criteria:
 Design is being completed first. Implementation resumes only after the
 remaining design items are fixed.
 
-The next design topic is Verification command allowlist / commands policy
-matcher syntax.
+The next design topic is Run Summary export adapter field allowlist schema.
 The next implementation topic is v0.2 local review, held until design is done.
 ```
 
@@ -65,15 +64,15 @@ execution through logs, diffs, tests, and review evidence.
 ## Progress
 
 ```text
-Final model / concept design: about 85%
+Final model / concept design: about 88%
 Implementation: about 25-35%
 ```
 
 Remaining design items:
 
 ```text
-1. Verification command allowlist / commands policy matcher syntax
-2. Run Summary export adapter field allowlist schema
+1. Run Summary export adapter field allowlist schema
+2. files policy glob matcher syntax
 3. Remaining 5.3 DESIGN CANDIDATE syntax items
 ```
 
@@ -118,6 +117,7 @@ S2 Adapter seam
 -> Objective ledger minimum replay / snapshot model
 -> v0.2 implementation kickoff
 -> Mutation Engine minimum contract
+-> Command normalization and matcher syntax
 ```
 
 Important fixed boundaries:
@@ -150,30 +150,34 @@ Important fixed boundaries:
 - mutationId is derived deterministically from mutationKind, target identity, targetHash, and semantic payload, never from time, order, actorId, or reason text.
 - The mutation lock is a single fail-fast workspace lock, is never auto-broken when stale, and is not held across Run execution.
 - Corrective events are only for a structurally valid ledger with a wrong decision; snapshot mismatch is rebuild, structural damage is source repair.
+- Commands are argv arrays only; shell interpreter invocation is denied and argument spellings are never normalized into an equivalent form.
+- Command matching is argv prefix or exact token comparison with no regex and no glob; allowedCommands match case-sensitively and deniedCommands / destructiveCommands match case-insensitively so both directions resolve to the more restrictive outcome.
+- verificationPlan commands have no separate allowlist syntax and must pass policies.commands as-is.
+- Destructive command approval is granted per categoryId with cwd and runId scope, never per raw command string.
 ```
 
 ## Current Bottleneck
 
 ```text
-Verification command allowlist / commands policy matcher syntax
+Run Summary export adapter field allowlist schema
 ```
 
 Why this is next:
 
 ```text
 Design is being completed before further implementation.
-Mutation Engine minimum contract is now fixed, so command phase, idempotency, lock, and repair boundaries no longer block other design items.
-commands policy matcher syntax is shared by the Verification command allowlist and the files policy glob matcher, so it comes first.
+Mutation Engine minimum contract and commands policy matcher syntax are now fixed.
 Export adapter field allowlist can proceed independently because the S5 boundary is already fixed.
+files policy glob matcher follows, inheriting the determinism standard and case asymmetry fixed by command matching.
 ```
 
 Expected next design slice:
 
 ```text
-1. Define deterministic command matching syntax.
-2. Define how an allowlist entry maps to Harness-visible command channel evidence.
-3. Define what an unmatched command produces (degraded versus denied).
-4. Then define per-adapter export field allowlist and redaction-report behavior.
+1. Define per-adapter export field allowlist shape.
+2. Define how redaction-report records dropped fields.
+3. Define what an unknown adapter field produces.
+4. Then define files policy glob matcher syntax.
 5. Then close the remaining 5.3 DESIGN CANDIDATE syntax items.
 ```
 

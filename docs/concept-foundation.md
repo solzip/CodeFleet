@@ -5014,6 +5014,7 @@ PASS:
 - ledger event 최소 세트와 "ledger는 결정 로그" 원칙
 - 확정 규칙 작성 기준
 - Mutation Engine minimum contract (phase 경계 / mutationId 멱등성 / lock / corrective event 경계)
+- Command normalization / matcher 문법 / destructive category 승인 단위
 
 PASS_AFTER_REINFORCEMENT:
 - Risk 판단 원칙
@@ -5032,15 +5033,12 @@ RESOLVED_AFTER_THIS_LIST_WAS_WRITTEN:
      구현 범위는 VERSION_PLAN으로 남김
 
 NOT_FINAL_YET:
-- Verification command allowlist
-  -> VERIFICATION_EXECUTION_IS_HARNESS_OWNED_EVIDENCE는 authority만 고정했고
-     commands matcher 문법은 미정이다.
 - Run Summary export adapter별 field allowlist schema
   -> S5_EXPORT_SEAM_USES_SANITIZED_SUMMARY_ONLY는 boundary만 고정했고
      adapter별 field allowlist는 미정이다.
-- 5.3의 DESIGN CANDIDATE 문법 항목
-  -> files glob matcher / commands matcher / risk rule expression /
-     redaction pattern language / agentRoles 내부 taxonomy / profile rule id 네이밍
+- 5.3의 나머지 DESIGN CANDIDATE 문법 항목
+  -> files glob matcher / risk rule expression / redaction pattern language /
+     agentRoles 내부 taxonomy / profile rule id 네이밍
 ```
 
 `NOT_FINAL_YET` 항목은 확정 규칙이 아니다. 이 항목들은 다음 논의에서 같은 기준으로 하나씩 FINAL RULE로 승격하거나 VERSION_PLAN으로 남긴다.
@@ -8645,6 +8643,9 @@ policies:
     nestedRepoPolicy: "DENY | REQUIRE_EXPLICIT"
     generatedFilesPolicy: "ALLOW_IF_UNDER_ALLOWED_PATH | REQUIRE_EXPLICIT | DENY"
   commands:
+    # allowedCommands / deniedCommands entry: { argv: [], matchMode: "PREFIX | EXACT" }
+    # destructiveCommands entry: { categoryId: "", argv: [], matchMode: "PREFIX | EXACT" }
+    # matcher and normalization are fixed in 8.2.3.1 - 8.2.3.3
     allowedCommands: []
     deniedCommands: []
     destructiveCommands: []
@@ -10706,11 +10707,16 @@ repairBehavior:
 ```text
 DESIGN CANDIDATE:
 - files policy glob matcher 세부 문법
-- commands policy command matcher 세부 문법
 - risk policy rule expression 세부 문법
 - redaction policy pattern language
 - agentRoles 내부 role taxonomy
 - profile rule id 세부 네이밍 체계
+
+FIXED:
+- commands policy command matcher 문법
+  -> COMMAND_NORMALIZATION_IS_ARGV_BASED_AND_SHELL_FREE
+  -> COMMAND_MATCHER_IS_ARGV_PREFIX_WITHOUT_PATTERN_LANGUAGE
+  -> DESTRUCTIVE_COMMAND_CATEGORY_IS_APPROVAL_UNIT
 ```
 
 ```text
@@ -13032,6 +13038,243 @@ commandAttempt:
 - destructive command approval은 provider claim이 아니라 Review/Approval durable decision ref여야 한다.
 ```
 
+#### 8.2.3.1 Command normalization
+
+`command normalize`는 preflight와 verification pipeline이 모두 참조하지만 형태가 정의돼 있지 않았다. 아래가 그 정의다.
+
+정규화 규칙:
+
+```text
+1. command는 argv 배열로만 받는다. 문자열 command line을 파싱하지 않는다.
+2. shell을 경유하지 않는다. sh -c / bash -c / zsh -c / cmd /c / powershell -Command는 argv[0]에서 금지한다.
+3. argv[0]는 basename으로 정규화한다. 원본 경로는 evidence에 그대로 보존한다.
+4. 환경변수 prefix는 argv에 넣지 않는다. env는 별도 필드로 분리한다.
+5. 인자는 정규화하지 않는다. --opt=value와 --opt value를 같은 인자로 취급하지 않는다.
+6. cwd 정규화는 PATHS_ARE_WORKSPACE_RELATIVE_AND_CANONICAL을 따른다.
+```
+
+2번이 matcher 전체의 전제다. shell을 허용하면 `sh -c "npm test; rm -rf /"`가 `["sh"]` prefix 하나로 통과하고, 그 순간 allowedCommands / deniedCommands / destructiveCommands 판정이 전부 무의미해진다. shell 경유 금지는 편의 제한이 아니라 matcher가 성립하기 위한 조건이다.
+
+5번은 `No inferred category` 원칙을 argv에 적용한 것이다. 두 표기가 같은 뜻이라고 추정해서 정규화하기 시작하면 판정이 결정론을 잃는다. 같은 명령을 두 표기로 모두 허용하려면 matcher entry를 두 개 쓴다.
+
+정규화 결과 형태:
+
+```yaml
+normalizedCommand:
+  argv: []
+  argv0Original: ""
+  env: {}
+  cwd: ""
+```
+
+```yaml
+ruleId: COMMAND_NORMALIZATION_IS_ARGV_BASED_AND_SHELL_FREE
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+  - command attempt argv
+  - Harness-visible command channel evidence
+  - workspace path normalization rules
+inputs:
+  - raw argv
+  - raw cwd
+  - environment overrides
+preconditions:
+  - a command attempt has reached Harness preflight or verification pipeline.
+condition:
+  - command is accepted as an argv array and is never parsed from a command-line string.
+  - shell interpreter invocation is denied at argv[0].
+  - argv[0] is normalized to its basename while the original path is preserved as evidence.
+  - environment overrides are carried in a separate env field, not inside argv.
+  - argument tokens are compared as written and are never rewritten into an equivalent form.
+  - cwd normalization follows PATHS_ARE_WORKSPACE_RELATIVE_AND_CANONICAL.
+allowedEffect:
+  - preflight and verification may match policy against the normalized argv.
+  - evidence may record both normalized argv and original argv0.
+deniedEffect:
+  - CodeFleet cannot run a policy-checked command through a shell interpreter.
+  - CodeFleet cannot infer that two argument spellings are the same argument.
+  - CodeFleet cannot accept a command string in place of argv.
+evidence:
+  - normalizedCommand.argv
+  - normalizedCommand.argv0Original
+  - normalizedCommand.cwd
+  - normalizedCommand.env keys
+failureFinding:
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: CORRUPTION
+repairBehavior:
+  - block the command attempt and record blockedReason
+  - require the caller to supply argv instead of a shell string
+```
+
+#### 8.2.3.2 Command matcher
+
+matcher entry는 argv prefix 비교다. 정규식과 glob 패턴 언어를 도입하지 않는다.
+
+```yaml
+- argv: []
+  matchMode: "PREFIX | EXACT"
+```
+
+```text
+PREFIX
+= entry.argv가 normalizedCommand.argv의 앞부분과 토큰 단위로 완전히 일치한다.
+
+EXACT
+= entry.argv와 normalizedCommand.argv의 길이와 토큰이 모두 일치한다.
+```
+
+예시:
+
+```text
+entry ["npm", "test"] PREFIX
+- npm test               match
+- npm test --silent      match
+- npm run test           no match
+- npmtest                no match
+
+entry ["npm", "test"] EXACT
+- npm test               match
+- npm test --silent      no match
+```
+
+정규식과 glob을 쓰지 않는 이유:
+
+```text
+- 확정 규칙은 deterministic하고 machine-checkable해야 한다.
+- 정규식은 방언 차이와 catastrophic backtracking을 가진다.
+- glob은 셸 인용 규칙과 섞이면 플랫폼마다 판정이 갈린다.
+- argv 토큰 비교는 두 문제가 모두 없다.
+```
+
+`PREFIX`가 기본값이어도 안전한 이유는 이미 고정된 평가 순서에 있다. denied와 destructive는 합집합으로 병합되고 allowed보다 먼저 평가된다. 따라서 넓은 allow entry는 좁은 deny / destructive entry로 항상 되잡을 수 있다.
+
+대소문자 처리는 비대칭이다.
+
+```text
+allowedCommands 매칭      CASE_SENSITIVE
+deniedCommands 매칭       CASE_INSENSITIVE
+destructiveCommands 매칭  CASE_INSENSITIVE
+```
+
+이유는 `More restrictive wins`다. 대소문자를 구분하지 않는 파일시스템에서 `NPM TEST`가 실행될 수 있다. 전부 CASE_SENSITIVE로 두면 `NPM`이 allow에 걸리지 않아 차단되지만 deny에도 걸리지 않아 우회 경로가 된다. 비대칭으로 두면 allow는 좁게, deny는 넓게 적용되어 두 경우 모두 제한적인 쪽으로 판정된다. 플랫폼별 분기가 없으므로 다른 머신에서도 같은 결과가 나온다.
+
+verification command도 같은 matcher와 같은 정규화를 쓴다.
+
+```text
+- verificationPlan command는 별도 allowlist 문법을 갖지 않는다.
+- verificationPlan command는 policies.commands 판정을 그대로 통과해야 한다.
+- verificationPlan command와 실행된 normalized command / cwd가 일치해야 PASS authority를 가진다.
+```
+
+```yaml
+ruleId: COMMAND_MATCHER_IS_ARGV_PREFIX_WITHOUT_PATTERN_LANGUAGE
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+  - policies.commands entries
+  - Task Revision guardrail command restrictions
+  - Local Overlay command restrictions
+  - normalizedCommand
+inputs:
+  - matcher entry argv
+  - matcher entry matchMode
+  - normalizedCommand.argv
+preconditions:
+  - command has been normalized.
+condition:
+  - matcher entries are argv token lists with matchMode PREFIX or EXACT.
+  - matcher entries contain no regular expression and no glob pattern language.
+  - PREFIX matches when entry argv equals the leading tokens of the normalized argv.
+  - EXACT matches when entry argv equals the whole normalized argv.
+  - allowedCommands matching is case-sensitive.
+  - deniedCommands and destructiveCommands matching is case-insensitive.
+  - verificationPlan commands are matched by the same matcher and normalization.
+allowedEffect:
+  - a broad allow entry may be narrowed by deny or destructive entries evaluated first.
+  - the same command may be expressed as multiple entries when several spellings must be allowed.
+deniedEffect:
+  - CodeFleet cannot introduce a pattern language into command matching.
+  - CodeFleet cannot treat a partial token match as a match.
+  - CodeFleet cannot make allowedCommands case-insensitive.
+  - CodeFleet cannot give verification commands a separate allowlist syntax.
+evidence:
+  - matched entry argv
+  - matchMode
+  - matched policy source
+  - normalizedCommand.argv
+  - match decision
+failureFinding:
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: CORRUPTION
+repairBehavior:
+  - block the command attempt and record the unmatched normalized argv
+  - add an explicit matcher entry in the policy source that owns the restriction
+```
+
+#### 8.2.3.3 Destructive command category
+
+`destructiveCommands` entry는 approval 단위인 `categoryId`를 가진다. durable approval은 개별 명령 문자열이 아니라 category를 참조한다.
+
+```yaml
+destructiveCommands:
+  - categoryId: ""
+    argv: []
+    matchMode: "PREFIX | EXACT"
+```
+
+```text
+- categoryId는 durable approval이 참조하는 승인 단위다.
+- 하나의 categoryId에 여러 matcher entry가 속할 수 있다.
+- approval은 categoryId + cwd + runId 범위로 기록된다.
+- categoryId가 없는 destructive entry는 유효하지 않다.
+```
+
+matcher entry가 아니라 category를 승인 단위로 두는 이유는 이미 고정돼 있다. destructive command approval은 `that exact category / command / cwd / run`을 덮어야 하고, 같은 위험 종류에 속한 명령이 표기만 달라졌다고 별도 승인을 요구하거나 반대로 무관한 명령까지 함께 승인되는 것을 막아야 한다.
+
+```yaml
+ruleId: DESTRUCTIVE_COMMAND_CATEGORY_IS_APPROVAL_UNIT
+status: FINAL
+scope: POLICY
+sourceOfTruth:
+  - policies.commands.destructiveCommands entries
+  - durable approval decisions
+inputs:
+  - categoryId
+  - matcher entry
+  - normalizedCommand
+  - cwd
+  - runId
+  - approval refs
+preconditions:
+  - a command attempt matched a destructive entry.
+condition:
+  - every destructive entry declares a categoryId.
+  - durable approval references categoryId, cwd, and runId, not a raw command string.
+  - a destructive entry without categoryId is invalid policy.
+  - matching a destructive entry blocks execution unless a covering durable approval exists.
+allowedEffect:
+  - several matcher entries may share one categoryId.
+  - approval may cover every entry inside one categoryId for the approved cwd and run.
+deniedEffect:
+  - CodeFleet cannot approve a destructive command from a provider claim.
+  - CodeFleet cannot widen an approval beyond its categoryId, cwd, and runId.
+  - CodeFleet cannot execute a destructive match without a covering durable approval.
+evidence:
+  - categoryId
+  - matched entry argv
+  - normalizedCommand.argv
+  - cwd
+  - approvalRef path and hash
+failureFinding:
+  category: POLICY_ENFORCEMENT_INTEGRITY
+  severity: CORRUPTION
+repairBehavior:
+  - block the command attempt and record the missing approval category
+  - obtain an explicit durable approval for the categoryId before rerunning
+```
+
 ### 8.2.4 Execution isolation enforcement
 
 Run Plan은 AdapterRequest 생성 전에 concrete isolation mode를 가져야 한다.
@@ -14709,23 +14952,26 @@ repairBehavior:
 - mutationId는 mutationKind / target identity / targetHash / semantic payload에서 결정론적으로 계산하며 시각, 실행 순서, actorId, reason 자유 텍스트를 포함하지 않는다는 원칙
 - mutation lock은 workspace 단일 lock이고 fail-fast이며 stale lock을 자동 해제하지 않고 Run 실행은 lock 밖에서 수행한다는 원칙
 - corrective event는 ledger가 구조적으로 유효한데 결정이 틀렸을 때만 append하고, snapshot 불일치는 rebuild로, 구조 손상은 source repair로 처리한다는 원칙
+- command는 argv 배열로만 받고 shell 경유를 금지하며 인자 표기를 동일 의미로 정규화하지 않는다는 원칙
+- command matcher는 정규식 / glob 없이 argv prefix 또는 exact 토큰 비교이며, allowedCommands는 case-sensitive, deniedCommands / destructiveCommands는 case-insensitive로 매칭해 항상 더 제한적인 쪽으로 판정한다는 원칙
+- verificationPlan command는 별도 allowlist 문법을 갖지 않고 policies.commands 판정을 그대로 통과해야 한다는 원칙
+- destructive command의 승인 단위는 개별 명령 문자열이 아니라 categoryId이며 durable approval은 categoryId / cwd / runId 범위로 기록된다는 원칙
 ```
 
 다음으로 논의할 항목:
 
 ```text
-1. Verification command allowlist / commands policy matcher 문법
-   - define deterministic command matching syntax
-   - define how an allowlist entry maps to Harness-visible command channel evidence
-   - define what an unmatched command produces (degraded versus denied)
-
-2. Run Summary export adapter별 field allowlist schema
+1. Run Summary export adapter별 field allowlist schema
    - define per-adapter field allowlist shape
    - define how redaction-report records dropped fields
    - define what an unknown adapter field produces
 
+2. files policy glob matcher 문법
+   - decide whether path matching reuses the argv-style token model or needs a bounded glob subset
+   - define deterministic matching for allowedPaths / deniedPaths
+   - keep the case asymmetry consistent with command matching
+
 3. 5.3의 나머지 DESIGN CANDIDATE 문법 항목
-   - files policy glob matcher 문법
    - risk policy rule expression 문법
    - redaction policy pattern language
    - agentRoles 내부 role taxonomy
@@ -14735,9 +14981,9 @@ repairBehavior:
 논의 순서 이유:
 
 ```text
-- commands matcher 문법은 Verification allowlist와 files glob matcher가 공유하는 기반이므로 먼저 고정한다.
-- export field allowlist는 S5 경계가 이미 고정돼 있어 matcher 문법과 독립적으로 진행할 수 있다.
-- 나머지 문법 항목은 위 두 개가 고정된 뒤 같은 형식을 따라간다.
+- export field allowlist는 S5 경계가 이미 고정돼 있어 독립적으로 진행할 수 있다.
+- files glob matcher는 command matcher가 정한 결정론 기준과 case 비대칭 원칙을 그대로 이어받는다.
+- 나머지 문법 항목은 위 둘이 고정된 뒤 같은 형식을 따라간다.
 ```
 
 ## 16. 다음 세션에서 이어갈 때

@@ -18,13 +18,15 @@ README.md                    현재 구현 사용법
 ## 진행 요약
 
 ```text
-Phase 0-9    완료      76단계, FINAL RULE 67개
-Phase 10     진행 중   남은 설계 4단계 (전부 문법 계층)
+Phase 0-9    완료      76단계
+Phase 10     진행 중   5단계 중 1단계 완료, 남은 설계 4단계 (전부 문법 계층)
 Phase 11     대기      설계 확정 후 구현 재개
 ```
 
 ```text
-설계 진행도: 약 85%
+전체 84단계 중 77단계 완료
+FINAL RULE 70개
+설계 진행도: 약 88%
 구현 진행도: 약 25-35%
 ```
 
@@ -171,23 +173,27 @@ Phase 11     대기      설계 확정 후 구현 재개
 ## Phase 10. 남은 문법 계층 (현재 위치)
 
 ```text
-[ ] 77. Verification command allowlist / commands policy matcher 문법   <- 다음, 미착수
-[ ] 78. Run Summary export adapter별 field allowlist schema
-[ ] 79. 나머지 DESIGN CANDIDATE 문법 항목
-        - files policy glob matcher
+[x] 77. Verification command allowlist / commands policy matcher 문법
+        - command normalization (argv only, shell 경유 금지)
+        - matcher (argv prefix / exact, 정규식·glob 없음, case 비대칭)
+        - destructive command categoryId 승인 단위
+[ ] 78. Run Summary export adapter별 field allowlist schema             <- 다음, 미착수
+[ ] 79. files policy glob matcher 문법
+[ ] 80. 나머지 DESIGN CANDIDATE 문법 항목
         - risk policy rule expression
         - redaction policy pattern language
         - agentRoles 내부 role taxonomy
         - profile rule id 네이밍 체계
-[ ] 80. 0.13 상태 목록 최종 재감사
+[ ] 81. 0.13 상태 목록 최종 재감사
 ```
 
 논의 순서 이유:
 
 ```text
-- 77의 commands matcher 문법은 Verification allowlist와 files glob matcher가 공유하는 기반이므로 먼저 고정한다.
+- 77은 Verification allowlist와 files glob matcher가 공유하는 기반이라 먼저 고정했다.
 - 78은 S5 경계가 이미 고정돼 있어 matcher 문법과 독립적으로 진행할 수 있다.
-- 79는 77이 고정된 뒤 같은 형식을 따라간다.
+- 79는 77이 정한 결정론 기준과 case 비대칭 원칙을 그대로 이어받는다.
+- 80은 위 항목들이 고정된 뒤 같은 형식을 따라간다.
 ```
 
 남은 설계의 성격:
@@ -201,9 +207,9 @@ Phase 10은 "그 판정을 어떤 표기로 쓰는가"를 정한다.
 ## Phase 11. 구현 재개 (설계 확정 후)
 
 ```text
-[ ] 81. codefleet review (v0.2 local review)   <- 유일하게 남은 v0.2 구현 슬라이스
-[ ] 82. SPINE 한 바퀴 수동 검증
-[ ] 83. 이후 final 슬라이스
+[ ] 82. codefleet review (v0.2 local review)   <- 유일하게 남은 v0.2 구현 슬라이스
+[ ] 83. SPINE 한 바퀴 수동 검증
+[ ] 84. 이후 final 슬라이스
 ```
 
 81번의 상세 슬라이스는 `docs/session-handoff.md`의 held implementation slice에 있다.
@@ -214,7 +220,8 @@ Phase 10은 "그 판정을 어떤 표기로 쓰는가"를 정한다.
 
 ```text
 - 설계 항목을 하나 확정하면 해당 줄을 [x]로 바꾸고 Phase 요약과 진행도를 함께 갱신한다.
-- 새 항목이 생기면 발견한 Phase 끝에 추가한다. 과거 번호를 다시 매기지 않는다.
+- [x] 항목의 번호는 바꾸지 않는다. 완료 번호는 커밋 메시지와 논의 기록이 참조하는 고정 식별자다.
+- 아직 [ ]인 항목은 새 항목이 끼어들 때 다시 매길 수 있다. 다시 매기면 그 Phase 전체를 한 번에 정리한다.
 - 이 문서는 확정 순서만 기록한다. 규칙 본문을 여기에 복사하지 않는다.
 - concept-foundation.md의 0.13 상태 목록과 15절 다음 논의 항목을 함께 갱신한다.
 ```
