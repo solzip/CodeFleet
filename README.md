@@ -1,12 +1,18 @@
 # CodeFleet
 
-CodeFleet is a local CLI foundation for orchestrating AI coding agents as a development fleet.
+CodeFleet is an AI-native development orchestration CLI. It structures a user's development/operations Objective into Tasks, defines backend/infrastructure work with role, scope, guardrails, and verification conditions, delegates approved Tasks to AI agents, and tracks execution through logs, diffs, tests, and review evidence.
 
-The long-term goal is a multi-agent development platform. CodeFleet v0.1 keeps the scope small: it turns structured development tasks into Codex-ready prompts, records each run, and stores logs, diffs, and results in the local filesystem.
+The point is not to call an AI model. The point is that delegated work carries an approval decision, runs inside enforced boundaries, and leaves evidence that does not depend on what the agent claims it did.
 
-## v0.1 Goal
+## What CodeFleet Is Not
 
-CodeFleet v0.1 is a Codex-based development orchestration CLI for executing, tracking, and reviewing development work by task.
+CodeFleet is not a Codex runner, a prompt generator, an AI CLI wrapper, a central project management tool, a web dashboard, a DB-backed task system, a CI/CD replacement, a deployment tool, a secret manager, or a full sandbox. This scope is fixed and is not planned to widen.
+
+## Current Implementation Scope
+
+This README documents the current local CLI as it exists today. The v0.1 seed executes, tracks, and reviews development work by task through a Codex adapter. Later slices add the workspace, run plan, adapter, verification, and review boundaries described in the concept foundation.
+
+The canonical product definition is `docs/concept-foundation.md`, not this file.
 
 ## Current Features
 
@@ -189,9 +195,10 @@ The generated prompt is passed to the configured command on stdin. Treat execute
 - Multi-phase workflow handling beyond a single prompt.
 - Additional adapters for Claude Code, Gemini CLI, local agents, reviewers, testers, and docs agents.
 - Task dependency handling.
-- Pull request and issue integrations.
+- Pull request and issue integrations through the export seam.
 - Run metrics and success/failure analysis.
-- Optional dashboard after the local CLI foundation is stable.
+
+Export to external tools is limited to the sanitized Run Summary export seam. A web dashboard, a central task DB, and a general-purpose agent platform are explicit non-goals, not deferred work.
 
 ## Architecture
 
