@@ -1,0 +1,523 @@
+import { createHash } from "node:crypto";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import type { FileRef } from "./workspace.ts";
+
+export type ReviewDecision = "ACCEPTED" | "REJECTED" | "NEEDS_CHANGES";
+
+export type LocalReviewStatus =
+  | "MIGRATION_READY"
+  | "DEGRADED_RECORDED"
+  | "MIGRATION_BLOCKED"
+  | "SUPERSEDED";
+
+export interface ReviewOptions {
+  decision: ReviewDecision;
+  reason: string;
+  actorId?: string;
+  noteRef?: string;
+  aiReviewRef?: string;
+  supersedesLocalReviewId?: string;
+}
+
+interface ReviewEvidenceBundle {
+  schemaVersion: "0.2";
+  documentKind: "REVIEW_EVIDENCE_BUNDLE";
+  reviewDecisionId: string;
+  reviewEvidenceBundleId: string;
+  runId: string;
+  runPlanId: string;
+  taskId: string;
+  bundleStatus: "COMPLETE" | "DEGRADED";
+  unavailableReasons: string[];
+  runSummaryRef: FileRef;
+  runPlanRef: FileRef | null;
+  adapterRequestRef: FileRef | null;
+  harnessObservationRef: FileRef | null;
+  adapterResultRef: FileRef | null;
+  verificationEvidenceRefs: FileRef[];
+  observedResultSnapshot: string;
+  observedCheckSnapshot: string;
+  verificationGateResult: string;
+  verificationGateReason: string;
+  computedRisk: string;
+  commandEvidenceAuthority: string;
+  pathViolationSummary: {
+    evaluated: boolean;
+    hasViolation: boolean;
+    violationRefs: FileRef[];
+    unavailableReason: string;
+  };
+  hashChecks: HashCheck[];
+  createdAt: string;
+}
+
+interface HashCheck {
+  path: string;
+  expectedHash: string;
+  actualHash: string;
+  valid: boolean;
+  unavailableReason: string;
+}
+
+interface LocalReviewDecision {
+  schemaVersion: "0.2";
+  documentKind: "LOCAL_REVIEW_DECISION";
+  finalDecisionTruth: false;
+  migrationTarget: "RUN_REVIEW_DECIDED";
+  localReviewId: string;
+  reviewDecisionId: string;
+  runId: string;
+  taskId: string;
+  decision: ReviewDecision;
+  actorKind: "HUMAN";
+  actorId: string;
+  decisionBasis: "HUMAN_REVIEW";
+  reason: string;
+  runSummaryRef: FileRef;
+  reviewEvidenceBundleRef: FileRef;
+  bundleStatus: "COMPLETE" | "DEGRADED";
+  observedResultSnapshot: string;
+  observedCheckSnapshot: string;
+  verificationGateResult: string;
+  verificationGateReason: string;
+  computedRisk: string;
+  pathViolationSummary: {
+    evaluated: boolean;
+    hasViolation: boolean;
+    violationRefs: FileRef[];
+    unavailableReason: string;
+  };
+  reviewNoteRef: string;
+  aiReviewHintRef: string;
+  supersedesLocalReviewId: string;
+  localReviewStatus: LocalReviewStatus;
+  localReviewStatusReasons: string[];
+  safeguards: {
+    canProduceVerified: false;
+    canProgressQueue: false;
+    acceptanceEvidence: false;
+  };
+  createdAt: string;
+}
+
+export interface ReviewExecution {
+  runId: string;
+  reviewDecisionId: string;
+  localReviewId: string;
+  decision: ReviewDecision;
+  localReviewStatus: LocalReviewStatus;
+  bundleStatus: "COMPLETE" | "DEGRADED";
+  bundlePath: string;
+  localReviewPath: string;
+  blockedReasons: string[];
+}
+
+const REQUIRED_BUNDLE_INPUTS = [
+  "runPlanRef",
+  "adapterRequestRef",
+  "harnessObservationRef",
+  "adapterResultRef"
+] as const;
+
+export async function reviewRun(
+  rootDir: string,
+  runId: string,
+  options: ReviewOptions
+): Promise<ReviewExecution> {
+  assertDecision(options.decision);
+  if (options.reason.trim().length === 0) {
+    throw new Error("Missing required option: --reason");
+  }
+
+  const runDir = path.join(rootDir, ".codefleet", "runs", runId);
+  const runSummaryPath = path.join(runDir, "run-summary.json");
+  const runSummary = await readJson(runSummaryPath);
+  if (runSummary === null) {
+    throw new Error(`Run Summary not found for run: ${runId}`);
+  }
+
+  const createdAt = new Date().toISOString();
+  const reviewDecisionId = await nextReviewDecisionId(rootDir, runId);
+  const localReviewId = `${reviewDecisionId}:local`;
+
+  const bundle = await buildEvidenceBundle({
+    rootDir,
+    runId,
+    reviewDecisionId,
+    runSummary,
+    runSummaryRef: await fileRef(rootDir, runSummaryPath),
+    createdAt
+  });
+
+  const reviewDir = path.join(rootDir, ".codefleet", "reviews", reviewDecisionId);
+  await mkdir(reviewDir, { recursive: true });
+  const bundlePath = path.join(reviewDir, "evidence-bundle.json");
+  await writeJson(bundlePath, bundle);
+
+  const acceptance = evaluateAcceptance(bundle);
+  if (options.decision === "ACCEPTED" && !acceptance.allowed) {
+    throw new Error(
+      `ACCEPTED local review is not allowed for ${runId}.\n` +
+        acceptance.blockedReasons.map((reason) => `  - ${reason}`).join("\n")
+    );
+  }
+
+  const localReviewPath = path.join(runDir, "review-decision.local.json");
+  const statusResult = deriveLocalReviewStatus({
+    decision: options.decision,
+    bundle,
+    acceptance,
+    supersedesLocalReviewId: options.supersedesLocalReviewId ?? ""
+  });
+
+  const localReview: LocalReviewDecision = {
+    schemaVersion: "0.2",
+    documentKind: "LOCAL_REVIEW_DECISION",
+    finalDecisionTruth: false,
+    migrationTarget: "RUN_REVIEW_DECIDED",
+    localReviewId,
+    reviewDecisionId,
+    runId,
+    taskId: bundle.taskId,
+    decision: options.decision,
+    actorKind: "HUMAN",
+    actorId: options.actorId ?? "local-user",
+    decisionBasis: "HUMAN_REVIEW",
+    reason: options.reason,
+    runSummaryRef: bundle.runSummaryRef,
+    reviewEvidenceBundleRef: await fileRef(rootDir, bundlePath),
+    bundleStatus: bundle.bundleStatus,
+    observedResultSnapshot: bundle.observedResultSnapshot,
+    observedCheckSnapshot: bundle.observedCheckSnapshot,
+    verificationGateResult: bundle.verificationGateResult,
+    verificationGateReason: bundle.verificationGateReason,
+    computedRisk: bundle.computedRisk,
+    pathViolationSummary: bundle.pathViolationSummary,
+    reviewNoteRef: options.noteRef ?? "",
+    aiReviewHintRef: options.aiReviewRef ?? "",
+    supersedesLocalReviewId: options.supersedesLocalReviewId ?? "",
+    localReviewStatus: statusResult.status,
+    localReviewStatusReasons: statusResult.reasons,
+    safeguards: {
+      canProduceVerified: false,
+      canProgressQueue: false,
+      acceptanceEvidence: false
+    },
+    createdAt
+  };
+
+  assertLocalReview(localReview);
+  await writeJson(localReviewPath, localReview);
+
+  return {
+    runId,
+    reviewDecisionId,
+    localReviewId,
+    decision: options.decision,
+    localReviewStatus: statusResult.status,
+    bundleStatus: bundle.bundleStatus,
+    bundlePath: toRelativePath(rootDir, bundlePath),
+    localReviewPath: toRelativePath(rootDir, localReviewPath),
+    blockedReasons: acceptance.blockedReasons
+  };
+}
+
+async function buildEvidenceBundle(input: {
+  rootDir: string;
+  runId: string;
+  reviewDecisionId: string;
+  runSummary: Record<string, unknown>;
+  runSummaryRef: FileRef;
+  createdAt: string;
+}): Promise<ReviewEvidenceBundle> {
+  const { rootDir, runId, reviewDecisionId, runSummary, runSummaryRef, createdAt } = input;
+  const inputs = asRecord(runSummary.inputs);
+  const unavailableReasons: string[] = [];
+  const hashChecks: HashCheck[] = [];
+
+  const resolved: Record<string, FileRef | null> = {};
+  for (const key of REQUIRED_BUNDLE_INPUTS) {
+    const declared = asFileRef(inputs[key]);
+    if (declared === null) {
+      resolved[key] = null;
+      unavailableReasons.push(`MISSING_INPUT_REF:${key}`);
+      continue;
+    }
+    resolved[key] = declared;
+    hashChecks.push(await verifyHash(rootDir, declared));
+  }
+
+  const verificationRefs: FileRef[] = [];
+  for (const value of asArray(inputs.verificationEvidenceRefs)) {
+    const declared = asFileRef(value);
+    if (declared === null) {
+      continue;
+    }
+    verificationRefs.push(declared);
+    hashChecks.push(await verifyHash(rootDir, declared));
+  }
+  if (verificationRefs.length === 0) {
+    unavailableReasons.push("NO_VERIFICATION_EVIDENCE");
+  }
+
+  for (const check of hashChecks) {
+    if (!check.valid) {
+      unavailableReasons.push(`HASH_INVALID:${check.path}`);
+    }
+  }
+
+  const result = asRecord(runSummary.result);
+  const check = asRecord(runSummary.check);
+  const evidenceAuthority = asRecord(runSummary.evidenceAuthority);
+  const policy = asRecord(runSummary.policy);
+  const pathViolation = asRecord(policy.pathViolationSummary);
+  const normalization = asRecord(runSummary.normalization);
+
+  if (normalization.status !== "COMPLETE") {
+    unavailableReasons.push(`RUN_SUMMARY_NORMALIZATION:${asString(normalization.status, "UNKNOWN")}`);
+  }
+
+  const violationRefs: FileRef[] = [];
+  for (const value of asArray(pathViolation.violationRefs)) {
+    const declared = asFileRef(value);
+    if (declared !== null) {
+      violationRefs.push(declared);
+    }
+  }
+
+  const bundleStatus = unavailableReasons.length === 0 ? "COMPLETE" : "DEGRADED";
+
+  return {
+    schemaVersion: "0.2",
+    documentKind: "REVIEW_EVIDENCE_BUNDLE",
+    reviewDecisionId,
+    reviewEvidenceBundleId: `${reviewDecisionId}:bundle`,
+    runId,
+    runPlanId: asString(runSummary.runPlanId, ""),
+    taskId: asString(runSummary.taskId, ""),
+    bundleStatus,
+    unavailableReasons,
+    runSummaryRef,
+    runPlanRef: resolved.runPlanRef ?? null,
+    adapterRequestRef: resolved.adapterRequestRef ?? null,
+    harnessObservationRef: resolved.harnessObservationRef ?? null,
+    adapterResultRef: resolved.adapterResultRef ?? null,
+    verificationEvidenceRefs: verificationRefs,
+    observedResultSnapshot: asString(result.value, "UNKNOWN"),
+    observedCheckSnapshot: asString(check.observedCheck, "NONE"),
+    verificationGateResult: asString(check.verificationGateResult, "NOT_SATISFIED"),
+    verificationGateReason: asString(check.verificationGateReason, "UNAVAILABLE"),
+    computedRisk: asString(policy.computedRisk, "UNKNOWN"),
+    commandEvidenceAuthority: asString(evidenceAuthority.commandEvidenceAuthority, "NONE"),
+    pathViolationSummary: {
+      evaluated: pathViolation.evaluated === true,
+      hasViolation: pathViolation.hasViolation === true,
+      violationRefs,
+      unavailableReason: asString(pathViolation.unavailableReason, "")
+    },
+    hashChecks,
+    createdAt
+  };
+}
+
+function evaluateAcceptance(bundle: ReviewEvidenceBundle): {
+  allowed: boolean;
+  blockedReasons: string[];
+} {
+  const blockedReasons: string[] = [];
+
+  if (bundle.bundleStatus !== "COMPLETE") {
+    blockedReasons.push(`bundle is DEGRADED: ${bundle.unavailableReasons.join(", ")}`);
+  }
+  if (bundle.hashChecks.some((entry) => !entry.valid)) {
+    blockedReasons.push("one or more referenced artifact hashes are invalid");
+  }
+  if (bundle.observedResultSnapshot !== "DONE") {
+    blockedReasons.push(`normalized result is ${bundle.observedResultSnapshot}, not DONE`);
+  }
+  if (
+    bundle.verificationGateResult !== "SATISFIED" &&
+    bundle.verificationGateResult !== "WAIVED_ALLOWED"
+  ) {
+    blockedReasons.push(
+      `verification gate is ${bundle.verificationGateResult} (${bundle.verificationGateReason})`
+    );
+  }
+  if (!bundle.pathViolationSummary.evaluated) {
+    blockedReasons.push("path violation was not evaluated");
+  } else if (bundle.pathViolationSummary.hasViolation) {
+    blockedReasons.push("unresolved path violation is present");
+  }
+
+  return { allowed: blockedReasons.length === 0, blockedReasons };
+}
+
+function deriveLocalReviewStatus(input: {
+  decision: ReviewDecision;
+  bundle: ReviewEvidenceBundle;
+  acceptance: { allowed: boolean; blockedReasons: string[] };
+  supersedesLocalReviewId: string;
+}): { status: LocalReviewStatus; reasons: string[] } {
+  const { decision, bundle, acceptance } = input;
+
+  if (bundle.hashChecks.some((entry) => !entry.valid)) {
+    return {
+      status: "MIGRATION_BLOCKED",
+      reasons: bundle.hashChecks.filter((entry) => !entry.valid).map((entry) => `HASH_INVALID:${entry.path}`)
+    };
+  }
+
+  if (decision === "ACCEPTED") {
+    if (!acceptance.allowed) {
+      return { status: "MIGRATION_BLOCKED", reasons: acceptance.blockedReasons };
+    }
+    return { status: "MIGRATION_READY", reasons: [] };
+  }
+
+  if (bundle.bundleStatus === "DEGRADED") {
+    return { status: "DEGRADED_RECORDED", reasons: bundle.unavailableReasons };
+  }
+
+  return { status: "MIGRATION_READY", reasons: [] };
+}
+
+async function verifyHash(rootDir: string, ref: FileRef): Promise<HashCheck> {
+  const absolute = path.join(rootDir, ref.path);
+  try {
+    const raw = await readFile(absolute);
+    const actualHash = createHash("sha256").update(raw).digest("hex");
+    return {
+      path: ref.path,
+      expectedHash: ref.contentHash,
+      actualHash,
+      valid: actualHash === ref.contentHash,
+      unavailableReason: ""
+    };
+  } catch {
+    return {
+      path: ref.path,
+      expectedHash: ref.contentHash,
+      actualHash: "",
+      valid: false,
+      unavailableReason: "ARTIFACT_NOT_READABLE"
+    };
+  }
+}
+
+function assertDecision(value: string): asserts value is ReviewDecision {
+  if (value !== "ACCEPTED" && value !== "REJECTED" && value !== "NEEDS_CHANGES") {
+    throw new Error("--decision must be ACCEPTED, REJECTED, or NEEDS_CHANGES");
+  }
+}
+
+function assertLocalReview(value: LocalReviewDecision): void {
+  const errors: string[] = [];
+  if (value.finalDecisionTruth !== false) {
+    errors.push("finalDecisionTruth must be false");
+  }
+  if (value.migrationTarget !== "RUN_REVIEW_DECIDED") {
+    errors.push("migrationTarget must be RUN_REVIEW_DECIDED");
+  }
+  if (value.safeguards.canProduceVerified !== false) {
+    errors.push("local review cannot produce VERIFIED");
+  }
+  if (value.safeguards.canProgressQueue !== false) {
+    errors.push("local review cannot progress the queue");
+  }
+  if (value.safeguards.acceptanceEvidence !== false) {
+    errors.push("local review is not acceptance evidence");
+  }
+  if (value.reason.trim().length === 0) {
+    errors.push("reason must be present");
+  }
+  if (errors.length > 0) {
+    throw new Error(`Invalid local review decision:\n${errors.map((e) => `  - ${e}`).join("\n")}`);
+  }
+}
+
+async function nextReviewDecisionId(rootDir: string, runId: string): Promise<string> {
+  const reviewsDir = path.join(rootDir, ".codefleet", "reviews");
+  let existing: string[] = [];
+  try {
+    existing = await readdir(reviewsDir);
+  } catch {
+    existing = [];
+  }
+
+  // reviewDecisionId names a directory under .codefleet/reviews, so it must stay
+  // path-safe on every platform. Colon separators are reserved for ids that are
+  // never used as a path segment.
+  const prefix = `${runId}-review-`;
+  let next = 1;
+  for (const entry of existing) {
+    if (!entry.startsWith(prefix)) {
+      continue;
+    }
+    const parsed = Number.parseInt(entry.slice(prefix.length), 10);
+    if (Number.isInteger(parsed) && parsed >= next) {
+      next = parsed + 1;
+    }
+  }
+
+  return `${prefix}${String(next).padStart(3, "0")}`;
+}
+
+async function readJson(filePath: string): Promise<Record<string, unknown> | null> {
+  try {
+    const raw = await readFile(filePath, "utf8");
+    const parsed: unknown = JSON.parse(raw);
+    return parsed !== null && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeJson(filePath: string, value: unknown): Promise<void> {
+  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+async function fileRef(rootDir: string, filePath: string): Promise<FileRef> {
+  const raw = await readFile(filePath);
+  return {
+    path: toRelativePath(rootDir, filePath),
+    contentHash: createHash("sha256").update(raw).digest("hex"),
+    present: true
+  };
+}
+
+function toRelativePath(rootDir: string, filePath: string): string {
+  return path.relative(rootDir, filePath).split(path.sep).join("/");
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function asString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.length > 0 ? value : fallback;
+}
+
+function asFileRef(value: unknown): FileRef | null {
+  const record = asRecord(value);
+  if (typeof record.path !== "string" || record.path.length === 0) {
+    return null;
+  }
+  if (typeof record.contentHash !== "string" || record.contentHash.length === 0) {
+    return null;
+  }
+  if (record.present === false) {
+    return null;
+  }
+  return {
+    path: record.path,
+    contentHash: record.contentHash,
+    present: true
+  };
+}

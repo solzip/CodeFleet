@@ -47,8 +47,9 @@ Important criteria:
 Design is complete as of the final consistency re-audit. Implementation
 has resumed.
 
-Design is complete. The next topic is implementation: codefleet review.
-The next implementation topic is v0.2 local review.
+Design is complete. codefleet review is implemented. The next topic is the
+manual SPINE validation pass.
+The next implementation topic is the manual SPINE validation pass.
 ```
 
 ## Product Definition
@@ -92,6 +93,10 @@ Current implementation status:
 - codefleet run creates VerificationEvidence with authority NONE when required verification cannot be run by the Harness.
 - VerificationEvidence distinguishes NO_VERIFICATION_COMMANDS_CONFIGURED from COMMAND_CHANNEL_NOT_HARNESS_VISIBLE.
 - Legacy result.json is still kept for v0.x compatibility.
+- codefleet review assembles ReviewEvidenceBundle from Run Summary refs and re-verifies every referenced artifact hash.
+- codefleet review writes review-decision.local.json with finalDecisionTruth false and migrationTarget RUN_REVIEW_DECIDED.
+- ACCEPTED is refused unless the bundle is COMPLETE, hashes are valid, the normalized result is DONE, the verification gate is satisfied or waived, and no path violation is unresolved.
+- Local review derives MIGRATION_READY / DEGRADED_RECORDED / MIGRATION_BLOCKED and never records VERIFIED or queue progression.
 - Missing final evidence is represented as unavailable / degraded reason instead of truth.
 ```
 
@@ -192,28 +197,25 @@ Important fixed boundaries:
 ## Current Bottleneck
 
 ```text
-v0.2 local review implementation
+manual SPINE validation pass
 ```
 
 Why this is next:
 
 ```text
-Design is complete and verified. Nothing remains as DESIGN CANDIDATE or NOT_FINAL_YET.
-codefleet review is the last v0.2 implementation slice.
-review-decision.local.json must stay migration input, not final ledger truth.
-No local review artifact may produce VERIFIED or queue progression by itself.
+Every v0.2 implementation slice is done: workspace discovery, run-plan, the S2
+artifact split, run-summary normalization, VerificationEvidence, and local review.
+What has never been exercised is one full pass across S1 to S4 against the fixed
+evidence checklist, so the remaining risk is integration, not missing code.
 ```
 
 Next implementation slice:
 
 ```text
-1. Define minimal ReviewEvidenceBundle type.
-2. Add non-interactive codefleet review <runId> --decision ... --reason ...
-3. Read run-summary, VerificationEvidence, AdapterRequest, HarnessObservation, and AdapterResult refs/hash.
-4. Write review-decision.local.json with finalDecisionTruth false and migrationTarget RUN_REVIEW_DECIDED.
-5. Preserve observed result/check/gate snapshots from Run Summary.
-6. Derive MIGRATION_READY / DEGRADED_RECORDED / MIGRATION_BLOCKED / SUPERSEDED local statuses.
-7. Add tests proving local review does not create VERIFIED or queue progression.
+1. Run one full pass: init, task validate, prompt, run, review.
+2. Check every S1 to S4 boundary against MANUAL_SPINE_PASS_IS_EVIDENCE_CHECKLIST.
+3. Record each boundary as a durable artifact ref/hash or an explicit unavailableReason.
+4. Report the pass as PASS or BLOCKED with the unresolved boundary named.
 ```
 
 ## Repository Note

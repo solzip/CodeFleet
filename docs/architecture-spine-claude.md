@@ -79,7 +79,7 @@ Evidence / Trace       [S] 🟡   실행 증거       ◀══ SEAM S3: Verific
 [닫힘] derived state (VERIFIED 등)  →  carry-forward(승인된 결정/요약)  →  다음 Objective
 ```
 
-이 척추에서 색을 정직하게 읽으면: **S1-S5 최소 계약, Project Profile defaults/policies 계약, Harness enforcement 계약, AgentRole / Guardrail taxonomy, Verification 실행 정책, Workspace discovery, v0.1 / v0.2 / final implementation slicing, Review model v0.2 구현 세부, local review deterministic assembly / ACCEPTED gate / migration status, Objective ledger RUN_REVIEW_DECIDED migration path, Objective ledger replay / snapshot model, Mutation Engine minimum contract, command normalization / matcher 문법, export adapter field allowlist tier, files policy glob matcher 문법, redaction pattern language, risk rule expression 문법, AgentRole 필드 분해, policy rule id 규칙, 정합성 최종 재감사까지 고정됐고, v0.2 implementation kickoff의 workspace discovery / run-plan / S2 artifact split / run-summary normalization / VerificationEvidence 초기 구현이 들어갔다.** 설계를 먼저 완주하는 방침이므로 설계는 완료됐고 다음 병목은 v0.2 local review 구현이고, 설계 항목은 모두 고정됐다.
+이 척추에서 색을 정직하게 읽으면: **S1-S5 최소 계약, Project Profile defaults/policies 계약, Harness enforcement 계약, AgentRole / Guardrail taxonomy, Verification 실행 정책, Workspace discovery, v0.1 / v0.2 / final implementation slicing, Review model v0.2 구현 세부, local review deterministic assembly / ACCEPTED gate / migration status, Objective ledger RUN_REVIEW_DECIDED migration path, Objective ledger replay / snapshot model, Mutation Engine minimum contract, command normalization / matcher 문법, export adapter field allowlist tier, files policy glob matcher 문법, redaction pattern language, risk rule expression 문법, AgentRole 필드 분해, policy rule id 규칙, 정합성 최종 재감사까지 고정됐고, v0.2 implementation kickoff의 workspace discovery / run-plan / S2 artifact split / run-summary normalization / VerificationEvidence 초기 구현이 들어갔다.** 설계를 먼저 완주하는 방침이므로 설계는 완료됐고 v0.2 구현 슬라이스도 모두 끝나 다음 병목은 SPINE 한 바퀴 수동 검증이고, 설계 항목은 모두 고정됐다.
 
 ---
 
@@ -129,6 +129,7 @@ S4  Review seam     ◆    Run 결과 ─▶ 사람 수용/거절 기록 ─▶ 
     고정: ReviewEvidenceBundle 위치는 .codefleet/reviews/<reviewDecisionId>/
     고정: latest effective review는 ledger order + valid actor/bundle + not invalidated
     고정: ACCEPTED / REJECTED / NEEDS_CHANGES, RETRY는 새 Run reason
+    구현: codefleet review가 ReviewEvidenceBundle과 review-decision.local.json을 생성
     빈칸: ledger implementation
 
 S5  Export seam           Run Trace ─▶ Run Summary(sanitized) ─▶ Notion / 일지 / Issue
@@ -137,7 +138,7 @@ S5  Export seam           Run Trace ─▶ Run Summary(sanitized) ─▶ Notion 
     고정: exposure tier 기반 field allowlist와 raw evidence export 금지
 ```
 
-핵심: **S1(Task Revision 최소 계약), S2(Adapter), S3(Verification), S4(Review), S5(Export), Project Profile defaults/policies 최소 계약, Harness enforcement 최소 계약, AgentRole / Guardrail taxonomy, Verification 실행 정책, Workspace discovery, v0.1 / v0.2 / final implementation slicing, Review model v0.2 구현 세부와 local review deterministic assembly / ACCEPTED gate / migration status, Objective ledger RUN_REVIEW_DECIDED migration path, Objective ledger replay / snapshot model, Mutation Engine minimum contract, command normalization / matcher 문법, export adapter field allowlist tier, files policy glob matcher 문법, redaction pattern language, risk rule expression 문법, AgentRole 필드 분해, policy rule id 규칙, 정합성 최종 재감사까지 고정됐고, v0.2 implementation kickoff의 workspace discovery / run-plan / S2 artifact split / run-summary normalization / VerificationEvidence 초기 구현이 들어갔다.** 다만 실제 end-to-end runtime validation은 남아 있다. 설계를 먼저 완주하는 방침이므로 설계는 완료됐고 다음 병목은 v0.2 local review 구현이다.
+핵심: **S1(Task Revision 최소 계약), S2(Adapter), S3(Verification), S4(Review), S5(Export), Project Profile defaults/policies 최소 계약, Harness enforcement 최소 계약, AgentRole / Guardrail taxonomy, Verification 실행 정책, Workspace discovery, v0.1 / v0.2 / final implementation slicing, Review model v0.2 구현 세부와 local review deterministic assembly / ACCEPTED gate / migration status, Objective ledger RUN_REVIEW_DECIDED migration path, Objective ledger replay / snapshot model, Mutation Engine minimum contract, command normalization / matcher 문법, export adapter field allowlist tier, files policy glob matcher 문법, redaction pattern language, risk rule expression 문법, AgentRole 필드 분해, policy rule id 규칙, 정합성 최종 재감사까지 고정됐고, v0.2 implementation kickoff의 workspace discovery / run-plan / S2 artifact split / run-summary normalization / VerificationEvidence 초기 구현이 들어갔다.** 다만 실제 end-to-end runtime validation은 남아 있다. 설계를 먼저 완주하는 방침이므로 설계는 완료됐고 v0.2 구현 슬라이스도 모두 끝나 다음 병목은 SPINE 한 바퀴 수동 검증이다.
 
 ---
 
@@ -242,8 +243,7 @@ S1은 `Task Revision minimum contract`, S2는 `AdapterRequest -> AgentAdapter ->
 
 ```text
 설계
-1. v0.2 local review implementation   ← 다음 병목
-2. SPINE 한 바퀴 수동 검증
+1. SPINE 한 바퀴 수동 검증   ← 다음 병목
 
 구현 (설계 확정 후)
 4. v0.2 local review implementation

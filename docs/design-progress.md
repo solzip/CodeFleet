@@ -24,10 +24,10 @@ Phase 11     대기      설계 확정 후 구현 재개
 ```
 
 ```text
-전체 87단계 중 84단계 완료
+전체 87단계 중 85단계 완료
 FINAL RULE 82개
 설계 진행도: 100% (미고정 항목 없음)
-구현 진행도: 약 25-35%
+구현 진행도: 약 40-50% (v0.2 슬라이스 6/6 완료)
 ```
 
 방침:
@@ -289,8 +289,11 @@ Phase 10에서 반복된 판단 기준:
 ## Phase 11. 구현 재개 (현재 위치)
 
 ```text
-[ ] 85. codefleet review (v0.2 local review)   <- 다음, 미착수
-[ ] 86. SPINE 한 바퀴 수동 검증
+[x] 85. codefleet review (v0.2 local review)
+        - ReviewEvidenceBundle 결정론적 조립 + 참조 아티팩트 hash 재검증
+        - review-decision.local.json (finalDecisionTruth false)
+        - ACCEPTED 5조건 게이트, 파생 migration status
+[ ] 86. SPINE 한 바퀴 수동 검증                                        <- 다음, 미착수
 [ ] 87. 이후 final 슬라이스
 ```
 
