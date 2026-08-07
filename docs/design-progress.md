@@ -19,14 +19,14 @@ README.md                    현재 구현 사용법
 
 ```text
 Phase 0-9    완료      76단계
-Phase 10     진행 중   5단계 중 3단계 완료, 남은 설계 2단계
+Phase 10     진행 중   8단계 중 4단계 완료, 남은 설계 4단계
 Phase 11     대기      설계 확정 후 구현 재개
 ```
 
 ```text
-전체 84단계 중 79단계 완료
-FINAL RULE 74개
-설계 진행도: 약 94%
+전체 87단계 중 80단계 완료
+FINAL RULE 76개
+설계 진행도: 약 95%
 구현 진행도: 약 25-35%
 ```
 
@@ -185,16 +185,18 @@ FINAL RULE 74개
         - literal / 단일 세그먼트 * / 전체 세그먼트 ** 만 허용
         - 전체 경로 매칭, 암묵적 서브트리 없음, dir/** 는 dir 자체 미매칭
         - 부정 금지, case는 기존 canonical key 규칙 그대로
-[ ] 80. 나머지 DESIGN CANDIDATE 문법 항목                                <- 다음, 미착수
-        - redaction policy pattern language
-        - risk policy rule expression
-        - agentRoles 내부 role taxonomy
-        - profile rule id 네이밍 체계
-[ ] 81. 정합성 최종 재감사
+[x] 80. redaction policy pattern language
+        - 선형 시간 정규식 부분집합 (역참조 / 룩어라운드 금지)
+        - action 강도 순서 DROPPED > REDACTED > HASHED > RELATIVIZED
+        - 잘못된 rule은 건너뛰지 않고 export 차단
+[ ] 81. risk policy rule expression 문법                                <- 다음, 미착수
+[ ] 82. agentRoles 내부 role taxonomy
+[ ] 83. profile rule id 네이밍 체계
+[ ] 84. 정합성 최종 재감사
         - 0.13 상태 목록 재확인
         - authority 필드명 분리 또는 "서로 다른 enum" 명시
           (verification 5값 / command 4값 / changedFiles 3값)
-        - 규칙 블록 fence 통일 (현재 text 50개 / yaml 23개)
+        - 규칙 블록 fence 통일 (현재 text 50개 / yaml 26개)
 ```
 
 79번 직후 정합성 감사에서 결함 5건을 찾았고 3건을 즉시 고쳤다.
@@ -203,8 +205,8 @@ FINAL RULE 74개
 고침: SanitizedRunSummary에 없는 redactionSummary 경로를 tier가 참조하던 문제
 고침: Project Profile에 export 블록이 없는데 Profile 제한 권한을 주장하던 문제
 고침: FINAL RULE 4개가 preconditions / allowedEffect / evidence를 빠뜨린 문제
-남김: authority 동명 enum 3종 구분 미표기        -> 81번
-남김: 규칙 블록 fence 표기 불일치                -> 81번
+남김: authority 동명 enum 3종 구분 미표기        -> 84번
+남김: 규칙 블록 fence 표기 불일치                -> 84번
 ```
 
 논의 순서 이유:
@@ -214,7 +216,8 @@ FINAL RULE 74개
 - 78은 S5 경계가 이미 고정돼 있어 matcher 문법과 독립적으로 먼저 끝냈다.
 - 79는 기존 예시와 사용자 Task가 이미 ** 표기를 쓰고 있어 토큰 모델이 아니라 제한된 glob으로 갔다.
 - 79의 case 처리는 CASE_INSENSITIVE_PATH_MATCH_USES_CANONICAL_KEY가 이미 고정해 두어 새로 정하지 않았다.
-- 80은 위 항목들이 고정된 뒤 같은 형식을 따라간다.
+- 80은 남은 문법 중 유일하게 외부로 나가는 데이터를 직접 통제하므로 먼저 고정했다.
+- 81 이후는 판정 로직 -> 명명 규칙 순서로 간다.
 ```
 
 남은 설계의 성격:
@@ -228,12 +231,12 @@ Phase 10은 "그 판정을 어떤 표기로 쓰는가"를 정한다.
 ## Phase 11. 구현 재개 (설계 확정 후)
 
 ```text
-[ ] 82. codefleet review (v0.2 local review)   <- 유일하게 남은 v0.2 구현 슬라이스
-[ ] 83. SPINE 한 바퀴 수동 검증
-[ ] 84. 이후 final 슬라이스
+[ ] 85. codefleet review (v0.2 local review)   <- 유일하게 남은 v0.2 구현 슬라이스
+[ ] 86. SPINE 한 바퀴 수동 검증
+[ ] 87. 이후 final 슬라이스
 ```
 
-82번의 상세 슬라이스는 `docs/session-handoff.md`의 held implementation slice에 있다.
+85번의 상세 슬라이스는 `docs/session-handoff.md`의 held implementation slice에 있다.
 
 ---
 

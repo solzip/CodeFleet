@@ -79,7 +79,7 @@ Evidence / Trace       [S] 🟡   실행 증거       ◀══ SEAM S3: Verific
 [닫힘] derived state (VERIFIED 등)  →  carry-forward(승인된 결정/요약)  →  다음 Objective
 ```
 
-이 척추에서 색을 정직하게 읽으면: **S1-S5 최소 계약, Project Profile defaults/policies 계약, Harness enforcement 계약, AgentRole / Guardrail taxonomy, Verification 실행 정책, Workspace discovery, v0.1 / v0.2 / final implementation slicing, Review model v0.2 구현 세부, local review deterministic assembly / ACCEPTED gate / migration status, Objective ledger RUN_REVIEW_DECIDED migration path, Objective ledger replay / snapshot model, Mutation Engine minimum contract, command normalization / matcher 문법, export adapter field allowlist tier, files policy glob matcher 문법은 고정됐고, v0.2 implementation kickoff의 workspace discovery / run-plan / S2 artifact split / run-summary normalization / VerificationEvidence 초기 구현이 들어갔다.** 설계를 먼저 완주하는 방침이므로 다음 병목은 redaction policy pattern language이고, v0.2 local review implementation은 설계 확정 후로 미룬다.
+이 척추에서 색을 정직하게 읽으면: **S1-S5 최소 계약, Project Profile defaults/policies 계약, Harness enforcement 계약, AgentRole / Guardrail taxonomy, Verification 실행 정책, Workspace discovery, v0.1 / v0.2 / final implementation slicing, Review model v0.2 구현 세부, local review deterministic assembly / ACCEPTED gate / migration status, Objective ledger RUN_REVIEW_DECIDED migration path, Objective ledger replay / snapshot model, Mutation Engine minimum contract, command normalization / matcher 문법, export adapter field allowlist tier, files policy glob matcher 문법, redaction pattern language는 고정됐고, v0.2 implementation kickoff의 workspace discovery / run-plan / S2 artifact split / run-summary normalization / VerificationEvidence 초기 구현이 들어갔다.** 설계를 먼저 완주하는 방침이므로 다음 병목은 risk policy rule expression 문법이고, v0.2 local review implementation은 설계 확정 후로 미룬다.
 
 ---
 
@@ -137,7 +137,7 @@ S5  Export seam           Run Trace ─▶ Run Summary(sanitized) ─▶ Notion 
     고정: exposure tier 기반 field allowlist와 raw evidence export 금지
 ```
 
-핵심: **S1(Task Revision 최소 계약), S2(Adapter), S3(Verification), S4(Review), S5(Export), Project Profile defaults/policies 최소 계약, Harness enforcement 최소 계약, AgentRole / Guardrail taxonomy, Verification 실행 정책, Workspace discovery, v0.1 / v0.2 / final implementation slicing, Review model v0.2 구현 세부와 local review deterministic assembly / ACCEPTED gate / migration status, Objective ledger RUN_REVIEW_DECIDED migration path, Objective ledger replay / snapshot model, Mutation Engine minimum contract, command normalization / matcher 문법, export adapter field allowlist tier, files policy glob matcher 문법은 고정됐고, v0.2 implementation kickoff의 workspace discovery / run-plan / S2 artifact split / run-summary normalization / VerificationEvidence 초기 구현이 들어갔다.** 다만 실제 end-to-end runtime validation은 남아 있다. 설계를 먼저 완주하는 방침이므로 다음 병목은 redaction policy pattern language다.
+핵심: **S1(Task Revision 최소 계약), S2(Adapter), S3(Verification), S4(Review), S5(Export), Project Profile defaults/policies 최소 계약, Harness enforcement 최소 계약, AgentRole / Guardrail taxonomy, Verification 실행 정책, Workspace discovery, v0.1 / v0.2 / final implementation slicing, Review model v0.2 구현 세부와 local review deterministic assembly / ACCEPTED gate / migration status, Objective ledger RUN_REVIEW_DECIDED migration path, Objective ledger replay / snapshot model, Mutation Engine minimum contract, command normalization / matcher 문법, export adapter field allowlist tier, files policy glob matcher 문법, redaction pattern language는 고정됐고, v0.2 implementation kickoff의 workspace discovery / run-plan / S2 artifact split / run-summary normalization / VerificationEvidence 초기 구현이 들어갔다.** 다만 실제 end-to-end runtime validation은 남아 있다. 설계를 먼저 완주하는 방침이므로 다음 병목은 risk policy rule expression 문법이다.
 
 ---
 
@@ -242,8 +242,9 @@ S1은 `Task Revision minimum contract`, S2는 `AdapterRequest -> AgentAdapter ->
 
 ```text
 설계
-1. redaction policy pattern language   ← 다음 병목
-2. risk policy rule expression / agentRoles taxonomy / rule id 네이밍
+1. risk policy rule expression 문법   ← 다음 병목
+2. agentRoles taxonomy / profile rule id 네이밍
+3. 정합성 최종 재감사
 
 구현 (설계 확정 후)
 4. v0.2 local review implementation

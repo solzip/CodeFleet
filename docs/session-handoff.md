@@ -47,7 +47,7 @@ Important criteria:
 Design is being completed first. Implementation resumes only after the
 remaining design items are fixed.
 
-The next design topic is redaction policy pattern language.
+The next design topic is risk policy rule expression syntax.
 The next implementation topic is v0.2 local review, held until design is done.
 ```
 
@@ -64,16 +64,17 @@ execution through logs, diffs, tests, and review evidence.
 ## Progress
 
 ```text
-Final model / concept design: about 94%
+Final model / concept design: about 95%
 Implementation: about 25-35%
 ```
 
 Remaining design items:
 
 ```text
-1. redaction policy pattern language
-2. risk policy rule expression syntax
-3. agentRoles role taxonomy and profile rule id naming
+1. risk policy rule expression syntax
+2. agentRoles role taxonomy
+3. profile rule id naming scheme
+4. final consistency re-audit
 ```
 
 Current implementation status:
@@ -120,6 +121,7 @@ S2 Adapter seam
 -> Command normalization and matcher syntax
 -> Export adapter field allowlist tiers
 -> Files policy glob matcher syntax
+-> Redaction pattern language
 ```
 
 Important fixed boundaries:
@@ -163,30 +165,34 @@ Important fixed boundaries:
 - Path patterns allow only literal segments, single-segment `*`, and whole-segment `**`; no character class, brace expansion, negation, or regex.
 - Path matching is whole-path with no implicit subtree expansion, and `dir/**` does not match the directory entry itself.
 - Path exclusion is expressed only through deniedPaths, and path case handling stays on the already-fixed canonical comparison key.
+- Redaction does take a pattern language because its matcher decides removal rather than permission and secrets cannot be caught by literals, but backreferences and lookaround are denied so linear-time matching is guaranteed by grammar.
+- Redaction action strictness is DROPPED > REDACTED > HASHED > RELATIVIZED; HASHED ranks below REDACTED because a hash preserves equality correlation.
+- A broken redaction rule is never skipped; it makes sanitization incomplete and blocks export.
+- Redaction runs after exposure tier filtering, and both stages record into the same redaction-report.
 ```
 
 ## Current Bottleneck
 
 ```text
-redaction policy pattern language
+risk policy rule expression syntax
 ```
 
 Why this is next:
 
 ```text
 Design is being completed before further implementation.
-Mutation Engine contract, commands matcher syntax, export field allowlist tiers, and files glob matcher are now fixed.
-redaction pattern language is the only remaining syntax item that directly controls what leaves the machine, so it comes before the naming-level items.
-risk rule expression, agentRoles taxonomy, and profile rule id naming follow.
+Every matcher and pattern item is now fixed: commands, files, export field allowlist, and redaction.
+risk rule expression is the last remaining judgement-logic syntax item, so it comes before the naming-level items.
+agentRoles taxonomy and profile rule id naming follow, then the final consistency re-audit.
 ```
 
 Expected next design slice:
 
 ```text
-1. Decide whether secret / token detection can reuse a bounded literal matcher or genuinely needs expressions.
-2. Define what an unmatchable pattern produces.
-3. Keep blockedExport semantics unchanged.
-4. Then close risk rule expression, agentRoles taxonomy, and rule id naming.
+1. Define deterministic risk rule evaluation without free-form expressions.
+2. Keep risk lowering restrictions and UNKNOWN semantics intact.
+3. Then define agentRoles role taxonomy and profile rule id naming.
+4. Then run the final consistency re-audit.
 ```
 
 Held implementation slice (resumes after design is fixed):

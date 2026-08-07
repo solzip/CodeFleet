@@ -5017,6 +5017,7 @@ PASS:
 - Command normalization / matcher 문법 / destructive category 승인 단위
 - Export adapter field allowlist (exposure tier / leaf field path / unknown field 처리)
 - Files policy glob matcher 문법 (제한된 * / ** 부분집합)
+- Redaction pattern language (선형 시간 정규식 부분집합 / action 강도 순서 / 실패 시 export 차단)
 
 PASS_AFTER_REINFORCEMENT:
 - Risk 판단 원칙
@@ -5036,8 +5037,7 @@ RESOLVED_AFTER_THIS_LIST_WAS_WRITTEN:
 
 NOT_FINAL_YET:
 - 5.3의 나머지 DESIGN CANDIDATE 문법 항목
-  -> risk rule expression / redaction pattern language /
-     agentRoles 내부 taxonomy / profile rule id 네이밍
+  -> risk rule expression / agentRoles 내부 taxonomy / profile rule id 네이밍
 ```
 
 `NOT_FINAL_YET` 항목은 확정 규칙이 아니다. 이 항목들은 다음 논의에서 같은 기준으로 하나씩 FINAL RULE로 승격하거나 VERSION_PLAN으로 남긴다.
@@ -8701,6 +8701,8 @@ policies:
     defaultAttemptIdPrefix: "verify"
     allowWaiver: false
   redaction:
+    # rules entry: { ruleId, matchKind, pattern, action, appliesTo: [] }
+    # pattern language and action strictness order fixed in the redaction pattern language section
     blockExportOnSecretMatch: true
     allowLocalPathExport: false
     allowPublicUrlExport: false
@@ -8850,6 +8852,7 @@ policies.redaction.allowPublicUrlExport
 
 policies.redaction.rules
 = union, then stricter matching/action wins for overlapping rules
+= action strictness order is DROPPED > REDACTED > HASHED > RELATIVIZED
 
 policies.carryForward.allowSanitizedSummary
 = AND; false wins
@@ -10857,7 +10860,6 @@ repairBehavior:
 ```text
 DESIGN CANDIDATE:
 - risk policy rule expression 세부 문법
-- redaction policy pattern language
 - agentRoles 내부 role taxonomy
 - profile rule id 세부 네이밍 체계
 
@@ -10868,6 +10870,10 @@ FIXED:
   -> DESTRUCTIVE_COMMAND_CATEGORY_IS_APPROVAL_UNIT
 - files policy glob matcher 문법
   -> FILES_POLICY_MATCHER_IS_BOUNDED_GLOB_SUBSET
+- redaction policy pattern language
+  -> REDACTION_PATTERN_IS_LINEAR_TIME_REGEX_SUBSET
+  -> REDACTION_ACTION_STRICTNESS_ORDER_IS_FIXED
+  -> REDACTION_RULE_FAILURE_BLOCKS_EXPORT
 ```
 
 ```text
@@ -13982,6 +13988,216 @@ Sanitization 실패 효과:
 - finding.severity = WARNING 또는 CORRUPTION은 sanitizer rule definition이 결정
 ```
 
+#### Redaction pattern language
+
+`policies.redaction.rules` entry의 형태와 패턴 문법을 여기서 고정한다.
+
+Rule entry:
+
+```yaml
+rules:
+  - ruleId: ""
+    matchKind: "SECRET | TOKEN | RAW_LOG | RAW_DIFF | INTERNAL_URL | LOCAL_ABSOLUTE_PATH | ENV_DUMP | SCHEMA_UNKNOWN_FIELD | CUSTOM"
+    pattern: ""
+    action: "REDACTED | DROPPED | RELATIVIZED | HASHED"
+    appliesTo: []
+```
+
+`appliesTo`는 sanitized field path 목록이며 비어 있으면 sanitized 내용 전체에 적용한다. 표기는 export field allowlist와 같은 것을 쓴다. 새 경로 표기를 만들지 않는다.
+
+command matcher와 files matcher는 패턴 언어를 도입하지 않았지만 redaction은 도입한다. 두 경우는 위험의 방향이 반대다.
+
+```text
+command / files matcher
+= matcher가 허용을 결정한다
+= 너무 넓으면 권한 과다가 되어 보안 경계가 뚫린다
+
+redaction matcher
+= matcher가 제거를 결정한다
+= 너무 좁으면 유출이고, 너무 넓으면 내용 과다 삭제다
+= 과다 삭제는 안전한 실패다
+```
+
+그리고 리터럴 매칭으로는 원리적으로 불가능하다. 시크릿은 정의상 매번 다른 값이므로 알려진 문자열 목록으로 잡을 수 없고, `sk-` 접두사와 고정 길이, `AKIA` 접두사와 대문자 16자, JWT 3분절, PEM 헤더 같은 형태 매칭이 필요하다.
+
+허용 문법:
+
+```text
+literal
+[a-z0-9] 문자 클래스
+[^...]   부정 문자 클래스
+|        교대
+? * +    수량자
+{n} {n,} {n,m}   상한이 있는 반복
+^ $      앵커
+( )      그룹핑 전용
+```
+
+금지 문법:
+
+```text
+\1 등 역참조
+(?=) (?!) (?<=) (?<!) 룩어라운드
+재귀 패턴
+조건부 패턴
+\K, 원자 그룹, 소유 수량자
+```
+
+금지 목록의 기준은 표현력이 아니라 **선형 시간 매칭 보장**이다. 역참조와 룩어라운드를 제거하면 패턴은 유한 오토마타로 컴파일되어 입력 길이에 선형인 시간에 매칭된다. redaction은 로그, diff, provider transcript 같은 신뢰할 수 없는 입력 위에서 동작하므로, catastrophic backtracking을 정책으로 금지하는 것이 아니라 문법 수준에서 불가능하게 만들어야 한다.
+
+실제 시크릿 형식 중 역참조나 룩어라운드를 요구하는 것은 없다.
+
+Action 강도 순서:
+
+```text
+DROPPED > REDACTED > HASHED > RELATIVIZED
+```
+
+```text
+DROPPED      값이 사라진다. 아무것도 남기지 않는다.
+REDACTED     고정 placeholder로 치환한다. 존재 사실만 남는다.
+HASHED       해시로 치환한다. 같은 값끼리 대조가 가능하다.
+RELATIVIZED  경로를 상대화만 한다. 내용 대부분이 남는다.
+```
+
+`HASHED`가 `REDACTED`보다 약한 이유는 해시가 동일성 상관관계를 남기기 때문이다. 같은 시크릿이 여러 Run에 나타나면 같은 해시가 되어 값 자체를 몰라도 추적이 가능하다.
+
+이 순서는 `policies.redaction.rules`의 병합 규칙이 이미 요구하고 있던 것이다. 병합은 union 후 겹치는 rule에서 더 엄격한 action이 이긴다고 고정돼 있었지만 강도 순서가 정의돼 있지 않아 결정론적이지 않았다.
+
+적용 순서:
+
+```text
+1. exposure tier로 export 대상 필드를 선별한다.
+2. 남은 내용에만 redaction rule을 적용한다.
+3. 두 단계의 결과를 같은 redaction-report.json에 기록한다.
+```
+
+tier가 이미 제거한 필드를 스캔할 이유가 없다. `SCHEMA_UNKNOWN_FIELD` 기록이 같은 리포트에 들어가는 것도 이 순서와 일치한다.
+
+```yaml
+ruleId: REDACTION_PATTERN_IS_LINEAR_TIME_REGEX_SUBSET
+status: FINAL
+scope: EXPORT
+sourceOfTruth:
+  - Core secret pattern set
+  - policies.redaction.rules
+  - sanitized run summary content
+inputs:
+  - rule pattern
+  - rule matchKind
+  - rule appliesTo
+  - sanitized field values
+preconditions:
+  - exposure tier filtering has produced the sanitized field set.
+condition:
+  - patterns use literal text, character classes, alternation, quantifiers, bounded repetition, anchors, and grouping only.
+  - patterns contain no backreference, lookaround, recursion, conditional, atomic group, or possessive quantifier.
+  - every pattern compiles to a finite automaton and matches in time linear in input length.
+  - repetition bounds are explicit and finite.
+  - appliesTo reuses the export field path notation and applies to all sanitized content when empty.
+  - redaction runs after exposure tier filtering, never before.
+allowedEffect:
+  - Core may ship a baseline secret pattern set.
+  - Project Profile rules may add patterns on top of the Core set.
+  - a pattern may over-match and remove more content than strictly required.
+deniedEffect:
+  - CodeFleet cannot evaluate a pattern whose matching time is not linear in input length.
+  - CodeFleet cannot rely on literal-only matching to detect secrets.
+  - CodeFleet cannot introduce a second field path notation for appliesTo.
+  - CodeFleet cannot run redaction on fields the tier already dropped.
+evidence:
+  - ruleId
+  - matchKind
+  - pattern
+  - appliesTo
+  - match count
+  - applied action
+failureFinding:
+  category: EXECUTION_EVIDENCE_INTEGRITY
+  severity: CORRUPTION
+repairBehavior:
+  - rewrite the pattern using the supported subset
+  - split a lookaround-dependent pattern into separate rules
+```
+
+```yaml
+ruleId: REDACTION_ACTION_STRICTNESS_ORDER_IS_FIXED
+status: FINAL
+scope: EXPORT
+sourceOfTruth:
+  - policies.redaction.rules merge semantics
+  - Core secret pattern set
+inputs:
+  - overlapping rule set for one value
+  - each rule action
+preconditions:
+  - more than one redaction rule matched the same value.
+condition:
+  - action strictness order is DROPPED, then REDACTED, then HASHED, then RELATIVIZED.
+  - the strictest matched action is applied to the value.
+  - HASHED ranks below REDACTED because a hash preserves equality correlation across Runs.
+  - every applied action is recorded per rule in redaction-report.
+allowedEffect:
+  - several rules may match one value and only the strictest action takes effect.
+  - Local Overlay may raise an action to a stricter one.
+deniedEffect:
+  - CodeFleet cannot apply a weaker action when a stricter rule matched.
+  - CodeFleet cannot leave the winning action undefined for overlapping rules.
+  - CodeFleet cannot lower an action through Local Overlay or Run options.
+evidence:
+  - matched ruleId list
+  - each candidate action
+  - applied action
+  - value field path
+failureFinding:
+  category: EXECUTION_EVIDENCE_INTEGRITY
+  severity: CORRUPTION
+repairBehavior:
+  - recompute the applied action from the fixed strictness order
+  - regenerate sanitized artifacts before retrying export
+```
+
+```yaml
+ruleId: REDACTION_RULE_FAILURE_BLOCKS_EXPORT
+status: FINAL
+scope: EXPORT
+sourceOfTruth:
+  - policies.redaction.rules
+  - redaction-report.json
+  - sanitizer execution result
+inputs:
+  - rule validation result
+  - pattern compilation result
+  - sanitizer completion state
+preconditions:
+  - sanitization has been requested for an export attempt.
+condition:
+  - a rule using unsupported syntax fails Project Profile validation.
+  - a pattern that fails to compile makes sanitization incomplete.
+  - incomplete sanitization sets blockedExport true.
+  - an unusable rule is never skipped so that export can proceed.
+allowedEffect:
+  - validation may report every invalid rule at once.
+  - export may be retried after the rule is corrected and artifacts are regenerated.
+deniedEffect:
+  - CodeFleet cannot skip a broken redaction rule and continue exporting.
+  - CodeFleet cannot treat incomplete sanitization as a clean export.
+  - CodeFleet cannot downgrade a redaction failure to a warning that still exports.
+evidence:
+  - ruleId
+  - validation error
+  - compilation error
+  - sanitizer completion state
+  - blockedExport value
+  - blockedReasons
+failureFinding:
+  category: EXECUTION_EVIDENCE_INTEGRITY
+  severity: CORRUPTION
+repairBehavior:
+  - correct the invalid rule in the owning policy source
+  - regenerate sanitized artifacts and create a new exportAttempt
+```
+
 S5 Export seam 최종 계약:
 
 ```text
@@ -15373,31 +15589,33 @@ repairBehavior:
 - files policy 경로 패턴은 literal / 단일 세그먼트 * / 전체 세그먼트 ** 만 허용하고 문자 클래스, 중괄호 확장, 부정, 정규식을 쓰지 않는다는 원칙
 - 경로 매칭은 전체 경로 기준이며 중간 경로가 서브트리를 암묵적으로 덮지 않고 dir/** 는 디렉터리 엔트리 자체에 매칭되지 않는다는 원칙
 - 경로 제외는 패턴 부정이 아니라 deniedPaths로만 표현하며 대소문자 판정은 CASE_INSENSITIVE_PATH_MATCH_USES_CANONICAL_KEY의 canonical key를 그대로 쓴다는 원칙
+- redaction은 허용을 결정하는 matcher와 위험 방향이 반대이고 시크릿은 리터럴로 잡을 수 없으므로 패턴 언어를 도입하되 역참조와 룩어라운드를 금지해 선형 시간 매칭을 문법 수준에서 보장한다는 원칙
+- redaction action 강도는 DROPPED > REDACTED > HASHED > RELATIVIZED이며 HASHED는 동일성 상관관계를 남기므로 REDACTED보다 약하다는 원칙
+- 잘못된 redaction rule은 건너뛰지 않고 sanitization을 불완전으로 만들어 export를 차단한다는 원칙
+- redaction은 exposure tier 필터 이후에 적용하며 두 단계 결과를 같은 redaction-report에 기록한다는 원칙
 ```
 
 다음으로 논의할 항목:
 
 ```text
-1. redaction policy pattern language
-   - decide whether secret / token detection can reuse a bounded literal matcher or genuinely needs expressions
-   - define what an unmatchable pattern produces
-   - keep blockedExport semantics unchanged
-
-2. risk policy rule expression 문법
+1. risk policy rule expression 문법
    - define deterministic risk rule evaluation without free-form expressions
-   - keep risk lowering restrictions intact
+   - keep risk lowering restrictions and UNKNOWN semantics intact
 
-3. agentRoles 내부 role taxonomy
+2. agentRoles 내부 role taxonomy
+   - define the role id set and its max capability mapping
+   - keep AgentRole as classification, never a permission grant
 
-4. profile rule id 네이밍 체계
+3. profile rule id 네이밍 체계
+   - define a stable naming scheme for policy rule ids
 ```
 
 논의 순서 이유:
 
 ```text
-- redaction pattern language는 남은 문법 항목 중 유일하게 외부로 나가는 데이터를 직접 통제하므로 먼저 고정한다.
-- risk rule expression은 이미 고정된 risk lowering 제한 위에서만 정의하면 되므로 그 다음이다.
-- agentRoles taxonomy와 rule id 네이밍은 판정 로직이 아니라 명명 규칙이므로 마지막이다.
+- risk rule expression은 판정 로직이므로 명명 규칙보다 먼저 고정한다.
+- agentRoles taxonomy는 이미 고정된 classification 원칙 위에서 id 집합만 정하면 된다.
+- rule id 네이밍은 판정에 영향을 주지 않으므로 마지막이다.
 ```
 
 ## 16. 다음 세션에서 이어갈 때
