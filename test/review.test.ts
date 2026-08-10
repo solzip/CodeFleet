@@ -345,3 +345,29 @@ test("the decision record cannot state a claim its own bundle contradicts", asyn
     "MIGRATION_READY/INCOMPLETE"
   );
 });
+
+test("every Run leaves a readable record, and it does not hide what is unknown", async () => {
+  const { root, runId } = await seedWorkspace();
+  const recordPath = path.join(root, ".codefleet", "runs", runId, "run-record.md");
+
+  // Written by the Run itself, with no export requested.
+  let text = await readFile(recordPath, "utf8");
+  assert.match(text, new RegExp(`# Run ${runId}`));
+  assert.match(text, /## What this Run was for/);
+  assert.match(text, /## What is not known/);
+
+  const summary = await readJson(path.join(root, ".codefleet", "runs", runId, "run-summary.json"));
+  const gaps = (summary.normalization as { unavailableReasons: string[] }).unavailableReasons;
+  for (const gap of gaps) {
+    assert.ok(text.includes(gap), `run-record must list ${gap} rather than summarise it away`);
+  }
+  assert.match(text, /No review has been recorded/);
+
+  await reviewRun(root, runId, { decision: "REJECTED", reason: "not acceptable" });
+
+  // The review outcome joins the same record, so one file stays the whole story.
+  text = await readFile(recordPath, "utf8");
+  assert.match(text, /decision\s*:\s*REJECTED/);
+  assert.match(text, /Reason: not acceptable/);
+  assert.match(text, /not final decision truth/);
+});

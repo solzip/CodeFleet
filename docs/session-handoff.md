@@ -111,6 +111,9 @@ Current implementation status:
 - An EVIDENCE_DEFECT is never waivable by any actor, because nobody can stand in for evidence that does not match its recorded hash.
 - Auto-accept additionally requires normalization COMPLETE with no gap of either kind, so CodeFleet can never waive its own blind spot.
 - Local review derives MIGRATION_READY / MIGRATION_READY_WAIVED / DEGRADED_RECORDED / MIGRATION_BLOCKED and never records VERIFIED or queue progression.
+- Every Run writes run-record.md, a readable account of what it did and what stayed unknown, independently of any export.
+- run-record.md lists every unavailableReason with its classification rather than summarising it away, and a review outcome joins the same file.
+- exports/summary.md stays the sanitized outward record; the two are separate because most Runs are never exported and redaction can block an export outright.
 - Missing final evidence is represented as unavailable / degraded reason instead of truth.
 ```
 

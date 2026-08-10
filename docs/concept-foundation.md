@@ -9582,10 +9582,107 @@ v0.2 S2 artifact layout:
   adapter-request.json
   harness-observation.json
   adapter-result.json
+  run-record.md
   prompt.md
   stdout.log
   stderr.log
   git-diff.patch
+```
+
+#### Run record
+
+`run-record.md`는 Run 하나를 사람이 읽을 수 있게 서술한 기록이다. `exports/summary.md`와 목적이 다르므로 분리한다.
+
+```text
+run-record.md
+= 이 저장소에서 작업하는 사람을 위한 기록
+= Run 마다 항상 생성된다
+= workspace-relative 경로와 refs/hash 를 그대로 담을 수 있다
+= Run Trace 의 일부이며 생성 후 수정하지 않는다
+
+exports/summary.md
+= 외부로 나가는 기록
+= exportAttempt 가 있을 때만 생성된다
+= exposure tier 필터와 redaction 을 거친다
+= blockedExport 이면 생성되지 않을 수 있다
+```
+
+둘을 하나로 합칠 수 없는 이유가 셋 있다.
+
+```text
+1. export 는 대부분의 Run 에서 일어나지 않는다.
+   사람용 기록이 export 에만 있으면 거의 모든 Run 이 읽을 수 없는 상태로 남는다.
+
+2. redaction 이 export 를 차단할 수 있다.
+   그 경우 Run 은 실행됐는데 사람이 읽을 기록이 하나도 없게 된다.
+
+3. 두 독자의 신뢰 경계가 다르다.
+   로컬 기록은 run path 와 hash 를 그대로 보여줘야 추적이 가능하고,
+   외부 기록은 그것들을 제거해야 한다.
+```
+
+`run-record.md` 최소 내용:
+
+```text
+- runId, taskId, 실행 시각
+- Task goal 과 doneCriteria (무엇을 왜 하려 했는가)
+- scope include / exclude
+- normalized result
+- 변경된 파일 목록과 path policy 판정
+- 실행된 검증 명령과 결과, authority
+- observedCheck / verificationGateResult / verificationGateReason
+- unavailableReason 전체 목록과 각각의 분류
+- Review Decision 이 있으면 그 결정과 사유, waive 한 gap
+```
+
+마지막 두 항목이 중요하다. 사람이 읽는 형식은 "대체로 잘 됐다"로 공백을 덮기 가장 쉬운 자리다. `run-record.md`는 unavailable 한 것을 숨기지 않고 목록으로 드러내야 한다.
+
+```yaml
+ruleId: RUN_RECORD_IS_LOCAL_DERIVED_NARRATIVE
+status: FINAL
+scope: RUN_ARTIFACTS
+sourceOfTruth:
+  - run-summary.json
+  - harness-observation.json
+  - VerificationEvidence
+  - Task Revision goal and doneCriteria
+  - review-decision.local.json when present
+inputs:
+  - runId
+  - taskId
+  - normalized result
+  - changed files and path policy evaluation
+  - verification attempts and authority
+  - unavailableReason list with gap classification
+  - review decision when present
+preconditions:
+  - run-summary.json exists for the Run.
+condition:
+  - run-record.md is created for every Run, independently of any export.
+  - run-record.md is derived from existing artifacts and states no claim they do not carry.
+  - run-record.md lists every unavailableReason with its CAPABILITY_GAP or EVIDENCE_DEFECT classification.
+  - run-record.md is not an export adapter input and is never sent outside the workspace.
+  - run-record.md is not decision truth and cannot produce VERIFIED or queue progression.
+allowedEffect:
+  - a person may read one file to learn what the Run did and what remains unknown.
+  - run-record.md may show workspace-relative paths, refs, and hashes.
+  - export may still be blocked while run-record.md exists.
+deniedEffect:
+  - CodeFleet cannot omit run-record.md because an export was not requested.
+  - CodeFleet cannot omit an unavailableReason from run-record.md.
+  - CodeFleet cannot use run-record.md as an export adapter input.
+  - CodeFleet cannot let run-record.md state a result its source artifacts do not.
+evidence:
+  - runId
+  - run-record.md path and hash
+  - source artifact refs it was derived from
+  - listed unavailableReason count
+failureFinding:
+  category: EXECUTION_EVIDENCE_INTEGRITY
+  severity: WARNING
+repairBehavior:
+  - regenerate run-record.md from the existing Run artifacts
+  - add the missing unavailableReason entries before reading it as complete
 ```
 
 생성 순서:

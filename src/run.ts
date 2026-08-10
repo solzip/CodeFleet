@@ -9,6 +9,7 @@ import { loadTask } from "./task.ts";
 import type { AgentRunInput, AgentRunResult, RunResultFile } from "./types.ts";
 import { normalizeCommand, preflightCommand, type CommandMatcher, type DestructiveMatcher } from "./command-policy.ts";
 import { evaluatePathPolicy, type PathViolation } from "./path-policy.ts";
+import { renderRunRecord } from "./run-record.ts";
 import { discoverWorkspace, type FileRef, type WorkspaceDiscovery } from "./workspace.ts";
 
 export interface RunExecution {
@@ -438,6 +439,22 @@ export async function runTask(
   });
   assertRunSummary(runSummary);
   await writeJson(runSummaryPath, runSummary);
+
+  // Written for every Run, not only exported ones, so a person always has one
+  // file describing what happened and what stayed unknown.
+  await writeFile(
+    path.join(runDir, "run-record.md"),
+    renderRunRecord({
+      runId,
+      taskId: task.id,
+      createdAt: formatDateTimeWithOffset(startedAtDate),
+      task,
+      runSummary: runSummary as unknown as Record<string, unknown>,
+      harnessObservation,
+      localReview: null
+    }),
+    "utf8"
+  );
 
   const result: RunResultFile = {
     runId,

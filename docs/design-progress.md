@@ -26,7 +26,7 @@ Phase 11     대기      설계 확정 후 구현 재개
 ```
 
 ```text
-전체 93단계 중 90단계 완료
+전체 93단계 중 91단계 완료
 FINAL RULE 82개
 설계 진행도: 100% (미고정 항목 없음)
 구현 진행도: 약 60-70%
@@ -320,8 +320,12 @@ Phase 10에서 반복된 판단 기준:
         - 검증 공백 3건 해소, 링크 탈출 우회 경로 1건 발견·수정
         - path-policy / command-policy 단위 테스트 19개 추가 (기존 0개)
         - 기록: docs/implementation-audit-2026-08-10.md
-[ ] 91. CodeFleet 자신의 사람용 Run 기록 (summary.md)              <- 다음, 미착수
-[ ] 92. 값 집합 발산 8건 선언
+[x] 91. Run 자체 기록과 Export 분리
+        - run-record.md 를 Run 마다 항상 생성 (export 여부와 무관)
+        - exports/summary.md 는 sanitized 외부용으로 유지
+        - unavailableReason 을 분류와 함께 전부 나열, 요약으로 덮지 않음
+        - 리뷰가 기록되면 같은 파일에 결과가 합류
+[ ] 92. 값 집합 발산 8건 선언                                          <- 다음, 미착수
 [ ] 93. 이후 final 슬라이스 (workspace snapshot / provider transcript / agent command 관측)
 [ ] 87. 이후 final 슬라이스
 ```

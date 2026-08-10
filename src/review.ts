@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { renderRunRecord } from "./run-record.ts";
+import type { Task } from "./types.ts";
 import type { FileRef } from "./workspace.ts";
 
 export type ReviewDecision = "ACCEPTED" | "REJECTED" | "NEEDS_CHANGES";
@@ -240,6 +242,7 @@ export async function reviewRun(
 
   assertLocalReview(localReview, bundle);
   await writeJson(localReviewPath, localReview);
+  await refreshRunRecord(rootDir, runDir, runId, runSummary, localReview);
 
   return {
     runId,
@@ -253,6 +256,48 @@ export async function reviewRun(
     localReviewPath: toRelativePath(rootDir, localReviewPath),
     blockedReasons: acceptance.blockedReasons
   };
+}
+
+// The Run record carries the review outcome once one exists, so the one readable
+// file stays the whole story rather than stopping at execution.
+async function refreshRunRecord(
+  rootDir: string,
+  runDir: string,
+  runId: string,
+  runSummary: Record<string, unknown>,
+  localReview: Record<string, unknown>
+): Promise<void> {
+  const observation = await readJson(path.join(runDir, "harness-observation.json"));
+  const taskSnapshot = await readJson(path.join(runDir, "run-plan.json"));
+  const task = await readTaskSnapshot(rootDir, runDir);
+  if (observation === null || task === null || taskSnapshot === null) {
+    return;
+  }
+
+  await writeFile(
+    path.join(runDir, "run-record.md"),
+    renderRunRecord({
+      runId,
+      taskId: asString(runSummary.taskId, ""),
+      createdAt: asString(runSummary.createdAt, ""),
+      task,
+      runSummary,
+      harnessObservation: observation,
+      localReview
+    }),
+    "utf8"
+  );
+}
+
+async function readTaskSnapshot(rootDir: string, runDir: string): Promise<Task | null> {
+  try {
+    const { parseYaml } = await import("./yaml.ts");
+    const raw = await readFile(path.join(runDir, "task.yaml"), "utf8");
+    const parsed = parseYaml(raw);
+    return parsed !== null && typeof parsed === "object" ? (parsed as unknown as Task) : null;
+  } catch {
+    return null;
+  }
 }
 
 async function buildEvidenceBundle(input: {
