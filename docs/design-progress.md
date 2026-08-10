@@ -24,10 +24,10 @@ Phase 11     대기      설계 확정 후 구현 재개
 ```
 
 ```text
-전체 87단계 중 86단계 완료
+전체 89단계 중 87단계 완료
 FINAL RULE 82개
 설계 진행도: 100% (미고정 항목 없음)
-구현 진행도: 약 40-50% (v0.2 슬라이스 6/6 완료)
+구현 진행도: 약 50-60%
 ```
 
 방침:
@@ -298,7 +298,13 @@ Phase 10에서 반복된 판단 기준:
         - 판정 BLOCKED (S3 command channel, S4 final ledger 미구현)
         - changed-files 증거가 untracked 파일을 누락하던 결함 발견 및 수정
         - 기록: docs/spine-pass-2026-08-07.md
-[ ] 87. 이후 final 슬라이스                                            <- 다음, 미착수
+[x] 87. path policy evaluation
+        - bounded glob matcher 구현 (literal / * / **, 전체 경로, 세그먼트 경계)
+        - denied 우선, allowlist 미매치는 violation
+        - scope 항목이 와일드카드 없는 디렉터리면 Task validation에서 거부
+        - changed-files 증거가 degraded면 평가하지 않고 unavailable로 기록
+[ ] 88. Harness-visible command channel (S3)                          <- 다음, 미착수
+[ ] 89. 이후 final 슬라이스
 [ ] 87. 이후 final 슬라이스
 ```
 

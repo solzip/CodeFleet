@@ -1,5 +1,6 @@
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
+import { validatePattern } from "./path-policy.ts";
 import type { LoadedTask, Task, ValidationResult } from "./types.ts";
 import { parseYaml } from "./yaml.ts";
 
@@ -84,6 +85,8 @@ export function validateTask(value: unknown): ValidationResult {
   } else {
     requireStringArray(value.scope, "scope.include", "include", errors);
     requireStringArray(value.scope, "scope.exclude", "exclude", errors);
+    requireValidPatterns(value.scope, "scope.include", "include", errors);
+    requireValidPatterns(value.scope, "scope.exclude", "exclude", errors);
   }
 
   requireStringArray(value, "constraints", "constraints", errors);
@@ -126,6 +129,32 @@ function requireStringArray(
   const invalid = candidate.find((item) => typeof item !== "string" || item.trim().length === 0);
   if (invalid !== undefined) {
     errors.push(`${label} must contain only non-empty strings.`);
+  }
+}
+
+// Scope entries become allowedPaths / deniedPaths, so they must satisfy the
+// fixed path matcher. Rejecting a bare directory name here is deliberate:
+// matching is whole-path with no implicit subtree, so "src" would match only a
+// file literally named "src" and quietly put every file under src/ out of scope.
+function requireValidPatterns(
+  value: Record<string, unknown>,
+  label: string,
+  key: string,
+  errors: string[]
+): void {
+  const candidate = value[key];
+  if (!Array.isArray(candidate)) {
+    return;
+  }
+
+  for (const item of candidate) {
+    if (typeof item !== "string") {
+      continue;
+    }
+    const problem = validatePattern(item);
+    if (problem !== null) {
+      errors.push(`${label} entry is invalid: ${problem.message}`);
+    }
   }
 }
 

@@ -47,9 +47,9 @@ Important criteria:
 Design is complete as of the final consistency re-audit. Implementation
 has resumed.
 
-Design is complete and the first SPINE pass is done. The next topic is the
-final slices, starting with path policy evaluation.
-The next implementation topic is path policy evaluation.
+Design is complete. Path policy evaluation is implemented. The next topic is
+the Harness-visible command channel.
+The next implementation topic is the Harness-visible command channel.
 ```
 
 ## Product Definition
@@ -94,6 +94,9 @@ Current implementation status:
 - VerificationEvidence distinguishes NO_VERIFICATION_COMMANDS_CONFIGURED from COMMAND_CHANNEL_NOT_HARNESS_VISIBLE.
 - Legacy result.json is still kept for v0.x compatibility.
 - Changed-files evidence comes from git status with untracked files included, since an agent creating a new file must not be invisible.
+- Path policy is evaluated against changed files using the fixed bounded glob subset, denied first, and violations are recorded in HarnessObservation.
+- Path policy is not evaluated when changed-files evidence is degraded; it reports unavailable rather than "no violations" over partial input.
+- Task scope entries must be valid patterns; a bare directory name is rejected at validation because whole-path matching would silently put its contents out of scope.
 - codefleet review assembles ReviewEvidenceBundle from Run Summary refs and re-verifies every referenced artifact hash.
 - codefleet review writes review-decision.local.json with finalDecisionTruth false and migrationTarget RUN_REVIEW_DECIDED.
 - ACCEPTED is refused unless the bundle is COMPLETE, hashes are valid, the normalized result is DONE, the verification gate is satisfied or waived, and no path violation is unresolved.
@@ -198,28 +201,29 @@ Important fixed boundaries:
 ## Current Bottleneck
 
 ```text
-path policy evaluation
+Harness-visible command channel (S3)
 ```
 
 Why this is next:
 
 ```text
-The first SPINE pass recorded BLOCKED with S3 and final S4 named, and it found
-one real defect: changed-files evidence omitted untracked files while claiming the
-observation was complete. That is fixed.
+Path policy now evaluates, and an in-scope Run no longer lists a path violation
+among its ACCEPTED blockers. The only remaining blocker is the verification gate.
 
-Changed-files evidence is now trustworthy, which is exactly the input path policy
-evaluation needs. Until it runs, pathViolationSummary stays evaluated:false and no
-ACCEPTED local review is possible, so this unblocks the acceptance path.
+S3 is what closes it. Until the Harness executes or observes verification commands
+itself, observedCheck stays NONE, the gate stays NOT_SATISFIED (MISSING), and no
+Run can be accepted. It is also the last boundary the first SPINE pass recorded as
+BLOCKED.
 ```
 
 Next implementation slice:
 
 ```text
-1. Derive allowedPaths / deniedPaths from Task scope and guardrails in run-plan.
-2. Evaluate changed files against them using the fixed bounded glob subset.
-3. Record violations in HarnessObservation and pathViolationSummary.
-4. Add tests proving an out-of-scope untracked file is recorded as a violation.
+1. Read verificationPlan commands as argv arrays from the Task contract.
+2. Execute them through a Harness-owned channel with shell invocation denied.
+3. Record exitCode, stdout/stderr refs, and authority HARNESS_EXECUTED per attempt.
+4. Compute observedCheck and verificationGateResult from that evidence only.
+5. Add tests proving a provider claim alone never satisfies the gate.
 ```
 
 ## Repository Note

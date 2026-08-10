@@ -7,6 +7,7 @@ import { loadConfig } from "./config.ts";
 import { renderPrompt } from "./prompt.ts";
 import { loadTask } from "./task.ts";
 import type { AgentRunInput, AgentRunResult, RunResultFile } from "./types.ts";
+import { evaluatePathPolicy, type PathViolation } from "./path-policy.ts";
 import { discoverWorkspace, type FileRef, type WorkspaceDiscovery } from "./workspace.ts";
 
 export interface RunExecution {
@@ -104,7 +105,7 @@ interface RunSummary {
     pathViolationSummary: {
       evaluated: boolean;
       hasViolation: boolean;
-      violationRefs: FileRef[];
+      violations: PathViolation[];
       unavailableReason: string;
     };
   };
@@ -270,6 +271,26 @@ export async function runTask(
   const diffRef = await fileRef(rootDir, diffPath);
   const changedFilesEvidence = await captureGitChangedFiles(projectPath);
 
+  // Path policy can only be evaluated when changed-files evidence is itself
+  // trustworthy. If the observation is degraded, the evaluation stays
+  // unavailable rather than reporting "no violations" over partial input.
+  const pathPolicy = changedFilesEvidence.unavailableReason === undefined
+    ? evaluatePathPolicy({
+        changedFiles: changedFilesEvidence.files,
+        allowedPaths: task.scope.include,
+        deniedPaths: task.scope.exclude,
+        caseSensitive: await detectCaseSensitivity(projectPath)
+      })
+    : {
+        evaluated: false,
+        caseSensitive: true,
+        allowedPaths: task.scope.include,
+        deniedPaths: task.scope.exclude,
+        checkedPaths: [],
+        violations: [],
+        unavailableReason: changedFilesEvidence.unavailableReason
+      };
+
   const harnessObservation = {
     schemaVersion: "0.2",
     documentKind: "HARNESS_OBSERVATION",
@@ -312,11 +333,16 @@ export async function runTask(
       unavailableReason: "COMMAND_CHANNEL_NOT_HARNESS_VISIBLE"
     },
     policyChecks: {
-      pathViolations: [],
+      pathViolations: pathPolicy.violations,
       commandViolations: [],
       capabilityViolations: [],
-      pathPolicyEvaluationRef: {
-        unavailableReason: "PATH_POLICY_EVALUATION_NOT_IMPLEMENTED_V02"
+      pathPolicyEvaluation: {
+        evaluated: pathPolicy.evaluated,
+        caseSensitive: pathPolicy.caseSensitive,
+        allowedPaths: pathPolicy.allowedPaths,
+        deniedPaths: pathPolicy.deniedPaths,
+        checkedPaths: pathPolicy.checkedPaths,
+        unavailableReason: pathPolicy.unavailableReason
       }
     },
     observationSource: {
@@ -503,12 +529,7 @@ function buildRunSummary(input: {
     },
     policy: {
       computedRisk: ((input.runPlan.computedRisk as Record<string, unknown> | undefined)?.level as string | undefined) ?? "UNKNOWN",
-      pathViolationSummary: {
-        evaluated: false,
-        hasViolation: false,
-        violationRefs: [],
-        unavailableReason: "PATH_POLICY_EVALUATION_NOT_IMPLEMENTED_V02"
-      }
+      pathViolationSummary: pathViolationSummary(input.harnessObservation)
     },
     safeguards: {
       canProduceVerified: false,
@@ -536,7 +557,10 @@ function runSummaryUnavailableReasons(input: {
   addUnavailableReason(reasons, commands?.commandLogRef);
   addUnavailableReason(reasons, commands?.providerReportedCommandsRef);
   const policyChecks = input.harnessObservation.policyChecks as Record<string, unknown> | undefined;
-  addUnavailableReason(reasons, policyChecks?.pathPolicyEvaluationRef);
+  const pathEvaluation = policyChecks?.pathPolicyEvaluation as Record<string, unknown> | undefined;
+  if (pathEvaluation?.evaluated !== true) {
+    addUnavailableReason(reasons, pathEvaluation);
+  }
   addUnavailableReason(reasons, input.verificationEvidence);
   if (input.verificationEvidence === null) {
     reasons.add("VERIFICATION_EVIDENCE_NOT_AVAILABLE");
@@ -741,6 +765,53 @@ function normalizedRunResult(result: AgentRunResult): string {
 function commandEvidenceAuthority(harnessObservation: Record<string, unknown>): string {
   const commands = harnessObservation.commands as Record<string, unknown> | undefined;
   return typeof commands?.authority === "string" ? commands.authority : "NONE";
+}
+
+function pathViolationSummary(harnessObservation: Record<string, unknown>): {
+  evaluated: boolean;
+  hasViolation: boolean;
+  violations: PathViolation[];
+  unavailableReason: string;
+} {
+  const policyChecks = harnessObservation.policyChecks as Record<string, unknown> | undefined;
+  const evaluation = policyChecks?.pathPolicyEvaluation as Record<string, unknown> | undefined;
+  const violations = Array.isArray(policyChecks?.pathViolations)
+    ? (policyChecks.pathViolations as PathViolation[])
+    : [];
+
+  if (evaluation?.evaluated !== true) {
+    return {
+      evaluated: false,
+      hasViolation: false,
+      violations: [],
+      unavailableReason:
+        typeof evaluation?.unavailableReason === "string" && evaluation.unavailableReason.length > 0
+          ? evaluation.unavailableReason
+          : "PATH_POLICY_EVALUATION_UNAVAILABLE"
+    };
+  }
+
+  return {
+    evaluated: true,
+    hasViolation: violations.length > 0,
+    violations,
+    unavailableReason: ""
+  };
+}
+
+// Windows and macOS default to case-insensitive filesystems. Detection keeps
+// allowed and denied matching on the same canonical key, as the fixed rule
+// requires, instead of branching on platform at policy level.
+async function detectCaseSensitivity(projectPath: string): Promise<boolean> {
+  try {
+    const upper = path.join(projectPath, ".codefleet");
+    const lower = path.join(projectPath, ".CODEFLEET");
+    const a = await stat(upper);
+    const b = await stat(lower);
+    return a.ino !== b.ino || a.ino === 0;
+  } catch {
+    return process.platform !== "win32" && process.platform !== "darwin";
+  }
 }
 
 function changedFilesAuthority(harnessObservation: Record<string, unknown>): string {

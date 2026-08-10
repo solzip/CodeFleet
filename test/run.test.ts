@@ -23,8 +23,8 @@ test("runTask writes run-plan and S2 artifacts before legacy result", async () =
       "projectPath: .",
       "goal: Exercise run artifacts",
       "scope:",
-      "  include: [src]",
-      "  exclude: [secrets]",
+      "  include: [src/**]",
+      "  exclude: [secrets/**]",
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [Run dry-run adapter]",
@@ -140,13 +140,15 @@ test("runTask writes run-plan and S2 artifacts before legacy result", async () =
   const pathViolationSummary = (runSummary.policy as {
     pathViolationSummary: { evaluated: boolean; unavailableReason: string };
   }).pathViolationSummary;
+  // No git repository exists in this fixture, so changed-files evidence is
+  // unavailable and path policy must report that rather than "no violations".
   assert.equal(pathViolationSummary.evaluated, false);
-  assert.equal(pathViolationSummary.unavailableReason, "PATH_POLICY_EVALUATION_NOT_IMPLEMENTED_V02");
+  assert.equal(pathViolationSummary.unavailableReason, "GIT_CHANGED_FILES_FAILED");
   const normalization = runSummary.normalization as { status: string; unavailableReasons: string[] };
   assert.equal(normalization.status, "PARTIAL");
   assert.ok(normalization.unavailableReasons.includes("COMMAND_CHANNEL_NOT_HARNESS_VISIBLE"));
   assert.ok(normalization.unavailableReasons.includes("NO_VERIFICATION_COMMANDS_CONFIGURED"));
-  assert.ok(normalization.unavailableReasons.includes("PATH_POLICY_EVALUATION_NOT_IMPLEMENTED_V02"));
+  assert.ok(normalization.unavailableReasons.includes("GIT_CHANGED_FILES_FAILED"));
   assert.ok(!normalization.unavailableReasons.includes("VERIFICATION_EVIDENCE_NOT_IMPLEMENTED_V02"));
   assert.equal((runSummary.safeguards as { canProduceVerified: boolean }).canProduceVerified, false);
   assert.equal(legacyResult.adapterResultPath, execution.result.adapterResultPath);
@@ -171,8 +173,8 @@ test("runTask rejects projectPath outside the workspace before S2 artifacts", as
       `projectPath: ${outside}`,
       "goal: Reject outside project path",
       "scope:",
-      "  include: [src]",
-      "  exclude: [secrets]",
+      "  include: [src/**]",
+      "  exclude: [secrets/**]",
       "constraints: []",
       "doneCriteria: [No run artifacts]",
       "workflow: [Plan]",
@@ -204,8 +206,8 @@ test("runTask rejects file projectPath before S2 artifacts", async () => {
       "projectPath: README.md",
       "goal: Reject file project path",
       "scope:",
-      "  include: [src]",
-      "  exclude: [secrets]",
+      "  include: [src/**]",
+      "  exclude: [secrets/**]",
       "constraints: []",
       "doneCriteria: [No run artifacts]",
       "workflow: [Plan]",
@@ -236,8 +238,8 @@ test("runTask preserves S2 artifacts when adapter creation fails", async () => {
       "projectPath: .",
       "goal: Exercise failed adapter artifacts",
       "scope:",
-      "  include: [src]",
-      "  exclude: [secrets]",
+      "  include: [src/**]",
+      "  exclude: [secrets/**]",
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [Run missing adapter]",
@@ -334,8 +336,8 @@ test("changed-files evidence includes untracked files created during the Run", a
       "projectPath: .",
       "goal: Exercise untracked change evidence",
       "scope:",
-      "  include: [src]",
-      "  exclude: [secrets]",
+      "  include: [src/**]",
+      "  exclude: [secrets/**]",
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [Edit files]",
@@ -358,4 +360,78 @@ test("changed-files evidence includes untracked files created during the Run", a
     changes.changedFiles.every((file) => !file.startsWith(".codefleet/")),
     "CodeFleet's own run artifacts are not agent changes"
   );
+});
+
+test("an out-of-scope untracked file is recorded as a path violation", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-pathpolicy-"));
+  await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await writeFile(path.join(root, "src", "keep.js"), "export const a = 1;\n", "utf8");
+  await writeFile(path.join(root, ".gitignore"), ".codefleet/\n", "utf8");
+
+  const { spawnSync } = await import("node:child_process");
+  for (const args of [["init"], ["add", "-A"], ["commit", "-m", "init"]]) {
+    spawnSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", ...args], { cwd: root });
+  }
+
+  await writeFile(
+    path.join(root, "agent.mjs"),
+    [
+      'import { writeFileSync, mkdirSync } from "node:fs";',
+      `writeFileSync("src/keep.js", ${JSON.stringify("export const a = 2;\n")});`,
+      'mkdirSync("infra", { recursive: true });',
+      `writeFileSync("infra/deploy.sh", ${JSON.stringify("echo deploy\n")});`,
+      `writeFileSync("src/secret.key", ${JSON.stringify("token\n")});`,
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "config.json"),
+    `${JSON.stringify({
+      version: "0.1.0",
+      defaultAgent: "codex",
+      mode: "execute",
+      agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
+      workspace: { id: "path-policy-test" }
+    })}\n`,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "tasks", "sample.yaml"),
+    [
+      "id: sample",
+      "title: Sample task",
+      "projectPath: .",
+      "goal: Exercise path policy",
+      "scope:",
+      '  include: ["src/**"]',
+      '  exclude: ["src/*.key"]',
+      "constraints: []",
+      "doneCriteria: [Artifacts exist]",
+      "workflow: [Edit files]",
+      "status: READY",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  const execution = await runTask(root, "sample");
+  const observation = await readJson(path.join(execution.runDir, "harness-observation.json"));
+  const runSummary = await readJson(path.join(execution.runDir, "run-summary.json"));
+
+  const violations = (observation.policyChecks as { pathViolations: { path: string; violationCode: string }[] })
+    .pathViolations;
+  const byPath = new Map(violations.map((entry) => [entry.path, entry.violationCode]));
+
+  assert.equal(byPath.get("infra/deploy.sh"), "PATH_OUTSIDE_ALLOWED_PATHS");
+  assert.equal(byPath.get("src/secret.key"), "PATH_MATCHES_DENIED_PATHS");
+  assert.equal(byPath.has("src/keep.js"), false, "an in-scope change is not a violation");
+  assert.equal(byPath.has("agent.mjs"), true, "a file outside src/** is a violation even at the root");
+
+  const summary = (runSummary.policy as {
+    pathViolationSummary: { evaluated: boolean; hasViolation: boolean };
+  }).pathViolationSummary;
+  assert.equal(summary.evaluated, true);
+  assert.equal(summary.hasViolation, true);
 });
