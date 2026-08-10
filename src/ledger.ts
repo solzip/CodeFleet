@@ -38,6 +38,9 @@ export interface QueueItem {
   storedState: QueueStoredState;
   derivedState: QueueDerivedState;
   effectiveReviewDecisionId: string;
+  effectiveDecision: string;
+  effectiveGateResult: string;
+  effectiveResult: string;
 }
 
 // The fixed transition table. CANCELED is terminal; SKIPPED returns to WAITING
@@ -218,6 +221,7 @@ export async function replayObjective(rootDir: string, objectiveId: string): Pro
   let title = "";
   const queue: QueueItem[] = [];
 
+  const reviewEvents: LedgerEvent[] = [];
   let eventsApplied = 0;
   if (!structural && created) {
     for (const event of ordered) {
@@ -242,8 +246,13 @@ export async function replayObjective(rootDir: string, objectiveId: string): Pro
           taskRevisionHash: String(event.payload.taskRevisionHash ?? ""),
           storedState: "WAITING",
           derivedState: "NONE",
-          effectiveReviewDecisionId: ""
+          effectiveReviewDecisionId: "",
+          effectiveDecision: "",
+          effectiveGateResult: "",
+          effectiveResult: ""
         });
+      } else if (event.type === "RUN_REVIEW_DECIDED") {
+        reviewEvents.push(event);
       } else if (event.type === "QUEUE_REORDERED") {
         applyReorder(queue, event, findings);
       } else if (QUEUE_EVENT_TARGET[event.type] !== undefined) {
@@ -251,6 +260,7 @@ export async function replayObjective(rootDir: string, objectiveId: string): Pro
       }
     }
 
+    applyReviewDecisions(queue, reviewEvents, findings);
     deriveQueueStates(queue, kind);
   }
 
@@ -357,21 +367,92 @@ function applyReorder(queue: QueueItem[], event: LedgerEvent, findings: ReplayFi
   queue.push(...history, ...reordered, ...untouched);
 }
 
-// NEXT, ACTIVE, DONE, VERIFIED are never stored. This slice derives what the
-// queue alone can decide; run-derived states arrive with step 97.
+// The latest effective decision per queue item, chosen by ledger seq order.
+// Decisions naming a supersede or invalidation remove the target first, so an
+// overturned decision cannot come back as the latest one.
+function applyReviewDecisions(
+  queue: QueueItem[],
+  reviewEvents: LedgerEvent[],
+  findings: ReplayFinding[]
+): void {
+  const invalidated = new Set<string>();
+  for (const event of reviewEvents) {
+    const payload = event.payload as unknown as Record<string, unknown>;
+    for (const key of ["supersedesReviewDecisionId", "invalidatesReviewDecisionId"]) {
+      const target = payload[key];
+      if (typeof target === "string" && target.length > 0) {
+        invalidated.add(target);
+      }
+    }
+  }
+
+  for (const event of reviewEvents) {
+    const payload = event.payload as unknown as Record<string, unknown>;
+    const itemId = String(payload.objectiveQueueItemId ?? "");
+    const item = queue.find((entry) => entry.objectiveQueueItemId === itemId);
+    if (item === undefined) {
+      findings.push({
+        failureClass: "REFERENCE_FAILURE",
+        checkId: "REVIEW_TARGETS_QUEUE_ITEM",
+        detail: `review decision references unknown queue item ${itemId}`,
+        affectedSeq: event.seq
+      });
+      continue;
+    }
+
+    const decisionId = String(payload.reviewDecisionId ?? "");
+    if (invalidated.has(decisionId)) {
+      continue;
+    }
+
+    const bundleHash = String(
+      ((payload.reviewEvidenceBundleRef ?? {}) as Record<string, unknown>).hash ?? ""
+    );
+    if (bundleHash.length === 0) {
+      // A decision without frozen evidence is not an effective decision.
+      findings.push({
+        failureClass: "REFERENCE_FAILURE",
+        checkId: "REVIEW_HAS_EVIDENCE_BUNDLE",
+        detail: `review decision ${decisionId} has no evidence bundle hash`,
+        affectedSeq: event.seq
+      });
+      continue;
+    }
+
+    // Later seq wins for the same identity.
+    item.effectiveReviewDecisionId = decisionId;
+    item.effectiveDecision = String(payload.decision ?? "");
+    item.effectiveGateResult = String(payload.verificationGateResult ?? "");
+    item.effectiveResult = String(payload.observedResultSnapshot ?? "");
+  }
+}
+
+// NEXT, ACTIVE, DONE, VERIFIED are never stored. VERIFIED needs an accepted
+// effective decision, a satisfied or waived gate, and a successful result; any
+// one of those missing leaves the item unverified rather than optimistic.
 function deriveQueueStates(queue: QueueItem[], kind: ObjectiveKind): void {
   let nextAssigned = false;
   for (const item of queue) {
+    const verified =
+      item.effectiveDecision === "ACCEPTED" &&
+      (item.effectiveGateResult === "SATISFIED" || item.effectiveGateResult === "WAIVED_ALLOWED") &&
+      item.effectiveResult === "DONE";
+
+    if (verified) {
+      item.derivedState = "VERIFIED";
+      continue;
+    }
     if (item.storedState !== "WAITING") {
       item.derivedState = "NONE";
       continue;
     }
+    // A rejected or unverified item still holds the cursor: progression past it
+    // would be exactly the automatic advance this design refuses.
     if (nextAssigned) {
       item.derivedState = "NONE";
       continue;
     }
     item.derivedState = "NEXT";
-    // A SEQUENCE Objective has at most one derived NEXT.
     if (kind === "SEQUENCE") {
       nextAssigned = true;
     }

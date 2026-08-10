@@ -26,7 +26,7 @@ Phase 11     대기      설계 확정 후 구현 재개
 ```
 
 ```text
-전체 98단계 중 96단계 완료
+전체 98단계 중 97단계 완료
 FINAL RULE 82개
 설계 진행도: 100% (미고정 항목 없음)
 구현 진행도: 약 60-70%
@@ -362,8 +362,13 @@ Phase 10에서 반복된 판단 기준:
         - waive 한 gap 목록이 ledger 로 함께 넘어감
         - 같은 reviewDecisionId 에 다른 bundle hash 면 이관 차단
         - CLI: objective import-review <id> <run-id>
-[ ] 97. VERIFIED 계산 + Queue 진행                                     <- 다음, 미착수
-[ ] 98. 이후 final 슬라이스 (carry-forward / export / CAPABILITY_GAP) (workspace snapshot / provider transcript / agent command 관측)
+[x] 97. VERIFIED 계산 + Queue 진행 — 루프가 닫혔다
+        - ledger 의 latest effective RUN_REVIEW_DECIDED 에서 VERIFIED 파생
+        - ACCEPTED + gate SATISFIED/WAIVED_ALLOWED + result DONE 셋 다 필요
+        - 하나라도 빠지면 미검증으로 남고 커서가 넘어가지 않음
+        - supersedes/invalidates 참조가 먼저 적용됨
+        - evidence bundle hash 없는 결정은 effective 가 되지 않음
+[ ] 98. 이후 (carry-forward / export / CAPABILITY_GAP)                 <- 다음, 미착수 (workspace snapshot / provider transcript / agent command 관측)
 [ ] 87. 이후 final 슬라이스
 ```
 

@@ -457,3 +457,90 @@ test("the same reviewDecisionId with a different bundle blocks migration", async
   assert.equal(conflicting.failedPhase, "M2_PRECHECK");
   assert.match(conflicting.failureMessage, /already imported with a different bundle hash/);
 });
+
+test("an accepted review with a satisfied gate derives VERIFIED and moves the cursor", async () => {
+  const root = await seed();
+  await create(root, "auth", "Auth work");
+  await attach(root, "auth", "login");
+  await attach(root, "auth", "logout");
+
+  const before = (await replayObjective(root, "auth")).snapshot;
+  assert.equal(before.queue[0].derivedState, "NEXT");
+  assert.equal(before.queue[1].derivedState, "NONE");
+
+  await importLocalReviewFor(root, "login");
+
+  const after = (await replayObjective(root, "auth")).snapshot;
+  assert.equal(after.queue[0].derivedState, "VERIFIED");
+  assert.equal(after.queue[0].effectiveReviewDecisionId, "run-1-review-001");
+  assert.equal(after.queue[1].derivedState, "NEXT", "the cursor moves to the next item");
+  assert.equal(after.cursor.objectiveQueueItemId, "auth:logout:1");
+});
+
+test("VERIFIED needs all three of accepted, gate satisfied, and a successful result", async () => {
+  for (const override of [
+    { decision: "REJECTED" },
+    { decision: "NEEDS_CHANGES" },
+    { verificationGateResult: "NOT_SATISFIED" },
+    { observedResultSnapshot: "FAILED" }
+  ]) {
+    const root = await seed();
+    await create(root, "auth", "Auth work");
+    await attach(root, "auth", "login");
+    await importLocalReviewFor(root, "login", override);
+
+    const { snapshot } = await replayObjective(root, "auth");
+    assert.notEqual(
+      snapshot.queue[0].derivedState,
+      "VERIFIED",
+      `${JSON.stringify(override)} must not produce VERIFIED`
+    );
+    // An unverified item keeps the cursor rather than letting the queue advance.
+    assert.equal(snapshot.queue[0].derivedState, "NEXT");
+  }
+});
+
+test("a waived acceptance still derives VERIFIED, and the ledger says it was waived", async () => {
+  const root = await seed();
+  await create(root, "auth", "Auth work");
+  await attach(root, "auth", "login");
+
+  await importLocalReviewFor(root, "login", {
+    localReviewStatus: "MIGRATION_READY_WAIVED",
+    evidenceCompleteness: "WAIVED_INCOMPLETE",
+    verificationGateResult: "WAIVED_ALLOWED",
+    waivedCapabilityGaps: [
+      { reason: "WORKSPACE_SNAPSHOT_NOT_IMPLEMENTED_V02", acknowledgedBy: "reviewer", justification: "checked" }
+    ]
+  });
+
+  const { snapshot } = await replayObjective(root, "auth");
+  assert.equal(snapshot.queue[0].derivedState, "VERIFIED");
+
+  // The waiver is not lost in derivation: a reader can still see a person stood
+  // in for evidence the Harness never collected.
+  const raw = await readFile(ledgerPath(root, "auth"), "utf8");
+  const decision = raw
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as { type: string; payload: Record<string, unknown> })
+    .find((event) => event.type === "RUN_REVIEW_DECIDED");
+  assert.equal(decision?.payload.evidenceCompleteness, "WAIVED_INCOMPLETE");
+});
+
+async function importLocalReviewFor(
+  root: string,
+  taskId: string,
+  overrides: Record<string, unknown> = {}
+): Promise<void> {
+  const { importLocalReview } = await import("../src/ledger.ts");
+  const outcome = await importLocalReview(root, {
+    objectiveId: "auth",
+    runId: "run-1",
+    localReview: localReviewFixture({ taskId, ...overrides }),
+    localReviewRef: { path: ".codefleet/runs/run-1/review-decision.local.json", hash: "local-hash-1" },
+    reason: "imported",
+    actorId: "tester"
+  });
+  assert.equal(outcome.failedPhase, null, outcome.failureMessage);
+}
