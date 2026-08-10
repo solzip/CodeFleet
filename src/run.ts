@@ -976,20 +976,31 @@ async function findEscapingSymlinks(projectPath: string, changedFiles: string[])
   const escaping: string[] = [];
   const rootReal = await realpath(projectPath).catch(() => projectPath);
 
+  // git reports what lies inside a linked directory, not the link itself, so a
+  // junction planted in the workspace makes outside files look like in-scope
+  // paths. Checking only the leaf would miss that, so every ancestor segment is
+  // checked too.
   for (const file of changedFiles) {
-    const absolute = path.join(projectPath, file);
-    try {
-      const info = await lstat(absolute);
-      if (!info.isSymbolicLink()) {
-        continue;
+    const segments = file.split("/").filter((segment) => segment.length > 0);
+    let escaped = false;
+
+    for (let depth = 1; depth <= segments.length && !escaped; depth += 1) {
+      const partial = segments.slice(0, depth).join("/");
+      const absolute = path.join(projectPath, partial);
+      try {
+        const info = await lstat(absolute);
+        if (!info.isSymbolicLink()) {
+          continue;
+        }
+        const target = await realpath(absolute);
+        const relative = path.relative(rootReal, target);
+        if (relative.startsWith("..") || path.isAbsolute(relative)) {
+          escaping.push(file);
+          escaped = true;
+        }
+      } catch {
+        // A broken link resolves nowhere, so it cannot escape the workspace.
       }
-      const target = await realpath(absolute);
-      const relative = path.relative(rootReal, target);
-      if (relative.startsWith("..") || path.isAbsolute(relative)) {
-        escaping.push(file);
-      }
-    } catch {
-      // A broken symlink resolves nowhere, so it cannot escape the workspace.
     }
   }
 

@@ -623,3 +623,190 @@ test("a provider claim alone never satisfies the verification gate", async () =>
   assert.equal(evidence.verificationGateResult, "NOT_SATISFIED");
   assert.equal(evidence.verificationGateReason, "MISSING");
 });
+
+test("run-plan.json is written once and is not rewritten later in the Run", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-immutable-"));
+  await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
+  await writeFile(
+    path.join(root, ".codefleet", "config.json"),
+    `${JSON.stringify({ version: "0.1.0", defaultAgent: "codex", mode: "dry-run", workspace: { id: "immutable-test" } })}\n`,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "tasks", "sample.yaml"),
+    [
+      "id: sample",
+      "title: Sample task",
+      "projectPath: .",
+      "goal: Exercise run plan immutability",
+      "scope:",
+      '  include: ["src/**"]',
+      "  exclude: []",
+      "constraints: []",
+      "doneCriteria: [Artifacts exist]",
+      "workflow: [Run dry-run adapter]",
+      "status: READY",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  const execution = await runTask(root, "sample");
+  const runPlanPath = path.join(execution.runDir, "run-plan.json");
+  const planAfterRun = await readFile(runPlanPath, "utf8");
+
+  // The Run Summary references run-plan by hash, so the plan the Run finished
+  // with must be the plan every later artifact points at.
+  const runSummary = await readJson(path.join(execution.runDir, "run-summary.json"));
+  const planRef = (runSummary.inputs as { runPlanRef: { contentHash: string } }).runPlanRef;
+  assert.equal(planRef.contentHash, hashFile(planAfterRun), "run-plan hash must still match its recorded ref");
+
+  const observation = await readJson(path.join(execution.runDir, "harness-observation.json"));
+  assert.equal(
+    (observation.runPlanRef as { contentHash: string }).contentHash,
+    planRef.contentHash,
+    "every artifact must reference the same run-plan content"
+  );
+});
+
+test("a delete and a rename are both reported, naming each side", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-rename-"));
+  await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await writeFile(path.join(root, "src", "gone.js"), "export const a = 1;\n", "utf8");
+  await writeFile(path.join(root, "src", "old.js"), "export const b = 2;\n", "utf8");
+  await writeFile(path.join(root, ".gitignore"), ".codefleet/\n", "utf8");
+
+  const { spawnSync } = await import("node:child_process");
+  for (const args of [["init"], ["add", "-A"], ["commit", "-m", "init"]]) {
+    spawnSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", ...args], { cwd: root });
+  }
+
+  await writeFile(
+    path.join(root, "agent.mjs"),
+    [
+      'import { rmSync, renameSync } from "node:fs";',
+      'rmSync("src/gone.js");',
+      'renameSync("src/old.js", "src/new.js");',
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "config.json"),
+    `${JSON.stringify({
+      version: "0.1.0",
+      defaultAgent: "codex",
+      mode: "execute",
+      agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
+      workspace: { id: "rename-test" }
+    })}\n`,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "tasks", "sample.yaml"),
+    [
+      "id: sample",
+      "title: Sample task",
+      "projectPath: .",
+      "goal: Exercise delete and rename evidence",
+      "scope:",
+      '  include: ["src/**"]',
+      "  exclude: []",
+      "constraints: []",
+      "doneCriteria: [Artifacts exist]",
+      "workflow: [Edit files]",
+      "status: READY",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  const execution = await runTask(root, "sample");
+  const observation = await readJson(path.join(execution.runDir, "harness-observation.json"));
+  const changed = (observation.changes as { changedFiles: string[] }).changedFiles;
+
+  assert.ok(changed.includes("src/gone.js"), "a deleted file is a policy subject");
+  // Both sides of a rename are recorded: the delete and the create are each a
+  // policy subject on their own.
+  assert.ok(changed.includes("src/old.js"), "the rename source must be reported");
+  assert.ok(changed.includes("src/new.js"), "the rename target must be reported");
+});
+
+test("a symlink whose target leaves the workspace is recorded as a violation", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-symlink-"));
+  const outside = await mkdtemp(path.join(os.tmpdir(), "codefleet-outside-"));
+  await writeFile(path.join(outside, "secret.txt"), "outside the workspace\n", "utf8");
+
+  await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await writeFile(path.join(root, "src", "keep.js"), "export const a = 1;\n", "utf8");
+  await writeFile(path.join(root, ".gitignore"), ".codefleet/\n", "utf8");
+
+  const { spawnSync } = await import("node:child_process");
+  for (const args of [["init"], ["add", "-A"], ["commit", "-m", "init"]]) {
+    spawnSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", ...args], { cwd: root });
+  }
+
+  // A file symlink needs privileges on Windows, but a directory junction does
+  // not, and both resolve through realpath. Fall back so this is verified
+  // everywhere rather than skipped on the platform being developed on.
+  const { symlink } = await import("node:fs/promises");
+  let linkName = "escape.txt";
+  try {
+    await symlink(path.join(outside, "secret.txt"), path.join(root, "src", linkName));
+  } catch {
+    linkName = "escape-dir";
+    try {
+      await symlink(path.join(outside), path.join(root, "src", linkName), "junction");
+    } catch {
+      t.skip("neither a symlink nor a junction can be created here");
+      return;
+    }
+  }
+
+  await writeFile(path.join(root, "agent.mjs"), "process.stdout.write('noop\n');\n", "utf8");
+  await writeFile(
+    path.join(root, ".codefleet", "config.json"),
+    `${JSON.stringify({
+      version: "0.1.0",
+      defaultAgent: "codex",
+      mode: "execute",
+      agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
+      workspace: { id: "symlink-test" }
+    })}\n`,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "tasks", "sample.yaml"),
+    [
+      "id: sample",
+      "title: Sample task",
+      "projectPath: .",
+      "goal: Exercise symlink escape detection",
+      "scope:",
+      '  include: ["src/**", "*.mjs"]',
+      "  exclude: []",
+      "constraints: []",
+      "doneCriteria: [Artifacts exist]",
+      "workflow: [Edit files]",
+      "status: READY",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  const execution = await runTask(root, "sample");
+  const observation = await readJson(path.join(execution.runDir, "harness-observation.json"));
+  const violations = (observation.policyChecks as { pathViolations: { path: string; violationCode: string }[] })
+    .pathViolations;
+
+  // Matching the link's own path against allowedPaths says nothing about where a
+  // write through it lands, so the escape is a violation regardless of scope.
+  assert.ok(
+    violations.some(
+      (v) => v.path.startsWith("src/escape") && v.violationCode === "SYMLINK_TARGET_ESCAPES_WORKSPACE"
+    ),
+    `expected a symlink escape violation, got ${JSON.stringify(violations)}`
+  );
+});
