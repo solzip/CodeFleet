@@ -73,6 +73,15 @@ interface ReviewEvidenceBundle {
     unavailableReason: string;
   };
   hashChecks: HashCheck[];
+  // A bundle that verified nothing must not read like one that verified
+  // everything and found no problem.
+  scanScope: {
+    refsChecked: number;
+    hashesValid: number;
+    hashesInvalid: number;
+    capabilityGaps: number;
+    evidenceDefects: number;
+  };
   createdAt: string;
 }
 
@@ -404,6 +413,13 @@ async function buildEvidenceBundle(input: {
       unavailableReason: asString(pathViolation.unavailableReason, "")
     },
     hashChecks,
+    scanScope: {
+      refsChecked: hashChecks.length,
+      hashesValid: hashChecks.filter((entry) => entry.valid).length,
+      hashesInvalid: hashChecks.filter((entry) => !entry.valid).length,
+      capabilityGaps: unavailableReasons.filter((r) => classifyGap(r) === "CAPABILITY_GAP").length,
+      evidenceDefects: unavailableReasons.filter((r) => classifyGap(r) === "EVIDENCE_DEFECT").length
+    },
     createdAt
   };
 }

@@ -61,6 +61,13 @@ interface VerificationEvidence {
   observedCheck: ObservedCheck;
   verificationGateResult: VerificationGateResult;
   verificationGateReason: VerificationGateReason;
+  // Reporting what was scanned, not only the verdict: zero attempts examined
+  // and zero attempts failing must not look the same.
+  scanScope: {
+    attemptsRecorded: number;
+    attemptsExecuted: number;
+    attemptsBlocked: number;
+  };
   attempts: VerificationAttempt[];
   providerReportedVerificationRef: UnavailableRef;
   waiverRef: UnavailableRef;
@@ -377,6 +384,12 @@ export async function runTask(
         allowedPaths: pathPolicy.allowedPaths,
         deniedPaths: pathPolicy.deniedPaths,
         checkedPaths: pathPolicy.checkedPaths,
+        scanScope: {
+          pathsChecked: pathPolicy.checkedPaths.length,
+          violationsFound: pathPolicy.violations.length,
+          allowedPatterns: pathPolicy.allowedPaths.length,
+          deniedPatterns: pathPolicy.deniedPaths.length
+        },
         unavailableReason: pathPolicy.unavailableReason
       }
     },
@@ -813,6 +826,11 @@ function buildVerificationEvidence(input: {
     observedCheck: outcome.observedCheck,
     verificationGateResult: outcome.verificationGateResult,
     verificationGateReason: outcome.verificationGateReason,
+    scanScope: {
+      attemptsRecorded: input.attempts.length,
+      attemptsExecuted: input.attempts.filter((a) => a.authority === "HARNESS_EXECUTED").length,
+      attemptsBlocked: input.attempts.filter((a) => a.decision === "BLOCKED").length
+    },
     attempts: input.attempts.length > 0
       ? input.attempts
       : [

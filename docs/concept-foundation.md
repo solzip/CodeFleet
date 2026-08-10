@@ -445,6 +445,7 @@ evidence:
   - appendedEventId when M4 succeeded
   - lastSeq
   - rebuild result
+  - scanScope: phases executed of the eight
 failureFinding:
   category: STATE_TRANSITION_INTEGRITY
   severity: WARNING
@@ -3001,6 +3002,7 @@ evidence:
   - allOf condition results
   - whether the rule contributed
   - contributing rule set for the computed max
+  - scanScope: allOf conditions evaluated per rule
 failureFinding:
   category: POLICY_ENFORCEMENT_INTEGRITY
   severity: CORRUPTION
@@ -3039,6 +3041,7 @@ evidence:
   - computedRisk
   - unresolved input list
   - blocked progression reason
+  - scanScope: risk inputs resolved and unresolved
 failureFinding:
   category: POLICY_ENFORCEMENT_INTEGRITY
   severity: WARNING
@@ -5064,6 +5067,32 @@ VERSION PLAN
 = 사람이나 LLM의 감이 아니라, 같은 입력과 같은 rule set에서 같은 결과가 나오는 deterministic / machine-checkable condition을 가짐
 ```
 
+확정 규칙은 검사 범위를 보고해야 한다.
+
+```text
+검사 범위
+= 판정 결과에 더해, 무엇을 몇 건 검사했는지를 evidence 로 남김
+= 집합을 한정하는 규칙에만 요구한다. 단일 대상을 보는 규칙은 해당하지 않는다
+= 검사 대상이 0건이면 통과가 아니라 실패다
+```
+
+결정론적인 것과 검사 범위를 밝히는 것은 다르다. 불리언 검사도 결정론적이지만
+무엇을 몇 건 봤는지 말하지 않는다. 범위를 밝히지 않으면 **미검사와 무결이 같은
+결과로 보인다.**
+
+실제로 이 구분이 없어서 같은 형태의 결함이 반복해서 발생했다.
+
+```text
+changed-files 가 untracked 를 못 봤는데 unavailableReason 은 비어 있었다
+path policy 가 심볼릭 링크와 중첩 repo 를 검사하지 않았는데 evaluated 는 true 였다
+review 가 gap 을 남긴 채 evidenceCompleteness 를 COMPLETE 로 기록했다
+링크 탈출 검사가 말단 경로만 보고 조상 세그먼트를 건너뛰었다
+규칙 파서가 0건을 읽고도 위반 0건으로 통과했다
+```
+
+다섯 건 모두 결정론적이었다. 몇 번을 돌려도 같은 결과가 나왔고, 그래서
+`정량적 = deterministic` 기준만으로는 걸러지지 않았다.
+
 확정 규칙은 전제를 가져야 한다.
 
 ```text
@@ -5903,6 +5932,7 @@ evidence:
 - artifact hashes
 - lifecycle stage reached
 - missing artifact list
+- scanScope: durable paths checked
 failureFinding:
   category: POLICY_ENFORCEMENT_INTEGRITY
   severity: WARNING
@@ -6466,6 +6496,7 @@ evidence:
   - ReviewEvidenceBundle ref/hash or unavailableReason
   - reviewNoteRef when present
   - aiReviewHintRef when present
+  - scanScope: bundle refs checked and gaps found by kind
 failureFinding:
   category: REVIEW_INTEGRITY
   severity: WARNING
@@ -6935,6 +6966,7 @@ evidence:
 - boundary artifact paths and hashes
 - resume boundary used
 - blocked or unavailable reason when a boundary was not produced
+- scanScope: boundaries checked and boundaries produced
 failureFinding:
   category: POLICY_ENFORCEMENT_INTEGRITY
   severity: WARNING
@@ -7134,6 +7166,7 @@ evidence:
 - artifact path and hash per boundary
 - unavailableReason per missing boundary
 - pass or blocked result with reason
+- scanScope: checklist items checked and items unresolved
 failureFinding:
   category: POLICY_ENFORCEMENT_INTEGRITY
   severity: WARNING
@@ -8461,6 +8494,7 @@ evidence:
 - policies.autoAdvanceOnDone JSON pointer
 - source values
 - effectivePolicy.autoAdvanceOnDone
+- scanScope: policy sources merged
 failureFinding:
   category: POLICY_ENFORCEMENT_INTEGRITY
   severity: WARNING
@@ -8569,6 +8603,7 @@ evidence:
 - profilePath
 - defaults.task.workflow JSON pointer
 - invalid stage value when present
+- scanScope: workflow phases validated
 failureFinding:
   category: POLICY_ENFORCEMENT_INTEGRITY
   severity: WARNING
@@ -8766,6 +8801,7 @@ evidence:
 - policies.agentAdapters JSON pointer
 - allowedAdapters
 - invalid adapter entry when present
+- scanScope: adapter entries validated
 failureFinding:
   category: POLICY_ENFORCEMENT_INTEGRITY
   severity: WARNING
@@ -9206,6 +9242,7 @@ evidence:
 - policies JSON pointer
 - validated policy block names
 - invalid field paths when present
+- scanScope: policy blocks validated of the nine
 failureFinding:
   category: POLICY_ENFORCEMENT_INTEGRITY
   severity: WARNING
@@ -9701,6 +9738,7 @@ evidence:
   - run-record.md path and hash
   - source artifact refs it was derived from
   - listed unavailableReason count
+  - scanScope: unavailableReason entries listed
 failureFinding:
   category: EXECUTION_EVIDENCE_INTEGRITY
   severity: WARNING
@@ -9804,6 +9842,7 @@ evidence:
 - command authority
 - adapterExecutionStatus
 - synthetic flag
+- scanScope: artifacts checked of the three
 failureFinding:
   category: EXECUTION_EVIDENCE_INTEGRITY
   severity: WARNING
@@ -10142,6 +10181,7 @@ evidence:
 - diffRef or changedFiles unavailableReason
 - commandLogRef or commands unavailableReason
 - policy violation check result
+- scanScope: changed paths observed
 failureFinding:
   category: EXECUTION_EVIDENCE_INTEGRITY
   severity: WARNING
@@ -10332,6 +10372,7 @@ evidence:
 - observedCheck
 - verificationGateResult
 - waiverRef when used
+- scanScope: attempts recorded and attempts executed
 failureFinding:
   category: EXECUTION_EVIDENCE_INTEGRITY
   severity: WARNING
@@ -10497,6 +10538,7 @@ evidence:
 - workspaceRootRef
 - selectedWorkspaceRootRealPath
 - violationCode
+- scanScope: changed paths normalised and paths rejected
 failureFinding:
   category: POLICY_ENFORCEMENT_INTEGRITY
   severity: WARNING
@@ -10538,6 +10580,7 @@ evidence:
 - matchedAllowedPath
 - matchedDeniedPath
 - violationCode
+- scanScope: paths matched against denied and allowed entries
 failureFinding:
   category: POLICY_ENFORCEMENT_INTEGRITY
   severity: WARNING
@@ -10743,6 +10786,7 @@ evidence:
   - matchedAllowedPath
   - matchedDeniedPath
   - match decision
+  - scanScope: patterns validated and paths matched
 failureFinding:
   category: POLICY_ENFORCEMENT_INTEGRITY
   severity: CORRUPTION
@@ -10945,6 +10989,7 @@ evidence:
 - synthetic flag
 - adapterError.code when synthetic
 - unavailableReason fields when observation failed
+- scanScope: artifacts written of the three
 failureFinding:
   category: EXECUTION_EVIDENCE_INTEGRITY
   severity: WARNING
@@ -11151,6 +11196,7 @@ evidence:
 - matchedPatternId
 - matchedValueKind
 - pathValue
+- scanScope: profile keys inspected
 failureFinding:
   category: POLICY_ENFORCEMENT_INTEGRITY
   severity: CORRUPTION
@@ -12228,6 +12274,7 @@ evidence:
   - affectedSeq
   - affectedQueueItemId
   - missingRef when present
+  - scanScope: events replayed and findings by failure class
 failureFinding:
   - failureClass: LEDGER_STRUCTURAL_FAILURE
     category: LEDGER_INTEGRITY
@@ -13991,6 +14038,7 @@ evidence:
   - normalizedCommand.argv
   - cwd
   - approvalRef path and hash
+  - scanScope: destructive entries matched
 failureFinding:
   category: POLICY_ENFORCEMENT_INTEGRITY
   severity: CORRUPTION
@@ -14131,6 +14179,7 @@ evidence:
   - HarnessObservation ref/hash
   - VerificationEvidence ref/hash
   - pathViolation refs
+  - scanScope: enforcement points checked
 failureFinding:
   category: POLICY_ENFORCEMENT_INTEGRITY
   severity: WARNING
@@ -14682,6 +14731,7 @@ evidence:
   - appliesTo
   - match count
   - applied action
+  - scanScope: patterns compiled and matches found
 failureFinding:
   category: EXECUTION_EVIDENCE_INTEGRITY
   severity: CORRUPTION
@@ -14719,6 +14769,7 @@ evidence:
   - each candidate action
   - applied action
   - value field path
+  - scanScope: overlapping rules compared per value
 failureFinding:
   category: EXECUTION_EVIDENCE_INTEGRITY
   severity: CORRUPTION
@@ -15102,6 +15153,7 @@ evidence:
   - declared tier
   - resolved allowedFieldPaths
   - applied targetNarrowing
+  - scanScope: field paths resolved and fields dropped
 failureFinding:
   category: POLICY_ENFORCEMENT_INTEGRITY
   severity: CORRUPTION
@@ -15227,6 +15279,7 @@ evidence:
 - redactionReportRef path and hash
 - exportAttemptId and result
 - blockedReasons when export was blocked
+- scanScope: sanitized fields exported and fields removed
 failureFinding:
   category: EXECUTION_EVIDENCE_INTEGRITY
   severity: WARNING

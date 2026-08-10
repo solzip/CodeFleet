@@ -123,6 +123,8 @@ Current implementation status:
 - NEXT is derived, never stored, and a SEQUENCE Objective has at most one; QUEUE_REORDERED declares a new future order and refuses to touch decided items.
 - The Task ledger owns approval, replayed from events rather than stored on the task file, and approval binds to a content hash.
 - An unapproved Task cannot run and leaves no Run Trace; editing after approval revokes executability, and re-approval requires an explicit invalidation first.
+- A rule that quantifies over a set must report what it scanned, because a deterministic check that says nothing about its scope makes examining nothing look like finding nothing.
+- Runtime artifacts carry scanScope counts alongside their verdicts: paths checked, attempts recorded and executed, refs hashed, gaps by kind.
 - Missing final evidence is represented as unavailable / degraded reason instead of truth.
 ```
 

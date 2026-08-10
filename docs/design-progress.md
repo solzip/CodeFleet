@@ -352,6 +352,9 @@ Phase 10에서 반복된 판단 기준:
         - 픽스처 전수 검사 추가 — 승인 없이 runTask 를 부르면 테스트가 깨진다
         - 모든 검사기가 측정값을 보고하도록 변경 (판정만으로는 0건 검사와 구분 불가)
         - 설계 정합성 검사를 임시 스크립트에서 테스트로 이관 (design-rules.test.ts)
+        - 0.12 에 "검사 범위 보고" 원칙 추가 — 결정론적인 것과 범위를 밝히는 것은 다르다
+        - 집합을 한정하는 규칙 27개에 scanScope evidence 추가 (기계적 판별, 단일 대상 규칙은 제외)
+        - 런타임 산출물에 건수 노출 (pathPolicy / verification / reviewBundle)
 [ ] 96. RUN_REVIEW_DECIDED 이관                                        <- 다음, 미착수
 [ ] 97. VERIFIED 계산 + Queue 진행
 [ ] 98. 이후 final 슬라이스 (carry-forward / export / CAPABILITY_GAP) (workspace snapshot / provider transcript / agent command 관측)

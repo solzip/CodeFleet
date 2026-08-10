@@ -133,6 +133,26 @@ test("findings use only the fixed category and severity taxonomies", async () =>
   assert.deepEqual([...severities].filter((value) => !SEVERITIES.has(value)), []);
 });
 
+test("a rule that quantifies over a set reports what it scanned", async () => {
+  const rules = parseRules(await designDoc());
+
+  // Mechanical criterion, not a judgement call: a rule quantifies over a set
+  // when its condition says every, each, all, or any. Those rules must say what
+  // they scanned, because otherwise examining nothing and finding nothing look
+  // identical. A rule about a single subject is exempt, so the field does not
+  // become a formality carrying scanScope on a lock or a single flag.
+  const quantifier = /\b(every|each|all |any )/i;
+  const setLike = rules.filter((rule) => {
+    const condition = /\ncondition:\n((?:(?:  )?- .*\n)+)/.exec(rule.body)?.[1] ?? "";
+    return quantifier.test(condition);
+  });
+  const missing = setLike.filter((rule) => !/^\s*-?\s*scanScope:/m.test(rule.body));
+
+  console.log(`set-quantifying rules ${setLike.length} of ${rules.length}, missing scanScope ${missing.length}`);
+  assert.ok(setLike.length >= 20, `expected at least 20 set-quantifying rules, found ${setLike.length}`);
+  assert.deepEqual(missing.map((rule) => rule.ruleId), []);
+});
+
 test("no new field name holds two different value sets", async () => {
   const doc = await designDoc();
   const byField = new Map<string, Set<string>>();

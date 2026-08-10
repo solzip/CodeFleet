@@ -975,3 +975,85 @@ test("approval is refused before a bad projectPath is reported", async () => {
   await assert.rejects(() => runTask(root, "sample"), /not approved for execution/);
   assert.deepEqual(await readdir(path.join(root, ".codefleet", "runs")), []);
 });
+
+test("artifacts report what was scanned, so nothing examined differs from nothing found", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-scope-"));
+  await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await mkdir(path.join(root, "tools"), { recursive: true });
+  await writeFile(path.join(root, "src", "app.js"), "export const a = 1;\n", "utf8");
+  await writeFile(path.join(root, ".gitignore"), ".codefleet/\n", "utf8");
+  await writeFile(
+    path.join(root, "tools", "agent.mjs"),
+    [
+      'import { writeFileSync, mkdirSync } from "node:fs";',
+      `writeFileSync("src/app.js", ${JSON.stringify("export const a = 2;\n")});`,
+      'mkdirSync("infra", { recursive: true });',
+      `writeFileSync("infra/x.sh", ${JSON.stringify("echo x\n")});`,
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  await writeFile(path.join(root, "tools", "check.mjs"), "process.exit(0);\n", "utf8");
+
+  const { spawnSync } = await import("node:child_process");
+  for (const args of [["init"], ["add", "-A"], ["commit", "-m", "init"]]) {
+    spawnSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", ...args], { cwd: root });
+  }
+
+  await writeFile(
+    path.join(root, ".codefleet", "config.json"),
+    `${JSON.stringify({
+      version: "0.1.0",
+      defaultAgent: "codex",
+      mode: "execute",
+      agents: { codex: { command: process.execPath, args: ["tools/agent.mjs"] } },
+      workspace: { id: "scope-test" }
+    })}\n`,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "tasks", "sample.yaml"),
+    [
+      "id: sample",
+      "title: Sample task",
+      "projectPath: .",
+      "goal: Exercise scan scope reporting",
+      "scope:",
+      '  include: ["src/**"]',
+      "  exclude: []",
+      "verification:",
+      "  commands:",
+      "    - commandId: unit-tests",
+      `      command: [${JSON.stringify(process.execPath)}, "tools/check.mjs"]`,
+      "constraints: []",
+      "doneCriteria: [Artifacts exist]",
+      "workflow: [IMPLEMENT]",
+      "status: READY",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  await approveForTest(root, "sample");
+  const execution = await runTask(root, "sample");
+
+  const observation = await readJson(path.join(execution.runDir, "harness-observation.json"));
+  const pathScope = (observation.policyChecks as {
+    pathPolicyEvaluation: { scanScope: Record<string, number> };
+  }).pathPolicyEvaluation.scanScope;
+
+  // The counts are what separate "checked two paths, one was a violation" from
+  // "checked nothing and therefore found nothing".
+  const violations = (observation.policyChecks as { pathViolations: { path: string }[] }).pathViolations;
+  assert.ok(pathScope.pathsChecked > 0, "a run that changed files must report paths checked");
+  assert.equal(pathScope.violationsFound, violations.length, "the count must match the recorded violations");
+  assert.deepEqual(violations.map((entry) => entry.path), ["infra/x.sh"]);
+  assert.equal(pathScope.allowedPatterns, 1);
+
+  const evidence = await readJson(path.join(execution.runDir, "verification", "verify-001.json"));
+  const verifyScope = evidence.scanScope as Record<string, number>;
+  assert.equal(verifyScope.attemptsRecorded, 1);
+  assert.equal(verifyScope.attemptsExecuted, 1);
+  assert.equal(verifyScope.attemptsBlocked, 0);
+});
