@@ -2388,6 +2388,9 @@ condition:
 - no blocking finding exists
 - no unresolved required field exists
 - no blocking needsReview exists
+- run-summary normalization status is COMPLETE
+- no CAPABILITY_GAP and no EVIDENCE_DEFECT remains unresolved
+- evidenceCompleteness is COMPLETE and never WAIVED_INCOMPLETE
 - reviewEvidenceBundleRef exists at decision time
 - reviewEvidenceBundleHash exists at decision time
 - RUN_REVIEW_DECIDED.actorKind == SYSTEM_POLICY
@@ -2399,6 +2402,9 @@ allowedEffect:
 - Queue progression may use VERIFIED
 deniedEffect:
 - CodeFleet must not append SYSTEM_POLICY ACCEPTED review decision
+- CodeFleet must not auto-accept while any observation boundary is unevaluated or degraded
+- CodeFleet must not waive its own capability gap
+- CodeFleet must not auto-accept a review whose evidenceCompleteness is WAIVED_INCOMPLETE
 - Queue progression must not use DONE alone
 evidence:
 - runPlanId
@@ -6052,6 +6058,48 @@ VerificationEvidence rules:
 - The latest or effective verification attempt is selected by Run Summary policy; old attempts are not edited.
 ```
 
+#### Evidence gap classification
+
+`unavailableReason`은 성격이 다른 두 사건을 함께 담고 있었다. 둘을 구분한다.
+
+```text
+CAPABILITY_GAP
+= CodeFleet이 아직 관측할 수 없는 영역이다.
+= 도구의 한계이며 이 Run에 고유한 문제가 아니다.
+= 사람이 직접 확인해 보완할 수 있다.
+
+EVIDENCE_DEFECT
+= 이 Run의 증거가 없거나, 읽을 수 없거나, 기록된 hash와 다르다.
+= 증거 자체를 신뢰할 수 없다.
+= 사람도 보완할 수 없다. 없는 증거를 사람이 만들어낼 수 없기 때문이다.
+```
+
+분류:
+
+```text
+CAPABILITY_GAP:
+- WORKSPACE_SNAPSHOT_NOT_IMPLEMENTED_V02
+- COMMAND_CHANNEL_NOT_HARNESS_VISIBLE
+- PROVIDER_TRANSCRIPT_PARSING_NOT_IMPLEMENTED_V02
+- NESTED_REPO_NOT_TRAVERSED
+- GIT_CHANGED_FILES_FAILED
+- NO_VERIFICATION_COMMANDS_CONFIGURED
+
+EVIDENCE_DEFECT:
+- HASH_INVALID
+- ARTIFACT_NOT_READABLE
+- MISSING_INPUT_REF
+```
+
+구분이 필요한 이유는 두 사건이 사람 리뷰에 대해 정반대이기 때문이다. `CAPABILITY_GAP`은 사람이 저장소를 직접 확인해 판단을 대신할 수 있다. `EVIDENCE_DEFECT`는 대신할 수 없다. hash가 맞지 않는 아티팩트는 실행 당시의 것인지 확인할 방법이 없고, 사람이 본다고 그 사실이 바뀌지 않는다.
+
+두 사건을 같은 `degraded`로 묶으면 도구가 아직 못 만든 기능 때문에 사람 판단까지 막힌다. 실제로 v0.2에서 모든 Run이 그 상태였다.
+
+```text
+사람은 도구의 한계를 대신 감당할 수 있다.
+기계는 자기 한계를 스스로 면제할 수 없다.
+```
+
 `review-decision.local.json` is v0.2-only migration input. It exists only when
 the Objective ledger `RUN_REVIEW_DECIDED` event is not implemented for that path.
 It must be shaped so the final ledger event can be created later without treating
@@ -6089,9 +6137,16 @@ computedRisk: "LOW | MEDIUM | HIGH | UNKNOWN"
 pathViolationSummary:
   hasViolation: false
   violationRefs: []
+evidenceCompleteness: "COMPLETE | WAIVED_INCOMPLETE"
+waivedCapabilityGaps:
+  - reason: ""
+    acknowledgedBy: ""
+    justification: ""
 supersedesLocalReviewId: ""
 createdAt: ""
 ```
+
+`waivedCapabilityGaps`는 항목별로만 기록한다. 전체를 한 번에 면제하는 표현은 두지 않는다. 사람이 무엇을 대신 확인했는지가 남아야 나중에 그 Run을 감사할 때 주장의 범위를 알 수 있다.
 
 Local review rules:
 
@@ -6342,14 +6397,20 @@ condition:
   - review-decision.local.json has finalDecisionTruth false and migrationTarget RUN_REVIEW_DECIDED.
   - review-decision.local.json references ReviewEvidenceBundle when bundleStatus is COMPLETE.
   - ReviewEvidenceBundle is assembled from Run Summary refs in deterministic order.
-  - ACCEPTED local review requires COMPLETE bundle, valid hashes, successful normalized result, satisfied or waived verification gate, and no unresolved path violation.
+  - ACCEPTED local review requires successful normalized result, satisfied or waived verification gate, and no unresolved path violation.
+  - an EVIDENCE_DEFECT in the bundle blocks ACCEPTED and cannot be waived by any actor.
+  - a CAPABILITY_GAP blocks ACCEPTED unless a human waives that specific reason with a justification.
+  - a waived ACCEPTED records evidenceCompleteness WAIVED_INCOMPLETE and lists every waived reason.
   - human note and AI review output are optional refs, not evidence truth.
   - AI review output is degraded reviewer hint only.
-  - degraded local review cannot be ACCEPTED and cannot be used as acceptance evidence.
+  - a local review degraded by EVIDENCE_DEFECT cannot be ACCEPTED and cannot be used as acceptance evidence.
+  - a local review degraded only by waived CAPABILITY_GAP is acceptance evidence for the waiving actor, never for automatic progression.
 allowedEffect:
   - v0.2 may preserve local review decision data for later Objective ledger migration.
   - review tooling may show local review status as migration-ready or degraded.
 deniedEffect:
+  - v0.2 review must not waive an EVIDENCE_DEFECT.
+  - v0.2 review must not waive a CAPABILITY_GAP without naming the specific reason and a justification.
   - v0.2 review must not append final RUN_REVIEW_DECIDED unless Objective ledger support exists.
   - v0.2 review must not calculate final VERIFIED from review-decision.local.json.
   - v0.2 review must not mutate Run Trace artifacts.
@@ -6399,7 +6460,8 @@ preconditions:
   - Objective ledger RUN_REVIEW_DECIDED is not implemented for this path
   - codefleet review is evaluating a local review artifact
 condition:
-  - MIGRATION_READY is derived only from a non-superseded local artifact with finalDecisionTruth false, migrationTarget RUN_REVIEW_DECIDED, valid ReviewEvidenceBundle ref/hash, valid decision fields, and present reason.
+  - MIGRATION_READY is derived only from a non-superseded local artifact with finalDecisionTruth false, migrationTarget RUN_REVIEW_DECIDED, valid ReviewEvidenceBundle ref/hash, valid decision fields, present reason, and evidenceCompleteness COMPLETE.
+  - MIGRATION_READY_WAIVED is derived when the same conditions hold but evidenceCompleteness is WAIVED_INCOMPLETE.
   - DEGRADED_RECORDED is derived only from REJECTED or NEEDS_CHANGES with explicit degraded or unavailable evidence.
   - MIGRATION_BLOCKED is derived when required migration fields or hashes are invalid.
   - SUPERSEDED is derived when a later local artifact references supersedesLocalReviewId.
@@ -6409,6 +6471,7 @@ allowedEffect:
 deniedEffect:
   - local review status cannot create DONE, FAILED, VERIFIED, NEXT, Queue progression, or Objective closure.
   - MIGRATION_READY cannot be treated as RUN_REVIEW_DECIDED.
+  - MIGRATION_READY_WAIVED cannot be imported without carrying its waived reason list into the ledger event.
   - SUPERSEDED local artifacts cannot be imported unless explicitly selected for audit repair.
 evidence:
   - localReviewId

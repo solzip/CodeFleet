@@ -7,6 +7,7 @@ export type ReviewDecision = "ACCEPTED" | "REJECTED" | "NEEDS_CHANGES";
 
 export type LocalReviewStatus =
   | "MIGRATION_READY"
+  | "MIGRATION_READY_WAIVED"
   | "DEGRADED_RECORDED"
   | "MIGRATION_BLOCKED"
   | "SUPERSEDED";
@@ -18,6 +19,27 @@ export interface ReviewOptions {
   noteRef?: string;
   aiReviewRef?: string;
   supersedesLocalReviewId?: string;
+  /** Specific CAPABILITY_GAP reasons a human takes responsibility for. */
+  waivedGaps?: string[];
+  waiveJustification?: string;
+}
+
+export type GapKind = "CAPABILITY_GAP" | "EVIDENCE_DEFECT";
+
+export interface EvidenceGap {
+  reason: string;
+  kind: GapKind;
+}
+
+// A CAPABILITY_GAP is something CodeFleet cannot observe yet; a person can check
+// the repository and stand in for it. An EVIDENCE_DEFECT means this Run's
+// evidence is missing or does not match its recorded hash, which nobody can
+// stand in for, so it is never waivable.
+const EVIDENCE_DEFECT_PREFIXES = ["HASH_INVALID", "ARTIFACT_NOT_READABLE", "MISSING_INPUT_REF"];
+
+export function classifyGap(reason: string): GapKind {
+  const head = reason.split(":")[0];
+  return EVIDENCE_DEFECT_PREFIXES.includes(head) ? "EVIDENCE_DEFECT" : "CAPABILITY_GAP";
 }
 
 interface ReviewEvidenceBundle {
@@ -91,6 +113,8 @@ interface LocalReviewDecision {
   reviewNoteRef: string;
   aiReviewHintRef: string;
   supersedesLocalReviewId: string;
+  evidenceCompleteness: "COMPLETE" | "WAIVED_INCOMPLETE";
+  waivedCapabilityGaps: { reason: string; acknowledgedBy: string; justification: string }[];
   localReviewStatus: LocalReviewStatus;
   localReviewStatusReasons: string[];
   safeguards: {
@@ -108,6 +132,7 @@ export interface ReviewExecution {
   decision: ReviewDecision;
   localReviewStatus: LocalReviewStatus;
   bundleStatus: "COMPLETE" | "DEGRADED";
+  evidenceCompleteness: "COMPLETE" | "WAIVED_INCOMPLETE";
   bundlePath: string;
   localReviewPath: string;
   blockedReasons: string[];
@@ -155,7 +180,7 @@ export async function reviewRun(
   const bundlePath = path.join(reviewDir, "evidence-bundle.json");
   await writeJson(bundlePath, bundle);
 
-  const acceptance = evaluateAcceptance(bundle);
+  const acceptance = evaluateAcceptance(bundle, options.waivedGaps ?? []);
   if (options.decision === "ACCEPTED" && !acceptance.allowed) {
     throw new Error(
       `ACCEPTED local review is not allowed for ${runId}.\n` +
@@ -197,6 +222,12 @@ export async function reviewRun(
     reviewNoteRef: options.noteRef ?? "",
     aiReviewHintRef: options.aiReviewRef ?? "",
     supersedesLocalReviewId: options.supersedesLocalReviewId ?? "",
+    evidenceCompleteness: acceptance.waived.length > 0 ? "WAIVED_INCOMPLETE" : "COMPLETE",
+    waivedCapabilityGaps: acceptance.waived.map((reason) => ({
+      reason,
+      acknowledgedBy: options.actorId ?? "local-user",
+      justification: options.waiveJustification ?? options.reason
+    })),
     localReviewStatus: statusResult.status,
     localReviewStatusReasons: statusResult.reasons,
     safeguards: {
@@ -217,6 +248,7 @@ export async function reviewRun(
     decision: options.decision,
     localReviewStatus: statusResult.status,
     bundleStatus: bundle.bundleStatus,
+    evidenceCompleteness: localReview.evidenceCompleteness,
     bundlePath: toRelativePath(rootDir, bundlePath),
     localReviewPath: toRelativePath(rootDir, localReviewPath),
     blockedReasons: acceptance.blockedReasons
@@ -274,8 +306,18 @@ async function buildEvidenceBundle(input: {
   const pathViolation = asRecord(policy.pathViolationSummary);
   const normalization = asRecord(runSummary.normalization);
 
+  // Carry the individual normalization reasons rather than an aggregate. A
+  // waiver has to name a specific gap, and an aggregate would force the reviewer
+  // to waive everything at once without seeing what "everything" is.
   if (normalization.status !== "COMPLETE") {
-    unavailableReasons.push(`RUN_SUMMARY_NORMALIZATION:${asString(normalization.status, "UNKNOWN")}`);
+    const reasons = asArray(normalization.unavailableReasons).filter(
+      (value): value is string => typeof value === "string" && value.length > 0
+    );
+    if (reasons.length === 0) {
+      unavailableReasons.push(`RUN_SUMMARY_NORMALIZATION:${asString(normalization.status, "UNKNOWN")}`);
+    } else {
+      unavailableReasons.push(...reasons);
+    }
   }
 
   const violationRefs: FileRef[] = [];
@@ -321,15 +363,27 @@ async function buildEvidenceBundle(input: {
   };
 }
 
-function evaluateAcceptance(bundle: ReviewEvidenceBundle): {
-  allowed: boolean;
-  blockedReasons: string[];
-} {
+function evaluateAcceptance(
+  bundle: ReviewEvidenceBundle,
+  waivedGaps: string[]
+): { allowed: boolean; blockedReasons: string[]; waived: string[] } {
   const blockedReasons: string[] = [];
+  const waived: string[] = [];
 
-  if (bundle.bundleStatus !== "COMPLETE") {
-    blockedReasons.push(`bundle is DEGRADED: ${bundle.unavailableReasons.join(", ")}`);
+  for (const reason of bundle.unavailableReasons) {
+    if (classifyGap(reason) === "EVIDENCE_DEFECT") {
+      // Nobody can stand in for evidence that is missing or does not match its
+      // recorded hash, so this is never waivable.
+      blockedReasons.push(`evidence defect cannot be waived: ${reason}`);
+      continue;
+    }
+    if (waivedGaps.includes(reason)) {
+      waived.push(reason);
+      continue;
+    }
+    blockedReasons.push(`capability gap not waived: ${reason}`);
   }
+
   if (bundle.hashChecks.some((entry) => !entry.valid)) {
     blockedReasons.push("one or more referenced artifact hashes are invalid");
   }
@@ -344,19 +398,20 @@ function evaluateAcceptance(bundle: ReviewEvidenceBundle): {
       `verification gate is ${bundle.verificationGateResult} (${bundle.verificationGateReason})`
     );
   }
-  if (!bundle.pathViolationSummary.evaluated) {
-    blockedReasons.push("path violation was not evaluated");
-  } else if (bundle.pathViolationSummary.hasViolation) {
+  // An unevaluated path policy is a capability gap, not a finding: the reason it
+  // could not run is already carried in the gap list above and is waivable there.
+  // An actual violation is a finding and is never waivable.
+  if (bundle.pathViolationSummary.evaluated && bundle.pathViolationSummary.hasViolation) {
     blockedReasons.push("unresolved path violation is present");
   }
 
-  return { allowed: blockedReasons.length === 0, blockedReasons };
+  return { allowed: blockedReasons.length === 0, blockedReasons, waived };
 }
 
 function deriveLocalReviewStatus(input: {
   decision: ReviewDecision;
   bundle: ReviewEvidenceBundle;
-  acceptance: { allowed: boolean; blockedReasons: string[] };
+  acceptance: { allowed: boolean; blockedReasons: string[]; waived: string[] };
   supersedesLocalReviewId: string;
 }): { status: LocalReviewStatus; reasons: string[] } {
   const { decision, bundle, acceptance } = input;
@@ -371,6 +426,9 @@ function deriveLocalReviewStatus(input: {
   if (decision === "ACCEPTED") {
     if (!acceptance.allowed) {
       return { status: "MIGRATION_BLOCKED", reasons: acceptance.blockedReasons };
+    }
+    if (acceptance.waived.length > 0) {
+      return { status: "MIGRATION_READY_WAIVED", reasons: acceptance.waived };
     }
     return { status: "MIGRATION_READY", reasons: [] };
   }
@@ -430,6 +488,17 @@ function assertLocalReview(value: LocalReviewDecision): void {
   }
   if (value.reason.trim().length === 0) {
     errors.push("reason must be present");
+  }
+  for (const gap of value.waivedCapabilityGaps) {
+    if (classifyGap(gap.reason) !== "CAPABILITY_GAP") {
+      errors.push(`${gap.reason} is an evidence defect and cannot be waived`);
+    }
+    if (gap.justification.trim().length === 0) {
+      errors.push(`${gap.reason} was waived without a justification`);
+    }
+  }
+  if (value.evidenceCompleteness === "WAIVED_INCOMPLETE" && value.waivedCapabilityGaps.length === 0) {
+    errors.push("WAIVED_INCOMPLETE requires at least one waived gap");
   }
   if (errors.length > 0) {
     throw new Error(`Invalid local review decision:\n${errors.map((e) => `  - ${e}`).join("\n")}`);

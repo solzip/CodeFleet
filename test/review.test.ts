@@ -153,3 +153,127 @@ test("a second review creates a new reviewDecisionId", async () => {
   const localReview = await readJson(path.join(root, ".codefleet", "runs", runId, "review-decision.local.json"));
   assert.equal(localReview.supersedesLocalReviewId, first.localReviewId);
 });
+
+test("a capability gap can be waived by a human, item by item", async () => {
+  const { root, runId } = await seedVerifiedWorkspace();
+
+  await assert.rejects(
+    () => reviewRun(root, runId, { decision: "ACCEPTED", reason: "looks fine" }),
+    /capability gap not waived/
+  );
+
+  const summary = await readJson(path.join(root, ".codefleet", "runs", runId, "run-summary.json"));
+  const gaps = (summary.normalization as { unavailableReasons: string[] }).unavailableReasons;
+
+  const execution = await reviewRun(root, runId, {
+    decision: "ACCEPTED",
+    reason: "checked the repository directly",
+    waivedGaps: gaps,
+    waiveJustification: "reviewed git status and diff by hand"
+  });
+
+  assert.equal(execution.decision, "ACCEPTED");
+  assert.equal(execution.evidenceCompleteness, "WAIVED_INCOMPLETE");
+  assert.equal(execution.localReviewStatus, "MIGRATION_READY_WAIVED");
+
+  const localReview = await readJson(path.join(root, ".codefleet", "runs", runId, "review-decision.local.json"));
+  const waived = localReview.waivedCapabilityGaps as { reason: string; justification: string }[];
+  assert.equal(waived.length, gaps.length, "every waived gap is recorded by name");
+  assert.ok(waived.every((entry) => entry.justification.length > 0));
+});
+
+test("an evidence defect cannot be waived by anyone", async () => {
+  const { root, runId } = await seedWorkspace();
+  const observationPath = path.join(root, ".codefleet", "runs", runId, "harness-observation.json");
+  const observation = await readJson(observationPath);
+  observation.tampered = true;
+  await writeFile(observationPath, `${JSON.stringify(observation, null, 2)}\n`, "utf8");
+
+  const summary = await readJson(path.join(root, ".codefleet", "runs", runId, "run-summary.json"));
+  const gaps = (summary.normalization as { unavailableReasons: string[] }).unavailableReasons;
+  const hashRef = `HASH_INVALID:.codefleet/runs/${runId}/harness-observation.json`;
+
+  // Waive everything, including the hash defect itself. It must still refuse.
+  await assert.rejects(
+    () =>
+      reviewRun(root, runId, {
+        decision: "ACCEPTED",
+        reason: "I checked it myself",
+        waivedGaps: [...gaps, hashRef],
+        waiveJustification: "trying to waive a hash mismatch"
+      }),
+    /evidence defect cannot be waived/
+  );
+});
+
+test("waiving a gap without a justification is rejected", async () => {
+  const { root, runId } = await seedWorkspace();
+  const summary = await readJson(path.join(root, ".codefleet", "runs", runId, "run-summary.json"));
+  const gaps = (summary.normalization as { unavailableReasons: string[] }).unavailableReasons;
+
+  await assert.rejects(
+    () =>
+      reviewRun(root, runId, {
+        decision: "ACCEPTED",
+        reason: "   ",
+        waivedGaps: gaps,
+        waiveJustification: "   "
+      }),
+    /Missing required option: --reason/
+  );
+});
+
+// A workspace whose Run reaches DONE with a Harness-executed verification and an
+// evaluated path policy, so only capability gaps remain between it and ACCEPTED.
+async function seedVerifiedWorkspace(): Promise<{ root: string; runId: string }> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-verified-"));
+  await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await mkdir(path.join(root, "tools"), { recursive: true });
+  await writeFile(path.join(root, "src", "app.js"), "export const ok = true;\n", "utf8");
+  await writeFile(path.join(root, ".gitignore"), ".codefleet/\n", "utf8");
+  await writeFile(path.join(root, "tools", "agent.mjs"), 'import { writeFileSync } from "node:fs";\n', "utf8");
+  await writeFile(path.join(root, "tools", "check.mjs"), "process.exit(0);\n", "utf8");
+
+  const { spawnSync } = await import("node:child_process");
+  for (const args of [["init"], ["add", "-A"], ["commit", "-m", "init"]]) {
+    spawnSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", ...args], { cwd: root });
+  }
+
+  await writeFile(
+    path.join(root, ".codefleet", "config.json"),
+    `${JSON.stringify({
+      version: "0.1.0",
+      defaultAgent: "codex",
+      mode: "execute",
+      agents: { codex: { command: process.execPath, args: ["tools/agent.mjs"] } },
+      workspace: { id: "verified-test" }
+    })}\n`,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "tasks", "sample.yaml"),
+    [
+      "id: sample",
+      "title: Sample task",
+      "projectPath: .",
+      "goal: Reach DONE with verification",
+      "scope:",
+      '  include: ["src/**", "tools/**"]',
+      "  exclude: []",
+      "verification:",
+      "  commands:",
+      "    - commandId: unit-tests",
+      `      command: [${JSON.stringify(process.execPath)}, "tools/check.mjs"]`,
+      "constraints: []",
+      "doneCriteria: [Artifacts exist]",
+      "workflow: [IMPLEMENT]",
+      "status: READY",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  const execution = await runTask(root, "sample");
+  return { root, runId: execution.result.runId };
+}

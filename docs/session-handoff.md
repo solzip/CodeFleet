@@ -104,7 +104,11 @@ Current implementation status:
 - codefleet review assembles ReviewEvidenceBundle from Run Summary refs and re-verifies every referenced artifact hash.
 - codefleet review writes review-decision.local.json with finalDecisionTruth false and migrationTarget RUN_REVIEW_DECIDED.
 - ACCEPTED is refused unless the bundle is COMPLETE, hashes are valid, the normalized result is DONE, the verification gate is satisfied or waived, and no path violation is unresolved.
-- Local review derives MIGRATION_READY / DEGRADED_RECORDED / MIGRATION_BLOCKED and never records VERIFIED or queue progression.
+- Evidence gaps are classified: a CAPABILITY_GAP is something CodeFleet cannot observe yet, an EVIDENCE_DEFECT is evidence that is missing or fails its hash.
+- A human may accept over a CAPABILITY_GAP by waiving each reason by name with a justification; the result is recorded as WAIVED_INCOMPLETE and MIGRATION_READY_WAIVED.
+- An EVIDENCE_DEFECT is never waivable by any actor, because nobody can stand in for evidence that does not match its recorded hash.
+- Auto-accept additionally requires normalization COMPLETE with no gap of either kind, so CodeFleet can never waive its own blind spot.
+- Local review derives MIGRATION_READY / MIGRATION_READY_WAIVED / DEGRADED_RECORDED / MIGRATION_BLOCKED and never records VERIFIED or queue progression.
 - Missing final evidence is represented as unavailable / degraded reason instead of truth.
 ```
 

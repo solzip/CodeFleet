@@ -158,7 +158,9 @@ async function handleReview(cwd: string, options: CliOptions, args: string[]): P
     actorId: flags.actor,
     noteRef: flags.note,
     aiReviewRef: flags.aiReviewFile,
-    supersedesLocalReviewId: flags.supersedes
+    supersedesLocalReviewId: flags.supersedes,
+    waivedGaps: flags.waiveGap === undefined ? [] : flags.waiveGap.split(",").map((v) => v.trim()).filter((v) => v.length > 0),
+    waiveJustification: flags.waiveReason
   });
 
   console.log("CodeFleet local review recorded.");
@@ -166,6 +168,7 @@ async function handleReview(cwd: string, options: CliOptions, args: string[]): P
   console.log(`reviewDecisionId: ${execution.reviewDecisionId}`);
   console.log(`decision: ${execution.decision}`);
   console.log(`bundleStatus: ${execution.bundleStatus}`);
+  console.log(`evidenceCompleteness: ${execution.evidenceCompleteness}`);
   console.log(`localReviewStatus: ${execution.localReviewStatus}`);
   console.log(`evidenceBundle: ${execution.bundlePath}`);
   console.log(`localReview: ${execution.localReviewPath}`);
@@ -179,6 +182,8 @@ interface ReviewFlags {
   note?: string;
   aiReviewFile?: string;
   supersedes?: string;
+  waiveGap?: string;
+  waiveReason?: string;
 }
 
 function parseReviewFlags(argv: string[]): ReviewFlags {
@@ -189,7 +194,9 @@ function parseReviewFlags(argv: string[]): ReviewFlags {
     "--actor": "actor",
     "--note": "note",
     "--ai-review-file": "aiReviewFile",
-    "--supersedes": "supersedes"
+    "--supersedes": "supersedes",
+    "--waive-gap": "waiveGap",
+    "--waive-reason": "waiveReason"
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -295,6 +302,8 @@ Review options:
   --note <path>
   --ai-review-file <path>
   --supersedes <localReviewId>
+  --waive-gap <REASON[,REASON]>   accept responsibility for a capability gap
+  --waive-reason <text>           what you checked instead
 
 Notes:
   Run 'codefleet init' before other commands.

@@ -24,7 +24,7 @@ Phase 11     대기      설계 확정 후 구현 재개
 ```
 
 ```text
-전체 89단계 중 88단계 완료
+전체 90단계 중 89단계 완료
 FINAL RULE 82개
 설계 진행도: 100% (미고정 항목 없음)
 구현 진행도: 약 60-70%
@@ -309,7 +309,12 @@ Phase 10에서 반복된 판단 기준:
         - HARNESS_EXECUTED authority, exitCode / stdout / stderr refs 기록
         - observedCheck / gate를 Harness 실행 증거에서만 계산
         - YAML 파서에 map 리스트 지원 추가 (설계가 고정한 스키마 요구)
-[ ] 89. 이후 final 슬라이스 (workspace snapshot / provider transcript / agent command 관측)
+[x] 89. 사람 리뷰 / 자동 수락 게이트 분리
+        - unavailableReason 을 CAPABILITY_GAP / EVIDENCE_DEFECT 로 분류
+        - 사람은 capability gap 을 항목별 waive 가능, evidence defect 는 누구도 불가
+        - 자동 수락은 normalization COMPLETE 를 전제로 강화
+        - FINAL RULE 2개 개정 (REVIEW_MODEL_V02 / SYSTEM_POLICY_AUTO_REVIEW)
+[ ] 90. 이후 final 슬라이스 (workspace snapshot / provider transcript / agent command 관측)
 [ ] 87. 이후 final 슬라이스
 ```
 
