@@ -71,6 +71,8 @@ Final model / concept design: complete
 Implementation: about 25-35%
 ```
 
+Known divergences are declared in 0.13 NOT_FINAL_YET, not silently carried.
+
 Design verification result:
 
 ```text

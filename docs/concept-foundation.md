@@ -5240,7 +5240,31 @@ RESOLVED_AFTER_THIS_LIST_WAS_WRITTEN:
      구현 범위는 VERSION_PLAN으로 남김
 
 NOT_FINAL_YET:
-- (없음. 남은 항목은 정합성 재감사뿐이다.)
+- 같은 필드명에 서로 다른 값 집합이 존재하는 8건
+  authority     해소됨. 8.2.2에 필드별 대응을 명시했다.
+  decision      미해소. attempts[]는 3값, commandAttempt는 2값이다.
+  changeKind    미해소. 관측 6값과 export 5값 사이에 무손실 매핑이 없다.
+                TYPECHANGE / SYMLINK가 export에 대응이 없고 UNKNOWN이 관측에 없다.
+  pathKind      미해소. 파일시스템 엔트리 종류와 경로 기준점이 이름을 공유한다.
+  mode / result / source / status
+                미해소. 담는 객체가 달라 실해는 확인되지 않았다.
+
+- 완전성을 뜻하는 필드가 세 축에 걸쳐 다섯 개로 나뉘어 있다
+  관측  observationStatus / normalization.status / bundleStatus
+  수락  evidenceCompleteness
+  재생  replayStatus
+  관측 축 셋은 같은 질문에 답하면서 값 집합이 서로 다르다.
+  S5 export를 구현할 때 외부에 어느 어휘로 말할지 함께 정한다.
+```
+
+이 항목들은 2026-08-10 감사에서 기계 검사로 발견했다. `authority` 하나만 실제로 문제를 일으켰고, 나머지는 아직 아무것도 깨뜨리지 않았다. 실해가 확인되지 않은 것을 추측으로 순위 매겨 고치지 않고, 목록으로 남겨 두었다가 실제로 걸릴 때 고친다.
+
+검사 방법의 한계도 함께 기록한다.
+
+```text
+현재 검사는 같은 이름에 다른 값 집합이 있는 경우만 찾는다.
+다른 이름에 같은 개념이 담긴 경우는 찾지 못한다.
+완전성 다섯 필드가 그 사각에 해당하며, 이름이 달라 8건 목록에는 잡히지 않았다.
 ```
 
 `NOT_FINAL_YET` 항목은 확정 규칙이 아니다. 이 항목들은 다음 논의에서 같은 기준으로 하나씩 FINAL RULE로 승격하거나 VERSION_PLAN으로 남긴다.

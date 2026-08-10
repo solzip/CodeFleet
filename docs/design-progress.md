@@ -26,7 +26,7 @@ Phase 11     대기      설계 확정 후 구현 재개
 ```
 
 ```text
-전체 93단계 중 91단계 완료
+전체 93단계 중 92단계 완료
 FINAL RULE 82개
 설계 진행도: 100% (미고정 항목 없음)
 구현 진행도: 약 60-70%
@@ -325,8 +325,12 @@ Phase 10에서 반복된 판단 기준:
         - exports/summary.md 는 sanitized 외부용으로 유지
         - unavailableReason 을 분류와 함께 전부 나열, 요약으로 덮지 않음
         - 리뷰가 기록되면 같은 파일에 결과가 합류
-[ ] 92. 값 집합 발산 8건 선언                                          <- 다음, 미착수
-[ ] 93. 이후 final 슬라이스 (workspace snapshot / provider transcript / agent command 관측)
+[x] 92. 값 집합 발산 선언
+        - 같은 이름·다른 값 집합 8건을 0.13 NOT_FINAL_YET 에 선언
+        - 완전성 어휘가 관측/수락/재생 세 축 다섯 필드로 나뉜 것도 함께 선언
+        - 검사기 한계(다른 이름·같은 개념은 못 잡음)를 명시
+        - authority 외 7건은 실해 미확인이므로 추측으로 순위 매기지 않고 목록으로 유지
+[ ] 93. 이후 final 슬라이스                                            <- 다음, 미착수 (workspace snapshot / provider transcript / agent command 관측)
 [ ] 87. 이후 final 슬라이스
 ```
 
