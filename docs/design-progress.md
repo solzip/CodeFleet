@@ -1,6 +1,6 @@
 # CodeFleet Design Progress
 
-Last updated: 2026-08-07
+Last updated: 2026-08-10
 
 이 문서는 CodeFleet 설계가 어떤 순서로 확정됐고 지금 어디를 진행 중인지 기록한다.
 
@@ -22,14 +22,7 @@ README.md                    현재 구현 사용법
 ```text
 Phase 0-9    완료      76단계
 Phase 10     완료      8단계 전부 완료
-Phase 11     대기      설계 확정 후 구현 재개
-```
-
-```text
-전체 98단계 중 97단계 완료
-FINAL RULE 82개
-설계 진행도: 100% (미고정 항목 없음)
-구현 진행도: 약 60-70%
+Phase 11     진행 중   97단계 완료, 98번 진행 중
 ```
 
 방침:
@@ -39,20 +32,28 @@ FINAL RULE 82개
 설계는 84번에서 완료됐다. 이제 Phase 11 구현으로 넘어간다.
 ```
 
-최종 검증 결과:
+측정값 (2026-08-10, `npm test` 로 재현 가능):
 
 ```text
-FINAL RULE            82개
-YAML 파싱 실패        0
-필수 섹션 누락        0
-id 형식 위반          0
-id 중복               0
-status != FINAL       0
-taxonomy 밖 category  0
-taxonomy 밖 severity  0
-DESIGN CANDIDATE      0
-NOT_FINAL_YET         0
+FINAL RULE                    83개
+scanScope 를 요구받는 규칙    27개 / 누락 0
+enum 필드                     52개 / 값 집합 분기 8개 (0.13 에 선언, 미수정)
+YAML 파싱 실패                0
+id 형식 위반 / 중복           0
+status != FINAL               0
+taxonomy 밖 category/severity 0
+
+테스트                        94 pass / 0 fail
+소스                          6,058 줄 (17 파일)
+테스트                        2,933 줄 (11 파일)
+
+완전 구성 Run 의 남은 gap     2건
+  COMMAND_CHANNEL_NOT_HARNESS_VISIBLE
+  PROVIDER_TRANSCRIPT_PARSING_NOT_IMPLEMENTED_V02
 ```
+
+이 수치는 손으로 세지 않는다. `test/design-rules.test.ts` 가 매 실행마다 출력하고,
+검사 대상이 0건이면 통과가 아니라 실패한다.
 
 ---
 
