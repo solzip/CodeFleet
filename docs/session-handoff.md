@@ -282,9 +282,19 @@ The checker is itself tested in test/rule-coverage.test.ts.
 Before this existed, "is it implemented as designed?" had no answer that could
 be re-derived. The doc header said "구현 진행도 약 60-70%" with nothing behind it.
 
-What 15.8% does NOT mean: the 58 unclaimed rules are a mix of not-implemented
-and implemented-but-unmapped, and nobody has separated the two yet. Separating
-them is the first step of the next slice, not a guess to publish.
+The 58 unclaimed rules are now classified in docs/rule-implementation-status.json,
+and the checker enforces the classification: every rule needs a claim or an entry,
+an entry goes stale the moment a test claims that rule, and an evidence path that
+does not exist fails the run.
+
+  IMPLEMENTED_UNMAPPED   16 rules  148 condition lines  code+test exist, no claim
+  IMPLEMENTED_UNTESTED    5 rules   30 lines            code exists, no test
+  NOT_CODE_VERIFIABLE     3 rules   17 lines            design/process rules
+  NOT_IMPLEMENTED        34 rules  203 lines            no code
+
+203 lines is the real size of the remaining implementation work. 148 lines is
+labelling, not building: claiming them would move coverage from 15.8% toward
+roughly 43% without writing a line of product code.
   npm run coverage:uncovered
 ```
 

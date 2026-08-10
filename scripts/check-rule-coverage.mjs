@@ -12,9 +12,10 @@
 // condition lines a passing test claims to check, and names every line nobody
 // claims. Those are different statements and the report says so.
 
+import { existsSync } from "node:fs";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { BASELINE_PATH, COVERAGE_DIR, loadRuleIndex } from "./design-doc.mjs";
+import { BASELINE_PATH, COVERAGE_DIR, REPO_ROOT, STATUS_PATH, loadRuleIndex } from "./design-doc.mjs";
 
 // Exported so the checker can be checked. A verifier nobody verifies is the
 // exact failure this whole mechanism exists to catch.
@@ -82,6 +83,58 @@ export function evaluateCoverage(rules, claims, baseline) {
   };
 }
 
+const STATUSES = new Set([
+  "NOT_IMPLEMENTED",
+  "IMPLEMENTED_UNMAPPED",
+  "IMPLEMENTED_UNTESTED",
+  "NOT_CODE_VERIFIABLE"
+]);
+
+// Every rule must be accounted for exactly once: either a passing test claims a
+// condition, or the status file says why not. Without this, a rule can drop out
+// of both and read as neither covered nor outstanding.
+export function evaluateStatus(rules, covered, status, fileExists) {
+  const errors = [];
+  const entries = status?.rules ?? {};
+  const ruleIds = new Set(rules.map((rule) => rule.ruleId));
+
+  for (const [ruleId, entry] of Object.entries(entries)) {
+    if (!ruleIds.has(ruleId)) {
+      errors.push(`status file classifies a rule that does not exist: ${ruleId}`);
+      continue;
+    }
+    if (!STATUSES.has(entry.status)) {
+      errors.push(`${ruleId}: unknown status ${JSON.stringify(entry.status)}`);
+    }
+    if (typeof entry.detail !== "string" || entry.detail.trim().length === 0) {
+      errors.push(`${ruleId}: status needs a detail saying what was checked`);
+    }
+    // A path nobody can open is not evidence. This is what stops the status file
+    // from becoming a place to assert findings that were never made.
+    if (typeof entry.evidence !== "string" || !fileExists(entry.evidence)) {
+      errors.push(`${ruleId}: evidence path does not exist: ${JSON.stringify(entry.evidence)}`);
+    }
+    if ((covered.get(ruleId)?.size ?? 0) > 0) {
+      errors.push(
+        `${ruleId}: a passing test now claims this rule, so its status entry is stale and must be removed`
+      );
+    }
+  }
+
+  const unaccounted = rules
+    .filter((rule) => (covered.get(rule.ruleId)?.size ?? 0) === 0 && entries[rule.ruleId] === undefined)
+    .map((rule) => rule.ruleId);
+  for (const ruleId of unaccounted) {
+    errors.push(`${ruleId}: no coverage claim and no status entry saying why`);
+  }
+
+  const byStatus = {};
+  for (const entry of Object.values(entries)) {
+    byStatus[entry.status] = (byStatus[entry.status] ?? 0) + 1;
+  }
+  return { errors, byStatus };
+}
+
 async function readClaims() {
   let files;
   try {
@@ -118,6 +171,15 @@ if (process.argv[1] !== undefined && import.meta.url === new URL(`file://${proce
   const { errors, covered, stats } = evaluateCoverage(rules, claims, updateBaseline ? null : baseline);
   const percent = stats.totalConditions === 0 ? "0" : ((stats.coveredConditions / stats.totalConditions) * 100).toFixed(1);
 
+  let status = null;
+  try {
+    status = JSON.parse(await readFile(STATUS_PATH, "utf8"));
+  } catch {
+    status = null;
+  }
+  const statusCheck = evaluateStatus(rules, covered, status, (p) => existsSync(path.join(REPO_ROOT, p)));
+  errors.push(...statusCheck.errors);
+
   console.log("");
   console.log("=== FINAL RULE coverage by condition line ===");
   console.log(`  rules                  ${stats.rules}`);
@@ -127,6 +189,11 @@ if (process.argv[1] !== undefined && import.meta.url === new URL(`file://${proce
   console.log(`  rules touched at all   ${stats.rulesTouched} of ${stats.rules}`);
   console.log(`  rules fully covered    ${stats.rulesFullyCovered} of ${stats.rules}`);
   console.log(`  rules with no claim    ${stats.rules - stats.rulesTouched}`);
+  console.log("");
+  console.log("  Why the unclaimed rules are unclaimed:");
+  for (const [name, count] of Object.entries(statusCheck.byStatus).sort(([a], [b]) => (a < b ? -1 : 1))) {
+    console.log(`    ${name.padEnd(22)} ${count}`);
+  }
   console.log("");
   console.log("  A claim means a passing test quoted that condition. It does not");
   console.log("  mean the condition is correctly implemented.");

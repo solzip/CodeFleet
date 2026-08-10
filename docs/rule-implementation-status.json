@@ -1,0 +1,302 @@
+{
+  "note": "Why each FINAL RULE has no coverage claim yet. Only rules with zero claims belong here; once a rule gets its first claim, its entry must be removed or the check fails. Verified by scripts/check-rule-coverage.mjs and test/rule-coverage.test.ts.",
+  "statusMeaning": {
+    "NOT_IMPLEMENTED": "no code enforces this rule. evidence names what was searched and found absent.",
+    "IMPLEMENTED_UNMAPPED": "code enforces it and a test exercises it; only the coversRule claim is missing.",
+    "IMPLEMENTED_UNTESTED": "code exists but no test exercises the rule's conditions.",
+    "NOT_CODE_VERIFIABLE": "a rule about how the design document or the slicing process is written, not about runtime behaviour."
+  },
+  "measuredOn": "2026-08-10",
+  "rules": {
+    "EXPORT_FIELD_ALLOWLIST_IS_CORE_OWNED_EXPOSURE_TIER": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/",
+      "detail": "no source file references exposureTier or an export allowlist. S5 is unimplemented."
+    },
+    "EXPORT_FIELD_PATH_IS_EXPLICIT_LEAF_WITHOUT_WILDCARD": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/",
+      "detail": "no export field path matcher exists."
+    },
+    "EXPORT_SCHEMA_UNKNOWN_FIELD_IS_DROPPED_AND_REPORTED": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/",
+      "detail": "no export schema exists."
+    },
+    "S5_EXPORT_SEAM_USES_SANITIZED_SUMMARY_ONLY": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/",
+      "detail": "no source file references sanitize. The S5 seam has no code."
+    },
+    "REDACTION_PATTERN_IS_LINEAR_TIME_REGEX_SUBSET": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/run-record.ts",
+      "detail": "the only occurrence of redaction in src is a comment in run-record.ts explaining why the record exists separately from an export."
+    },
+    "REDACTION_ACTION_STRICTNESS_ORDER_IS_FIXED": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/",
+      "detail": "no redaction action is implemented."
+    },
+    "REDACTION_RULE_FAILURE_BLOCKS_EXPORT": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/",
+      "detail": "neither redaction nor export is implemented, so the blocking relation has nothing to enforce."
+    },
+    "RISK_RULE_REUSES_FIXED_MATCHERS": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/run.ts",
+      "detail": "computedRisk.level is the constant UNKNOWN with reason RISK_ENGINE_NOT_IMPLEMENTED_V02. No risk rule is evaluated."
+    },
+    "RISK_RULE_CONJUNCTION_IS_FLAT_AND_NEGATION_IS_DENIED": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/run.ts",
+      "detail": "no risk rule structure is parsed or evaluated."
+    },
+    "UNKNOWN_RISK_IS_UNRESOLVED_STATE_NOT_HIGH_SEVERITY": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/run.ts",
+      "detail": "UNKNOWN is emitted as a constant, not derived from an unresolved evaluation, so the rule's distinction is untested."
+    },
+    "AGENT_ROLE_IS_CLASSIFICATION_NOT_PERMISSION_GRANT": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/",
+      "detail": "no source file references agentRole."
+    },
+    "AGENT_ROLE_DECLARES_ONLY_WHAT_IT_NARROWS": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/",
+      "detail": "no source file references agentRole."
+    },
+    "ROLE_EFFECTIVE_RESTRICTIONS_IS_DIAGNOSTIC_READ_MODEL": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/",
+      "detail": "no role read model exists."
+    },
+    "GUARDRAIL_IS_TASK_LOCAL_RESTRICTION_SOURCE": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/run.ts",
+      "detail": "the only occurrence of guardrail in src is a comment; Task guardrails are never read or applied."
+    },
+    "SYSTEM_POLICY_AUTO_REVIEW_DECISION_IS_BOUNDED": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/ledger.ts",
+      "detail": "every RUN_REVIEW_DECIDED path requires a human local review import. No system-policy automatic decision exists to bound."
+    },
+    "CORRECTIVE_EVENT_REQUIRES_VALID_LEDGER_AND_WRONG_DECISION": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/ledger.ts",
+      "detail": "supersede and invalidate references are read during replay, but no command appends a corrective event."
+    },
+    "POLICY_RULE_ID_IS_UNIQUE_WITH_REF_RECORDED_ORIGIN": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/config.ts",
+      "detail": "no policy rule ids are parsed; the config loader merges defaults without reading a policies block."
+    },
+    "PROFILE_CONFIG_IS_WORKSPACE_CONTRACT": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/config.ts",
+      "detail": "loadConfig merges DEFAULT_CONFIG with the parsed JSON and validates nothing."
+    },
+    "PROFILE_TOP_LEVEL_KEYS_FIXED": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/config.ts",
+      "detail": "unknown top-level keys are accepted silently."
+    },
+    "PROFILE_POLICY_BLOCK_KEYS_FIXED": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/config.ts",
+      "detail": "no policies block is read at all."
+    },
+    "ADAPTER_CANNOT_EXPAND_CAPABILITIES": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/agent.ts",
+      "detail": "capabilities are written into adapter-request.json but the adapter is a spawned process that never reads them, so nothing prevents it exceeding them. The Run's own path policy catches the result after the fact; the capability boundary itself is unenforced."
+    },
+    "PROJECT_PROFILE_POLICY_BLOCK_INTERNAL_SCHEMA": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/config.ts",
+      "detail": "no policies block schema is validated."
+    },
+    "PROFILE_DOES_NOT_STORE_RUNTIME_OR_LOCAL_STATE": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/config.ts",
+      "detail": "config.json currently stores agents.codex.command, which is exactly the local command path this rule forbids in the shared profile. Nothing rejects it."
+    },
+    "PROFILE_LOCAL_OVERLAY_RESTRICT_ONLY": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/workspace.ts",
+      "detail": "localOverlayRef is recorded in workspace discovery but no overlay file is read or intersected."
+    },
+    "PROFILE_EFFECTIVE_POLICY_IS_DERIVED": {
+      "status": "IMPLEMENTED_UNTESTED",
+      "evidence": "src/run.ts",
+      "detail": "effectivePolicy is derived and hashed in the Run Plan and is what path enforcement reads, but no test asserts the derivation rules themselves."
+    },
+    "PROFILE_DEFAULTS_REQUIRED_GATES_SCHEMA": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/config.ts",
+      "detail": "requiredGates appear in run.ts as a hardcoded literal, never read from or validated against a profile."
+    },
+    "PROFILE_DEFAULTS_RUN_AGENT_ADAPTER_SCHEMA": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/config.ts",
+      "detail": "no defaults.run.agentAdapter schema is validated."
+    },
+    "PROFILE_DEFAULTS_RUN_ISOLATION_MODE_SCHEMA": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/run.ts",
+      "detail": "isolation.mode is the constant NONE; no profile value is read."
+    },
+    "PROFILE_DEFAULTS_TASK_WORKFLOW_SCHEMA": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/config.ts",
+      "detail": "no defaults.task.workflow schema is validated."
+    },
+    "PROFILE_POLICY_AGENT_ADAPTERS_BLOCK": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/config.ts",
+      "detail": "allowedAdapters is never read; any defaultAgent string is accepted."
+    },
+    "PROFILE_POLICY_AUTO_ADVANCE_ON_DONE_IS_BOOLEAN": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/run.ts",
+      "detail": "autoAdvanceOnDone is written as a hardcoded false, never read from a profile or validated."
+    },
+    "TASK_REVISION_REQUIRED_GATES_ARE_CONCRETE": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/task.ts",
+      "detail": "Task YAML has no requiredGates field; the Run writes a fixed gate literal instead."
+    },
+    "EFFECTIVE_REQUIRED_GATES_MERGE_BY_DIMENSION": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/run.ts",
+      "detail": "no merge happens: there is one hardcoded gate literal and no profile or revision source to merge with."
+    },
+    "TASK_WORKFLOW_IS_DRAFT_TEMPLATE_NOT_EXECUTION_POLICY": {
+      "status": "IMPLEMENTED_UNTESTED",
+      "evidence": "src/prompt.ts",
+      "detail": "workflow is rendered into the prompt and never enforced, which is what the rule requires, but no test asserts that it cannot become policy."
+    },
+    "RUN_PLAN_AGENT_ADAPTER_RESOLUTION": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/run.ts",
+      "detail": "selectedAgentAdapter is copied from config.defaultAgent with no resolution order, no allowedAdapters check, and no recorded resolution source."
+    },
+    "REVIEW_DECISION_ACTOR_MUST_SATISFY_RESULT_REVIEW_GATE": {
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "src/review.ts",
+      "detail": "requiredGates.resultReview.allowedActors is always empty and no actor is checked against it."
+    },
+    "HARNESS_ENFORCEMENT_IS_POLICY_AND_EVIDENCE_BOUNDARY": {
+      "status": "IMPLEMENTED_UNTESTED",
+      "evidence": "src/run.ts",
+      "detail": "path policy is enforced from the derived effectivePolicy rather than the Task, but no test asserts the boundary as the rule states it."
+    },
+    "CODEFLEET_DURABLE_FILE_MAP_IS_LAYERED_CONTRACT": {
+      "status": "IMPLEMENTED_UNTESTED",
+      "evidence": "src/run.ts",
+      "detail": "the .codefleet layout is produced as designed, but no test asserts the layer contract itself."
+    },
+    "LATEST_EFFECTIVE_REVIEW_DECISION_IS_LEDGER_DERIVED": {
+      "status": "IMPLEMENTED_UNMAPPED",
+      "evidence": "src/ledger.ts",
+      "detail": "applyReviewDecisions picks the latest effective decision and honours supersede/invalidate; test/ledger.test.ts exercises it."
+    },
+    "RUN_REVIEW_DECIDED_IS_DURABLE_DECISION_EVENT": {
+      "status": "IMPLEMENTED_UNMAPPED",
+      "evidence": "src/ledger.ts",
+      "detail": "the event is appended to the append-only ledger and replayed; test/ledger.test.ts exercises it."
+    },
+    "REVIEW_MODEL_V02_IS_LOCAL_MIGRATION_PATH": {
+      "status": "IMPLEMENTED_UNMAPPED",
+      "evidence": "src/review.ts",
+      "detail": "local review writes a non-truth artifact that importLocalReview migrates; test/review.test.ts and test/ledger.test.ts exercise both halves."
+    },
+    "RUN_SUMMARY_VERIFICATION_AND_LOCAL_REVIEW_LAYOUT_FIXED": {
+      "status": "IMPLEMENTED_UNMAPPED",
+      "evidence": "src/run.ts",
+      "detail": "run-summary.json layout is asserted field by field in test/run.test.ts."
+    },
+    "RUN_PLAN_IS_IMMUTABLE_RESUME_BOUNDARY": {
+      "status": "IMPLEMENTED_UNMAPPED",
+      "evidence": "src/run.ts",
+      "detail": "test/run.test.ts has a test that run-plan.json is written once and not rewritten later in the Run."
+    },
+    "S2_MINIMUM_ARTIFACT_LAYOUT_IS_FIXED": {
+      "status": "IMPLEMENTED_UNMAPPED",
+      "evidence": "src/run.ts",
+      "detail": "artifactPlan and the written artifact set are asserted in test/run.test.ts."
+    },
+    "S2_RUN_ATTEMPT_ALWAYS_LEAVES_THREE_ARTIFACTS": {
+      "status": "IMPLEMENTED_UNMAPPED",
+      "evidence": "src/run.ts",
+      "detail": "test/run.test.ts asserts S2 artifacts survive an adapter creation failure."
+    },
+    "ADAPTER_REQUEST_IS_PROVIDER_AGNOSTIC": {
+      "status": "IMPLEMENTED_UNMAPPED",
+      "evidence": "src/run.ts",
+      "detail": "test/run.test.ts asserts adapter-request.json carries no command, args, or provider-specific field."
+    },
+    "ADAPTER_REQUEST_AND_RESULT_ARE_RUN_TRACE_ARTIFACTS": {
+      "status": "IMPLEMENTED_UNMAPPED",
+      "evidence": "src/run.ts",
+      "detail": "both are written under the Run Trace directory and hashed into the Run Summary inputs; test/run.test.ts asserts the refs."
+    },
+    "ADAPTER_RESULT_IS_EVIDENCE_NOT_DECISION": {
+      "status": "IMPLEMENTED_UNMAPPED",
+      "evidence": "src/run.ts",
+      "detail": "adapterExecutionStatus and providerReportedObservations.degraded are asserted in test/run.test.ts."
+    },
+    "HARNESS_OBSERVATION_OWNS_EXECUTION_EVIDENCE": {
+      "status": "IMPLEMENTED_UNMAPPED",
+      "evidence": "src/run.ts",
+      "detail": "harness-observation.json is written from Harness-collected evidence only; test/run.test.ts exercises changed files, diff, and policy checks."
+    },
+    "VERIFICATION_EVIDENCE_IS_HARNESS_OWNED": {
+      "status": "IMPLEMENTED_UNMAPPED",
+      "evidence": "src/run.ts",
+      "detail": "verification/verify-NNN.json is written by the Harness; test/run.test.ts asserts its shape and authority."
+    },
+    "VERIFICATION_EXECUTION_IS_HARNESS_OWNED_EVIDENCE": {
+      "status": "IMPLEMENTED_UNMAPPED",
+      "evidence": "src/run.ts",
+      "detail": "test/run.test.ts asserts the Harness executes verification commands itself and that a provider claim alone never satisfies the gate."
+    },
+    "COMMAND_EXECUTION_REQUIRES_OBSERVABLE_AUTHORITY_OR_DEGRADED_POLICY": {
+      "status": "IMPLEMENTED_UNMAPPED",
+      "evidence": "src/run.ts",
+      "detail": "authority degrades to NONE or PROVIDER_REPORTED_ONLY and the gate stays unsatisfied; test/run.test.ts exercises both."
+    },
+    "WORKSPACE_DISCOVERY_RESOLVES_SINGLE_WORKSPACE_CONTRACT": {
+      "status": "IMPLEMENTED_UNMAPPED",
+      "evidence": "src/workspace.ts",
+      "detail": "test/workspace.test.ts covers nearest-parent discovery and explicit --workspace."
+    },
+    "TASK_REVISION_MINIMUM_CONTRACT_IS_SOURCE_ONLY": {
+      "status": "IMPLEMENTED_UNMAPPED",
+      "evidence": "src/task-ledger.ts",
+      "detail": "approval is bound to a content hash and revoked when the task changes; test/run.test.ts exercises both."
+    },
+    "MINIMUM_CLI_FLOW_PRESERVES_FINAL_BOUNDARIES": {
+      "status": "IMPLEMENTED_UNTESTED",
+      "evidence": "src/cli.ts",
+      "detail": "the command set exists, but only one CLI test runs and it covers --workspace on status."
+    },
+    "IMPLEMENTATION_SLICING_MUST_PRESERVE_FINAL_BOUNDARIES": {
+      "status": "NOT_CODE_VERIFIABLE",
+      "evidence": "docs/design-progress.md",
+      "detail": "a rule about how implementation slices are chosen, not about runtime behaviour. It constrains the plan, and the plan is a document."
+    },
+    "MANUAL_SPINE_PASS_IS_EVIDENCE_CHECKLIST": {
+      "status": "NOT_CODE_VERIFIABLE",
+      "evidence": "docs/spine-pass-2026-08-07.md",
+      "detail": "a rule about how a manual verification pass is recorded. Its artifact is the dated pass document."
+    },
+    "V0_2_CODEX_SLICE_MUST_NOT_WEAKEN_FINAL_S2_CONTRACT": {
+      "status": "NOT_CODE_VERIFIABLE",
+      "evidence": "docs/concept-foundation.md",
+      "detail": "a constraint on what the v0.2 slice is allowed to change in the design, enforced by review of the design document rather than at runtime."
+    }
+  }
+}

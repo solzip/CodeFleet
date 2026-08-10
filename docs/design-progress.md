@@ -84,11 +84,50 @@ claim 은 통과한 테스트만 남긴다.
 ```
 
 **이 수치가 말하지 않는 것**: claim 은 "통과한 테스트가 이 condition 을 검사한다고
-주장했다" 는 뜻이지 "그 condition 이 올바르게 구현됐다" 는 뜻이 아니다. 또한
-58개 미claim 규칙 중 무엇이 *미구현* 이고 무엇이 *구현됐지만 미매핑* 인지는 아직
-분류되지 않았다. 그 분류가 다음 작업의 첫 단계다.
+주장했다" 는 뜻이지 "그 condition 이 올바르게 구현됐다" 는 뜻이 아니다.
 
 목록은 `npm run coverage:uncovered` 로 뽑는다.
+
+## 미claim 58개 규칙의 분류 (2026-08-10)
+
+`docs/rule-implementation-status.json` 이 정본이다. 규칙마다 status / evidence
+경로 / detail 을 적고, 체커가 다음을 강제한다:
+
+```text
+- 83개 규칙은 claim 이 있거나 status 항목이 있어야 한다. 둘 다 없으면 실패.
+- status 가 붙은 규칙에 claim 이 생기면 항목이 낡은 것이므로 실패 (갱신 강제)
+- evidence 경로가 실제로 없으면 실패 (없는 근거를 적을 수 없음)
+- status 값이 4종 밖이거나 detail 이 비면 실패
+```
+
+```text
+status                 규칙  condition 줄
+IMPLEMENTED_UNMAPPED     16      148   코드·테스트 있음, claim 만 없음
+IMPLEMENTED_UNTESTED      5       30   코드 있음, 테스트 없음
+NOT_CODE_VERIFIABLE       3       17   설계 문서·슬라이싱 규율 규칙
+NOT_IMPLEMENTED          34      203   코드 0줄
+claim 있음 (검증됨)      25       86
+claim 있음 (남은 줄)              61
+합계                     83      545
+```
+
+읽는 법:
+
+```text
+203줄  진짜 미구현. 여기가 1번 작업의 크기다.
+        Export/Redaction 32, Risk engine 16, AgentRole/Guardrail 23,
+        Project Profile 스키마 전체, requiredGates 강제, 시스템 자동 리뷰 등
+
+148줄  코드도 테스트도 있는데 claim 만 안 붙은 것.
+        claim 을 붙이면 커버리지가 15.8% -> 최대 43% 근처까지 오른다.
+        이건 구현 작업이 아니라 표시 작업이다.
+
+61줄   이미 건드린 규칙 안에서 아직 검증 안 된 나머지 줄.
+
+30줄   코드는 있는데 그 규칙을 검사하는 테스트가 없다.
+
+17줄   런타임 대상이 아니다. 영원히 미구현으로 남겨두면 거짓 부채가 된다.
+```
 
 ---
 
