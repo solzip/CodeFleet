@@ -238,13 +238,19 @@ A verified in-scope Run now reaches result DONE, observedCheck PASS, gate
 SATISFIED, and no path violation. ACCEPTED is still refused, for one reason:
 the bundle is DEGRADED because run-summary normalization is PARTIAL.
 
-Two unavailable reasons keep it partial, measured 2026-08-10 on a fully
-configured Run (verification command passing, in-scope change, git repo):
-  COMMAND_CHANNEL_NOT_HARNESS_VISIBLE
-  PROVIDER_TRANSCRIPT_PARSING_NOT_IMPLEMENTED_V02
+Measured 2026-08-10 on a fully configured Run (verification command passing,
+in-scope change, git repo). The remaining count now depends on what the adapter
+emits, which is the honest answer rather than a single number:
 
-WORKSPACE_SNAPSHOT_NOT_IMPLEMENTED_V02 is gone: 3 gaps -> 2.
-Both remaining gaps are the same channel, the agent's own command execution.
+  adapter emits a recognized command event   1 gap
+    COMMAND_CHANNEL_NOT_HARNESS_VISIBLE
+  adapter emits prose only                   2 gaps
+    + PROVIDER_TRANSCRIPT_NOT_STRUCTURED
+  adapter emits an unknown structured format 2 gaps
+    + PROVIDER_TRANSCRIPT_FORMAT_UNRECOGNIZED
+
+Closed this session: WORKSPACE_SNAPSHOT_NOT_IMPLEMENTED_V02 and
+PROVIDER_TRANSCRIPT_PARSING_NOT_IMPLEMENTED_V02.
 ```
 
 Done in this slice (src/workspace-snapshot.ts, test/workspace-snapshot.test.ts):
@@ -263,10 +269,19 @@ Done in this slice (src/workspace-snapshot.ts, test/workspace-snapshot.test.ts):
 Next implementation slice:
 
 ```text
-The remaining two gaps are one problem: the Harness cannot see the commands the
-agent runs. Provider transcript parsing is the readable half of it and is
-PROVIDER_REPORTED_ONLY authority by construction, which is why it can never
-close COMMAND_CHANNEL_NOT_HARNESS_VISIBLE on its own.
+Connect command policy to the Run. src/command-policy.ts is complete and tested,
+and capabilities.allowedCommands / deniedCommands are computed into the
+effectivePolicy, but nothing in the Run ever calls the matcher against them:
+policyChecks.commandViolations is a hardcoded [].
+
+This is the half of COMMAND_CHANNEL_NOT_HARNESS_VISIBLE that can be closed
+without a sandbox. The Harness already executes verification commands itself,
+so those commands are HARNESS_EXECUTED and can be judged. The agent's own
+commands stay unobservable, and that is what keeps the gap open.
+
+Do not judge PROVIDER_REPORTED_ONLY commands against the policy. Judging a
+claimed command means believing it, and a rejected Run built on a claim is a
+decision made from evidence the design says is not evidence.
 ```
 
 ## Repository Note

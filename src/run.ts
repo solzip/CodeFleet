@@ -175,6 +175,7 @@ export async function runTask(
   const resultPath = path.join(runDir, "result.json");
   const preRunSnapshotPath = path.join(runDir, "workspace-pre-run.json");
   const postRunSnapshotPath = path.join(runDir, "workspace-post-run.json");
+  const providerCommandsPath = path.join(runDir, "provider-commands.json");
 
   await copyFile(taskPath, path.join(runDir, "task.yaml"));
   const sourceTaskRef = await fileRef(rootDir, taskPath);
@@ -347,6 +348,28 @@ export async function runTask(
   const workspaceDelta = computeDelta(preRunSnapshot, postRunSnapshot);
   const snapshotGaps = collectSnapshotGaps(preRunSnapshot, postRunSnapshot);
 
+  // The adapter read its own transcript; Core only records what came back. If
+  // the adapter reported nothing at all, that is itself an unavailable reading
+  // rather than an empty one.
+  const transcript = agentResult.providerTranscript ?? {
+    commands: [],
+    unavailableReason: "PROVIDER_TRANSCRIPT_NOT_PROVIDED_BY_ADAPTER",
+    scanScope: { linesRead: 0, jsonLinesParsed: 0, commandEventsFound: 0, unrecognizedJsonLines: 0 }
+  };
+  let providerCommandsRef: FileRef | null = null;
+  if (transcript.commands.length > 0) {
+    await writeJson(providerCommandsPath, {
+      schemaVersion: "0.2",
+      documentKind: "PROVIDER_REPORTED_COMMANDS",
+      runId,
+      authority: "PROVIDER_REPORTED_ONLY",
+      notCommandTruth: true,
+      commands: transcript.commands,
+      scanScope: transcript.scanScope
+    });
+    providerCommandsRef = await fileRef(rootDir, providerCommandsPath);
+  }
+
   // Path policy can only be evaluated when changed-files evidence is itself
   // trustworthy. If the observation is degraded, the evaluation stays
   // unavailable rather than reporting "no violations" over partial input.
@@ -430,15 +453,20 @@ export async function runTask(
       unavailableReason: diffEvidence.unavailableReason ?? changedFilesEvidence.unavailableReason ?? ""
     },
     commands: {
-      authority: "NONE",
+      // PROVIDER_REPORTED_ONLY is a lower grade than NONE is an absence: it says
+      // commands exist on the record but nothing observed them. It can never
+      // satisfy command policy, verification, or VERIFIED.
+      authority: transcript.commands.length > 0 ? "PROVIDER_REPORTED_ONLY" : "NONE",
       commandLogRef: {
         unavailableReason: "COMMAND_CHANNEL_NOT_HARNESS_VISIBLE"
       },
-      providerReportedCommandsRef: {
-        unavailableReason: "PROVIDER_TRANSCRIPT_PARSING_NOT_IMPLEMENTED_V02"
-      },
-      commandsObserved: [],
+      providerReportedCommandsRef:
+        providerCommandsRef ?? { unavailableReason: transcript.unavailableReason },
+      commandsObserved: transcript.commands,
       commandsExecutedByHarness: [],
+      transcriptScanScope: transcript.scanScope,
+      // The Harness still cannot see the agent's command channel. A provider
+      // claim does not change that, so this reason stays.
       unavailableReason: "COMMAND_CHANNEL_NOT_HARNESS_VISIBLE"
     },
     policyChecks: {
@@ -464,7 +492,14 @@ export async function runTask(
       kind: "HARNESS",
       method: "GIT_DIFF"
     },
-    artifactRefs: [stdoutRef, stderrRef, diffRef, preRunSnapshotRef, postRunSnapshotRef]
+    artifactRefs: [
+      stdoutRef,
+      stderrRef,
+      diffRef,
+      preRunSnapshotRef,
+      postRunSnapshotRef,
+      ...(providerCommandsRef === null ? [] : [providerCommandsRef])
+    ]
   };
   await writeJson(harnessObservationPath, harnessObservation);
   const harnessObservationRef = await fileRef(rootDir, harnessObservationPath);
@@ -484,7 +519,10 @@ export async function runTask(
     status: agentResult.status,
     providerReportedObservations: {
       degraded: true,
-      reason: "PROVIDER_REPORTED_OBSERVATIONS_ARE_NOT_CORE_TRUTH"
+      reason: "PROVIDER_REPORTED_OBSERVATIONS_ARE_NOT_CORE_TRUTH",
+      commandsReported: transcript.scanScope.commandEventsFound,
+      transcriptScanScope: transcript.scanScope,
+      unavailableReason: transcript.unavailableReason
     },
     adapterError: adapterError(agentResult)
   };

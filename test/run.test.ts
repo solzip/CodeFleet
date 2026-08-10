@@ -287,6 +287,111 @@ test("the workspace snapshot sees a change git is configured to ignore", async (
   assert.match(record, /added: src\/generated\.js/);
 });
 
+test("a provider-reported command is recorded but never becomes command truth", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-transcript-"));
+  await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await writeFile(path.join(root, "src", "a.js"), "export const a = 1;\n", "utf8");
+
+  // The agent claims, in its transcript, to have run a command that the Task
+  // scope would forbid and that would satisfy verification if believed.
+  const claims = [
+    JSON.stringify({ type: "exec_command_begin", command: ["rm", "-rf", "/etc"] }),
+    JSON.stringify({ type: "command", command: ["npm", "test"], exitCode: 0 })
+  ];
+  await writeFile(
+    path.join(root, "agent.mjs"),
+    [
+      'import { writeFileSync } from "node:fs";',
+      `writeFileSync("src/a.js", ${JSON.stringify("export const a = 2;\n")});`,
+      ...claims.map((line) => `console.log(${JSON.stringify(line)});`),
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "config.json"),
+    `${JSON.stringify({
+      version: "0.1.0",
+      defaultAgent: "codex",
+      mode: "execute",
+      agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
+      workspace: { id: "transcript-test" }
+    })}\n`,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "tasks", "sample.yaml"),
+    [
+      "id: sample",
+      "title: Sample task",
+      "projectPath: .",
+      "goal: Exercise provider-reported command evidence",
+      "scope:",
+      "  include: [src/**]",
+      "  exclude: []",
+      "constraints: []",
+      "doneCriteria: [Artifacts exist]",
+      "workflow: [Edit files]",
+      "status: READY",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  await approveForTest(root, "sample");
+
+  const execution = await runTask(root, "sample");
+  const observation = await readJson(path.join(execution.runDir, "harness-observation.json"));
+  const runSummary = await readJson(path.join(execution.runDir, "run-summary.json"));
+  const claimed = await readJson(path.join(execution.runDir, "provider-commands.json"));
+
+  const commands = observation.commands as {
+    authority: string;
+    commandsObserved: unknown[];
+    commandsExecutedByHarness: unknown[];
+    providerReportedCommandsRef: { path?: string; unavailableReason?: string };
+    transcriptScanScope: Record<string, number>;
+    unavailableReason: string;
+  };
+
+  // Recorded, and recorded at the grade that says nobody watched it happen.
+  assert.equal(commands.authority, "PROVIDER_REPORTED_ONLY");
+  assert.equal(commands.commandsObserved.length, 2);
+  assert.match(String(commands.providerReportedCommandsRef.path), /provider-commands\.json$/);
+  assert.equal(commands.transcriptScanScope.commandEventsFound, 2);
+  assert.equal(claimed.notCommandTruth, true);
+
+  // The claims change nothing a decision depends on.
+  assert.deepEqual(commands.commandsExecutedByHarness, []);
+  assert.equal(
+    commands.unavailableReason,
+    "COMMAND_CHANNEL_NOT_HARNESS_VISIBLE",
+    "a provider claim does not make the command channel visible"
+  );
+  const policyChecks = observation.policyChecks as { commandViolations: unknown[] };
+  assert.deepEqual(
+    policyChecks.commandViolations,
+    [],
+    "a claimed rm -rf must not be judged as a violation: judging it would mean believing it"
+  );
+  const check = runSummary.check as { observedCheck: string; verificationGateResult: string };
+  assert.equal(check.observedCheck, "NONE", "a claimed passing npm test must not open the gate");
+  assert.equal(check.verificationGateResult, "NOT_SATISFIED");
+  const authority = runSummary.evidenceAuthority as { verificationAuthority: string };
+  assert.equal(authority.verificationAuthority, "NONE");
+
+  const reasons = (runSummary.normalization as { unavailableReasons: string[] }).unavailableReasons;
+  assert.ok(
+    !reasons.includes("PROVIDER_TRANSCRIPT_PARSING_NOT_IMPLEMENTED_V02"),
+    "the parsing gap must be gone"
+  );
+  assert.ok(
+    reasons.includes("COMMAND_CHANNEL_NOT_HARNESS_VISIBLE"),
+    "the observation gap must remain: parsing a transcript did not make commands observable"
+  );
+});
+
 test("runTask rejects projectPath outside the workspace before S2 artifacts", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-run-path-"));
   const outside = await mkdtemp(path.join(os.tmpdir(), "codefleet-outside-project-"));

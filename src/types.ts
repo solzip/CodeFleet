@@ -59,11 +59,38 @@ export interface AgentRunInput {
   config: CodeFleetConfig;
 }
 
+// A command the provider says it ran. Never command truth: the Harness did not
+// see it happen. Core stores it and Review may read it as a hint, and that is
+// the whole of what it is allowed to do.
+export interface ProviderReportedCommand {
+  eventType: string;
+  argv: string[];
+  raw: string;
+  exitCode: number | null;
+  lineNumber: number;
+}
+
+// What the adapter could and could not read out of its own transcript. The
+// counts are here so an unparsed transcript and an empty one stay distinct.
+export interface ProviderTranscriptReading {
+  commands: ProviderReportedCommand[];
+  unavailableReason: string;
+  scanScope: {
+    linesRead: number;
+    jsonLinesParsed: number;
+    commandEventsFound: number;
+    unrecognizedJsonLines: number;
+  };
+}
+
 export interface AgentRunResult {
   status: RunStatus;
   exitCode: number | null;
   stdout: string;
   stderr: string;
+  // Provider-agnostic by contract. The adapter owns the parsing rule; Core
+  // never learns which provider produced this or how it was recognized.
+  providerTranscript?: ProviderTranscriptReading;
 }
 
 export interface RunResultFile {

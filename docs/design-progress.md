@@ -43,13 +43,12 @@ id 형식 위반 / 중복           0
 status != FINAL               0
 taxonomy 밖 category/severity 0
 
-테스트                        94 pass / 0 fail
-소스                          6,058 줄 (17 파일)
-테스트                        2,933 줄 (11 파일)
+테스트                        100 pass / 0 fail
 
-완전 구성 Run 의 남은 gap     2건
-  COMMAND_CHANNEL_NOT_HARNESS_VISIBLE
-  PROVIDER_TRANSCRIPT_PARSING_NOT_IMPLEMENTED_V02
+완전 구성 Run 의 남은 gap     adapter 가 무엇을 내놓느냐에 달려 있다
+  구조화 transcript 를 냄        1건 (COMMAND_CHANNEL_NOT_HARNESS_VISIBLE)
+  산문만 냄                      2건 (+ PROVIDER_TRANSCRIPT_NOT_STRUCTURED)
+  모르는 형식을 냄               2건 (+ PROVIDER_TRANSCRIPT_FORMAT_UNRECOGNIZED)
 ```
 
 이 수치는 손으로 세지 않는다. `test/design-rules.test.ts` 가 매 실행마다 출력하고,
@@ -377,8 +376,15 @@ Phase 10에서 반복된 판단 기준:
             - changes.workspaceDelta = post - pre (scoped snapshot 기준)
             - git 이 무시하도록 설정된 파일도 delta 에 잡힘 (e2e 로 증명)
             - 완전 구성 Run 기준 gap 3건 -> 2건 (2026-08-10 측정)
-        [ ] PROVIDER_TRANSCRIPT_PARSING
+        [x] PROVIDER_TRANSCRIPT_PARSING — provider 보고 명령 기록
+            - 파싱 규칙은 adapter layer 에만 (Core 는 provider-agnostic 결과만 받음)
+            - 아는 event type 밖은 추측하지 않고 unrecognizedJsonLines 로 셈
+            - shell 문자열은 argv 로 쪼개지 않고 raw 유지
+            - 읽기 실패 3종 구분: NOT_PROVIDED / NOT_STRUCTURED / FORMAT_UNRECOGNIZED
+            - authority = PROVIDER_REPORTED_ONLY, command truth 아님
+            - 구조화 transcript 를 내는 adapter 기준 gap 2건 -> 1건 (2026-08-10 측정)
         [ ] COMMAND_CHANNEL_NOT_HARNESS_VISIBLE
+        [ ] command policy 를 Run 이 실제로 강제 (allowedCommands/deniedCommands 미연결)
         [ ] carry-forward
         [ ] Export (S5)
 [ ] 87. 이후 final 슬라이스

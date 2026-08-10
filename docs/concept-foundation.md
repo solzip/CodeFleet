@@ -6133,7 +6133,9 @@ EVIDENCE_DEFECT
 ```text
 CAPABILITY_GAP:
 - COMMAND_CHANNEL_NOT_HARNESS_VISIBLE
-- PROVIDER_TRANSCRIPT_PARSING_NOT_IMPLEMENTED_V02
+- PROVIDER_TRANSCRIPT_NOT_STRUCTURED
+- PROVIDER_TRANSCRIPT_FORMAT_UNRECOGNIZED
+- PROVIDER_TRANSCRIPT_NOT_PROVIDED_BY_ADAPTER
 - NESTED_REPO_NOT_TRAVERSED
 - GIT_CHANGED_FILES_FAILED
 - NO_VERIFICATION_COMMANDS_CONFIGURED
@@ -9557,6 +9559,23 @@ HARNESS_EXECUTED
 ```
 
 최종 모델에서 command execution truth는 provider transcript가 아니라 Harness-visible command channel에서만 나온다. Provider-reported command는 저장할 수 있지만 verification, command policy compliance, VERIFIED 계산을 만족시키는 증거로 사용할 수 없다.
+
+transcript 읽기 실패는 한 가지가 아니다. 세 가지를 구분하지 않으면 "명령이 없었다"와 "명령을 못 읽었다"가 같아 보인다:
+
+```text
+PROVIDER_TRANSCRIPT_NOT_PROVIDED_BY_ADAPTER
+= adapter 가 transcript 읽기 자체를 내놓지 않았다
+
+PROVIDER_TRANSCRIPT_NOT_STRUCTURED
+= transcript 에 구조화된 줄이 없다 (산문 출력)
+
+PROVIDER_TRANSCRIPT_FORMAT_UNRECOGNIZED
+= 구조화된 줄은 있는데 parser 가 그 모양을 모른다
+```
+
+transcript 읽기는 검사 범위를 함께 보고한다: `linesRead`, `jsonLinesParsed`, `commandEventsFound`, `unrecognizedJsonLines`. 인식 못 한 줄을 세지 않으면 parser 가 아무것도 못 읽은 Run 과 명령이 실제로 없던 Run 이 같은 산출물을 낸다.
+
+parser 가 아는 event type 밖의 줄은 추측해서 읽지 않는다. 잘못 읽은 명령 기록은 없는 기록보다 나쁘다. 같은 이유로 shell 문자열은 argv 로 쪼개지 않고 raw 로 남긴다. 쪼개는 순간 단어 경계를 지어내는 것이다.
 
 Path policy evaluation:
 
