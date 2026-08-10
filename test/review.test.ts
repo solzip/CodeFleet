@@ -311,3 +311,37 @@ test("an evidence defect is reported once, naming the artifact", async () => {
   assert.equal(hashLines.length, 1, `hash invalidity must be reported once, got:\n${message}`);
   assert.match(hashLines[0], /HASH_INVALID:.*harness-observation\.json/);
 });
+
+test("the decision record cannot state a claim its own bundle contradicts", async () => {
+  const { root, runId } = await seedWorkspace();
+  const execution = await reviewRun(root, runId, { decision: "REJECTED", reason: "not acceptable" });
+
+  const localReviewPath = path.join(root, ".codefleet", "runs", runId, "review-decision.local.json");
+  const localReview = await readJson(localReviewPath);
+  const bundle = await readJson(path.join(root, execution.bundlePath));
+
+  // Every value the record copies must be the value the bundle holds. This is
+  // the artifact that migrates into an append-only ledger, so a false claim here
+  // cannot be corrected later.
+  for (const key of [
+    "bundleStatus",
+    "observedResultSnapshot",
+    "observedCheckSnapshot",
+    "verificationGateResult",
+    "verificationGateReason",
+    "computedRisk"
+  ]) {
+    assert.equal(localReview[key], bundle[key], `${key} must match the evidence bundle`);
+  }
+  assert.deepEqual(localReview.pathViolationSummary, bundle.pathViolationSummary);
+  assert.equal(
+    (localReview.runSummaryRef as { contentHash: string }).contentHash,
+    (bundle.runSummaryRef as { contentHash: string }).contentHash
+  );
+
+  // And a status that outruns the evidence is refused.
+  assert.notEqual(
+    [localReview.localReviewStatus, localReview.evidenceCompleteness].join("/"),
+    "MIGRATION_READY/INCOMPLETE"
+  );
+});

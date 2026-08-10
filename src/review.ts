@@ -238,7 +238,7 @@ export async function reviewRun(
     createdAt
   };
 
-  assertLocalReview(localReview);
+  assertLocalReview(localReview, bundle);
   await writeJson(localReviewPath, localReview);
 
   return {
@@ -483,8 +483,42 @@ function assertDecision(value: string): asserts value is ReviewDecision {
   }
 }
 
-function assertLocalReview(value: LocalReviewDecision): void {
+// The decision record is the artifact that migrates into an append-only ledger,
+// so a false claim in it cannot be corrected later, only appended over. Every
+// value it copies from the bundle is re-checked here against that bundle, so the
+// record cannot state something its own evidence contradicts.
+function assertLocalReview(value: LocalReviewDecision, bundle: ReviewEvidenceBundle): void {
   const errors: string[] = [];
+
+  const copied: [string, unknown, unknown][] = [
+    ["bundleStatus", value.bundleStatus, bundle.bundleStatus],
+    ["observedResultSnapshot", value.observedResultSnapshot, bundle.observedResultSnapshot],
+    ["observedCheckSnapshot", value.observedCheckSnapshot, bundle.observedCheckSnapshot],
+    ["verificationGateResult", value.verificationGateResult, bundle.verificationGateResult],
+    ["verificationGateReason", value.verificationGateReason, bundle.verificationGateReason],
+    ["computedRisk", value.computedRisk, bundle.computedRisk],
+    ["runSummaryRef.contentHash", value.runSummaryRef.contentHash, bundle.runSummaryRef.contentHash],
+    [
+      "pathViolationSummary",
+      JSON.stringify(value.pathViolationSummary),
+      JSON.stringify(bundle.pathViolationSummary)
+    ]
+  ];
+  for (const [name, actual, expected] of copied) {
+    if (actual !== expected) {
+      errors.push(`${name} does not match the evidence bundle: ${String(actual)} vs ${String(expected)}`);
+    }
+  }
+
+  if (value.localReviewStatus === "MIGRATION_READY" && value.evidenceCompleteness !== "COMPLETE") {
+    errors.push("MIGRATION_READY requires evidenceCompleteness COMPLETE");
+  }
+  if (value.localReviewStatus === "MIGRATION_READY_WAIVED" && value.evidenceCompleteness !== "WAIVED_INCOMPLETE") {
+    errors.push("MIGRATION_READY_WAIVED requires evidenceCompleteness WAIVED_INCOMPLETE");
+  }
+  if (value.decision === "ACCEPTED" && value.localReviewStatus === "MIGRATION_BLOCKED") {
+    errors.push("ACCEPTED cannot be recorded as MIGRATION_BLOCKED");
+  }
   if (value.finalDecisionTruth !== false) {
     errors.push("finalDecisionTruth must be false");
   }
