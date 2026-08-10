@@ -10,6 +10,8 @@ Last updated: 2026-08-07
 docs/concept-foundation.md   확정된 설계 내용 자체 (정본)
 docs/design-progress.md      확정 순서와 현재 위치 (이 문서)
 docs/session-handoff.md      다음 세션이 이어받을 최소 상태
+docs/spine-pass-*.md         SPINE 한 바퀴 검증 기록 (날짜별)
+docs/implementation-audit-*.md  규칙 대 코드 대조 기록 (날짜별)
 README.md                    현재 구현 사용법
 ```
 
@@ -24,7 +26,7 @@ Phase 11     대기      설계 확정 후 구현 재개
 ```
 
 ```text
-전체 90단계 중 89단계 완료
+전체 93단계 중 90단계 완료
 FINAL RULE 82개
 설계 진행도: 100% (미고정 항목 없음)
 구현 진행도: 약 60-70%
@@ -314,7 +316,13 @@ Phase 10에서 반복된 판단 기준:
         - 사람은 capability gap 을 항목별 waive 가능, evidence defect 는 누구도 불가
         - 자동 수락은 normalization COMPLETE 를 전제로 강화
         - FINAL RULE 2개 개정 (REVIEW_MODEL_V02 / SYSTEM_POLICY_AUTO_REVIEW)
-[ ] 90. 이후 final 슬라이스 (workspace snapshot / provider transcript / agent command 관측)
+[x] 90. 구현 감사 — 규칙 21개 대 테스트 대조
+        - 검증 공백 3건 해소, 링크 탈출 우회 경로 1건 발견·수정
+        - path-policy / command-policy 단위 테스트 19개 추가 (기존 0개)
+        - 기록: docs/implementation-audit-2026-08-10.md
+[ ] 91. CodeFleet 자신의 사람용 Run 기록 (summary.md)              <- 다음, 미착수
+[ ] 92. 값 집합 발산 8건 선언
+[ ] 93. 이후 final 슬라이스 (workspace snapshot / provider transcript / agent command 관측)
 [ ] 87. 이후 final 슬라이스
 ```
 
@@ -330,6 +338,12 @@ Phase 10에서 반복된 판단 기준:
 - 아직 [ ]인 항목은 새 항목이 끼어들 때 다시 매길 수 있다. 다시 매기면 그 Phase 전체를 한 번에 정리한다.
 - 이 문서는 확정 순서만 기록한다. 규칙 본문을 여기에 복사하지 않는다.
 - concept-foundation.md의 0.13 상태 목록과 15절 다음 논의 항목을 함께 갱신한다.
+- 검증을 수행하면 날짜별 기록 문서를 남긴다. 무엇을 왜 검증했고, 무엇을 찾았고,
+  무엇을 확인할 수 없었는지를 적는다.
 ```
+
+검증 기록을 남기는 이유는 실증됐다. 2026-08-10 감사 이전에 손으로만 확인하고 아무것도
+남기지 않은 검증이 세 건 있었고, 그중 하나를 테스트로 복원하는 과정에서 실제 우회
+경로가 드러났다. 남기지 않은 검증은 검증하지 않은 것과 구분되지 않는다.
 
 마지막 항목이 중요하다. `0.13` 상태 목록은 뒤쪽 절에서 FINAL RULE이 추가되는 동안 갱신되지 않아 한 차례 낡은 상태로 남았고, 이미 고정된 항목 3개를 미고정으로 계속 표시했다. 진행 상태를 여러 곳에 나눠 적는 이상 함께 갱신하지 않으면 같은 문제가 반복된다.

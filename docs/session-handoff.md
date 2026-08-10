@@ -20,10 +20,12 @@ on another machine. The canonical design source is always
 Document roles:
 
 ```text
-docs/concept-foundation.md   fixed design content itself (canonical)
-docs/design-progress.md      fixed order and current position
-docs/session-handoff.md      minimum state for the next session
-README.md                    current implementation usage
+docs/concept-foundation.md      fixed design content itself (canonical)
+docs/design-progress.md         fixed order and current position
+docs/session-handoff.md         minimum state for the next session
+docs/spine-pass-*.md            dated SPINE validation records
+docs/implementation-audit-*.md  dated rule-to-code audit records
+README.md                       current implementation usage
 ```
 
 Do not start from implementation alone. First check the final goal, boundaries,
