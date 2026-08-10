@@ -44,19 +44,25 @@ id 형식 위반 / 중복           0
 status != FINAL               0
 taxonomy 밖 category/severity 0
 
-테스트                        113 pass / 0 fail
+테스트                        128 pass / 0 fail
 
 설계 대비 검증 커버리지
-  claim 이 붙은 condition       150 / 545  (27.5%)
-  한 줄이라도 검증되는 규칙     41 / 83
+  claim 이 붙은 condition       155 / 545  (28.4%)
+  한 줄이라도 검증되는 규칙     42 / 83
   전부 검증되는 규칙            2 / 83
-  claim 이 하나도 없는 규칙     42 (condition 250줄)
+  claim 이 하나도 없는 규칙     41 (condition 246줄)
 
 완전 구성 Run 의 남은 gap     adapter 가 무엇을 내놓느냐에 달려 있다
   구조화 transcript 를 냄        1건 (COMMAND_CHANNEL_NOT_HARNESS_VISIBLE)
   산문만 냄                      2건 (+ PROVIDER_TRANSCRIPT_NOT_STRUCTURED)
   모르는 형식을 냄               2건 (+ PROVIDER_TRANSCRIPT_FORMAT_UNRECOGNIZED)
 ```
+
+이 3분기는 이제 1회성 수동 측정이 아니라 테스트로 고정돼 있다. 1건 경우는
+`test/run.test.ts`, 나머지 2건은 `test/provider-transcript.test.ts` 가 재현한다.
+policies.commands 로 verification 이 전량 차단된 Run 에서만 나타나는
+`VERIFICATION_BLOCKED_BY_COMMAND_POLICY:n` 는 완전 구성 Run 에 도달하지 않으므로
+위 표에 없다.
 
 이 수치는 손으로 세지 않는다. `npm test` 가 매 실행마다 출력하고, 검사 대상이
 0건이면 통과가 아니라 실패한다.
@@ -105,27 +111,33 @@ IMPLEMENTED_UNMAPPED 16개(148줄)는 2026-08-10 에 claim 을 붙여 해소했�
 
 ```text
 status                 규칙  condition 줄
-NOT_IMPLEMENTED          34      203   코드 0줄
-IMPLEMENTED_UNTESTED      5       30   코드 있음, 테스트 없음
+NOT_IMPLEMENTED          32      198   코드 0줄
+IMPLEMENTED_UNTESTED      6       31   코드 있음, 테스트 없음
 NOT_CODE_VERIFIABLE       3       17   설계 문서·슬라이싱 규율 규칙
-claim 있음 (검증됨)      41      150
-claim 있음 (남은 줄)             145
+claim 있음 (검증됨)      42      155
+claim 있음 (남은 줄)             144
 합계                     83      545
 ```
 
 읽는 법:
 
 ```text
-203줄  진짜 미구현. 여기가 남은 구현 작업의 크기다.
-        Project Profile 스키마 전체 61, requiredGates 구체화·병합 41,
-        Export/Redaction/S5 32, AgentRole/Role/Guardrail 23,
-        시스템 자동 리뷰 18, Risk engine 16, 나머지
+198줄  진짜 미구현. 여기가 남은 구현 작업의 크기다.
+        분류는 command policy 작업(a95ee2e, 6b34db7) 이후 다시 뽑은 값이다.
 
-145줄  이미 claim 이 붙은 41개 규칙 안에서 아직 검증 안 된 나머지 줄.
-        여기가 지금 가장 큰 덩어리이고, 대부분 미구현 조건이 섞여 있다.
+        Project Profile 스키마·overlay·adapter   52   12개 규칙
+        requiredGates 구체화·병합                48    3개 규칙
+        Export / Redaction / S5                  32    7개 규칙
+        시스템 자동 리뷰 bound + actor gate      23    2개 규칙
+        AgentRole / Guardrail                    23    4개 규칙
+        Risk engine                              16    3개 규칙
+        ledger corrective event                   4    1개 규칙
+
+144줄  이미 claim 이 붙은 42개 규칙 안에서 아직 검증 안 된 나머지 줄.
+        여기가 지금 가장 큰 단일 덩어리이고, 대부분 미구현 조건이 섞여 있다.
         (예: Task Revision 에 agentRole / guardrails / requiredGates 필드가 없음)
 
-30줄   코드는 있는데 그 규칙을 검사하는 테스트가 없다.
+31줄   코드는 있는데 그 규칙을 검사하는 테스트가 없다.
 
 17줄   런타임 대상이 아니다. 영원히 미구현으로 남겨두면 거짓 부채가 된다.
 ```
@@ -459,14 +471,39 @@ Phase 10에서 반복된 판단 기준:
             - 읽기 실패 3종 구분: NOT_PROVIDED / NOT_STRUCTURED / FORMAT_UNRECOGNIZED
             - authority = PROVIDER_REPORTED_ONLY, command truth 아님
             - 구조화 transcript 를 내는 adapter 기준 gap 2건 -> 1건 (2026-08-10 측정)
+        [x] command policy 를 Run 이 실제로 강제
+            - policies.commands 를 읽어 effectivePolicy 에 실제 matcher 를 실음
+            - preflight 가 빈 리스트가 아니라 그 matcher 로 판정
+            - BLOCKED 시도를 commandViolations 로 기록 (HARNESS_EXECUTED,
+              scanScope 는 HARNESS_EXECUTED_COMMANDS_ONLY 로 명시)
+            - 패턴 문자가 섞인 matcher / policies.commands 의 미지 키 /
+              categoryId 없는 destructive entry 는 profile 자체를 실패시킴
+              (셋 다 "가득 찬 것처럼 보이는 빈 denylist" 를 만들기 때문)
+            - 전량 차단된 verification 은 VERIFICATION_BLOCKED_BY_COMMAND_POLICY:n
+              으로 기록 (matcher 가 항상 비어 있던 동안 도달 불가였던 결함)
+        [x] policies.harness — 관측 불가능한 명령의 Run 은 계획 단계에서 차단
+            - execute 모드인데 Harness 가 볼 수 있는 채널이 없으면 Run 디렉터리
+              생성 전에 거부
+            - 진행하려면 allowDegradedCommandObservation 를 profile 에 명시
+              (플래그는 관측을 만들지 않는다. gap 은 그대로 남고 사람 리뷰 필요)
+            - HARNESS_VISIBLE_COMMAND_CHANNEL 는 단일 상수 (src/run.ts)
+            - 기존 테스트 13개가 깨졌고, 13개 전부 같은 원인임을 메시지로 확인
+            - policies 블록 없는 config 가 거부되고 .codefleet/runs 가 비는지
+              보는 테스트를 따로 추가 (픽스처 수정이 규칙 무력화와 구분되도록)
         [ ] COMMAND_CHANNEL_NOT_HARNESS_VISIBLE
-        [ ] command policy 를 Run 이 실제로 강제 (allowedCommands/deniedCommands 미연결)
+            - 미구현 규칙이 아니라 채널 부재다. command proxy / sandbox log /
+              container exec log 중 무엇도 없어 읽을 대상이 없다.
         [ ] carry-forward
         [ ] Export (S5)
-[ ] 87. 이후 final 슬라이스
+[ ] 99. 이후 final 슬라이스
 ```
 
-85번의 상세 슬라이스는 `docs/session-handoff.md`의 held implementation slice에 있다.
+98번 이후 후보 3개와 각각의 측정 크기는 `docs/session-handoff.md`의
+Next implementation slice에 있다. 그 항목은 아직 선택되지 않았다.
+
+번호 재부여 1건: 마지막 줄이 `[ ] 87.` 이었는데 87번은 이미 path policy
+evaluation 으로 완료된 번호였다. 미완료 항목이므로 이 문서의 갱신 규칙에 따라
+99로 다시 매겼다.
 
 ---
 

@@ -1,6 +1,6 @@
 # CodeFleet Session Handoff
 
-Last updated: 2026-08-07
+Last updated: 2026-08-10 (through df556af)
 
 This is the compact handoff for continuing CodeFleet work in another session or
 on another machine. The canonical design source is always
@@ -49,9 +49,13 @@ Important criteria:
 Design is complete as of the final consistency re-audit. Implementation
 has resumed.
 
-Design is complete. The Harness now executes verification commands itself.
-The next topic is closing the remaining v0.2 evidence gaps.
-The Objective loop closes end to end. The next topic is carry-forward and export.
+The Objective loop closes end to end: approve, run, verify, review, import,
+derive VERIFIED, advance the queue. The Harness executes verification commands
+itself and now enforces policies.commands against them.
+
+One v0.2 evidence gap is left on a fully configured Run, and it is not a
+missing implementation: COMMAND_CHANNEL_NOT_HARNESS_VISIBLE stays open until a
+Harness-visible command channel exists. See Current Bottleneck.
 ```
 
 ## Product Definition
@@ -68,22 +72,37 @@ execution through logs, diffs, tests, and review evidence.
 
 ```text
 Final model / concept design: complete
-Implementation: about 25-35%
+Implementation: 155 of 545 FINAL RULE condition lines are claimed by a passing
+                test (28.4%). 128 tests, 0 failing.
 ```
+
+There is no separate implementation percentage. "about 25-35%" stood here with
+nothing behind it and has been removed; the coverage number is the only figure
+that can be re-derived, and `npm test` prints it on every run.
 
 Known divergences are declared in 0.13 NOT_FINAL_YET, not silently carried.
 
-Design verification result:
+Design verification result, as `npm test` reports it (test/design-rules.test.ts
+for the rule checks, test/rule-coverage.test.ts for parsing, and the posttest
+checker for the counts):
 
 ```text
-FINAL RULE            82
-YAML parse failures   0
-missing sections      0
-id format violations  0
-duplicate ids         0
-DESIGN CANDIDATE      0
-NOT_FINAL_YET         0
+FINAL RULE                    83
+condition lines               545
+YAML parse failures            0
+missing sections               0
+id format violations           0
+duplicate ids                  0
+status != FINAL                0   (DESIGN CANDIDATE, NOT_FINAL_YET)
+taxonomy-violating category    0
+set-quantifying rules         27   missing scanScope 0
+enum fields                   52   diverging value sets 8, declared in 0.13
 ```
+
+This block read 82 from b6c05f7 (2026-08-07) until now. 337d43c replaced the
+same hand-carried 82 in design-progress.md with the measured 83 and did not
+touch this file, so the two docs disagreed for eight commits. The suite prints
+the number on every run; do not hand-copy it into a second place.
 
 Current implementation status:
 
@@ -129,6 +148,10 @@ Current implementation status:
 - A rule that quantifies over a set must report what it scanned, because a deterministic check that says nothing about its scope makes examining nothing look like finding nothing.
 - Runtime artifacts carry scanScope counts alongside their verdicts: paths checked, attempts recorded and executed, refs hashed, gaps by kind.
 - Missing final evidence is represented as unavailable / degraded reason instead of truth.
+- policies.commands is read from the Project Profile and actually enforced: effectivePolicy carries the real matchers, verification preflight uses them, and blocked attempts become commandViolations with authority HARNESS_EXECUTED and scanScope HARNESS_EXECUTED_COMMANDS_ONLY. Before this, a profile could deny a command and the Run would still execute it.
+- A matcher token containing pattern characters, an unknown key under policies.commands, and a destructive entry without a well-formed categoryId each fail the profile, because each one otherwise produces an empty denylist that looks like a full one.
+- A Run whose every verification command was blocked by policy records VERIFICATION_BLOCKED_BY_COMMAND_POLICY with a count, instead of authority NONE with no reason. That path was unreachable while the matchers were always empty.
+- policies.harness is read. An execute-mode Run whose commands no Harness-visible channel can see is refused at planning time, before any Run directory exists; proceeding requires policies.harness.allowDegradedCommandObservation, which records the decision without making anything observed.
 ```
 
 ## Fixed Model
@@ -228,7 +251,7 @@ Important fixed boundaries:
 ## Current Bottleneck
 
 ```text
-remaining v0.2 evidence gaps
+a Harness-visible command channel
 ```
 
 Why this is next:
@@ -238,9 +261,8 @@ A verified in-scope Run now reaches result DONE, observedCheck PASS, gate
 SATISFIED, and no path violation. ACCEPTED is still refused, for one reason:
 the bundle is DEGRADED because run-summary normalization is PARTIAL.
 
-Measured 2026-08-10 on a fully configured Run (verification command passing,
-in-scope change, git repo). The remaining count now depends on what the adapter
-emits, which is the honest answer rather than a single number:
+The remaining count depends on what the adapter emits, which is the honest
+answer rather than a single number:
 
   adapter emits a recognized command event   1 gap
     COMMAND_CHANNEL_NOT_HARNESS_VISIBLE
@@ -249,11 +271,43 @@ emits, which is the honest answer rather than a single number:
   adapter emits an unknown structured format 2 gaps
     + PROVIDER_TRANSCRIPT_FORMAT_UNRECOGNIZED
 
-Closed this session: WORKSPACE_SNAPSHOT_NOT_IMPLEMENTED_V02 and
-PROVIDER_TRANSCRIPT_PARSING_NOT_IMPLEMENTED_V02.
+This is now pinned by tests rather than by a one-off manual measurement. The
+1-gap case is test/run.test.ts: a Run given a recognized command event keeps
+COMMAND_CHANNEL_NOT_HARNESS_VISIBLE, asserted with "the observation gap must
+remain: parsing a transcript did not make commands observable". The other two
+are test/provider-transcript.test.ts.
+
+Closed since: WORKSPACE_SNAPSHOT_NOT_IMPLEMENTED_V02,
+PROVIDER_TRANSCRIPT_PARSING_NOT_IMPLEMENTED_V02, and the unenforced command
+policy.
+
+A fourth reason exists and does not appear above because it is not reachable on
+a fully configured Run: VERIFICATION_BLOCKED_BY_COMMAND_POLICY:<n>, recorded
+when every verification command was refused by policies.commands.
 ```
 
-Done in this slice (src/workspace-snapshot.ts, test/workspace-snapshot.test.ts):
+What closing it actually requires:
+
+```text
+COMMAND_CHANNEL_NOT_HARNESS_VISIBLE is not an unimplemented rule. CodeFleet has
+no command proxy, sandbox log, or container exec log, so the channel does not
+exist to be read. Until one does, an agent's own commands can only ever be a
+provider claim, which by design cannot satisfy command policy, verification, or
+VERIFIED.
+
+HARNESS_VISIBLE_COMMAND_CHANNEL is a single named constant (src/run.ts, `= false`),
+so introducing a real channel is one edit rather than a search.
+
+Until then, execute mode requires the decision to be recorded in the profile:
+
+  "policies": { "harness": { "allowDegradedCommandObservation": true } }
+
+The flag does not make anything observed. Runs under it keep the gap and still
+require human review.
+```
+
+HarnessWorkspaceSnapshot, the slice that closed the state-evidence gap
+(src/workspace-snapshot.ts, test/workspace-snapshot.test.ts):
 
 ```text
 1. PRE_RUN snapshot captured before the adapter is given control, POST_RUN after.
@@ -271,8 +325,8 @@ Design-to-code coverage, added 2026-08-10:
 ```text
 npm test now ends with a coverage number over FINAL RULE condition lines.
 
-  150 of 545 condition lines claimed by a passing test  (27.5%)
-  41 of 83 rules touched, 2 fully covered, 42 with no claim at all
+  155 of 545 condition lines claimed by a passing test  (28.4%)
+  42 of 83 rules touched, 2 fully covered, 41 with no claim at all
 
 A claim is coversRule(ruleId, "condition text") called inside a test body, so
 only a passing test records one. An unknown ruleId, a condition quote that is
@@ -282,39 +336,63 @@ The checker is itself tested in test/rule-coverage.test.ts.
 Before this existed, "is it implemented as designed?" had no answer that could
 be re-derived. The doc header said "구현 진행도 약 60-70%" with nothing behind it.
 
-The 58 unclaimed rules are now classified in docs/rule-implementation-status.json,
-and the checker enforces the classification: every rule needs a claim or an entry,
+Every unclaimed rule is classified in docs/rule-implementation-status.json, and
+the checker enforces the classification: every rule needs a claim or an entry,
 an entry goes stale the moment a test claims that rule, and an evidence path that
 does not exist fails the run.
 
-  NOT_IMPLEMENTED        34 rules  203 condition lines  no code
-  IMPLEMENTED_UNTESTED    5 rules   30 lines            code exists, no test
+  NOT_IMPLEMENTED        32 rules  198 condition lines  no code
+  IMPLEMENTED_UNTESTED    6 rules   31 lines            code exists, no test
   NOT_CODE_VERIFIABLE     3 rules   17 lines            design/process rules
-  claimed, still open              145 lines            inside the 41 touched rules
+  claimed, still open              144 lines            inside the 42 touched rules
 
 The 16 IMPLEMENTED_UNMAPPED rules (148 lines) were labelled on 2026-08-10 and
 moved coverage from 15.8% to 27.5% without a line of product code.
 
-203 lines is the real size of the remaining build. The 145 open lines inside
-already-claimed rules are the next largest block and are mostly unimplemented
-conditions, not unmapped ones — e.g. Task YAML has no agentRole, guardrails, or
-requiredGates field at all.
+198 lines is the real size of the remaining build, re-derived after the command
+policy work rather than carried forward:
+
+  Project Profile schema, overlay, adapters     52  12 rules
+  requiredGates concretion and merge            48   3 rules
+  Export / Redaction / S5                       32   7 rules
+  system auto-review bound + actor gate         23   2 rules
+  AgentRole / Guardrail                         23   4 rules
+  Risk engine                                   16   3 rules
+  ledger corrective event                        4   1 rule
+
+The 144 open lines inside already-claimed rules are the next largest single
+block and are mostly unimplemented conditions, not unmapped ones — e.g. Task
+YAML has no agentRole, guardrails, or requiredGates field at all.
   npm run coverage:uncovered
 ```
 
 Next implementation slice:
 
 ```text
-Connect command policy to the Run. src/command-policy.ts is complete and tested,
-and capabilities.allowedCommands / deniedCommands are computed into the
-effectivePolicy, but nothing in the Run ever calls the matcher against them:
-policyChecks.commandViolations is a hardcoded [].
+NOT CHOSEN YET. The previous entry here — connect command policy to the Run —
+was completed in a95ee2e and 6b34db7 and is described under Current
+implementation status.
 
-This is the half of COMMAND_CHANNEL_NOT_HARNESS_VISIBLE that can be closed
-without a sandbox. The Harness already executes verification commands itself,
-so those commands are HARNESS_EXECUTED and can be judged. The agent's own
-commands stay unobservable, and that is what keeps the gap open.
+Three candidates remain, with their measured sizes:
 
+  Project Profile schema        52 lines / 12 rules
+    Largest block, and the precondition for several others: requiredGates,
+    agentRoles, and adapter resolution all read from the Profile.
+  requiredGates concretion      48 lines /  3 rules
+    Task YAML has no requiredGates field at all, so this is schema plus merge
+    plus gate evaluation, not a wiring job.
+  Export / Redaction / S5       32 lines /  7 rules
+    Self-contained. The only one that can be built without touching the
+    Profile first.
+
+Not a candidate: a Harness-visible command channel. It is the current
+bottleneck but not an unclaimed rule — see Current Bottleneck for why it needs
+a proxy or sandbox rather than an implementation slice.
+```
+
+Standing constraint for any of them:
+
+```text
 Do not judge PROVIDER_REPORTED_ONLY commands against the policy. Judging a
 claimed command means believing it, and a rejected Run built on a claim is a
 decision made from evidence the design says is not evidence.
