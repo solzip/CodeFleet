@@ -2,6 +2,8 @@
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { initProject, loadConfig } from "./config.ts";
+import { createObjective, detectDrift, rebuildSnapshot, replayObjective, type ObjectiveKind } from "./ledger.ts";
+import { breakLock, lockPathFor, readHolder } from "./mutation.ts";
 import { renderPrompt } from "./prompt.ts";
 import { reviewRun, type ReviewDecision } from "./review.ts";
 import { runTask, listRuns } from "./run.ts";
@@ -39,6 +41,12 @@ async function main(argv: string[]): Promise<number> {
         return 0;
       case "review":
         await handleReview(cwd, parsed.options, args);
+        return 0;
+      case "objective":
+        await handleObjective(cwd, parsed.options, args);
+        return 0;
+      case "lock":
+        await handleLock(cwd, parsed.options, args);
         return 0;
       case "help":
       case "--help":
@@ -175,6 +183,86 @@ async function handleReview(cwd: string, options: CliOptions, args: string[]): P
   console.log("note: local review is migration input, not final decision truth.");
 }
 
+async function handleObjective(cwd: string, options: CliOptions, args: string[]): Promise<void> {
+  const rootDir = await workspaceRoot(cwd, options);
+  await loadConfig(rootDir);
+  const [subcommand, objectiveId] = args;
+
+  if (subcommand === "create") {
+    const id = requireArg(objectiveId, "objective-id");
+    const flags = parseReviewFlags(args.slice(2));
+    const outcome = await createObjective(rootDir, {
+      objectiveId: id,
+      title: requireArg(flags.title, "--title"),
+      kind: (flags.kind ?? "ONE_OFF") as ObjectiveKind,
+      actorId: flags.actor ?? "local-user",
+      reason: flags.reason ?? "objective created"
+    });
+
+    console.log(`mutationId: ${outcome.mutationId}`);
+    if (outcome.alreadyApplied) {
+      console.log("already applied; no new ledger event appended");
+      return;
+    }
+    if (outcome.failedPhase !== null) {
+      // A failure after M4 keeps the event; the command still reports the phase.
+      throw new Error(
+        `${outcome.failedPhase} failed: ${outcome.failureMessage}` +
+          (outcome.applied ? " (ledger event was appended and is kept)" : "")
+      );
+    }
+    console.log(`objective: ${id}`);
+    console.log(`event: ${outcome.result?.eventId} seq=${outcome.result?.seq}`);
+    console.log(`ledger: .codefleet/objectives/${id}/ledger.jsonl`);
+    console.log(`snapshot: .codefleet/objectives/${id}/objective.json`);
+    return;
+  }
+
+  if (subcommand === "status") {
+    const id = requireArg(objectiveId, "objective-id");
+    const { snapshot } = await replayObjective(rootDir, id);
+    const drift = await detectDrift(rootDir, id);
+    console.log(`objective: ${snapshot.objectiveId}`);
+    console.log(`title: ${snapshot.title}`);
+    console.log(`status: ${snapshot.status}`);
+    console.log(`kind: ${snapshot.kind}`);
+    console.log(`replayStatus: ${snapshot.replay.replayStatus}`);
+    console.log(`lastSeq: ${snapshot.replay.lastSeq}`);
+    console.log(`drift: ${drift === null ? "none" : `${drift.checkId} — ${drift.detail}`}`);
+    for (const finding of snapshot.replay.findings) {
+      console.log(`finding: ${finding.failureClass} ${finding.checkId} — ${finding.detail}`);
+    }
+    return;
+  }
+
+  if (subcommand === "rebuild") {
+    const id = requireArg(objectiveId, "objective-id");
+    const snapshot = await rebuildSnapshot(rootDir, id);
+    console.log(`rebuilt: ${id} (replayStatus ${snapshot.replay.replayStatus}, lastSeq ${snapshot.replay.lastSeq})`);
+    return;
+  }
+
+  throw new Error("Usage: codefleet objective create|status|rebuild <objective-id>");
+}
+
+async function handleLock(cwd: string, options: CliOptions, args: string[]): Promise<void> {
+  const rootDir = await workspaceRoot(cwd, options);
+  const [subcommand] = args;
+
+  if (subcommand === "status") {
+    const holder = await readHolder(lockPathFor(rootDir));
+    console.log(holder === null ? "lock: free" : `lock: held by pid ${holder.pid} on ${holder.host} since ${holder.startedAt} (${holder.mutationKind})`);
+    return;
+  }
+  if (subcommand === "break") {
+    const holder = await breakLock(rootDir);
+    console.log(holder === null ? "no lock to break" : `broke lock held by pid ${holder.pid} (${holder.mutationKind})`);
+    return;
+  }
+
+  throw new Error("Usage: codefleet lock status|break");
+}
+
 interface ReviewFlags {
   decision?: string;
   reason?: string;
@@ -184,6 +272,8 @@ interface ReviewFlags {
   supersedes?: string;
   waiveGap?: string;
   waiveReason?: string;
+  title?: string;
+  kind?: string;
 }
 
 function parseReviewFlags(argv: string[]): ReviewFlags {
@@ -196,7 +286,9 @@ function parseReviewFlags(argv: string[]): ReviewFlags {
     "--ai-review-file": "aiReviewFile",
     "--supersedes": "supersedes",
     "--waive-gap": "waiveGap",
-    "--waive-reason": "waiveReason"
+    "--waive-reason": "waiveReason",
+    "--title": "title",
+    "--kind": "kind"
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -295,6 +387,10 @@ Usage:
   codefleet [--workspace <path>] task validate <task-id>
   codefleet [--workspace <path>] status
   codefleet [--workspace <path>] runs
+  codefleet [--workspace <path>] objective create <id> --title <text> [--kind ONE_OFF|SEQUENCE|WORKSTREAM]
+  codefleet [--workspace <path>] objective status <id>
+  codefleet [--workspace <path>] objective rebuild <id>
+  codefleet [--workspace <path>] lock status|break
   codefleet [--workspace <path>] review <run-id> --decision <ACCEPTED|REJECTED|NEEDS_CHANGES> --reason <text>
 
 Review options:

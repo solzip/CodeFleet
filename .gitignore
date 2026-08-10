@@ -4,3 +4,5 @@ node_modules/
 .codefleet/runs/
 .codefleet/prompts/
 .codefleet/reviews/
+.codefleet/objectives/
+.codefleet/locks/

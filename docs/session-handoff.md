@@ -51,7 +51,7 @@ has resumed.
 
 Design is complete. The Harness now executes verification commands itself.
 The next topic is closing the remaining v0.2 evidence gaps.
-The next implementation topic is HarnessWorkspaceSnapshot.
+The next implementation topic is Task attach and Queue, on top of the ledger.
 ```
 
 ## Product Definition
@@ -116,6 +116,9 @@ Current implementation status:
 - Every Run writes run-record.md, a readable account of what it did and what stayed unknown, independently of any export.
 - run-record.md lists every unavailableReason with its classification rather than summarising it away, and a review outcome joins the same file.
 - exports/summary.md stays the sanitized outward record; the two are separate because most Runs are never exported and redaction can block an export outright.
+- The Mutation Engine is the only window for state change: M4 ledger append is the commit point, the workspace lock is fail-fast and never auto-broken, and an identical repeat is a no-op by mutationId.
+- The Objective ledger is append-only JSONL; objective.json is rebuilt from replay, and a hand-edited snapshot is READ_MODEL_DRIFT repaired by rebuild, never by patching the ledger.
+- A structurally broken ledger blocks replay rather than deriving a plausible snapshot.
 - Missing final evidence is represented as unavailable / degraded reason instead of truth.
 ```
 
