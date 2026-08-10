@@ -1,0 +1,8 @@
+# Text files are stored as LF in the index on every platform. CRLF has already
+# produced one silent-green failure here — a rule parser that read 0 blocks and
+# reported success — so this is a correctness setting, not a formatting one.
+* text=auto eol=lf
+
+# Binary assets are never converted.
+*.png binary
+*.svg text eol=lf

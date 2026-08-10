@@ -13,6 +13,14 @@ npm test         # runs the suite, then the design-coverage checker
 
 `.codefleet/` is not tracked. It holds this repo's own trial runs, not state you need to resume.
 
+On a machine that has not built this repository before, set the commit identity
+before the first commit. See **Publication constraints** for why it matters:
+
+```bash
+git config user.name "sol"
+git config user.email "cysph413@naver.com"
+```
+
 ## Where to resume
 
 ```
@@ -20,6 +28,7 @@ docs/session-handoff.md               next slice, and why it is next
 docs/design-progress.md               ordered design steps, current position, measured counts
 docs/concept-foundation.md            the design. FINAL RULEs are canonical
 docs/rule-implementation-status.json  why each unclaimed rule is unclaimed
+docs/audits/<date>/SUMMARY.md         open findings by severity, and the slice they suggest
 npm run coverage:uncovered            rules with unclaimed conditions, right now
 ```
 
@@ -80,6 +89,38 @@ npm run coverage:baseline     # raise the baseline after adding claims
 The checker fails on: an unknown ruleId, a condition quote not present in the rule, zero claims recorded, coverage below baseline, a rule with neither a claim nor a status entry, a status entry that survived after its rule got a claim, or an evidence path that does not exist.
 
 After adding claims, the status entry for that rule must be removed from `docs/rule-implementation-status.json` — the run tells you which ones.
+
+## Publication constraints
+
+This repository is public. The three decisions below are already made. Each one
+was expensive to reach, and reversing one silently cannot be undone from inside
+the repository.
+
+**The owner's legal name appears nowhere.** It was removed from every commit by
+rewriting history, and the GitHub repository was then deleted and recreated so
+the old objects were purged server-side rather than left unreachable by hash. Use
+`solzip` or `sol`. The LICENSE copyright holder is `solzip` on purpose — that is
+the pseudonymous handle, not an oversight to correct. Never write a legal name
+into LICENSE, docs, commit messages, or path examples; use a placeholder.
+
+**This is source-available, not open source.** LICENSE is all-rights-reserved:
+readable and forkable for reading, with no grant to use, run, copy, modify,
+distribute, or train on. Do not substitute an OSI license, add an SPDX identifier
+implying one, or call the project open source in the README, `package.json`, or
+the repository description. GitHub does not show a license in its sidebar for
+this file; that is expected, not a defect to fix.
+
+**Commits carry one identity, `sol <cysph413@naver.com>`.** Every commit was
+rewritten to it. One commit from a second identity puts the history back to two
+authors, and the only remedy is another rewrite and a force push. Set it
+repository-locally on each machine rather than relying on a global default.
+
+### Line endings
+
+`.gitattributes` normalises text files to LF in the index on every platform.
+CRLF has already caused one silent-green failure here — a rule parser that read 0
+blocks and passed — so this is a correctness setting. Do not remove it, and do
+not commit a file whose line endings an editor converted.
 
 ## Commits
 
