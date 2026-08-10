@@ -75,6 +75,32 @@ export function renderRunRecord(input: RunRecordInput): string {
   }
   lines.push("");
 
+  // The workspace delta is measured independently of git, so it is stated
+  // separately. Where the two disagree, that disagreement is the finding.
+  const delta = record(changes.workspaceDelta);
+  const deltaScope = record(delta.scanScope);
+  lines.push("Workspace delta (post-run state minus pre-run state, over the Task scope):");
+  lines.push("");
+  if (str(delta.unavailableReason, "").length > 0) {
+    lines.push(`Not measured: ${str(delta.unavailableReason, "reason not recorded")}`);
+  } else {
+    lines.push("```text");
+    lines.push(
+      `added ${num(deltaScope.added)}, modified ${num(deltaScope.modified)}, removed ${num(deltaScope.removed)}`
+    );
+    lines.push(
+      `compared ${num(deltaScope.preRunFilesCompared)} pre-run file(s) against ${num(deltaScope.postRunFilesCompared)} post-run file(s)`
+    );
+    lines.push("```");
+    for (const [label, key] of [["added", "added"], ["modified", "modified"], ["removed", "removed"]] as const) {
+      const files = list(delta[key]).filter((v): v is string => typeof v === "string");
+      for (const file of files) {
+        lines.push(`- ${label}: ${file}`);
+      }
+    }
+  }
+  lines.push("");
+
   const violations = list(policyChecks.pathViolations)
     .map((entry) => record(entry))
     .filter((entry) => typeof entry.path === "string");

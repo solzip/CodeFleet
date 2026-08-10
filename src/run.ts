@@ -12,6 +12,7 @@ import { normalizeCommand, preflightCommand, type CommandMatcher, type Destructi
 import { evaluatePathPolicy, type PathViolation } from "./path-policy.ts";
 import { renderRunRecord } from "./run-record.ts";
 import { discoverWorkspace, type FileRef, type WorkspaceDiscovery } from "./workspace.ts";
+import { captureWorkspaceSnapshot, collectSnapshotGaps, computeDelta } from "./workspace-snapshot.ts";
 
 export interface RunExecution {
   runId: string;
@@ -172,6 +173,8 @@ export async function runTask(
   const stderrLogPath = path.join(runDir, "stderr.log");
   const diffPath = path.join(runDir, "git-diff.patch");
   const resultPath = path.join(runDir, "result.json");
+  const preRunSnapshotPath = path.join(runDir, "workspace-pre-run.json");
+  const postRunSnapshotPath = path.join(runDir, "workspace-post-run.json");
 
   await copyFile(taskPath, path.join(runDir, "task.yaml"));
   const sourceTaskRef = await fileRef(rootDir, taskPath);
@@ -292,6 +295,24 @@ export async function runTask(
   await writeJson(adapterRequestPath, adapterRequest);
   const adapterRequestRef = await fileRef(rootDir, adapterRequestPath);
 
+  // Captured before the adapter is given control. A snapshot taken any later
+  // would already contain the agent's changes and the delta would read empty.
+  // The scope patterns come from the derived effectivePolicy, not the Task, for
+  // the same reason path enforcement does: the derived copy is the narrow one.
+  const preRunSnapshot = await captureWorkspaceSnapshot({
+    projectPath,
+    runId,
+    phase: "PRE_RUN",
+    scopePatterns: effectivePolicy.capabilities.allowedPaths,
+    capturedAt: formatDateTimeWithOffset(new Date()),
+    workspaceRootRef: ".",
+    selectedWorkspaceRootRealPath: discovery.selectedWorkspaceRootRealPath,
+    workingDirectoryRef: task.projectPath,
+    runProcess
+  });
+  await writeJson(preRunSnapshotPath, preRunSnapshot);
+  const preRunSnapshotRef = await fileRef(rootDir, preRunSnapshotPath);
+
   const agentName = config.defaultAgent;
   const agentResult = await runAgentSafely(agentName, {
     task,
@@ -309,6 +330,22 @@ export async function runTask(
   const stderrRef = await fileRef(rootDir, stderrLogPath);
   const diffRef = await fileRef(rootDir, diffPath);
   const changedFilesEvidence = await captureGitChangedFiles(projectPath);
+
+  const postRunSnapshot = await captureWorkspaceSnapshot({
+    projectPath,
+    runId,
+    phase: "POST_RUN",
+    scopePatterns: effectivePolicy.capabilities.allowedPaths,
+    capturedAt: formatDateTimeWithOffset(new Date()),
+    workspaceRootRef: ".",
+    selectedWorkspaceRootRealPath: discovery.selectedWorkspaceRootRealPath,
+    workingDirectoryRef: task.projectPath,
+    runProcess
+  });
+  await writeJson(postRunSnapshotPath, postRunSnapshot);
+  const postRunSnapshotRef = await fileRef(rootDir, postRunSnapshotPath);
+  const workspaceDelta = computeDelta(preRunSnapshot, postRunSnapshot);
+  const snapshotGaps = collectSnapshotGaps(preRunSnapshot, postRunSnapshot);
 
   // Path policy can only be evaluated when changed-files evidence is itself
   // trustworthy. If the observation is degraded, the evaluation stays
@@ -351,11 +388,21 @@ export async function runTask(
       selectedWorkspaceRootRealPath: discovery.selectedWorkspaceRootRealPath,
       workingDirectoryRef: task.projectPath,
       workingDirectoryRealPath: projectPath,
-      preRunStateRef: {
-        unavailableReason: "WORKSPACE_SNAPSHOT_NOT_IMPLEMENTED_V02"
-      },
-      postRunStateRef: {
-        unavailableReason: "WORKSPACE_SNAPSHOT_NOT_IMPLEMENTED_V02"
+      preRunStateRef: preRunSnapshotRef,
+      postRunStateRef: postRunSnapshotRef,
+      preRunStateHash: preRunSnapshot.stateHash.value,
+      postRunStateHash: postRunSnapshot.stateHash.value,
+      // A snapshot that exists is not a snapshot that saw everything. Each
+      // section that could not be read stays named here so a partial snapshot
+      // cannot pass as a complete one.
+      snapshotGaps,
+      scanScope: {
+        preRunFilesHashed: preRunSnapshot.scanScope.scopedFilesHashed,
+        postRunFilesHashed: postRunSnapshot.scanScope.scopedFilesHashed,
+        preRunStatusEntries: preRunSnapshot.scanScope.statusEntries,
+        postRunStatusEntries: postRunSnapshot.scanScope.statusEntries,
+        scopePatterns: postRunSnapshot.scanScope.scopePatterns,
+        snapshotGapsFound: snapshotGaps.length
       }
     },
     stdio: {
@@ -365,6 +412,21 @@ export async function runTask(
     changes: {
       diffRef,
       changedFiles: changedFilesEvidence.files,
+      // Independent of git: the delta is postRunState minus preRunState over the
+      // scoped snapshot, so a file git never tracks still shows up as changed.
+      workspaceDelta: {
+        added: workspaceDelta.added,
+        modified: workspaceDelta.modified,
+        removed: workspaceDelta.removed,
+        scanScope: {
+          added: workspaceDelta.added.length,
+          modified: workspaceDelta.modified.length,
+          removed: workspaceDelta.removed.length,
+          preRunFilesCompared: preRunSnapshot.scopedFiles.value.length,
+          postRunFilesCompared: postRunSnapshot.scopedFiles.value.length
+        },
+        unavailableReason: workspaceDelta.unavailableReason
+      },
       unavailableReason: diffEvidence.unavailableReason ?? changedFilesEvidence.unavailableReason ?? ""
     },
     commands: {
@@ -402,7 +464,7 @@ export async function runTask(
       kind: "HARNESS",
       method: "GIT_DIFF"
     },
-    artifactRefs: [stdoutRef, stderrRef, diffRef]
+    artifactRefs: [stdoutRef, stderrRef, diffRef, preRunSnapshotRef, postRunSnapshotRef]
   };
   await writeJson(harnessObservationPath, harnessObservation);
   const harnessObservationRef = await fileRef(rootDir, harnessObservationPath);
@@ -639,7 +701,14 @@ function runSummaryUnavailableReasons(input: {
   const workspace = input.harnessObservation.workspace as Record<string, unknown> | undefined;
   addUnavailableReason(reasons, workspace?.preRunStateRef);
   addUnavailableReason(reasons, workspace?.postRunStateRef);
+  for (const gap of Array.isArray(workspace?.snapshotGaps) ? workspace.snapshotGaps : []) {
+    if (typeof gap === "string" && gap.length > 0) {
+      reasons.add(gap);
+    }
+  }
   addUnavailableReason(reasons, input.harnessObservation.changes);
+  const changes = input.harnessObservation.changes as Record<string, unknown> | undefined;
+  addUnavailableReason(reasons, changes?.workspaceDelta);
   addUnavailableReason(reasons, input.harnessObservation.commands);
   const commands = input.harnessObservation.commands as Record<string, unknown> | undefined;
   addUnavailableReason(reasons, commands?.commandLogRef);

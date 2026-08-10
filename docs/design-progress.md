@@ -368,7 +368,18 @@ Phase 10에서 반복된 판단 기준:
         - 하나라도 빠지면 미검증으로 남고 커서가 넘어가지 않음
         - supersedes/invalidates 참조가 먼저 적용됨
         - evidence bundle hash 없는 결정은 effective 가 되지 않음
-[ ] 98. 이후 (carry-forward / export / CAPABILITY_GAP)                 <- 다음, 미착수 (workspace snapshot / provider transcript / agent command 관측)
+[~] 98. 이후 (carry-forward / export / CAPABILITY_GAP)                 <- 진행 중
+        [x] HarnessWorkspaceSnapshot — PRE_RUN/POST_RUN 상태 증거
+            - adapter 에 제어를 넘기기 전에 PRE_RUN, 끝난 뒤 POST_RUN
+            - git headRef/status/diff, scoped file snapshot, stateHash 를 구간별로 분리
+            - 구간마다 자기 unavailableReason — 부분 스냅샷이 완전한 것처럼 통과할 수 없음
+            - changes.workspaceDelta = post - pre (scoped snapshot 기준)
+            - git 이 무시하도록 설정된 파일도 delta 에 잡힘 (e2e 로 증명)
+            - 완전 구성 Run 기준 gap 3건 -> 2건 (2026-08-10 측정)
+        [ ] PROVIDER_TRANSCRIPT_PARSING
+        [ ] COMMAND_CHANNEL_NOT_HARNESS_VISIBLE
+        [ ] carry-forward
+        [ ] Export (S5)
 [ ] 87. 이후 final 슬라이스
 ```
 

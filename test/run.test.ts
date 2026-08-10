@@ -173,6 +173,120 @@ test("runTask writes run-plan and S2 artifacts before legacy result", async () =
   assert.equal(legacyResult.runSummaryPath, execution.result.runSummaryPath);
 });
 
+test("the workspace snapshot sees a change git is configured to ignore", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-snapshot-e2e-"));
+  await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await writeFile(path.join(root, "src", "tracked.js"), "export const a = 1;\n", "utf8");
+  // git is told to ignore the generated file, so git status and git diff will
+  // both report nothing about it. The scoped snapshot is the only channel that
+  // can still see it, which is the whole reason it exists.
+  await writeFile(path.join(root, ".gitignore"), ".codefleet/\nsrc/generated.js\n", "utf8");
+
+  const git = async (args: string[]): Promise<void> => {
+    const { spawnSync } = await import("node:child_process");
+    spawnSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", ...args], { cwd: root });
+  };
+  await git(["init"]);
+  await git(["add", "-A"]);
+  await git(["commit", "-m", "init"]);
+
+  const agentPath = path.join(root, "agent.mjs");
+  await writeFile(
+    agentPath,
+    [
+      'import { writeFileSync } from "node:fs";',
+      `writeFileSync("src/tracked.js", ${JSON.stringify("export const a = 2;\n")});`,
+      `writeFileSync("src/generated.js", ${JSON.stringify("export const g = 1;\n")});`,
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "config.json"),
+    `${JSON.stringify({
+      version: "0.1.0",
+      defaultAgent: "codex",
+      mode: "execute",
+      agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
+      workspace: { id: "snapshot-e2e" }
+    })}\n`,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "tasks", "sample.yaml"),
+    [
+      "id: sample",
+      "title: Sample task",
+      "projectPath: .",
+      "goal: Exercise workspace state evidence",
+      "scope:",
+      "  include: [src/**]",
+      "  exclude: [secrets/**]",
+      "constraints: []",
+      "doneCriteria: [Artifacts exist]",
+      "workflow: [Edit files]",
+      "status: READY",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  await approveForTest(root, "sample");
+
+  const execution = await runTask(root, "sample");
+  const observation = await readJson(path.join(execution.runDir, "harness-observation.json"));
+  const runSummary = await readJson(path.join(execution.runDir, "run-summary.json"));
+  const pre = await readJson(path.join(execution.runDir, "workspace-pre-run.json"));
+  const post = await readJson(path.join(execution.runDir, "workspace-post-run.json"));
+
+  assert.equal(pre.phase, "PRE_RUN");
+  assert.equal(post.phase, "POST_RUN");
+  assert.equal(pre.documentKind, "HARNESS_WORKSPACE_SNAPSHOT");
+
+  const workspace = observation.workspace as {
+    preRunStateRef: { path?: string; unavailableReason?: string };
+    postRunStateRef: { path?: string; unavailableReason?: string };
+    snapshotGaps: string[];
+    scanScope: Record<string, number>;
+  };
+  assert.match(String(workspace.preRunStateRef.path), /workspace-pre-run\.json$/);
+  assert.match(String(workspace.postRunStateRef.path), /workspace-post-run\.json$/);
+  assert.deepEqual(workspace.snapshotGaps, []);
+  assert.equal(workspace.scanScope.preRunFilesHashed, 1);
+  assert.equal(workspace.scanScope.postRunFilesHashed, 2);
+
+  const changes = observation.changes as {
+    changedFiles: string[];
+    workspaceDelta: { added: string[]; modified: string[]; removed: string[]; unavailableReason: string };
+  };
+  assert.deepEqual(changes.workspaceDelta.added, ["src/generated.js"]);
+  assert.deepEqual(changes.workspaceDelta.modified, ["src/tracked.js"]);
+  assert.deepEqual(changes.workspaceDelta.removed, []);
+  assert.equal(changes.workspaceDelta.unavailableReason, "");
+
+  // The point of the comparison: git's channel misses the ignored file, so if
+  // the delta agreed with git it would be adding nothing.
+  assert.ok(
+    !changes.changedFiles.includes("src/generated.js"),
+    "git is expected to miss the ignored file; if it stops missing it this test proves nothing"
+  );
+
+  const normalization = runSummary.normalization as { unavailableReasons: string[] };
+  assert.ok(
+    !normalization.unavailableReasons.includes("WORKSPACE_SNAPSHOT_NOT_IMPLEMENTED_V02"),
+    "the capability gap must be gone, not merely unreported"
+  );
+  assert.ok(
+    !normalization.unavailableReasons.some((reason) => reason.startsWith("PRE_RUN_")),
+    "a complete snapshot must leave no pre-run gap"
+  );
+
+  const record = await readFile(path.join(execution.runDir, "run-record.md"), "utf8");
+  assert.match(record, /added 1, modified 1, removed 0/);
+  assert.match(record, /added: src\/generated\.js/);
+});
+
 test("runTask rejects projectPath outside the workspace before S2 artifacts", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-run-path-"));
   const outside = await mkdtemp(path.join(os.tmpdir(), "codefleet-outside-project-"));

@@ -6132,12 +6132,13 @@ EVIDENCE_DEFECT
 
 ```text
 CAPABILITY_GAP:
-- WORKSPACE_SNAPSHOT_NOT_IMPLEMENTED_V02
 - COMMAND_CHANNEL_NOT_HARNESS_VISIBLE
 - PROVIDER_TRANSCRIPT_PARSING_NOT_IMPLEMENTED_V02
 - NESTED_REPO_NOT_TRAVERSED
 - GIT_CHANGED_FILES_FAILED
 - NO_VERIFICATION_COMMANDS_CONFIGURED
+- PRE_RUN_<SECTION>_UNAVAILABLE:<reason>
+- POST_RUN_<SECTION>_UNAVAILABLE:<reason>
 
 EVIDENCE_DEFECT:
 - HASH_INVALID
@@ -9418,6 +9419,16 @@ workspace:
   workingDirectoryRealPath: ""
   preRunStateRef: ""
   postRunStateRef: ""
+  preRunStateHash: ""
+  postRunStateHash: ""
+  snapshotGaps: []
+  scanScope:
+    preRunFilesHashed: 0
+    postRunFilesHashed: 0
+    preRunStatusEntries: 0
+    postRunStatusEntries: 0
+    scopePatterns: 0
+    snapshotGapsFound: 0
 stdio:
   stdoutRef: ""
   stderrRef: ""
@@ -9425,6 +9436,17 @@ stdio:
 changes:
   diffRef: ""
   changedFiles: []
+  workspaceDelta:
+    added: []
+    modified: []
+    removed: []
+    scanScope:
+      added: 0
+      modified: 0
+      removed: 0
+      preRunFilesCompared: 0
+      postRunFilesCompared: 0
+    unavailableReason: ""
   unavailableReason: ""
 commands:
   authority: "NONE | PROVIDER_REPORTED_ONLY | HARNESS_OBSERVED | HARNESS_EXECUTED"
@@ -9476,25 +9498,42 @@ state hash
 HarnessWorkspaceSnapshot 최소 필드:
 
 ```yaml
-schemaVersion: "1.0"
+schemaVersion: "0.2"
+documentKind: "HARNESS_WORKSPACE_SNAPSHOT"
 runId: ""
 phase: "PRE_RUN | POST_RUN"
+capturedAt: ""
 workspaceRootRef: "."
 selectedWorkspaceRootRealPath: ""
 workingDirectoryRef: "."
 workingDirectoryRealPath: ""
 git:
-  headRef: ""
-  statusRef: ""
-  diffRef: ""
+  headRef:
+    value: ""
+    unavailableReason: ""
+  status:
+    value: []
+    unavailableReason: ""
+  diff:
+    value: ""
+    unavailableReason: ""
   untrackedPolicy: "IGNORE | LIST | SNAPSHOT"
 scopedFiles:
-  snapshotRef: ""
   scopeBasis: "EFFECTIVE_ALLOWED_PATHS | CHANGED_PATHS | BOTH"
+  scopePatterns: []
+  value: []
+  unavailableReason: ""
 stateHash:
   algorithm: "sha256"
   value: ""
+  unavailableReason: ""
+scanScope:
+  statusEntries: 0
+  scopedFilesHashed: 0
+  scopePatterns: 0
 ```
+
+각 증거 구간은 자기 몫의 `unavailableReason`을 갖는다. 하나로 합치면 어느 구간이 비어 있는지 사라지고, 리뷰어가 무엇을 손으로 확인해야 하는지 알 수 없게 된다. 비어 있는 구간은 `<PHASE>_<SECTION>_UNAVAILABLE:<reason>` 형태로 Run Summary 의 `unavailableReasons` 에 그대로 올라간다.
 
 pre-run workspace가 clean일 필요는 없다. `preRunStateRef`는 Run 시작 전 상태이고, `postRunStateRef`는 Run 종료 후 상태다. Run이 만든 변화는 `postRunState - preRunState`로 해석한다.
 

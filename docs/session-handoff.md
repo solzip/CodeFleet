@@ -238,22 +238,35 @@ A verified in-scope Run now reaches result DONE, observedCheck PASS, gate
 SATISFIED, and no path violation. ACCEPTED is still refused, for one reason:
 the bundle is DEGRADED because run-summary normalization is PARTIAL.
 
-Three unavailable reasons keep it partial:
+Two unavailable reasons keep it partial, measured 2026-08-10 on a fully
+configured Run (verification command passing, in-scope change, git repo):
   COMMAND_CHANNEL_NOT_HARNESS_VISIBLE
   PROVIDER_TRANSCRIPT_PARSING_NOT_IMPLEMENTED_V02
-  WORKSPACE_SNAPSHOT_NOT_IMPLEMENTED_V02
 
-These are the last v0.2 gaps. HarnessWorkspaceSnapshot is the most mechanical of
-the three and the one the S2 contract already specifies in full.
+WORKSPACE_SNAPSHOT_NOT_IMPLEMENTED_V02 is gone: 3 gaps -> 2.
+Both remaining gaps are the same channel, the agent's own command execution.
+```
+
+Done in this slice (src/workspace-snapshot.ts, test/workspace-snapshot.test.ts):
+
+```text
+1. PRE_RUN snapshot captured before the adapter is given control, POST_RUN after.
+2. git headRef / status / diff, scoped file snapshot, and stateHash each carry
+   their own unavailableReason; a partial snapshot cannot pass as a whole one.
+3. HarnessObservation.workspace references both snapshots and reports
+   snapshotGaps plus scanScope counts.
+4. changes.workspaceDelta = post minus pre over the scoped snapshot, so a file
+   git is configured to ignore still shows as changed. Proved by an e2e test
+   that gitignores the file the agent creates.
 ```
 
 Next implementation slice:
 
 ```text
-1. Capture pre-run and post-run git status / diff plus a scoped file snapshot.
-2. Record stateHash for each side and reference them from HarnessObservation.
-3. Compute the changed-file delta from the snapshots rather than a single status call.
-4. Add tests proving the snapshot pair explains every reported change.
+The remaining two gaps are one problem: the Harness cannot see the commands the
+agent runs. Provider transcript parsing is the readable half of it and is
+PROVIDER_REPORTED_ONLY authority by construction, which is why it can never
+close COMMAND_CHANNEL_NOT_HARNESS_VISIBLE on its own.
 ```
 
 ## Repository Note
