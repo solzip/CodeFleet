@@ -1,6 +1,6 @@
 # CodeFleet Session Handoff
 
-Last updated: 2026-08-10 (through df556af)
+Last updated: 2026-08-10 (through 6c8b82d)
 
 This is the compact handoff for continuing CodeFleet work in another session or
 on another machine. The canonical design source is always
@@ -99,7 +99,7 @@ set-quantifying rules         27   missing scanScope 0
 enum fields                   52   diverging value sets 8, declared in 0.13
 ```
 
-This block read 82 from b6c05f7 (2026-08-07) until now. 337d43c replaced the
+This block read 82 from 7e40ca0 (2026-08-07) until now. 13fac97 replaced the
 same hand-carried 82 in design-progress.md with the measured 83 and did not
 touch this file, so the two docs disagreed for eight commits. The suite prints
 the number on every run; do not hand-copy it into a second place.
@@ -370,7 +370,7 @@ Next implementation slice:
 
 ```text
 NOT CHOSEN YET. The previous entry here — connect command policy to the Run —
-was completed in a95ee2e and 6b34db7 and is described under Current
+was completed in 3380691 and 0724e18 and is described under Current
 implementation status.
 
 Three candidates remain, with their measured sizes:

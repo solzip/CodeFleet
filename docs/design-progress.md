@@ -123,7 +123,7 @@ claim 있음 (남은 줄)             144
 
 ```text
 198줄  진짜 미구현. 여기가 남은 구현 작업의 크기다.
-        분류는 command policy 작업(a95ee2e, 6b34db7) 이후 다시 뽑은 값이다.
+        분류는 command policy 작업(3380691, 0724e18) 이후 다시 뽑은 값이다.
 
         Project Profile 스키마·overlay·adapter   52   12개 규칙
         requiredGates 구체화·병합                48    3개 규칙

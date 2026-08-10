@@ -2,9 +2,9 @@
 
 ```text
 점검 일시   : 2026-08-10
-점검 대상   : 770b39b9aa95681782c27d23911271063483a237 (codeFleet/)
-             점검 시각의 작업 트리 기준. src/ 는 직전 커밋 2196a8bb 와 바이트 동일하고,
-             770b39b 는 README 한/영 분리와 task-001.yaml verification 블록만 담는다.
+점검 대상   : 3d793ec0802147c6d3825be36cbb1c893f52d951 (codeFleet/)
+             점검 시각의 작업 트리 기준. src/ 는 직전 커밋 15274570 와 바이트 동일하고,
+             3d793ec 는 README 한/영 분리와 task-001.yaml verification 블록만 담는다.
              ※ 상위 디렉터리 CodeFleet-orchestration/ 은 git 저장소가 아니며,
                git 저장소 루트는 codeFleet/ 이다.
 점검 범위   : src/ 17개 파일 6,588줄 전수 정독, test/ 15개 파일, docs/rule-implementation-status.json
