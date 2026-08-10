@@ -1,72 +1,76 @@
 # CodeFleet
 
-CodeFleet is an AI-native development orchestration CLI. It structures a user's development/operations Objective into Tasks, defines backend/infrastructure work with role, scope, guardrails, and verification conditions, delegates approved Tasks to AI agents, and tracks execution through logs, diffs, tests, and review evidence.
+한국어 | [English](README.en.md)
 
-The point is not to call an AI model. The point is that delegated work carries an approval decision, runs inside enforced boundaries, and leaves evidence that does not depend on what the agent claims it did.
+CodeFleet은 AI-native 개발 오케스트레이션 CLI다. 사용자의 개발/운영 Objective를 하나 이상의 Task로 구조화하고, 백엔드/인프라 작업을 범위·가드레일·검증 조건이 포함된 Task로 정의하며, 사람이 승인한 Task만 실행하고, 실행 결과를 로그·diff·Harness가 직접 실행한 검증·해시로 검사된 증거 기반의 리뷰 결정으로 추적한다.
 
-## What CodeFleet Is Not
+핵심은 AI 모델을 호출하는 것이 아니다. 위임된 작업이 승인 결정을 수반하고, 강제되는 경계 안에서 실행되며, **에이전트의 주장에 의존하지 않는 증거**를 남기는 것이다.
 
-CodeFleet is not a Codex runner, a prompt generator, an AI CLI wrapper, a central project management tool, a web dashboard, a DB-backed task system, a CI/CD replacement, a deployment tool, a secret manager, or a full sandbox. This scope is fixed and is not planned to widen.
+## CodeFleet이 아닌 것
 
-## Current Implementation Scope
+CodeFleet은 Codex 러너, 프롬프트 생성기, AI CLI 래퍼, 중앙 프로젝트 관리 도구, 웹 대시보드, DB 기반 태스크 시스템, CI/CD 대체재, 배포 도구, 시크릿 매니저, 완전한 샌드박스가 아니다. 이 경계는 고정이며 넓힐 계획이 없다.
 
-This README documents the current local CLI as it exists today. The v0.1 seed executes, tracks, and reviews development work by task through a Codex adapter. Later slices add the workspace, run plan, adapter, verification, and review boundaries described in the concept foundation.
+## 전체 흐름
 
-The canonical product definition is `docs/concept-foundation.md`, not this file.
+아래 각 단계는 하나의 명령이고, 각각 파일을 남긴다. 주장만으로 진행되는 단계는 없다.
 
-## Current Features
+| 단계 | 명령 | 남기는 것 |
+| --- | --- | --- |
+| 1. Objective | `objective create`, `objective attach` | `.codefleet/objectives/<id>/ledger.jsonl` |
+| 2. Task 정의 | `.codefleet/tasks/<id>.yaml` 작성 후 `task validate` | 실행 계약 |
+| 3. 승인 | `task approve <id> --reason <text>` | `.codefleet/tasks/<id>/task-ledger.jsonl` |
+| 4. 실행 | `run <id>` | `.codefleet/runs/<run-id>/` |
+| 5. 검증 | `run` 내부에서 실행 | `runs/<run-id>/verification/verify-NNN.json` |
+| 6. 리뷰 | `review <run-id> --decision <D> --reason <text>` | `.codefleet/reviews/<review-id>/evidence-bundle.json` |
+| 7. 기록 반영 | `objective import-review` | Objective ledger 이벤트 |
 
-- `codefleet init` creates a local `.codefleet` workspace.
-- YAML task files are read from `.codefleet/tasks`.
-- Required task fields are validated.
-- Codex-oriented prompts are generated from tasks.
-- Runs are stored under `.codefleet/runs/<run-id>`.
-- Dry-run mode is the default, so Codex is not executed unless configured.
-- Each run records `task.yaml`, `prompt.md`, `stdout.log`, `stderr.log`, `git-diff.patch`, and `result.json`.
-- A small Agent Adapter layer exists with a first `codex` adapter.
+3단계 없이는 Run이 시작되지 않는다. 5단계 증거가 없으면 리뷰를 ACCEPTED로 기록할 수 없다.
 
-## Requirements
+## 현재 구현 범위
 
-- Node.js 24 or newer
-- npm or pnpm only if you want package-script convenience
+구현된 것: Objective ledger와 큐, Task revision/승인 ledger, Run Planning, Codex 어댑터 seam, 워크스페이스 상태와 diff에 대한 Harness 관측, path policy, command policy, Harness가 직접 실행하는 검증, 해시 검사를 포함한 리뷰 증거 번들, 단일 writer 워크스페이스 락.
 
-This project currently has no external runtime dependencies.
+구현되지 않은 것 — 암시하지 않고 명시한다:
 
-## Install
+- **AgentRole**은 `docs/concept-foundation.md` §11에 설계되어 있으나 코드가 없다. 모든 Run이 `defaultAgent`를 사용하므로 아직 역할 기반 위임이 아니다.
+- **Risk 엔진** — `computedRisk`는 항상 `UNKNOWN`이다 (`RISK_ENGINE_NOT_IMPLEMENTED_V02`).
+- **실행 격리** — `isolation.mode`는 항상 `NONE`이다.
+- **Harness가 볼 수 있는 command 채널** — 에이전트가 스스로 실행한 명령은 관측되지 않는다. [Execute 모드](#execute-모드) 참고.
+- **VERIFIED와 큐 진행** — 로컬 리뷰는 이 둘을 만들어낼 수 없다. 로컬 리뷰는 향후 `RUN_REVIEW_DECIDED` ledger 이벤트를 위한 마이그레이션 입력이다.
 
-From this repository:
+제품 정의의 정본은 이 파일이 아니라 `docs/concept-foundation.md`다.
+
+## 요구 사항
+
+- Node.js 24 이상 (네이티브 TypeScript stripping)
+- npm 또는 pnpm은 package script 편의를 원할 때만
+
+이 프로젝트에는 외부 런타임 의존성이 없다.
+
+## 설치
 
 ```bash
 npm install
 npm link
 ```
 
-You can also run the CLI without linking:
+링크 없이 실행할 수도 있다:
 
 ```bash
 node ./src/cli.ts --help
 ```
 
-On Windows PowerShell, if npm script execution is restricted, use `cmd.exe /c npm ...` or call Node directly.
+Windows PowerShell에서 npm 스크립트 실행이 제한된다면 `cmd.exe /c npm ...`을 쓰거나 Node를 직접 호출한다.
 
-## Initialize
-
-In the project you want CodeFleet metadata to live in:
+## 초기화
 
 ```bash
 codefleet init
 ```
 
-This creates:
+`.codefleet/tasks/`, `.codefleet/runs/`, `.codefleet/config.json`을 만든다. 나머지 디렉터리 — `objectives/`, `reviews/`, `prompts/`, `locks/` — 는 처음 필요할 때 생성된다.
 
-```text
-.codefleet/
-  tasks/
-  runs/
-  config.json
-```
-
-Default config:
+`init`이 쓰는 config:
 
 ```json
 {
@@ -74,34 +78,76 @@ Default config:
   "defaultAgent": "codex",
   "mode": "dry-run",
   "agents": {
-    "codex": {
-      "command": "codex",
-      "args": ["exec", "-"]
+    "codex": { "command": "codex", "args": ["exec", "-"] }
+  },
+  "policies": {
+    "commands": {
+      "allowedCommands": [],
+      "deniedCommands": [],
+      "destructiveCommands": [],
+      "requireHarnessVisibleCommandChannel": true,
+      "allowProviderReportedCommandTruth": false
+    },
+    "harness": {
+      "allowedModes": ["DRY_RUN", "SUGGEST_ONLY", "WORKSPACE_EDIT", "COMMAND_EXEC"],
+      "maxMode": "COMMAND_EXEC",
+      "requireIsolationForMutation": true,
+      "allowDegradedCommandObservation": false,
+      "approvalRequiredForDestructiveCommands": true
     }
   }
 }
 ```
 
-## Write a Task
+모든 policy 기본값은 각 스위치의 가장 엄격한 쪽이다. 아무것도 말하지 않은 프로파일을 "전부 허용"으로 읽어서는 안 되기 때문이다. policy 블록의 알 수 없는 키는 무시하지 않고 거부한다. 오타 난 `deniedCommands`는 가득 찬 denylist처럼 보이는 빈 denylist이기 때문이다.
 
-Create `.codefleet/tasks/task-001.yaml`.
+## 1. Objective
+
+Objective는 Task와 그에 대한 결정을 담는 큐다. append-only JSONL ledger이며, 스냅샷은 replay로 도출된다. 제자리에서 수정되지 않는다.
+
+```bash
+codefleet objective create obj-001 --title "API 응답 정리" --kind SEQUENCE
+codefleet objective attach obj-001 task-001
+codefleet objective status obj-001
+```
+
+`--kind`는 `ONE_OFF`(기본값), `SEQUENCE`, `WORKSTREAM` 중 하나다. `attach`는 attach 시점 Task의 content hash를 기록하므로, 이후 Task를 수정하면 조용히 흡수되지 않고 drift로 드러난다.
+
+큐 아이템은 명시적 결정으로만 움직이며, 각 결정에는 reason이 필요하다:
+
+```bash
+codefleet objective block obj-001 <queue-item-id> --reason "스키마 결정 대기"
+codefleet objective unblock obj-001 <queue-item-id> --reason "스키마 확정됨"
+codefleet objective skip|unskip|cancel-item obj-001 <queue-item-id> --reason <text>
+codefleet objective reorder obj-001 --order item-2,item-1 --reason "핫픽스 우선"
+```
+
+`objective status`는 아이템별 stored/derived 상태, replay 상태, 마지막 seq, 그리고 ledger와 스냅샷 사이의 drift를 출력한다. `objective rebuild`는 ledger로부터 `objective.json`을 다시 생성한다.
+
+## 2. Task 정의
+
+Task는 계약이다. 무엇을 할지, 어디까지 건드려도 되는지, 무엇을 하면 안 되는지, 어떻게 확인할지를 담는다. `.codefleet/tasks/task-001.yaml`을 만든다.
 
 ```yaml
 id: task-001
-title: "API response structure standardization"
+title: "API 응답 구조 표준화"
 projectPath: "."
-goal: "Make successful controller responses use a common ApiResponse<T> shape."
+goal: "성공 응답이 공통 ApiResponse<T> 형태를 사용하도록 만든다."
 scope:
   include:
     - "src/main/java/**"
   exclude:
     - "src/main/resources/application*.yml"
+verification:
+  commands:
+    - commandId: unit-tests
+      command: ["mvn", "-q", "test"]
 constraints:
-  - "Do not change the database schema."
-  - "Do not modify files unrelated to the task scope."
+  - "데이터베이스 스키마를 변경하지 않는다."
+  - "작업 범위와 무관한 파일을 수정하지 않는다."
 doneCriteria:
-  - "Successful controller responses return ApiResponse<T>."
-  - "Existing tests pass when they can be run."
+  - "성공 컨트롤러 응답이 ApiResponse<T>를 반환한다."
+  - "실행 가능한 기존 테스트가 통과한다."
 workflow:
   - PLAN
   - IMPLEMENT
@@ -109,105 +155,186 @@ workflow:
 status: READY
 ```
 
-A copy of this sample is available at `examples/tasks/task-001.yaml`.
+동일한 샘플이 `examples/tasks/task-001.yaml`에 있다.
 
-## Validate a Task
+**강제되는 것과 서술에 그치는 것.** 기계가 강제하는 필드는 둘뿐이다:
+
+- `scope.include` / `scope.exclude`는 `allowedPaths` / `deniedPaths`가 되어, Run 이후 Harness가 관측한 변경 파일에 대해 평가된다.
+- `verification.commands`는 Harness가 직접 실행한다. 그래서 그 결과가 주장이 아니라 증거가 된다.
+
+`constraints`, `doneCriteria`, `workflow`는 프롬프트와 리뷰어용 `run-record.md`에 렌더링된다. 에이전트에 대한 지시이자 사람을 위한 체크리스트일 뿐, 이를 강제하는 장치는 없다. 가드레일로 읽지 말 것.
+
+첫 validation 오류 전에 알아둘 스키마 규칙 둘:
+
+- scope 패턴은 whole-path 매칭이며 하위 트리를 암묵적으로 포함하지 않는다. `src`는 이름이 정확히 `src`인 파일만 매칭한다. `src/**`로 써야 한다.
+- `verification.commands[].command`는 argv 배열이며 셸 문자열이 아니다. 셸 인터프리터는 거부된다. command 매칭이 의미를 유지해야 하기 때문이다.
+- `command[0]`은 매칭과 실행 모두에서 basename으로 정규화된다. 따라서 `./gradlew` 같은 상대 스크립트 경로는 해석되지 않는다. `PATH`에 있는 명령을 사용할 것.
+
+`status`는 `READY`, `RUNNING`, `DONE`, `FAILED`, `BLOCKED` 중 하나여야 한다.
 
 ```bash
 codefleet task validate task-001
+codefleet prompt task-001     # .codefleet/prompts/task-001.md 생성, 실행은 하지 않음
 ```
 
-## Generate a Prompt
+## 3. Task 승인
+
+승인되지 않은 Task에 대해서는 Run이 시작을 거부한다. 승인은 Task id가 아니라 **파일의 content hash에 바인딩**된다.
 
 ```bash
-codefleet prompt task-001
+codefleet task approve task-001 --reason "범위와 검증 조건 확인함"
+codefleet task status task-001
 ```
 
-The prompt is written to:
+`approve`는 validation을 통과하지 못한 Task를 거부한다. 유효하지 않은 Task는 실행 계약이 될 수 없기 때문이다. 승인은 revision과 approval을 함께 만들어 `.codefleet/tasks/task-001/task-ledger.jsonl`에 append한다.
 
-```text
-.codefleet/prompts/task-001.md
+`task status`는 최신 revision, 승인된 revision, 승인자, 실행 가능 여부를 출력한다. 실행 불가일 때 사유는 다음 중 하나다:
+
+| `blockedReason` | 의미 |
+| --- | --- |
+| `NO_REVISION_CREATED` | 승인된 적 없음 |
+| `NO_VALID_APPROVAL` | 승인이 무효화됨 |
+| `TASK_CONTENT_CHANGED_AFTER_APPROVAL` | 승인 이후 파일이 수정됨 |
+
+승인된 Task를 수정해도 승인이 조용히 따라오지 않는다. 수정된 내용을 다시 승인하려면:
+
+```bash
+codefleet task invalidate task-001 --reason "범위가 넓어짐"
+codefleet task approve task-001 --reason "범위 변경 후 재검토함"
 ```
 
-## Run a Task
+`--actor <actorId>`로 결정 주체를 기록한다. 기본값은 `local-user`다.
+
+## 4. 실행
 
 ```bash
 codefleet run task-001
 ```
 
-In the default `dry-run` mode, CodeFleet does not execute Codex. It creates the run directory and records the prompt and result files.
+Run은 어댑터에 제어를 넘기기 전에 계획된다. 승인을 먼저 확인하고, 그 다음 command 채널을 확인하고, 그 다음 워크스페이스 스냅샷을 캡처한다. 계획이 차단되면 Run 디렉터리 자체가 생성되지 않는다.
 
-Run output is stored like this:
+기본 모드인 `dry-run`은 에이전트 프로세스를 실행하지 않는다. 그럼에도 아티팩트 세트는 전부 생성되므로, 에이전트 실행을 소모하기 전에 Task를 점검하는 용도로 유용하다.
+
+## 5. 검증
+
+Task의 검증 명령은 에이전트가 아니라 **Harness가 직접** 실행하며, preflight에서 command policy로 검사된다. 각 시도는 자신의 stdout, stderr, exit code, authority를 기록한다:
+
+```text
+runs/<run-id>/verification/verify-001.json
+runs/<run-id>/verification/verify-001/unit-tests.stdout.log
+runs/<run-id>/verification/verify-001/unit-tests.stderr.log
+```
+
+`verify-001.json`은 `authority`, `observedCheck`, gate 결과와 함께 기록/실행/차단된 시도 수를 담은 `scanScope`를 남긴다. 모든 명령이 policy로 차단된 Run이 전부 통과한 Run처럼 보여서는 안 되기 때문이다.
+
+`dry-run`에서는 command 실행이 비활성이므로 모든 검증 시도가 `COMMAND_EXECUTION_DISABLED`로 차단되고, `observedCheck`는 `SKIP`, gate는 `NOT_SATISFIED / BLOCKED`가 된다. **따라서 dry-run은 ACCEPTED 리뷰를 만들어낼 수 없다.** 이는 우회할 제약이 아니라 의도된 형태다.
+
+`verification` 블록이 없는 Task는 `NO_VERIFICATION_COMMANDS_CONFIGURED`와 함께 동일하게 만족되지 않은 gate를 받는다. 검증은 effective policy가 요구하는 항목이며, 설정하지 않는 것이 통과를 의미하지 않는다.
+
+## 6. 리뷰
+
+```bash
+codefleet review 2026-05-27_001 --decision ACCEPTED --reason "diff가 목표와 일치, 테스트 통과"
+```
+
+`--decision`은 `ACCEPTED`, `REJECTED`, `NEEDS_CHANGES` 중 하나다. 이 명령은 먼저 증거 번들을 만든다. 모든 입력 참조를 디스크 파일과 다시 해시 비교하고, Run의 unavailable 사유를 뭉뚱그리지 않고 개별적으로 옮긴다.
+
+갭은 두 종류이며 다르게 다뤄진다:
+
+- **`CAPABILITY_GAP`** — CodeFleet이 아직 관측할 수 없는 것. 사람이 저장소를 직접 확인해 대신할 수 있으며, 사유를 붙여 항목 단위로 waive할 수 있다.
+- **`EVIDENCE_DEFECT`** — 증거가 없거나, 읽을 수 없거나, 기록된 해시와 일치하지 않는 것 (`HASH_INVALID`, `ARTIFACT_NOT_READABLE`, `MISSING_INPUT_REF`). 누구도 대신할 수 없다. 절대 waive되지 않는다.
+
+`ACCEPTED`는 모든 갭이 waive되었거나 없고, 정규화된 result가 `DONE`이며, 검증 gate가 만족되고, path 위반이 없을 때만 허용된다. 거부 시 차단 사유가 모두 나열된다.
+
+```bash
+codefleet review 2026-05-27_001 \
+  --decision ACCEPTED \
+  --reason "저장소에서 직접 확인함" \
+  --waive-gap COMMAND_CHANNEL_NOT_HARNESS_VISIBLE \
+  --waive-reason "전체 diff를 읽고 테스트를 수동으로 재실행함"
+```
+
+기타 옵션: `--actor <actorId>`, `--note <path>`, `--ai-review-file <path>` (AI 리뷰는 힌트일 뿐 결정 진실이 아니다), `--supersedes <localReviewId>`.
+
+리뷰는 `.codefleet/reviews/<run-id>-review-NNN/evidence-bundle.json`과 `.codefleet/runs/<run-id>/review-decision.local.json`을 쓰고, `run-record.md`를 갱신해 하나의 읽을 수 있는 파일이 결과까지 담게 한다. `localReviewStatus`는 `MIGRATION_READY`, `MIGRATION_READY_WAIVED`, `DEGRADED_RECORDED`, `MIGRATION_BLOCKED`, `SUPERSEDED` 중 하나다.
+
+거부된 `ACCEPTED`도 증거 번들은 남긴다. 거부 자체를 나중에 확인할 수 있어야 하기 때문이며, 다음 리뷰는 그 다음 `-review-NNN` id를 받는다.
+
+로컬 리뷰는 `VERIFIED`를 만들지 않고 큐를 진행시키지 않는다. Objective에 기록하려면:
+
+```bash
+codefleet objective import-review obj-001 2026-05-27_001 --reason "수동 확인 후 수락"
+```
+
+`import-review`는 `MIGRATION_READY` 또는 `MIGRATION_READY_WAIVED`만 받는다. 그 외는 거부된다 — `local review status DEGRADED_RECORDED cannot be imported`. 나머지 상태는 그 산출물이 유효한 결정이 아님을 말하기 위해 존재하기 때문이다.
+
+## Run 디렉터리
 
 ```text
 .codefleet/runs/2026-05-27_001/
-  task.yaml
-  prompt.md
+  run-plan.json                 승인 정보, effective policy, 검증 계획, 아티팩트 계획
+  task.yaml                     승인된 내용의 사본
+  prompt.md                     에이전트에게 전달된 것
+  adapter-request.json          어댑터에 넘긴 capabilities
+  workspace-pre-run.json        실행 전 scope 내 파일 해시
   stdout.log
   stderr.log
   git-diff.patch
-  result.json
+  workspace-post-run.json       실행 후 scope 내 파일 해시
+  provider-commands.json        어댑터가 명령을 보고한 경우에만; PROVIDER_REPORTED_ONLY
+  verification/verify-001.json  검증 증거
+  verification/verify-001/      명령별 stdout, stderr. 실제 실행된 시도만
+  harness-observation.json      Harness가 본 것과 보지 못한 것
+  adapter-result.json           어댑터 상태와 exit code
+  run-summary.json              파생된 정규화 결과. 결정 진실이 아님
+  run-record.md                 사람이 읽는 Run 기록
+  result.json                   CLI용 요약
+  review-decision.local.json    `review`가 생성
 ```
 
-## Review Results
+`harness-observation.json`은 git과 무관하게 스냅샷에서 계산한 workspace delta를 기록한다. 그래서 git이 추적하지 않는 파일도 변경으로 드러난다. 읽지 못한 구간은 `snapshotGaps`에 이름이 남으므로, 부분 스냅샷이 완전한 스냅샷처럼 통과할 수 없다.
 
-List recent runs:
+## 조회
 
 ```bash
-codefleet runs
+codefleet runs            # run-id, status, task-id, agent
+codefleet status          # 버전, 모드, 워크스페이스 id, discovery 모드, task/run 개수
+codefleet lock status     # 워크스페이스 mutation 락 보유자
+codefleet lock break      # 남아 있는 락 해제
 ```
 
-Show workspace status:
+ledger를 변경하는 작업 — 승인, Objective/큐 변경, 리뷰 import — 은 `.codefleet/locks/workspace.lock`에서 단일 writer 락을 잡는다. `lock break`는 락을 쥔 채 프로세스가 죽은 경우를 위한 것이다.
 
-```bash
-codefleet status
-```
+모든 명령은 `--workspace <path>`를 받는다. 현재 디렉터리에서 `.codefleet/config.json`을 탐색하는 대신 워크스페이스를 명시적으로 지정할 때 쓴다.
 
-Open the run result:
+## Execute 모드
 
-```text
-.codefleet/runs/<run-id>/result.json
-```
-
-## Execute Mode
-
-Dry-run is the supported default. To let the Codex adapter launch a process, change `.codefleet/config.json`:
-
-```json
-{
-  "version": "0.1.0",
-  "defaultAgent": "codex",
-  "mode": "execute",
-  "agents": {
-    "codex": {
-      "command": "codex",
-      "args": ["exec", "-"]
-    }
-  },
-  "policies": {
-    "harness": { "allowDegradedCommandObservation": true }
-  }
-}
-```
-
-The generated prompt is passed to the configured command on stdin. Treat execute mode as an adapter hook that may need adjustment for your installed Codex CLI.
-
-### Why execute mode needs `allowDegradedCommandObservation`
-
-Without it, `codefleet run` refuses to start and writes no Run directory:
+Codex 어댑터가 프로세스를 실행하게 하려면 `.codefleet/config.json`의 `mode`를 `execute`로 바꾼다. 추가 플래그 없이는 `codefleet run`이 시작을 거부하고 Run 디렉터리를 만들지 않는다:
 
 ```text
 Run Planning is blocked: this Run may execute commands, and no Harness-visible
 command channel exists to observe them.
 ```
 
-CodeFleet has no command proxy, sandbox log, or container exec log. An agent running under execute mode can run any command, and the only record of what it ran is the agent's own transcript — a claim, not an observation. Such a claim can never satisfy command policy, verification, or VERIFIED.
+CodeFleet에는 command 프록시도, 샌드박스 로그도, 컨테이너 exec 로그도 없다. execute 모드의 에이전트는 어떤 명령이든 실행할 수 있고, 무엇을 실행했는지에 대한 유일한 기록은 에이전트 자신의 transcript — 관측이 아니라 주장이다. 그런 주장은 command policy도, 검증도, `VERIFIED`도 만족시킬 수 없다.
 
-Setting the flag does not make those commands observed. It records that you decided to proceed anyway. Every Run under it keeps `COMMAND_CHANNEL_NOT_HARNESS_VISIBLE` in its unavailable reasons and still requires a human review.
+그럼에도 진행하려면 그 결정을 기록한다:
+
+```json
+{
+  "policies": {
+    "harness": { "allowDegradedCommandObservation": true }
+  }
+}
+```
+
+이 플래그를 켠다고 해서 명령이 관측되는 것은 아니다. **그럼에도 진행하기로 당신이 결정했다는 사실이 기록될 뿐이다.** 이 설정 아래의 모든 Run은 unavailable 사유에 `COMMAND_CHANNEL_NOT_HARNESS_VISIBLE`을 유지하며 여전히 사람의 리뷰를 요구한다.
+
+생성된 프롬프트는 설정된 명령의 stdin으로 전달된다. execute 모드는 설치된 Codex CLI에 맞춰 조정이 필요할 수 있는 어댑터 훅으로 다룰 것.
 
 ### Command policy
 
-`policies.commands` is enforced for commands the Harness runs itself, which today means verification commands:
+`policies.commands`는 Harness가 직접 실행하는 명령에 적용되며, 오늘 기준으로는 검증 명령을 의미한다:
 
 ```json
 {
@@ -221,27 +348,63 @@ Setting the flag does not make those commands observed. It records that you deci
 }
 ```
 
-Matchers are argv token lists, compared as written. There is no glob and no regex: a token containing `*`, `?`, or bracket characters is rejected rather than accepted and quietly never matched. `matchMode` is `PREFIX` (default) or `EXACT`. Denied is evaluated first and wins; an empty `allowedCommands` does not constrain, a non-empty one does. A destructive entry needs an `UPPER_SNAKE_CASE` `categoryId`, because approval is granted per category.
+matcher는 argv 토큰 리스트이며 쓰인 그대로 비교된다. glob도 regex도 없다. `*`, `?`, 대괄호가 포함된 토큰은 조용히 영원히 매칭되지 않는 대신 거부된다. `matchMode`는 `PREFIX`(기본값) 또는 `EXACT`다. denied가 먼저 평가되고 우선한다. 비어 있는 `allowedCommands`는 제약하지 않고, 비어 있지 않으면 제약한다. destructive 항목에는 `UPPER_SNAKE_CASE` `categoryId`가 필요하다. 승인이 카테고리 단위로 부여되기 때문이다 — 그리고 카테고리 단위 승인이 아직 CLI에 연결되지 않았으므로, 매칭된 destructive 명령은 `DESTRUCTIVE_WITHOUT_APPROVAL`로 차단된다.
 
-Commands the agent runs on its own are **not** judged against this policy. The Harness never saw them, so treating a transcript claim as a violation would mean believing the claim.
+에이전트가 스스로 실행한 명령은 이 policy로 **판정하지 않는다**. Harness가 보지 못했으므로, transcript의 주장을 위반으로 판정하는 것은 그 주장을 믿는 것이 되기 때문이다.
 
-## Roadmap
+## 명령 레퍼런스
 
-- Stronger YAML support through a dedicated parser package if needed.
-- Multi-phase workflow handling beyond a single prompt.
-- Additional adapters for Claude Code, Gemini CLI, local agents, reviewers, testers, and docs agents.
-- Task dependency handling.
-- Pull request and issue integrations through the export seam.
-- Run metrics and success/failure analysis.
+```text
+codefleet [--workspace <path>] init
+codefleet [--workspace <path>] run <task-id>
+codefleet [--workspace <path>] prompt <task-id>
+codefleet [--workspace <path>] task validate|status <task-id>
+codefleet [--workspace <path>] task approve|invalidate <task-id> --reason <text>
+codefleet [--workspace <path>] status
+codefleet [--workspace <path>] runs
+codefleet [--workspace <path>] objective create <id> --title <text> [--kind ONE_OFF|SEQUENCE|WORKSTREAM]
+codefleet [--workspace <path>] objective attach <id> <task-id> [--revision N]
+codefleet [--workspace <path>] objective block|unblock|skip|unskip|cancel-item <id> <queue-item-id> --reason <text>
+codefleet [--workspace <path>] objective import-review <id> <run-id> --reason <text>
+codefleet [--workspace <path>] objective reorder <id> --order <id,id> --reason <text>
+codefleet [--workspace <path>] objective status|rebuild <id>
+codefleet [--workspace <path>] lock status|break
+codefleet [--workspace <path>] review <run-id> --decision <ACCEPTED|REJECTED|NEEDS_CHANGES> --reason <text>
+```
 
-Export to external tools is limited to the sanitized Run Summary export seam. A web dashboard, a central task DB, and a general-purpose agent platform are explicit non-goals, not deferred work.
+## 워크스페이스 구조
 
-## Architecture
+```text
+.codefleet/
+  config.json                        Project Profile
+  tasks/<task-id>.yaml               Task 계약
+  tasks/<task-id>/task-ledger.jsonl  revision과 승인
+  objectives/<id>/ledger.jsonl       append-only Objective 이벤트
+  objectives/<id>/objective.json     replay된 스냅샷
+  runs/<run-id>/                     Run 하나당 디렉터리 하나
+  reviews/<review-id>/               증거 번들
+  prompts/<task-id>.md               `prompt`가 생성
+  locks/workspace.lock               단일 writer mutation 락
+```
 
-See `docs/architecture.md` for a text-based architecture overview with diagrams that do not require Mermaid rendering.
+## 로드맵
 
-## Concept Foundation
+- AgentRole. 단일 어댑터가 아니라 역할 기반 위임이 되도록.
+- Claude Code, Gemini CLI, 로컬 에이전트, 리뷰어/테스터/문서 에이전트용 추가 어댑터.
+- Harness가 볼 수 있는 command 채널. 에이전트 명령이 증거가 되려면 이것이 필요하다.
+- `computedRisk` 뒤의 risk 엔진, 그리고 실행 격리.
+- Objective ledger의 `RUN_REVIEW_DECIDED`. 리뷰가 큐를 진행시킬 수 있도록.
+- 단일 프롬프트를 넘어서는 다단계 workflow 처리.
+- Task 의존성 처리.
+- export seam을 통한 PR/이슈 연동.
+- Run 지표와 성공/실패 분석.
+- 필요해지면 전용 파서 패키지로 YAML 지원 강화.
 
-See `docs/concept-foundation.md` for the canonical product definition, Core/Workspace/Profile/Harness concepts, and the fixed orchestration direction.
+외부 도구로의 export는 sanitize된 Run Summary export seam으로 제한된다. 웹 대시보드, 중앙 태스크 DB, 범용 에이전트 플랫폼은 미뤄둔 작업이 아니라 명시적 non-goal이다.
 
-See `docs/design-progress.md` for the order in which the design was fixed and which step is currently in progress.
+## 문서
+
+- `docs/concept-foundation.md` — 제품 정의의 정본. Core/Workspace/Profile/Harness 개념과 FINAL RULE.
+- `docs/architecture.md` — Mermaid 렌더링 없이 읽는 텍스트 기반 아키텍처 개요.
+- `docs/design-progress.md` — 설계가 고정된 순서와 현재 위치.
+- `docs/session-handoff.md` — 다른 세션에서 이어가기 위한 최소 상태.

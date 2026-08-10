@@ -25,7 +25,7 @@ docs/design-progress.md         fixed order and current position
 docs/session-handoff.md         minimum state for the next session
 docs/spine-pass-*.md            dated SPINE validation records
 docs/implementation-audit-*.md  dated rule-to-code audit records
-README.md                       current implementation usage
+README.md                       current implementation usage (Korean; README.en.md is English)
 ```
 
 Do not start from implementation alone. First check the final goal, boundaries,

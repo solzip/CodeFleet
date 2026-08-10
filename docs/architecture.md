@@ -154,7 +154,7 @@ Project Root
   |                 +-- result.json
   |
   +-- src/
-  +-- README.md
+  +-- README.md / README.en.md
   +-- package.json
 ```
 

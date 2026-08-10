@@ -7,6 +7,10 @@ scope:
     - "src/main/java/**"
   exclude:
     - "src/main/resources/application*.yml"
+verification:
+  commands:
+    - commandId: unit-tests
+      command: ["mvn", "-q", "test"]
 constraints:
   - "Do not change the database schema."
   - "Do not modify files unrelated to the task scope."

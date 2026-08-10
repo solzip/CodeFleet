@@ -12,7 +12,7 @@ docs/design-progress.md      확정 순서와 현재 위치 (이 문서)
 docs/session-handoff.md      다음 세션이 이어받을 최소 상태
 docs/spine-pass-*.md         SPINE 한 바퀴 검증 기록 (날짜별)
 docs/implementation-audit-*.md  규칙 대 코드 대조 기록 (날짜별)
-README.md                    현재 구현 사용법
+README.md                    현재 구현 사용법 (한글 기준, 영문은 README.en.md)
 ```
 
 이 문서는 설계 *내용*을 담지 않는다. 규칙 본문은 항상 `docs/concept-foundation.md`가 정본이다.
