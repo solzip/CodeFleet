@@ -51,7 +51,7 @@ has resumed.
 
 Design is complete. The Harness now executes verification commands itself.
 The next topic is closing the remaining v0.2 evidence gaps.
-The next implementation topic is importing local reviews into the Objective ledger.
+The next implementation topic is deriving VERIFIED and progressing the queue.
 ```
 
 ## Product Definition
@@ -123,6 +123,8 @@ Current implementation status:
 - NEXT is derived, never stored, and a SEQUENCE Objective has at most one; QUEUE_REORDERED declares a new future order and refuses to touch decided items.
 - The Task ledger owns approval, replayed from events rather than stored on the task file, and approval binds to a content hash.
 - An unapproved Task cannot run and leaves no Run Trace; editing after approval revokes executability, and re-approval requires an explicit invalidation first.
+- Importing a local review appends RUN_REVIEW_DECIDED with migrationSource and migrationSourceRef; it never promotes the local file in place and never edits it, the bundle, or the Run Trace.
+- Only MIGRATION_READY and MIGRATION_READY_WAIVED import; a waived acceptance carries its waived gaps into the ledger, and the same reviewDecisionId with a different bundle hash blocks migration rather than overwriting.
 - A rule that quantifies over a set must report what it scanned, because a deterministic check that says nothing about its scope makes examining nothing look like finding nothing.
 - Runtime artifacts carry scanScope counts alongside their verdicts: paths checked, attempts recorded and executed, refs hashed, gaps by kind.
 - Missing final evidence is represented as unavailable / degraded reason instead of truth.

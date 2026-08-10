@@ -5,6 +5,7 @@ import { initProject, loadConfig } from "./config.ts";
 import {
   attachTask,
   createObjective,
+  importLocalReview,
   detectDrift,
   rebuildSnapshot,
   reorderQueue,
@@ -314,6 +315,30 @@ async function handleObjective(cwd: string, options: CliOptions, args: string[])
     return;
   }
 
+  if (subcommand === "import-review") {
+    const id = requireArg(objectiveId, "objective-id");
+    const runId = requireArg(args[2], "run-id");
+    const flags = parseReviewFlags(args.slice(3));
+
+    const { readFile } = await import("node:fs/promises");
+    const { createHash } = await import("node:crypto");
+    const localPath = path.join(rootDir, ".codefleet", "runs", runId, "review-decision.local.json");
+    const raw = await readFile(localPath, "utf8");
+    const outcome = await importLocalReview(rootDir, {
+      objectiveId: id,
+      runId,
+      localReview: JSON.parse(raw) as Record<string, unknown>,
+      localReviewRef: {
+        path: `.codefleet/runs/${runId}/review-decision.local.json`,
+        hash: createHash("sha256").update(raw).digest("hex")
+      },
+      reason: flags.reason ?? "imported local review",
+      actorId: flags.actor ?? "local-user"
+    });
+    reportOutcome(outcome, `imported review for ${runId} into ${id}`);
+    return;
+  }
+
   if (subcommand === "status") {
     const id = requireArg(objectiveId, "objective-id");
     const { snapshot } = await replayObjective(rootDir, id);
@@ -520,6 +545,7 @@ Usage:
   codefleet [--workspace <path>] objective create <id> --title <text> [--kind ONE_OFF|SEQUENCE|WORKSTREAM]
   codefleet [--workspace <path>] objective attach <id> <task-id> [--revision N]
   codefleet [--workspace <path>] objective block|unblock|skip|unskip|cancel-item <id> <queue-item-id> --reason <text>
+  codefleet [--workspace <path>] objective import-review <id> <run-id> --reason <text>
   codefleet [--workspace <path>] objective reorder <id> --order <id,id> --reason <text>
   codefleet [--workspace <path>] objective status <id>
   codefleet [--workspace <path>] objective rebuild <id>

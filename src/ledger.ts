@@ -24,7 +24,8 @@ export type LedgerEventType =
   | "QUEUE_ITEM_SKIPPED"
   | "QUEUE_ITEM_UNSKIPPED"
   | "QUEUE_ITEM_CANCELED"
-  | "QUEUE_REORDERED";
+  | "QUEUE_REORDERED"
+  | "RUN_REVIEW_DECIDED";
 
 export type QueueStoredState = "WAITING" | "BLOCKED" | "SKIPPED" | "CANCELED";
 export type QueueDerivedState = "NEXT" | "ACTIVE" | "DONE" | "FAILED" | "VERIFIED" | "NONE";
@@ -722,6 +723,138 @@ export async function reorderQueue(
         appendEvent(rootDir, objectiveId, mutationId, "QUEUE_REORDERED", actorId, reason, {
           futureOrder
         })
+    }
+  );
+}
+
+export interface ReviewDecisionEventPayload {
+  reviewDecisionId: string;
+  objectiveQueueItemId: string;
+  taskId: string;
+  taskRevision: number;
+  runId: string;
+  decision: string;
+  actorKind: string;
+  actorId: string;
+  decisionBasis: string;
+  observedResultSnapshot: string;
+  observedCheckSnapshot: string;
+  verificationGateResult: string;
+  verificationGateReason: string;
+  reviewEvidenceBundleRef: { path: string; hash: string };
+  evidenceCompleteness: string;
+  waivedCapabilityGaps: { reason: string; acknowledgedBy: string; justification: string }[];
+  migrationSource: "LOCAL_REVIEW_DECISION";
+  migrationSourceRef: { path: string; hash: string };
+}
+
+// Importing a local review appends a new decision event. It never promotes the
+// local file in place, never edits it, and never edits the bundle or the Run
+// Trace. The local artifact stays exactly what it was: migration input.
+export async function importLocalReview(
+  rootDir: string,
+  input: {
+    objectiveId: string;
+    runId: string;
+    localReview: Record<string, unknown>;
+    localReviewRef: { path: string; hash: string };
+    reason: string;
+    actorId: string;
+  }
+): Promise<MutationOutcome<LedgerEvent>> {
+  const { objectiveId, runId, localReview, localReviewRef, reason, actorId } = input;
+
+  const reviewDecisionId = String(localReview.reviewDecisionId ?? "");
+  const status = String(localReview.localReviewStatus ?? "");
+  const bundleRef = (localReview.reviewEvidenceBundleRef ?? {}) as { path?: string; contentHash?: string };
+  const bundleHash = String(bundleRef.contentHash ?? "");
+
+  const payload: ReviewDecisionEventPayload = {
+    reviewDecisionId,
+    objectiveQueueItemId: `${objectiveId}:${String(localReview.taskId ?? "")}:${Number(localReview.taskRevision ?? 1)}`,
+    taskId: String(localReview.taskId ?? ""),
+    taskRevision: Number(localReview.taskRevision ?? 1),
+    runId,
+    decision: String(localReview.decision ?? ""),
+    actorKind: String(localReview.actorKind ?? "HUMAN"),
+    actorId: String(localReview.actorId ?? ""),
+    decisionBasis: String(localReview.decisionBasis ?? ""),
+    observedResultSnapshot: String(localReview.observedResultSnapshot ?? ""),
+    observedCheckSnapshot: String(localReview.observedCheckSnapshot ?? ""),
+    verificationGateResult: String(localReview.verificationGateResult ?? ""),
+    verificationGateReason: String(localReview.verificationGateReason ?? ""),
+    reviewEvidenceBundleRef: { path: String(bundleRef.path ?? ""), hash: bundleHash },
+    evidenceCompleteness: String(localReview.evidenceCompleteness ?? ""),
+    // A waived acceptance carries its waived gaps into the ledger. Without them
+    // a later reader sees ACCEPTED and cannot tell what a person stood in for.
+    waivedCapabilityGaps: Array.isArray(localReview.waivedCapabilityGaps)
+      ? (localReview.waivedCapabilityGaps as ReviewDecisionEventPayload["waivedCapabilityGaps"])
+      : [],
+    migrationSource: "LOCAL_REVIEW_DECISION",
+    migrationSourceRef: localReviewRef
+  };
+
+  return runMutation(
+    rootDir,
+    {
+      mutationKind: "REVIEW_DECISION_IMPORT",
+      targetId: objectiveId,
+      targetHash: bundleHash,
+      semanticPayload: { reviewDecisionId, runId, decision: payload.decision }
+    },
+    {
+      ...objectiveSteps(rootDir, objectiveId, (events) => {
+        if (localReview.finalDecisionTruth !== false) {
+          throw new Error("local review must carry finalDecisionTruth false");
+        }
+        // Only a migration-ready artifact is an effective decision. The other
+        // derived statuses exist precisely to say this one is not ready.
+        if (status !== "MIGRATION_READY" && status !== "MIGRATION_READY_WAIVED") {
+          throw new Error(`local review status ${status || "(none)"} cannot be imported`);
+        }
+        if (bundleHash.length === 0) {
+          throw new Error("local review has no ReviewEvidenceBundle hash");
+        }
+
+        // Same decision id with a different bundle means two different
+        // decisions claiming one identity. Silently overwriting would destroy
+        // the earlier one, so migration stops and asks for an explicit
+        // supersede instead.
+        const collision = events.find(
+          (event) =>
+            event.type === "RUN_REVIEW_DECIDED" &&
+            (event.payload as unknown as ReviewDecisionEventPayload).reviewDecisionId === reviewDecisionId &&
+            (event.payload as unknown as ReviewDecisionEventPayload).reviewEvidenceBundleRef.hash !== bundleHash
+        );
+        if (collision !== undefined) {
+          throw new Error(
+            `reviewDecisionId ${reviewDecisionId} already imported with a different bundle hash`
+          );
+        }
+      }),
+      isAlreadyApplied: async (): Promise<boolean> => {
+        const { events } = await readEvents(rootDir, objectiveId);
+        return events.some((event) => {
+          if (event.type !== "RUN_REVIEW_DECIDED") {
+            return false;
+          }
+          const existing = event.payload as unknown as ReviewDecisionEventPayload;
+          return (
+            existing.reviewDecisionId === reviewDecisionId &&
+            existing.reviewEvidenceBundleRef.hash === bundleHash
+          );
+        });
+      },
+      append: async (mutationId): Promise<LedgerEvent> =>
+        appendEvent(
+          rootDir,
+          objectiveId,
+          mutationId,
+          "RUN_REVIEW_DECIDED",
+          actorId,
+          reason,
+          payload as unknown as Record<string, unknown>
+        )
     }
   );
 }

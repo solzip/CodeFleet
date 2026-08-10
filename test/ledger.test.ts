@@ -333,3 +333,127 @@ test("replay reports how many events it read and applied", async () => {
   assert.equal(snapshot.replay.scanScope.eventsApplied, 3);
   assert.deepEqual(snapshot.replay.scanScope.findingsByClass, {});
 });
+
+function localReviewFixture(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    documentKind: "LOCAL_REVIEW_DECISION",
+    finalDecisionTruth: false,
+    migrationTarget: "RUN_REVIEW_DECIDED",
+    reviewDecisionId: "run-1-review-001",
+    runId: "run-1",
+    taskId: "login",
+    taskRevision: 1,
+    decision: "ACCEPTED",
+    actorKind: "HUMAN",
+    actorId: "reviewer",
+    decisionBasis: "HUMAN_REVIEW",
+    reason: "checked",
+    observedResultSnapshot: "DONE",
+    observedCheckSnapshot: "PASS",
+    verificationGateResult: "SATISFIED",
+    verificationGateReason: "PASS",
+    reviewEvidenceBundleRef: { path: ".codefleet/reviews/x/evidence-bundle.json", contentHash: "bundle-hash-1" },
+    evidenceCompleteness: "COMPLETE",
+    waivedCapabilityGaps: [],
+    localReviewStatus: "MIGRATION_READY",
+    ...overrides
+  };
+}
+
+async function importReview(root: string, overrides: Record<string, unknown> = {}) {
+  const { importLocalReview } = await import("../src/ledger.ts");
+  return importLocalReview(root, {
+    objectiveId: "auth",
+    runId: "run-1",
+    localReview: localReviewFixture(overrides),
+    localReviewRef: { path: ".codefleet/runs/run-1/review-decision.local.json", hash: "local-hash-1" },
+    reason: "imported",
+    actorId: "tester"
+  });
+}
+
+test("importing a local review appends a decision event carrying its migration source", async () => {
+  const root = await seed();
+  await create(root, "auth", "Auth work");
+  await attach(root, "auth", "login");
+
+  const outcome = await importReview(root);
+  assert.equal(outcome.applied, true);
+
+  const events = (await replayObjective(root, "auth")).snapshot;
+  assert.equal(events.replay.replayStatus, "COMPLETE");
+
+  const raw = await readFile(ledgerPath(root, "auth"), "utf8");
+  const decision = raw
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as { type: string; payload: Record<string, unknown> })
+    .find((event) => event.type === "RUN_REVIEW_DECIDED");
+
+  assert.ok(decision, "a RUN_REVIEW_DECIDED event must be appended");
+  assert.equal(decision.payload.migrationSource, "LOCAL_REVIEW_DECISION");
+  assert.deepEqual(decision.payload.migrationSourceRef, {
+    path: ".codefleet/runs/run-1/review-decision.local.json",
+    hash: "local-hash-1"
+  });
+
+  // Re-importing the identical artifact is a no-op, not a second decision.
+  const again = await importReview(root);
+  assert.equal(again.alreadyApplied, true);
+});
+
+test("a waived acceptance carries its waived gaps into the ledger", async () => {
+  const root = await seed();
+  await create(root, "auth", "Auth work");
+
+  await importReview(root, {
+    localReviewStatus: "MIGRATION_READY_WAIVED",
+    evidenceCompleteness: "WAIVED_INCOMPLETE",
+    waivedCapabilityGaps: [
+      { reason: "WORKSPACE_SNAPSHOT_NOT_IMPLEMENTED_V02", acknowledgedBy: "reviewer", justification: "checked by hand" }
+    ]
+  });
+
+  const raw = await readFile(ledgerPath(root, "auth"), "utf8");
+  const decision = raw
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as { type: string; payload: Record<string, unknown> })
+    .find((event) => event.type === "RUN_REVIEW_DECIDED");
+
+  // Without these a later reader sees ACCEPTED and cannot tell that a person
+  // stood in for evidence the Harness never collected.
+  assert.equal(decision?.payload.evidenceCompleteness, "WAIVED_INCOMPLETE");
+  assert.deepEqual(
+    (decision?.payload.waivedCapabilityGaps as { reason: string }[]).map((gap) => gap.reason),
+    ["WORKSPACE_SNAPSHOT_NOT_IMPLEMENTED_V02"]
+  );
+});
+
+test("only a migration-ready local review can be imported", async () => {
+  const root = await seed();
+  await create(root, "auth", "Auth work");
+
+  for (const status of ["DEGRADED_RECORDED", "MIGRATION_BLOCKED", "SUPERSEDED"]) {
+    const outcome = await importReview(root, { localReviewStatus: status });
+    assert.equal(outcome.failedPhase, "M2_PRECHECK", `${status} must not import`);
+    assert.match(outcome.failureMessage, new RegExp(`${status} cannot be imported`));
+  }
+
+  const notLocal = await importReview(root, { finalDecisionTruth: true });
+  assert.match(notLocal.failureMessage, /finalDecisionTruth false/);
+});
+
+test("the same reviewDecisionId with a different bundle blocks migration", async () => {
+  const root = await seed();
+  await create(root, "auth", "Auth work");
+  await importReview(root);
+
+  // Two different decisions claiming one identity. Overwriting silently would
+  // destroy the first, so migration stops and asks for an explicit supersede.
+  const conflicting = await importReview(root, {
+    reviewEvidenceBundleRef: { path: ".codefleet/reviews/y/evidence-bundle.json", contentHash: "bundle-hash-2" }
+  });
+  assert.equal(conflicting.failedPhase, "M2_PRECHECK");
+  assert.match(conflicting.failureMessage, /already imported with a different bundle hash/);
+});
