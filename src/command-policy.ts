@@ -58,6 +58,90 @@ const SHELL_INTERPRETERS = new Set([
   "pwsh.exe"
 ]);
 
+export interface MatcherProblem {
+  index: number;
+  problem:
+    | "NOT_AN_OBJECT"
+    | "ARGV_NOT_ARRAY"
+    | "ARGV_EMPTY"
+    | "ARGV_TOKEN_NOT_STRING"
+    | "ARGV_TOKEN_EMPTY"
+    | "PATTERN_LANGUAGE_NOT_ALLOWED"
+    | "UNKNOWN_MATCH_MODE"
+    | "CATEGORY_ID_MISSING"
+    | "CATEGORY_ID_MALFORMED";
+  detail: string;
+}
+
+// A matcher token is compared as written. Accepting a token that looks like a
+// pattern would silently do nothing: `rm -rf *` would never match `rm -rf /x`,
+// so a policy author would believe they had denied something they had not.
+// Rejecting the entry is the only outcome that cannot be mistaken for working.
+const PATTERN_CHARS = /[*?\[\]{}()|^$\\]/;
+
+export function validateCommandMatchers(
+  entries: unknown,
+  options: { destructive?: boolean } = {}
+): MatcherProblem[] {
+  if (!Array.isArray(entries)) {
+    return [{ index: -1, problem: "NOT_AN_OBJECT", detail: "matcher list must be an array" }];
+  }
+
+  const problems: MatcherProblem[] = [];
+  for (const [index, raw] of entries.entries()) {
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+      problems.push({ index, problem: "NOT_AN_OBJECT", detail: "entry must be an object" });
+      continue;
+    }
+    const entry = raw as Record<string, unknown>;
+
+    if (!Array.isArray(entry.argv)) {
+      problems.push({ index, problem: "ARGV_NOT_ARRAY", detail: "argv must be an array of tokens" });
+    } else if (entry.argv.length === 0) {
+      // An empty argv matches nothing, so it is a policy line that does nothing.
+      problems.push({ index, problem: "ARGV_EMPTY", detail: "argv must have at least one token" });
+    } else {
+      for (const token of entry.argv) {
+        if (typeof token !== "string") {
+          problems.push({ index, problem: "ARGV_TOKEN_NOT_STRING", detail: `token ${JSON.stringify(token)}` });
+        } else if (token.length === 0) {
+          problems.push({ index, problem: "ARGV_TOKEN_EMPTY", detail: "argv token must not be empty" });
+        } else if (PATTERN_CHARS.test(token)) {
+          problems.push({
+            index,
+            problem: "PATTERN_LANGUAGE_NOT_ALLOWED",
+            detail: `token ${JSON.stringify(token)} looks like a pattern; matchers compare tokens as written`
+          });
+        }
+      }
+    }
+
+    if (entry.matchMode !== undefined && entry.matchMode !== "PREFIX" && entry.matchMode !== "EXACT") {
+      problems.push({
+        index,
+        problem: "UNKNOWN_MATCH_MODE",
+        detail: `matchMode ${JSON.stringify(entry.matchMode)} must be PREFIX or EXACT`
+      });
+    }
+
+    if (options.destructive === true) {
+      const categoryId = entry.categoryId;
+      if (typeof categoryId !== "string" || categoryId.length === 0) {
+        // Approval is granted per category, so an entry without one can never be
+        // approved and would block its command forever with no way out.
+        problems.push({ index, problem: "CATEGORY_ID_MISSING", detail: "destructive entry needs a categoryId" });
+      } else if (!/^[A-Z][A-Z0-9_]*$/.test(categoryId)) {
+        problems.push({
+          index,
+          problem: "CATEGORY_ID_MALFORMED",
+          detail: `categoryId ${JSON.stringify(categoryId)} must be UPPER_SNAKE_CASE`
+        });
+      }
+    }
+  }
+  return problems;
+}
+
 export function normalizeCommand(argv: string[], cwd: string): NormalizedCommand {
   const original = argv[0] ?? "";
   const basename = original.split(/[\\/]/).pop() ?? original;

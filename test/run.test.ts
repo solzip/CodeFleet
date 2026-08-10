@@ -456,6 +456,147 @@ test("a provider-reported command is recorded but never becomes command truth", 
   coversRule(COMMAND_TRUTH, "verification command evidence cannot be satisfied from PROVIDER_REPORTED_ONLY");
 });
 
+async function seedCommandPolicyRun(
+  label: string,
+  commandsPolicy: Record<string, unknown>,
+  verification: string[]
+): Promise<{ root: string; runDir: string }> {
+  const root = await mkdtemp(path.join(os.tmpdir(), `codefleet-${label}-`));
+  await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await writeFile(path.join(root, "src", "a.js"), "export const a = 1;\n", "utf8");
+  await writeFile(path.join(root, "agent.mjs"), "\n", "utf8");
+  await writeFile(
+    path.join(root, ".codefleet", "config.json"),
+    `${JSON.stringify({
+      version: "0.1.0",
+      defaultAgent: "codex",
+      mode: "execute",
+      agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
+      workspace: { id: label },
+      policies: { commands: commandsPolicy }
+    })}\n`,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "tasks", "sample.yaml"),
+    [
+      "id: sample",
+      "title: Sample task",
+      "projectPath: .",
+      "goal: Exercise command policy",
+      "scope:",
+      "  include: [src/**]",
+      "  exclude: []",
+      "constraints: []",
+      "doneCriteria: [done]",
+      "workflow: [edit]",
+      "status: READY",
+      "verification:",
+      "  commands:",
+      "    - commandId: v1",
+      `      command: [${verification.join(", ")}]`,
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  await approveForTest(root, "sample");
+  const execution = await runTask(root, "sample");
+  return { root, runDir: execution.runDir };
+}
+
+test("a denied verification command is blocked and recorded as a command violation", async () => {
+  // The whole point of policies.commands: before this was wired, this command
+  // ran and passed, and commandViolations was a hardcoded empty list.
+  const { runDir } = await seedCommandPolicyRun(
+    "cmd-denied",
+    { deniedCommands: [{ argv: ["node", "-e"] }] },
+    ["node", "-e", '"process.exit(0)"']
+  );
+
+  const observation = await readJson(path.join(runDir, "harness-observation.json"));
+  const runSummary = await readJson(path.join(runDir, "run-summary.json"));
+  const checks = observation.policyChecks as {
+    commandViolations: { violationCode: string; authority: string; commandId: string }[];
+    commandPolicyEvaluation: { evaluated: boolean; scope: string; scanScope: Record<string, number> };
+  };
+
+  assert.equal(checks.commandViolations.length, 1);
+  assert.equal(checks.commandViolations[0].violationCode, "MATCHES_DENIED_COMMANDS");
+  assert.equal(checks.commandViolations[0].commandId, "v1");
+  assert.equal(checks.commandViolations[0].authority, "HARNESS_EXECUTED");
+  assert.equal(checks.commandPolicyEvaluation.scope, "HARNESS_EXECUTED_COMMANDS_ONLY");
+  assert.equal(checks.commandPolicyEvaluation.scanScope.deniedMatchers, 1);
+  assert.equal(checks.commandPolicyEvaluation.scanScope.violationsFound, 1);
+
+  // A blocked command produces SKIP, never PASS, and the gate stays shut.
+  const check = runSummary.check as {
+    observedCheck: string;
+    verificationGateResult: string;
+    verificationGateReason: string;
+  };
+  assert.equal(check.observedCheck, "SKIP");
+  assert.equal(check.verificationGateResult, "NOT_SATISFIED");
+  assert.equal(check.verificationGateReason, "BLOCKED");
+
+  // The Run must name why it has no verification evidence rather than leaving
+  // authority NONE with nothing attached.
+  const reasons = (runSummary.normalization as { unavailableReasons: string[] }).unavailableReasons;
+  assert.ok(
+    reasons.includes("VERIFICATION_BLOCKED_BY_COMMAND_POLICY:1"),
+    `expected a blocked-by-policy reason, got ${JSON.stringify(reasons)}`
+  );
+});
+
+test("a command outside a non-empty allowlist is blocked, and inside it runs", async () => {
+  const outside = await seedCommandPolicyRun(
+    "cmd-outside",
+    { allowedCommands: [{ argv: ["npm", "test"] }] },
+    ["node", "-e", '"process.exit(0)"']
+  );
+  const outsideChecks = (await readJson(path.join(outside.runDir, "harness-observation.json")))
+    .policyChecks as { commandViolations: { violationCode: string }[] };
+  assert.equal(outsideChecks.commandViolations[0].violationCode, "OUTSIDE_ALLOWED_COMMANDS");
+
+  const inside = await seedCommandPolicyRun(
+    "cmd-inside",
+    { allowedCommands: [{ argv: ["node"] }] },
+    ["node", "-e", '"process.exit(0)"']
+  );
+  const insideObservation = await readJson(path.join(inside.runDir, "harness-observation.json"));
+  const insideChecks = insideObservation.policyChecks as {
+    commandViolations: unknown[];
+    commandPolicyEvaluation: { scanScope: Record<string, number> };
+  };
+  assert.deepEqual(insideChecks.commandViolations, []);
+  assert.equal(insideChecks.commandPolicyEvaluation.scanScope.commandsChecked, 1);
+
+  // Zero violations must be distinguishable from zero commands examined.
+  assert.equal(insideChecks.commandPolicyEvaluation.scanScope.allowedMatchers, 1);
+  const insideSummary = await readJson(path.join(inside.runDir, "run-summary.json"));
+  assert.equal((insideSummary.check as { observedCheck: string }).observedCheck, "PASS");
+});
+
+test("a destructive command is blocked when no approval covers its category", async () => {
+  const { runDir } = await seedCommandPolicyRun(
+    "cmd-destructive",
+    { destructiveCommands: [{ categoryId: "NODE_EVAL", argv: ["node", "-e"] }] },
+    ["node", "-e", '"process.exit(0)"']
+  );
+
+  const checks = (await readJson(path.join(runDir, "harness-observation.json"))).policyChecks as {
+    commandViolations: { violationCode: string }[];
+    commandPolicyEvaluation: { scanScope: Record<string, number> };
+  };
+  assert.equal(checks.commandViolations[0].violationCode, "DESTRUCTIVE_WITHOUT_APPROVAL");
+  assert.equal(checks.commandPolicyEvaluation.scanScope.destructiveMatchers, 1);
+
+  coversRule(
+    "DESTRUCTIVE_COMMAND_CATEGORY_IS_APPROVAL_UNIT",
+    "matching a destructive entry blocks execution unless a covering durable approval exists."
+  );
+});
+
 test("runTask rejects projectPath outside the workspace before S2 artifacts", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-run-path-"));
   const outside = await mkdtemp(path.join(os.tmpdir(), "codefleet-outside-project-"));

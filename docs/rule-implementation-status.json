@@ -96,7 +96,7 @@
     "PROFILE_CONFIG_IS_WORKSPACE_CONTRACT": {
       "status": "NOT_IMPLEMENTED",
       "evidence": "src/config.ts",
-      "detail": "loadConfig merges DEFAULT_CONFIG with the parsed JSON and validates nothing."
+      "detail": "the config path is fixed at .codefleet/config.json, but schemaVersion is neither required nor checked against a supported set."
     },
     "PROFILE_TOP_LEVEL_KEYS_FIXED": {
       "status": "NOT_IMPLEMENTED",
@@ -104,19 +104,14 @@
       "detail": "unknown top-level keys are accepted silently."
     },
     "PROFILE_POLICY_BLOCK_KEYS_FIXED": {
-      "status": "NOT_IMPLEMENTED",
+      "status": "IMPLEMENTED_UNTESTED",
       "evidence": "src/config.ts",
-      "detail": "no policies block is read at all."
+      "detail": "loadCommandPolicy rejects unknown keys inside policies.commands, but the policies block itself still accepts any top-level key, so the rule's own condition about the nine allowed block names is unenforced."
     },
     "ADAPTER_CANNOT_EXPAND_CAPABILITIES": {
       "status": "NOT_IMPLEMENTED",
       "evidence": "src/agent.ts",
       "detail": "capabilities are written into adapter-request.json but the adapter is a spawned process that never reads them, so nothing prevents it exceeding them. The Run's own path policy catches the result after the fact; the capability boundary itself is unenforced."
-    },
-    "PROJECT_PROFILE_POLICY_BLOCK_INTERNAL_SCHEMA": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/config.ts",
-      "detail": "no policies block schema is validated."
     },
     "PROFILE_DOES_NOT_STORE_RUNTIME_OR_LOCAL_STATE": {
       "status": "NOT_IMPLEMENTED",

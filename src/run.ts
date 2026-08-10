@@ -189,13 +189,17 @@ export async function runTask(
     runSummaryPath: toRelativePath(rootDir, runSummaryPath),
     verificationDir: toRelativePath(rootDir, verificationDir)
   };
+  // Command policy comes from the Project Profile, not the Task. A Task states
+  // what work it wants; it does not get to widen what the workspace permits.
+  const commandPolicy = config.policies.commands;
   const capabilities = {
     fileEdit: config.mode === "execute",
     commandExecution: config.mode === "execute",
     allowedPaths: task.scope.include,
     deniedPaths: task.scope.exclude,
-    allowedCommands: [] as string[],
-    deniedCommands: [] as string[]
+    allowedCommands: commandPolicy.allowedCommands,
+    deniedCommands: commandPolicy.deniedCommands,
+    destructiveCommands: commandPolicy.destructiveCommands
   };
   const verificationPlanSeed = {
     commands: (task.verification?.commands ?? []).map((entry) => ({
@@ -398,6 +402,36 @@ export async function runTask(
         unavailableReason: changedFilesEvidence.unavailableReason
       };
 
+  // Verification runs before the HarnessObservation is written because its
+  // command preflight is a Harness-owned check, and policyChecks is where
+  // Harness-owned checks belong.
+  await mkdir(verificationDir, { recursive: true });
+  const verificationAttemptId = await nextVerificationAttemptId(verificationDir);
+  const verificationEvidencePath = path.join(verificationDir, `${verificationAttemptId}.json`);
+  const verificationAttempts = await runVerificationCommands({
+    runDir,
+    rootDir,
+    projectPath,
+    verificationAttemptId,
+    commands: verificationPlanSeed.commands,
+    commandExecution: effectivePolicy.capabilities.commandExecution,
+    allowedCommands: effectivePolicy.capabilities.allowedCommands as CommandMatcher[],
+    deniedCommands: effectivePolicy.capabilities.deniedCommands as CommandMatcher[],
+    destructiveCommands: effectivePolicy.capabilities.destructiveCommands as DestructiveMatcher[],
+    cwdRef: task.projectPath
+  });
+  const commandViolations = verificationAttempts
+    .filter((attempt) => attempt.decision === "BLOCKED")
+    .map((attempt) => ({
+      commandId: attempt.commandId,
+      command: attempt.command,
+      cwdRef: attempt.cwdRef,
+      violationCode: attempt.blockedReason,
+      // Harness-executed only. A command the provider merely claimed to run is
+      // not judged here: judging it would mean believing it.
+      authority: "HARNESS_EXECUTED"
+    }));
+
   const harnessObservation = {
     schemaVersion: "0.2",
     documentKind: "HARNESS_OBSERVATION",
@@ -471,8 +505,23 @@ export async function runTask(
     },
     policyChecks: {
       pathViolations: pathPolicy.violations,
-      commandViolations: [],
+      commandViolations,
       capabilityViolations: [],
+      commandPolicyEvaluation: {
+        evaluated: true,
+        // Only commands the Harness ran are subject to this evaluation, so the
+        // scope says so rather than implying it covered every command the Run
+        // caused to execute.
+        scope: "HARNESS_EXECUTED_COMMANDS_ONLY",
+        scanScope: {
+          commandsChecked: verificationAttempts.filter((a) => a.decision !== "UNAVAILABLE").length,
+          violationsFound: commandViolations.length,
+          allowedMatchers: effectivePolicy.capabilities.allowedCommands.length,
+          deniedMatchers: effectivePolicy.capabilities.deniedCommands.length,
+          destructiveMatchers: effectivePolicy.capabilities.destructiveCommands.length
+        },
+        unavailableReason: ""
+      },
       pathPolicyEvaluation: {
         evaluated: pathPolicy.evaluated,
         caseSensitive: pathPolicy.caseSensitive,
@@ -529,21 +578,6 @@ export async function runTask(
   await writeJson(adapterResultPath, adapterResult);
   const adapterResultRef = await fileRef(rootDir, adapterResultPath);
 
-  await mkdir(verificationDir, { recursive: true });
-  const verificationAttemptId = await nextVerificationAttemptId(verificationDir);
-  const verificationEvidencePath = path.join(verificationDir, `${verificationAttemptId}.json`);
-  const verificationAttempts = await runVerificationCommands({
-    runDir,
-    rootDir,
-    projectPath,
-    verificationAttemptId,
-    commands: verificationPlanSeed.commands,
-    commandExecution: effectivePolicy.capabilities.commandExecution,
-    allowedCommands: effectivePolicy.capabilities.allowedCommands as unknown as CommandMatcher[],
-    deniedCommands: effectivePolicy.capabilities.deniedCommands as unknown as CommandMatcher[],
-    destructiveCommands: [] as DestructiveMatcher[],
-    cwdRef: task.projectPath
-  });
   const verificationEvidence = buildVerificationEvidence({
     verificationAttemptId,
     runId,
@@ -921,8 +955,18 @@ function buildVerificationEvidence(input: {
   attempts: VerificationAttempt[];
 }): VerificationEvidence {
   const verificationPlan = input.runPlan.verificationPlan ?? {};
-  const executed = input.attempts.filter((attempt) => attempt.decision !== "UNAVAILABLE");
-  const unavailableReason = executed.length > 0 ? "" : verificationUnavailableReason(input.runPlan);
+  // A blocked attempt is a recorded attempt but not an executed one. Counting
+  // it as executed left authority NONE with no reason attached, which the
+  // evidence guard rejects — and rightly: a Run where policy blocked every
+  // verification command must say so, not go quiet.
+  const executed = input.attempts.filter((attempt) => attempt.authority === "HARNESS_EXECUTED");
+  const blocked = input.attempts.filter((attempt) => attempt.decision === "BLOCKED");
+  const unavailableReason =
+    executed.length > 0
+      ? ""
+      : blocked.length > 0
+        ? `VERIFICATION_BLOCKED_BY_COMMAND_POLICY:${blocked.length}`
+        : verificationUnavailableReason(input.runPlan);
   const outcome = deriveVerificationOutcome(input.attempts, input.runPlan);
   return {
     schemaVersion: "0.2",

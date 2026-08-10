@@ -7,12 +7,46 @@ export interface AgentCommandConfig {
   args?: string[];
 }
 
+export interface CommandMatcherConfig {
+  argv: string[];
+  matchMode?: "PREFIX" | "EXACT";
+}
+
+export interface DestructiveMatcherConfig extends CommandMatcherConfig {
+  categoryId: string;
+}
+
+// policies.commands from the Project Profile. This is workspace policy, not
+// local machine state, which is why command paths and tokens never live here.
+export interface CommandPolicyConfig {
+  allowedCommands: CommandMatcherConfig[];
+  deniedCommands: CommandMatcherConfig[];
+  destructiveCommands: DestructiveMatcherConfig[];
+  requireHarnessVisibleCommandChannel: boolean;
+  allowProviderReportedCommandTruth: boolean;
+}
+
+export interface ProfilePolicies {
+  commands: CommandPolicyConfig;
+}
+
 export interface CodeFleetConfig {
   version: string;
   defaultAgent: string;
   mode: CodeFleetMode;
   agents?: Record<string, AgentCommandConfig>;
+  policies: ProfilePolicies;
 }
+
+export const DEFAULT_COMMAND_POLICY: CommandPolicyConfig = {
+  allowedCommands: [],
+  deniedCommands: [],
+  destructiveCommands: [],
+  // Defaults are the strict end of each switch. A profile that says nothing
+  // must not be read as a profile that permits everything.
+  requireHarnessVisibleCommandChannel: true,
+  allowProviderReportedCommandTruth: false
+};
 
 export interface TaskScope {
   include: string[];
@@ -123,5 +157,8 @@ export const DEFAULT_CONFIG: CodeFleetConfig = {
       command: "codex",
       args: ["exec", "-"]
     }
+  },
+  policies: {
+    commands: DEFAULT_COMMAND_POLICY
   }
 };
