@@ -113,7 +113,7 @@ interface LocalReviewDecision {
   reviewNoteRef: string;
   aiReviewHintRef: string;
   supersedesLocalReviewId: string;
-  evidenceCompleteness: "COMPLETE" | "WAIVED_INCOMPLETE";
+  evidenceCompleteness: "COMPLETE" | "WAIVED_INCOMPLETE" | "INCOMPLETE";
   waivedCapabilityGaps: { reason: string; acknowledgedBy: string; justification: string }[];
   localReviewStatus: LocalReviewStatus;
   localReviewStatusReasons: string[];
@@ -132,7 +132,7 @@ export interface ReviewExecution {
   decision: ReviewDecision;
   localReviewStatus: LocalReviewStatus;
   bundleStatus: "COMPLETE" | "DEGRADED";
-  evidenceCompleteness: "COMPLETE" | "WAIVED_INCOMPLETE";
+  evidenceCompleteness: "COMPLETE" | "WAIVED_INCOMPLETE" | "INCOMPLETE";
   bundlePath: string;
   localReviewPath: string;
   blockedReasons: string[];
@@ -222,7 +222,7 @@ export async function reviewRun(
     reviewNoteRef: options.noteRef ?? "",
     aiReviewHintRef: options.aiReviewRef ?? "",
     supersedesLocalReviewId: options.supersedesLocalReviewId ?? "",
-    evidenceCompleteness: acceptance.waived.length > 0 ? "WAIVED_INCOMPLETE" : "COMPLETE",
+    evidenceCompleteness: evidenceCompleteness(bundle, acceptance.waived),
     waivedCapabilityGaps: acceptance.waived.map((reason) => ({
       reason,
       acknowledgedBy: options.actorId ?? "local-user",
@@ -384,9 +384,9 @@ function evaluateAcceptance(
     blockedReasons.push(`capability gap not waived: ${reason}`);
   }
 
-  if (bundle.hashChecks.some((entry) => !entry.valid)) {
-    blockedReasons.push("one or more referenced artifact hashes are invalid");
-  }
+  // An invalid hash is already reported above as HASH_INVALID:<path>, which names
+  // the artifact. Reporting it a second time in aggregate would state one fact
+  // twice and hide which artifact failed.
   if (bundle.observedResultSnapshot !== "DONE") {
     blockedReasons.push(`normalized result is ${bundle.observedResultSnapshot}, not DONE`);
   }
@@ -408,6 +408,20 @@ function evaluateAcceptance(
   return { allowed: blockedReasons.length === 0, blockedReasons, waived };
 }
 
+// A review that did not attempt acceptance still has to state its evidence
+// honestly. Without INCOMPLETE, a Run with open gaps would record COMPLETE and
+// claim a completeness it does not have.
+function evidenceCompleteness(
+  bundle: ReviewEvidenceBundle,
+  waived: string[]
+): "COMPLETE" | "WAIVED_INCOMPLETE" | "INCOMPLETE" {
+  if (bundle.unavailableReasons.length === 0) {
+    return "COMPLETE";
+  }
+  const unwaived = bundle.unavailableReasons.filter((reason) => !waived.includes(reason));
+  return unwaived.length === 0 ? "WAIVED_INCOMPLETE" : "INCOMPLETE";
+}
+
 function deriveLocalReviewStatus(input: {
   decision: ReviewDecision;
   bundle: ReviewEvidenceBundle;
@@ -416,11 +430,11 @@ function deriveLocalReviewStatus(input: {
 }): { status: LocalReviewStatus; reasons: string[] } {
   const { decision, bundle, acceptance } = input;
 
-  if (bundle.hashChecks.some((entry) => !entry.valid)) {
-    return {
-      status: "MIGRATION_BLOCKED",
-      reasons: bundle.hashChecks.filter((entry) => !entry.valid).map((entry) => `HASH_INVALID:${entry.path}`)
-    };
+  // Status derivation reads the same classification the acceptance gate reads,
+  // so a defect cannot block one and pass the other.
+  const defects = bundle.unavailableReasons.filter((reason) => classifyGap(reason) === "EVIDENCE_DEFECT");
+  if (defects.length > 0) {
+    return { status: "MIGRATION_BLOCKED", reasons: defects };
   }
 
   if (decision === "ACCEPTED") {
@@ -499,6 +513,9 @@ function assertLocalReview(value: LocalReviewDecision): void {
   }
   if (value.evidenceCompleteness === "WAIVED_INCOMPLETE" && value.waivedCapabilityGaps.length === 0) {
     errors.push("WAIVED_INCOMPLETE requires at least one waived gap");
+  }
+  if (value.evidenceCompleteness === "COMPLETE" && value.bundleStatus !== "COMPLETE") {
+    errors.push("evidenceCompleteness COMPLETE contradicts a DEGRADED bundle");
   }
   if (errors.length > 0) {
     throw new Error(`Invalid local review decision:\n${errors.map((e) => `  - ${e}`).join("\n")}`);

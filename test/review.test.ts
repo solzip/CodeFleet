@@ -277,3 +277,37 @@ async function seedVerifiedWorkspace(): Promise<{ root: string; runId: string }>
   const execution = await runTask(root, "sample");
   return { root, runId: execution.result.runId };
 }
+
+test("a review that did not waive its gaps records INCOMPLETE, not COMPLETE", async () => {
+  const { root, runId } = await seedWorkspace();
+
+  const execution = await reviewRun(root, runId, {
+    decision: "REJECTED",
+    reason: "not acceptable"
+  });
+
+  assert.equal(execution.evidenceCompleteness, "INCOMPLETE");
+
+  const localReview = await readJson(path.join(root, ".codefleet", "runs", runId, "review-decision.local.json"));
+  assert.equal(localReview.evidenceCompleteness, "INCOMPLETE");
+  assert.notEqual(localReview.bundleStatus, "COMPLETE");
+});
+
+test("an evidence defect is reported once, naming the artifact", async () => {
+  const { root, runId } = await seedWorkspace();
+  const observationPath = path.join(root, ".codefleet", "runs", runId, "harness-observation.json");
+  const observation = await readJson(observationPath);
+  observation.tampered = true;
+  await writeFile(observationPath, `${JSON.stringify(observation, null, 2)}\n`, "utf8");
+
+  let message = "";
+  try {
+    await reviewRun(root, runId, { decision: "ACCEPTED", reason: "ship it" });
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+
+  const hashLines = message.split("\n").filter((line) => line.includes("hash") || line.includes("HASH_INVALID"));
+  assert.equal(hashLines.length, 1, `hash invalidity must be reported once, got:\n${message}`);
+  assert.match(hashLines[0], /HASH_INVALID:.*harness-observation\.json/);
+});

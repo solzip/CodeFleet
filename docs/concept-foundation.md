@@ -6137,7 +6137,7 @@ computedRisk: "LOW | MEDIUM | HIGH | UNKNOWN"
 pathViolationSummary:
   hasViolation: false
   violationRefs: []
-evidenceCompleteness: "COMPLETE | WAIVED_INCOMPLETE"
+evidenceCompleteness: "COMPLETE | WAIVED_INCOMPLETE | INCOMPLETE"
 waivedCapabilityGaps:
   - reason: ""
     acknowledgedBy: ""
@@ -6145,6 +6145,22 @@ waivedCapabilityGaps:
 supersedesLocalReviewId: ""
 createdAt: ""
 ```
+
+`evidenceCompleteness` 의미:
+
+```text
+COMPLETE
+= 어떤 gap 도 없다.
+
+WAIVED_INCOMPLETE
+= CAPABILITY_GAP 이 있고, 사람이 항목별로 waive 했다.
+
+INCOMPLETE
+= gap 이 남아 있고 waive 되지 않았다.
+= REJECTED / NEEDS_CHANGES 처럼 수락을 시도하지 않은 경우가 여기 해당한다.
+```
+
+`INCOMPLETE`가 필요한 이유는 수락하지 않은 리뷰에도 증거 상태를 정직하게 기록해야 하기 때문이다. 이 값이 없으면 gap 이 남아 있는 Run 이 `COMPLETE` 로 기록되어, 문서가 없는 완전성을 주장하게 된다.
 
 `waivedCapabilityGaps`는 항목별로만 기록한다. 전체를 한 번에 면제하는 표현은 두지 않는다. 사람이 무엇을 대신 확인했는지가 남아야 나중에 그 Run을 감사할 때 주장의 범위를 알 수 있다.
 
