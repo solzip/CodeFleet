@@ -350,6 +350,8 @@ Phase 10에서 반복된 판단 기준:
         - CLI: task approve|invalidate|status
         - 승인 검사는 projectPath 해석보다 먼저 (실행 자격이 실행 방법보다 앞선다)
         - 픽스처 전수 검사 추가 — 승인 없이 runTask 를 부르면 테스트가 깨진다
+        - 모든 검사기가 측정값을 보고하도록 변경 (판정만으로는 0건 검사와 구분 불가)
+        - 설계 정합성 검사를 임시 스크립트에서 테스트로 이관 (design-rules.test.ts)
 [ ] 96. RUN_REVIEW_DECIDED 이관                                        <- 다음, 미착수
 [ ] 97. VERIFIED 계산 + Queue 진행
 [ ] 98. 이후 final 슬라이스 (carry-forward / export / CAPABILITY_GAP) (workspace snapshot / provider transcript / agent command 관측)
@@ -370,6 +372,8 @@ Phase 10에서 반복된 판단 기준:
 - concept-foundation.md의 0.13 상태 목록과 15절 다음 논의 항목을 함께 갱신한다.
 - 검증을 수행하면 날짜별 기록 문서를 남긴다. 무엇을 왜 검증했고, 무엇을 찾았고,
   무엇을 확인할 수 없었는지를 적는다.
+- 검사기는 판정뿐 아니라 측정값을 보고한다. 무엇을 몇 건 검사했는지 없이는
+  0건 발견과 0건 검사를 구분할 수 없다. 검사 대상이 사라지면 실패해야 한다.
 ```
 
 검증 기록을 남기는 이유는 실증됐다. 2026-08-10 감사 이전에 손으로만 확인하고 아무것도
