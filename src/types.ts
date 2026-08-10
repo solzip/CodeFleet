@@ -19,12 +19,22 @@ export interface TaskScope {
   exclude: string[];
 }
 
+export interface TaskVerificationCommand {
+  commandId: string;
+  command: string[];
+}
+
+export interface TaskVerification {
+  commands: TaskVerificationCommand[];
+}
+
 export interface Task {
   id: string;
   title: string;
   projectPath: string;
   goal: string;
   scope: TaskScope;
+  verification?: TaskVerification;
   constraints: string[];
   doneCriteria: string[];
   workflow: string[];

@@ -24,10 +24,10 @@ Phase 11     대기      설계 확정 후 구현 재개
 ```
 
 ```text
-전체 89단계 중 87단계 완료
+전체 89단계 중 88단계 완료
 FINAL RULE 82개
 설계 진행도: 100% (미고정 항목 없음)
-구현 진행도: 약 50-60%
+구현 진행도: 약 60-70%
 ```
 
 방침:
@@ -303,8 +303,13 @@ Phase 10에서 반복된 판단 기준:
         - denied 우선, allowlist 미매치는 violation
         - scope 항목이 와일드카드 없는 디렉터리면 Task validation에서 거부
         - changed-files 증거가 degraded면 평가하지 않고 unavailable로 기록
-[ ] 88. Harness-visible command channel (S3)                          <- 다음, 미착수
-[ ] 89. 이후 final 슬라이스
+[x] 88. Harness-visible command channel (S3)
+        - Task verification.commands (argv 배열) -> run-plan verificationPlan
+        - preflight (셸 차단 / denied 우선 / allowed / destructive) 후 Harness 직접 실행
+        - HARNESS_EXECUTED authority, exitCode / stdout / stderr refs 기록
+        - observedCheck / gate를 Harness 실행 증거에서만 계산
+        - YAML 파서에 map 리스트 지원 추가 (설계가 고정한 스키마 요구)
+[ ] 89. 이후 final 슬라이스 (workspace snapshot / provider transcript / agent command 관측)
 [ ] 87. 이후 final 슬라이스
 ```
 

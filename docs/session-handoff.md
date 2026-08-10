@@ -47,9 +47,9 @@ Important criteria:
 Design is complete as of the final consistency re-audit. Implementation
 has resumed.
 
-Design is complete. Path policy evaluation is implemented. The next topic is
-the Harness-visible command channel.
-The next implementation topic is the Harness-visible command channel.
+Design is complete. The Harness now executes verification commands itself.
+The next topic is closing the remaining v0.2 evidence gaps.
+The next implementation topic is HarnessWorkspaceSnapshot.
 ```
 
 ## Product Definition
@@ -94,6 +94,10 @@ Current implementation status:
 - VerificationEvidence distinguishes NO_VERIFICATION_COMMANDS_CONFIGURED from COMMAND_CHANNEL_NOT_HARNESS_VISIBLE.
 - Legacy result.json is still kept for v0.x compatibility.
 - Changed-files evidence comes from git status with untracked files included, since an agent creating a new file must not be invisible.
+- The Harness executes verificationPlan commands itself, so VerificationEvidence can carry HARNESS_EXECUTED and observedCheck PASS.
+- Verification commands are argv arrays; a shell interpreter at argv[0] is denied, and preflight runs denied, then allowed, then destructive.
+- observedCheck and the gate are computed only from Harness-executed attempts, so a provider claim can never move them.
+- verificationAuthority, commandEvidenceAuthority, and changedFilesAuthority are separate fields over separate subjects; the Harness running verification does not make the agent's own commands visible.
 - Path policy is evaluated against changed files using the fixed bounded glob subset, denied first, and violations are recorded in HarnessObservation.
 - Path policy is not evaluated when changed-files evidence is degraded; it reports unavailable rather than "no violations" over partial input.
 - Task scope entries must be valid patterns; a bare directory name is rejected at validation because whole-path matching would silently put its contents out of scope.
@@ -201,29 +205,32 @@ Important fixed boundaries:
 ## Current Bottleneck
 
 ```text
-Harness-visible command channel (S3)
+remaining v0.2 evidence gaps
 ```
 
 Why this is next:
 
 ```text
-Path policy now evaluates, and an in-scope Run no longer lists a path violation
-among its ACCEPTED blockers. The only remaining blocker is the verification gate.
+A verified in-scope Run now reaches result DONE, observedCheck PASS, gate
+SATISFIED, and no path violation. ACCEPTED is still refused, for one reason:
+the bundle is DEGRADED because run-summary normalization is PARTIAL.
 
-S3 is what closes it. Until the Harness executes or observes verification commands
-itself, observedCheck stays NONE, the gate stays NOT_SATISFIED (MISSING), and no
-Run can be accepted. It is also the last boundary the first SPINE pass recorded as
-BLOCKED.
+Three unavailable reasons keep it partial:
+  COMMAND_CHANNEL_NOT_HARNESS_VISIBLE
+  PROVIDER_TRANSCRIPT_PARSING_NOT_IMPLEMENTED_V02
+  WORKSPACE_SNAPSHOT_NOT_IMPLEMENTED_V02
+
+These are the last v0.2 gaps. HarnessWorkspaceSnapshot is the most mechanical of
+the three and the one the S2 contract already specifies in full.
 ```
 
 Next implementation slice:
 
 ```text
-1. Read verificationPlan commands as argv arrays from the Task contract.
-2. Execute them through a Harness-owned channel with shell invocation denied.
-3. Record exitCode, stdout/stderr refs, and authority HARNESS_EXECUTED per attempt.
-4. Compute observedCheck and verificationGateResult from that evidence only.
-5. Add tests proving a provider claim alone never satisfies the gate.
+1. Capture pre-run and post-run git status / diff plus a scoped file snapshot.
+2. Record stateHash for each side and reference them from HarnessObservation.
+3. Compute the changed-file delta from the snapshots rather than a single status call.
+4. Add tests proving the snapshot pair explains every reported change.
 ```
 
 ## Repository Note

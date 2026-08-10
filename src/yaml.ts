@@ -118,7 +118,19 @@ function parseArray(lines: ParsedLine[], state: { index: number }, indent: numbe
       break;
     }
 
-    const value = line.content.slice(2).trim();
+    const afterDash = line.content.slice(2);
+    const value = afterDash.trim();
+
+    // "- key: value" starts a map item whose remaining keys sit at the column
+    // the first key starts in, so the item is parsed as an object from here.
+    if (value.length > 0 && startsMapping(value)) {
+      const extraSpaces = afterDash.length - afterDash.trimStart().length;
+      const itemIndent = line.indent + 2 + extraSpaces;
+      lines[state.index] = { indent: itemIndent, content: value, lineNumber: line.lineNumber };
+      result.push(parseObject(lines, state, itemIndent));
+      continue;
+    }
+
     state.index += 1;
 
     if (value.length > 0) {
@@ -230,4 +242,11 @@ function stripComment(raw: string): string {
   }
 
   return raw.trimEnd();
+}
+
+// A list item like "- commandId: unit-tests" begins a mapping. A plain scalar
+// item such as "- src/**" or "- https://example.com/x" must not be mistaken for
+// one, so the key has to look like an identifier followed by a colon.
+function startsMapping(value: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_-]*\s*:(\s|$)/.test(value);
 }

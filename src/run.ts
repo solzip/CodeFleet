@@ -7,6 +7,7 @@ import { loadConfig } from "./config.ts";
 import { renderPrompt } from "./prompt.ts";
 import { loadTask } from "./task.ts";
 import type { AgentRunInput, AgentRunResult, RunResultFile } from "./types.ts";
+import { normalizeCommand, preflightCommand, type CommandMatcher, type DestructiveMatcher } from "./command-policy.ts";
 import { evaluatePathPolicy, type PathViolation } from "./path-policy.ts";
 import { discoverWorkspace, type FileRef, type WorkspaceDiscovery } from "./workspace.ts";
 
@@ -99,6 +100,7 @@ interface RunSummary {
   evidenceAuthority: {
     commandEvidenceAuthority: string;
     changedFilesAuthority: string;
+    verificationAuthority: string;
   };
   policy: {
     computedRisk: string;
@@ -165,7 +167,11 @@ export async function runTask(
     deniedCommands: [] as string[]
   };
   const verificationPlanSeed = {
-    commands: [] as unknown[],
+    commands: (task.verification?.commands ?? []).map((entry) => ({
+      commandId: entry.commandId,
+      command: entry.command,
+      cwdRef: task.projectPath
+    })),
     manualChecks: [] as unknown[],
     expectedEvidence: [] as unknown[]
   };
@@ -387,6 +393,18 @@ export async function runTask(
   await mkdir(verificationDir, { recursive: true });
   const verificationAttemptId = await nextVerificationAttemptId(verificationDir);
   const verificationEvidencePath = path.join(verificationDir, `${verificationAttemptId}.json`);
+  const verificationAttempts = await runVerificationCommands({
+    runDir,
+    rootDir,
+    projectPath,
+    verificationAttemptId,
+    commands: verificationPlanSeed.commands,
+    commandExecution: effectivePolicy.capabilities.commandExecution,
+    allowedCommands: effectivePolicy.capabilities.allowedCommands as unknown as CommandMatcher[],
+    deniedCommands: effectivePolicy.capabilities.deniedCommands as unknown as CommandMatcher[],
+    destructiveCommands: [] as DestructiveMatcher[],
+    cwdRef: task.projectPath
+  });
   const verificationEvidence = buildVerificationEvidence({
     verificationAttemptId,
     runId,
@@ -395,7 +413,8 @@ export async function runTask(
     runPlan,
     runPlanRef,
     sourceTaskRef,
-    harnessObservationRef
+    harnessObservationRef,
+    attempts: verificationAttempts
   });
   assertVerificationEvidence(verificationEvidence);
   await writeJson(verificationEvidencePath, verificationEvidence);
@@ -533,7 +552,8 @@ function buildRunSummary(input: {
     },
     evidenceAuthority: {
       commandEvidenceAuthority: commandEvidenceAuthority(input.harnessObservation),
-      changedFilesAuthority: changedFilesAuthority(input.harnessObservation)
+      changedFilesAuthority: changedFilesAuthority(input.harnessObservation),
+      verificationAuthority: input.verificationEvidence?.authority ?? "NONE"
     },
     policy: {
       computedRisk: ((input.runPlan.computedRisk as Record<string, unknown> | undefined)?.level as string | undefined) ?? "UNKNOWN",
@@ -589,6 +609,139 @@ function addUnavailableReason(reasons: Set<string>, value: unknown): void {
   }
 }
 
+interface PlannedVerificationCommand {
+  commandId: string;
+  command: string[];
+  cwdRef: string;
+}
+
+// The Harness runs verification commands itself, which is what makes the result
+// HARNESS_EXECUTED rather than a provider claim. This channel covers only these
+// planned commands; commands the agent ran on its own remain invisible and keep
+// HarnessObservation.commands.authority at NONE.
+async function runVerificationCommands(input: {
+  runDir: string;
+  rootDir: string;
+  projectPath: string;
+  verificationAttemptId: string;
+  commands: PlannedVerificationCommand[];
+  commandExecution: boolean;
+  allowedCommands: CommandMatcher[];
+  deniedCommands: CommandMatcher[];
+  destructiveCommands: DestructiveMatcher[];
+  cwdRef: string;
+}): Promise<VerificationAttempt[]> {
+  if (input.commands.length === 0) {
+    return [];
+  }
+
+  const logDir = path.join(input.runDir, "verification", input.verificationAttemptId);
+  await mkdir(logDir, { recursive: true });
+  const attempts: VerificationAttempt[] = [];
+
+  for (const planned of input.commands) {
+    const normalized = normalizeCommand(planned.command, input.projectPath);
+    const preflight = preflightCommand({
+      normalized,
+      commandExecution: input.commandExecution,
+      allowedCommands: input.allowedCommands,
+      deniedCommands: input.deniedCommands,
+      destructiveCommands: input.destructiveCommands,
+      approvedCategoryIds: []
+    });
+    const startedAt = formatDateTimeWithOffset(new Date());
+
+    if (preflight.decision === "BLOCKED") {
+      attempts.push({
+        commandId: planned.commandId,
+        command: normalized.argv,
+        cwdRef: input.cwdRef,
+        authority: "NONE",
+        decision: "BLOCKED",
+        startedAt,
+        endedAt: startedAt,
+        exitCode: null,
+        stdoutRef: { unavailableReason: "COMMAND_NOT_EXECUTED" },
+        stderrRef: { unavailableReason: "COMMAND_NOT_EXECUTED" },
+        logRef: { unavailableReason: "COMMAND_NOT_EXECUTED" },
+        result: "SKIP",
+        blockedReason: preflight.blockedReason,
+        unavailableReason: ""
+      });
+      continue;
+    }
+
+    const result = await runProcess(normalized.argv[0], normalized.argv.slice(1), input.projectPath);
+    const endedAt = formatDateTimeWithOffset(new Date());
+    const stdoutPath = path.join(logDir, `${planned.commandId}.stdout.log`);
+    const stderrPath = path.join(logDir, `${planned.commandId}.stderr.log`);
+    await writeFile(stdoutPath, result.stdout, "utf8");
+    await writeFile(stderrPath, result.stderr, "utf8");
+
+    attempts.push({
+      commandId: planned.commandId,
+      command: normalized.argv,
+      cwdRef: input.cwdRef,
+      authority: "HARNESS_EXECUTED",
+      decision: "ALLOWED",
+      startedAt,
+      endedAt,
+      exitCode: result.code,
+      stdoutRef: await fileRef(input.rootDir, stdoutPath),
+      stderrRef: await fileRef(input.rootDir, stderrPath),
+      logRef: await fileRef(input.rootDir, stdoutPath),
+      result: result.code === 0 ? "PASS" : "FAIL",
+      blockedReason: "",
+      unavailableReason: ""
+    });
+  }
+
+  return attempts;
+}
+
+// observedCheck and the gate are computed from Harness-executed attempts only.
+// A provider claim never appears here, so it can never move the gate.
+function deriveVerificationOutcome(
+  attempts: VerificationAttempt[],
+  runPlan: Record<string, unknown>
+): {
+  authority: VerificationAuthority;
+  observedCheck: ObservedCheck;
+  verificationGateResult: VerificationGateResult;
+  verificationGateReason: VerificationGateReason;
+} {
+  const required = isVerificationRequired(runPlan);
+  const executed = attempts.filter((attempt) => attempt.authority === "HARNESS_EXECUTED");
+
+  if (executed.length === 0) {
+    const blocked = attempts.some((attempt) => attempt.decision === "BLOCKED");
+    return {
+      authority: "NONE",
+      observedCheck: blocked ? "SKIP" : "NONE",
+      verificationGateResult: required ? "NOT_SATISFIED" : "SATISFIED",
+      verificationGateReason: required ? (blocked ? "BLOCKED" : "MISSING") : "NOT_REQUIRED"
+    };
+  }
+
+  if (executed.length !== attempts.length) {
+    // A partially executed plan cannot show that verification passed.
+    return {
+      authority: "HARNESS_EXECUTED",
+      observedCheck: "SKIP",
+      verificationGateResult: required ? "NOT_SATISFIED" : "SATISFIED",
+      verificationGateReason: required ? "BLOCKED" : "NOT_REQUIRED"
+    };
+  }
+
+  const failed = executed.some((attempt) => attempt.result === "FAIL");
+  return {
+    authority: "HARNESS_EXECUTED",
+    observedCheck: failed ? "FAIL" : "PASS",
+    verificationGateResult: failed ? "NOT_SATISFIED" : "SATISFIED",
+    verificationGateReason: failed ? "FAILED" : "PASS"
+  };
+}
+
 function buildVerificationEvidence(input: {
   verificationAttemptId: string;
   runId: string;
@@ -598,9 +751,12 @@ function buildVerificationEvidence(input: {
   runPlanRef: FileRef;
   sourceTaskRef: FileRef;
   harnessObservationRef: FileRef;
+  attempts: VerificationAttempt[];
 }): VerificationEvidence {
   const verificationPlan = input.runPlan.verificationPlan ?? {};
-  const unavailableReason = verificationUnavailableReason(input.runPlan);
+  const executed = input.attempts.filter((attempt) => attempt.decision !== "UNAVAILABLE");
+  const unavailableReason = executed.length > 0 ? "" : verificationUnavailableReason(input.runPlan);
+  const outcome = deriveVerificationOutcome(input.attempts, input.runPlan);
   return {
     schemaVersion: "0.2",
     documentKind: "VERIFICATION_EVIDENCE",
@@ -616,34 +772,30 @@ function buildVerificationEvidence(input: {
       present: true
     },
     effectivePolicyHash: effectivePolicyHash(input.runPlan),
-    authority: "NONE",
-    observedCheck: "NONE",
-    verificationGateResult: isVerificationRequired(input.runPlan) ? "NOT_SATISFIED" : "SATISFIED",
-    verificationGateReason: isVerificationRequired(input.runPlan) ? "MISSING" : "NOT_REQUIRED",
-    attempts: [
-      {
-        commandId: "verification-unavailable",
-        command: [],
-        cwdRef: "",
-        authority: "NONE",
-        decision: "UNAVAILABLE",
-        startedAt: input.createdAt,
-        endedAt: input.createdAt,
-        exitCode: null,
-        stdoutRef: {
-          unavailableReason: "COMMAND_NOT_EXECUTED"
-        },
-        stderrRef: {
-          unavailableReason: "COMMAND_NOT_EXECUTED"
-        },
-        logRef: {
-          unavailableReason
-        },
-        result: "NONE",
-        blockedReason: "",
-        unavailableReason
-      }
-    ],
+    authority: outcome.authority,
+    observedCheck: outcome.observedCheck,
+    verificationGateResult: outcome.verificationGateResult,
+    verificationGateReason: outcome.verificationGateReason,
+    attempts: input.attempts.length > 0
+      ? input.attempts
+      : [
+          {
+            commandId: "verification-unavailable",
+            command: [],
+            cwdRef: "",
+            authority: "NONE",
+            decision: "UNAVAILABLE",
+            startedAt: input.createdAt,
+            endedAt: input.createdAt,
+            exitCode: null,
+            stdoutRef: { unavailableReason: "COMMAND_NOT_EXECUTED" },
+            stderrRef: { unavailableReason: "COMMAND_NOT_EXECUTED" },
+            logRef: { unavailableReason },
+            result: "NONE",
+            blockedReason: "",
+            unavailableReason
+          }
+        ],
     providerReportedVerificationRef: {
       unavailableReason: "PROVIDER_REPORTED_VERIFICATION_NOT_IMPLEMENTED_V02",
       degraded: true
@@ -734,8 +886,18 @@ function assertRunSummary(value: RunSummary): void {
   if (value.finalDecisionTruth !== false) {
     errors.push("RunSummary cannot be final decision truth");
   }
-  if (value.check.observedCheck === "PASS" && value.evidenceAuthority.commandEvidenceAuthority === "NONE") {
-    errors.push("command authority NONE cannot produce observedCheck PASS");
+  // observedCheck is a verification result, so it is justified by verification
+  // authority. commandEvidenceAuthority describes commands the agent ran on its
+  // own and stays NONE even when the Harness executed verification itself. These
+  // are different enums over different subjects and must not be conflated.
+  if (
+    value.check.observedCheck === "PASS" &&
+    value.evidenceAuthority.verificationAuthority !== "HARNESS_EXECUTED" &&
+    value.evidenceAuthority.verificationAuthority !== "HARNESS_OBSERVED"
+  ) {
+    errors.push(
+      `verification authority ${value.evidenceAuthority.verificationAuthority} cannot produce observedCheck PASS`
+    );
   }
   if (value.safeguards.canProduceVerified || value.safeguards.acceptanceEvidence) {
     errors.push("RunSummary cannot produce VERIFIED or acceptance evidence");

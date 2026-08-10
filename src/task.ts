@@ -89,6 +89,8 @@ export function validateTask(value: unknown): ValidationResult {
     requireValidPatterns(value.scope, "scope.exclude", "exclude", errors);
   }
 
+  validateVerification(value, errors);
+
   requireStringArray(value, "constraints", "constraints", errors);
   requireStringArray(value, "doneCriteria", "doneCriteria", errors);
   requireStringArray(value, "workflow", "workflow", errors);
@@ -130,6 +132,47 @@ function requireStringArray(
   if (invalid !== undefined) {
     errors.push(`${label} must contain only non-empty strings.`);
   }
+}
+
+// Verification commands are argv arrays, never shell strings. Accepting a string
+// here would push shell parsing into the Harness, and the fixed rules deny shell
+// interpreter invocation precisely so command matching stays meaningful.
+function validateVerification(value: Record<string, unknown>, errors: string[]): void {
+  const verification = value.verification;
+  if (verification === undefined) {
+    return;
+  }
+  if (!isRecord(verification)) {
+    errors.push("verification must be an object.");
+    return;
+  }
+
+  const commands = verification.commands;
+  if (commands === undefined) {
+    return;
+  }
+  if (!Array.isArray(commands)) {
+    errors.push("verification.commands must be an array.");
+    return;
+  }
+
+  commands.forEach((entry, index) => {
+    const label = `verification.commands[${index}]`;
+    if (!isRecord(entry)) {
+      errors.push(`${label} must be an object.`);
+      return;
+    }
+    if (typeof entry.commandId !== "string" || entry.commandId.trim().length === 0) {
+      errors.push(`${label}.commandId is required and must be a non-empty string.`);
+    }
+    if (!Array.isArray(entry.command) || entry.command.length === 0) {
+      errors.push(`${label}.command must be a non-empty argv array, not a shell string.`);
+      return;
+    }
+    if (entry.command.some((token) => typeof token !== "string" || token.length === 0)) {
+      errors.push(`${label}.command must contain only non-empty strings.`);
+    }
+  });
 }
 
 // Scope entries become allowedPaths / deniedPaths, so they must satisfy the

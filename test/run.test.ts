@@ -503,3 +503,123 @@ test("a nested repository degrades the path policy evaluation instead of claimin
   assert.match(evaluation.unavailableReason, /^NESTED_REPO_NOT_TRAVERSED:/);
   assert.match(evaluation.unavailableReason, /vendor\/lib/);
 });
+
+test("verification commands are executed by the Harness and open the gate", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-verify-"));
+  await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await mkdir(path.join(root, "tools"), { recursive: true });
+  await writeFile(path.join(root, "src", "app.js"), "export const ok = true;\n", "utf8");
+  await writeFile(path.join(root, ".gitignore"), ".codefleet/\n", "utf8");
+  await writeFile(path.join(root, "tools", "agent.mjs"), 'import { writeFileSync } from "node:fs";\n', "utf8");
+  await writeFile(path.join(root, "tools", "check.mjs"), "process.exit(0);\n", "utf8");
+
+  const { spawnSync } = await import("node:child_process");
+  for (const args of [["init"], ["add", "-A"], ["commit", "-m", "init"]]) {
+    spawnSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", ...args], { cwd: root });
+  }
+
+  await writeFile(
+    path.join(root, ".codefleet", "config.json"),
+    `${JSON.stringify({
+      version: "0.1.0",
+      defaultAgent: "codex",
+      mode: "execute",
+      agents: { codex: { command: process.execPath, args: ["tools/agent.mjs"] } },
+      workspace: { id: "verify-test" }
+    })}\n`,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "tasks", "sample.yaml"),
+    [
+      "id: sample",
+      "title: Sample task",
+      "projectPath: .",
+      "goal: Exercise Harness-executed verification",
+      "scope:",
+      '  include: ["src/**"]',
+      "  exclude: []",
+      "verification:",
+      "  commands:",
+      "    - commandId: unit-tests",
+      `      command: [${JSON.stringify(process.execPath)}, "tools/check.mjs"]`,
+      "constraints: []",
+      "doneCriteria: [Artifacts exist]",
+      "workflow: [IMPLEMENT]",
+      "status: READY",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  const execution = await runTask(root, "sample");
+  const evidence = await readJson(path.join(execution.runDir, "verification", "verify-001.json"));
+  const runSummary = await readJson(path.join(execution.runDir, "run-summary.json"));
+
+  assert.equal(evidence.authority, "HARNESS_EXECUTED");
+  assert.equal(evidence.observedCheck, "PASS");
+  assert.equal(evidence.verificationGateResult, "SATISFIED");
+
+  const attempt = (evidence.attempts as { decision: string; exitCode: number; stdoutRef: { path?: string } }[])[0];
+  assert.equal(attempt.decision, "ALLOWED");
+  assert.equal(attempt.exitCode, 0);
+  assert.ok(attempt.stdoutRef.path, "an executed attempt records a real stdout ref");
+
+  // The Harness ran verification itself, but commands the agent ran on its own
+  // are still invisible. These are different subjects and must not merge.
+  const authority = runSummary.evidenceAuthority as Record<string, string>;
+  assert.equal(authority.verificationAuthority, "HARNESS_EXECUTED");
+  assert.equal(authority.commandEvidenceAuthority, "NONE");
+});
+
+test("a shell interpreter is denied as a verification command", async () => {
+  const { normalizeCommand, preflightCommand } = await import("../src/command-policy.ts");
+  const result = preflightCommand({
+    normalized: normalizeCommand(["/bin/sh", "-c", "npm test"], "."),
+    commandExecution: true,
+    allowedCommands: [],
+    deniedCommands: [],
+    destructiveCommands: [],
+    approvedCategoryIds: []
+  });
+
+  assert.equal(result.decision, "BLOCKED");
+  assert.equal(result.blockedReason, "SHELL_INTERPRETER_DENIED");
+});
+
+test("a provider claim alone never satisfies the verification gate", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-claim-"));
+  await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
+  await writeFile(
+    path.join(root, ".codefleet", "config.json"),
+    `${JSON.stringify({ version: "0.1.0", defaultAgent: "codex", mode: "dry-run", workspace: { id: "claim-test" } })}\n`,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "tasks", "sample.yaml"),
+    [
+      "id: sample",
+      "title: Sample task",
+      "projectPath: .",
+      "goal: Agent claims tests passed without a verification plan",
+      "scope:",
+      '  include: ["src/**"]',
+      "  exclude: []",
+      "constraints: []",
+      "doneCriteria: [Artifacts exist]",
+      "workflow: [IMPLEMENT]",
+      "status: READY",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  const execution = await runTask(root, "sample");
+  const evidence = await readJson(path.join(execution.runDir, "verification", "verify-001.json"));
+
+  assert.equal(evidence.authority, "NONE");
+  assert.equal(evidence.observedCheck, "NONE");
+  assert.equal(evidence.verificationGateResult, "NOT_SATISFIED");
+  assert.equal(evidence.verificationGateReason, "MISSING");
+});
