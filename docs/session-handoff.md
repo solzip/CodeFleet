@@ -271,8 +271,8 @@ Design-to-code coverage, added 2026-08-10:
 ```text
 npm test now ends with a coverage number over FINAL RULE condition lines.
 
-  86 of 545 condition lines claimed by a passing test  (15.8%)
-  25 of 83 rules touched, 2 fully covered, 58 with no claim at all
+  150 of 545 condition lines claimed by a passing test  (27.5%)
+  41 of 83 rules touched, 2 fully covered, 42 with no claim at all
 
 A claim is coversRule(ruleId, "condition text") called inside a test body, so
 only a passing test records one. An unknown ruleId, a condition quote that is
@@ -287,14 +287,18 @@ and the checker enforces the classification: every rule needs a claim or an entr
 an entry goes stale the moment a test claims that rule, and an evidence path that
 does not exist fails the run.
 
-  IMPLEMENTED_UNMAPPED   16 rules  148 condition lines  code+test exist, no claim
+  NOT_IMPLEMENTED        34 rules  203 condition lines  no code
   IMPLEMENTED_UNTESTED    5 rules   30 lines            code exists, no test
   NOT_CODE_VERIFIABLE     3 rules   17 lines            design/process rules
-  NOT_IMPLEMENTED        34 rules  203 lines            no code
+  claimed, still open              145 lines            inside the 41 touched rules
 
-203 lines is the real size of the remaining implementation work. 148 lines is
-labelling, not building: claiming them would move coverage from 15.8% toward
-roughly 43% without writing a line of product code.
+The 16 IMPLEMENTED_UNMAPPED rules (148 lines) were labelled on 2026-08-10 and
+moved coverage from 15.8% to 27.5% without a line of product code.
+
+203 lines is the real size of the remaining build. The 145 open lines inside
+already-claimed rules are the next largest block and are mostly unimplemented
+conditions, not unmapped ones — e.g. Task YAML has no agentRole, guardrails, or
+requiredGates field at all.
   npm run coverage:uncovered
 ```
 

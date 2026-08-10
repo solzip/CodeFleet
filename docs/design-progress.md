@@ -44,13 +44,13 @@ id 형식 위반 / 중복           0
 status != FINAL               0
 taxonomy 밖 category/severity 0
 
-테스트                        108 pass / 0 fail
+테스트                        113 pass / 0 fail
 
 설계 대비 검증 커버리지
-  claim 이 붙은 condition       86 / 545  (15.8%)
-  한 줄이라도 검증되는 규칙     25 / 83
+  claim 이 붙은 condition       150 / 545  (27.5%)
+  한 줄이라도 검증되는 규칙     41 / 83
   전부 검증되는 규칙            2 / 83
-  claim 이 하나도 없는 규칙     58 (condition 398줄)
+  claim 이 하나도 없는 규칙     42 (condition 250줄)
 
 완전 구성 Run 의 남은 gap     adapter 가 무엇을 내놓느냐에 달려 있다
   구조화 transcript 를 냄        1건 (COMMAND_CHANNEL_NOT_HARNESS_VISIBLE)
@@ -88,7 +88,7 @@ claim 은 통과한 테스트만 남긴다.
 
 목록은 `npm run coverage:uncovered` 로 뽑는다.
 
-## 미claim 58개 규칙의 분류 (2026-08-10)
+## 미claim 규칙의 분류 (2026-08-10)
 
 `docs/rule-implementation-status.json` 이 정본이다. 규칙마다 status / evidence
 경로 / detail 을 적고, 체커가 다음을 강제한다:
@@ -100,29 +100,30 @@ claim 은 통과한 테스트만 남긴다.
 - status 값이 4종 밖이거나 detail 이 비면 실패
 ```
 
+IMPLEMENTED_UNMAPPED 16개(148줄)는 2026-08-10 에 claim 을 붙여 해소했다. 커버리지
+15.8% -> 27.5%. 제품 코드는 한 줄도 쓰지 않았다. 표시 작업이었기 때문이다.
+
 ```text
 status                 규칙  condition 줄
-IMPLEMENTED_UNMAPPED     16      148   코드·테스트 있음, claim 만 없음
+NOT_IMPLEMENTED          34      203   코드 0줄
 IMPLEMENTED_UNTESTED      5       30   코드 있음, 테스트 없음
 NOT_CODE_VERIFIABLE       3       17   설계 문서·슬라이싱 규율 규칙
-NOT_IMPLEMENTED          34      203   코드 0줄
-claim 있음 (검증됨)      25       86
-claim 있음 (남은 줄)              61
+claim 있음 (검증됨)      41      150
+claim 있음 (남은 줄)             145
 합계                     83      545
 ```
 
 읽는 법:
 
 ```text
-203줄  진짜 미구현. 여기가 1번 작업의 크기다.
-        Export/Redaction 32, Risk engine 16, AgentRole/Guardrail 23,
-        Project Profile 스키마 전체, requiredGates 강제, 시스템 자동 리뷰 등
+203줄  진짜 미구현. 여기가 남은 구현 작업의 크기다.
+        Project Profile 스키마 전체 61, requiredGates 구체화·병합 41,
+        Export/Redaction/S5 32, AgentRole/Role/Guardrail 23,
+        시스템 자동 리뷰 18, Risk engine 16, 나머지
 
-148줄  코드도 테스트도 있는데 claim 만 안 붙은 것.
-        claim 을 붙이면 커버리지가 15.8% -> 최대 43% 근처까지 오른다.
-        이건 구현 작업이 아니라 표시 작업이다.
-
-61줄   이미 건드린 규칙 안에서 아직 검증 안 된 나머지 줄.
+145줄  이미 claim 이 붙은 41개 규칙 안에서 아직 검증 안 된 나머지 줄.
+        여기가 지금 가장 큰 덩어리이고, 대부분 미구현 조건이 섞여 있다.
+        (예: Task Revision 에 agentRole / guardrails / requiredGates 필드가 없음)
 
 30줄   코드는 있는데 그 규칙을 검사하는 테스트가 없다.
 

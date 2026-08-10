@@ -26,6 +26,8 @@ const VERIFIED = "VERIFIED_REQUIRES_ACCEPTED_REVIEW_AND_SATISFIED_GATES";
 const IMPORT = "LOCAL_REVIEW_IMPORT_APPENDS_LEDGER_DECISION";
 const CONFLICT = "REVIEW_DECISION_MIGRATION_CONFLICTS_ARE_EXPLICIT";
 const PHASES = "MUTATION_COMMAND_PHASES_ARE_FIXED";
+const DURABLE = "RUN_REVIEW_DECIDED_IS_DURABLE_DECISION_EVENT";
+const LATEST = "LATEST_EFFECTIVE_REVIEW_DECISION_IS_LEDGER_DERIVED";
 
 async function seed(): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-ledger-"));
@@ -442,6 +444,10 @@ test("importing a local review appends a decision event carrying its migration s
     "appended RUN_REVIEW_DECIDED records migrationSource LOCAL_REVIEW_DECISION and migrationSourceRef/hash."
   );
   coversRule(CONFLICT, "identical already-imported decision is idempotent and appends no event.");
+  coversRule(DURABLE, "RUN_REVIEW_DECIDED is appended to the Objective ledger");
+  coversRule(DURABLE, "RUN_REVIEW_DECIDED includes reviewDecisionId");
+  coversRule(DURABLE, "RUN_REVIEW_DECIDED includes actorKind, actorId, decisionBasis, reason, at");
+  coversRule(IMPORT, "migration does not edit review-decision.local.json.");
 });
 
 test("a waived acceptance carries its waived gaps into the ledger", async () => {
@@ -504,6 +510,8 @@ test("the same reviewDecisionId with a different bundle blocks migration", async
     "same reviewDecisionId with different ReviewEvidenceBundle hash is REVIEW_INTEGRITY and blocks import."
   );
   coversRule(IMPORT, "reviewDecisionId collision with different bundle hash blocks migration.");
+  coversRule(LATEST, "Review Decision must have effective ReviewEvidenceBundle");
+  coversRule(DURABLE, "RUN_REVIEW_DECIDED includes reviewEvidenceBundleRef and reviewEvidenceBundleHash");
 });
 
 test("an accepted review with a satisfied gate derives VERIFIED and moves the cursor", async () => {
@@ -529,6 +537,15 @@ test("an accepted review with a satisfied gate derives VERIFIED and moves the cu
   coversRule(
     VERIFIED,
     "VERIFIED is calculated for objectiveQueueItemId + taskId + taskRevision, not runId alone"
+  );
+  coversRule(
+    LATEST,
+    "effective Review Decision is calculated for objectiveQueueItemId + taskId + taskRevision"
+  );
+  coversRule(LATEST, "runId is evidence link and does not define VERIFIED identity by itself");
+  coversRule(
+    DURABLE,
+    "RUN_REVIEW_DECIDED does not directly write DONE, FAILED, VERIFIED, NEXT, or Queue State"
   );
 });
 

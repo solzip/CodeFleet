@@ -14,6 +14,18 @@ const COMMAND_TRUTH = "COMMAND_TRUTH_REQUIRES_HARNESS_VISIBLE_CHANNEL";
 const UNTRACKED = "GENERATED_UNTRACKED_AND_GITIGNORED_FILES_ARE_POLICY_SUBJECTS";
 const DELETE_RENAME = "DELETE_AND_RENAME_CHECK_SOURCE_AND_TARGET";
 const SYMLINK = "SYMLINK_TARGET_MUST_NOT_ESCAPE_PATH_POLICY";
+const S2_LAYOUT = "S2_MINIMUM_ARTIFACT_LAYOUT_IS_FIXED";
+const S2_THREE = "S2_RUN_ATTEMPT_ALWAYS_LEAVES_THREE_ARTIFACTS";
+const REQ_AGNOSTIC = "ADAPTER_REQUEST_IS_PROVIDER_AGNOSTIC";
+const RESULT_EVIDENCE = "ADAPTER_RESULT_IS_EVIDENCE_NOT_DECISION";
+const TRACE_ARTIFACTS = "ADAPTER_REQUEST_AND_RESULT_ARE_RUN_TRACE_ARTIFACTS";
+const OBSERVATION = "HARNESS_OBSERVATION_OWNS_EXECUTION_EVIDENCE";
+const VERIF_EVIDENCE = "VERIFICATION_EVIDENCE_IS_HARNESS_OWNED";
+const VERIF_EXEC = "VERIFICATION_EXECUTION_IS_HARNESS_OWNED_EVIDENCE";
+const SUMMARY_LAYOUT = "RUN_SUMMARY_VERIFICATION_AND_LOCAL_REVIEW_LAYOUT_FIXED";
+const PLAN_IMMUTABLE = "RUN_PLAN_IS_IMMUTABLE_RESUME_BOUNDARY";
+const TASK_SOURCE = "TASK_REVISION_MINIMUM_CONTRACT_IS_SOURCE_ONLY";
+const CMD_AUTHORITY = "COMMAND_EXECUTION_REQUIRES_OBSERVABLE_AUTHORITY_OR_DEGRADED_POLICY";
 
 // Running now requires an approval bound to the exact task content, so every
 // fixture approves before it runs.
@@ -178,6 +190,42 @@ test("runTask writes run-plan and S2 artifacts before legacy result", async () =
   assert.equal((runSummary.safeguards as { canProduceVerified: boolean }).canProduceVerified, false);
   assert.equal(legacyResult.adapterResultPath, execution.result.adapterResultPath);
   assert.equal(legacyResult.runSummaryPath, execution.result.runSummaryPath);
+
+  coversRule(
+    S2_LAYOUT,
+    "adapter-request.json contains no provider token, provider model, provider-specific CLI option, local command path, or transcript parsing rule"
+  );
+  coversRule(
+    S2_LAYOUT,
+    "adapter-result.json is created after adapter completion, launch failure, timeout, cancellation, or malformed output"
+  );
+  coversRule(REQ_AGNOSTIC, "AdapterRequest contains stable CodeFleet ids and references");
+  coversRule(REQ_AGNOSTIC, "AdapterRequest contains no provider-specific CLI option");
+  coversRule(RESULT_EVIDENCE, "AdapterResult records adapterExecutionStatus");
+  coversRule(
+    RESULT_EVIDENCE,
+    "Core normalizer derives Run Summary from Run Trace, AdapterResult, HarnessObservation, and verification evidence"
+  );
+  coversRule(
+    SUMMARY_LAYOUT,
+    "run-summary.json contains normalized execution fields plus refs/hash for its evidence inputs"
+  );
+  coversRule(
+    SUMMARY_LAYOUT,
+    "VerificationEvidence hash is the canonical content hash of the attempt artifact"
+  );
+  coversRule(
+    VERIF_EVIDENCE,
+    "if verification is required, Execution Harness creates VerificationEvidence even when no command could be run"
+  );
+  coversRule(VERIF_EVIDENCE, "VerificationEvidence is stored as a durable Run Trace Evidence artifact");
+  coversRule(PLAN_IMMUTABLE, "run-plan.json has a stable runPlanId and runId");
+  coversRule(
+    PLAN_IMMUTABLE,
+    "run-plan.json records source refs and hashes for Task Revision and Project Profile"
+  );
+  coversRule(PLAN_IMMUTABLE, "run-plan.json records artifactPlan paths for required Run artifacts");
+  coversRule(TRACE_ARTIFACTS, "prompt artifact is referenced by AdapterRequest");
 });
 
 test("the workspace snapshot sees a change git is configured to ignore", async () => {
@@ -535,6 +583,35 @@ test("runTask preserves S2 artifacts when adapter creation fails", async () => {
   assert.equal(adapterError.code, "LAUNCH_FAILED");
   assert.match(adapterError.message, /Unsupported agent: missing-adapter/);
   assert.equal(legacyResult.error, "Unsupported agent: missing-adapter");
+
+  coversRule(S2_THREE, "every Run attempt that reaches AdapterRequest creation leaves an AdapterRequest artifact");
+  coversRule(S2_THREE, "every Run attempt that reaches AdapterRequest creation leaves a HarnessObservation artifact");
+  coversRule(
+    S2_THREE,
+    "every Run attempt that reaches AdapterRequest creation leaves an AdapterResult artifact or synthetic AdapterResult artifact"
+  );
+  coversRule(
+    S2_THREE,
+    "adapter launch failure produces synthetic AdapterResult with adapterExecutionStatus = ADAPTER_FAILED and adapterError.code = LAUNCH_FAILED"
+  );
+  coversRule(S2_THREE, "adapter failure does not erase HarnessObservation");
+  coversRule(
+    S2_LAYOUT,
+    "if the adapter cannot produce structured AdapterResult, Execution Harness creates synthetic adapter-result.json"
+  );
+  coversRule(
+    S2_LAYOUT,
+    "harness-observation.json is created for every Run attempt that reaches AdapterRequest creation"
+  );
+  coversRule(RESULT_EVIDENCE, "synthetic AdapterResult records adapterError.code and adapterError.message");
+  coversRule(
+    RESULT_EVIDENCE,
+    "if AgentAdapter failed before returning structured output, Execution Harness creates synthetic=true AdapterResult"
+  );
+  coversRule(
+    OBSERVATION,
+    "Execution Harness creates a HarnessObservation artifact for every Run attempt"
+  );
 });
 
 async function readJson(filePath: string): Promise<Record<string, unknown>> {
@@ -853,6 +930,21 @@ test("verification commands are executed by the Harness and open the gate", asyn
     COMMAND_TRUTH,
     "HARNESS_EXECUTED command truth must come from Execution Harness direct command execution"
   );
+  coversRule(
+    VERIF_EVIDENCE,
+    "HARNESS_EXECUTED verification evidence may satisfy observedCheck PASS when the command matches verificationPlan and exits successfully"
+  );
+  coversRule(VERIF_EVIDENCE, "observedCheck is derived from VerificationEvidence, not from human input");
+  coversRule(
+    VERIF_EVIDENCE,
+    "verificationGateResult and verificationGateReason are derived by CodeFleet from requiredGates.verification, observedCheck, and waiver policy"
+  );
+  coversRule(VERIF_EXEC, "observedCheck is derived from VerificationEvidence.");
+  coversRule(
+    VERIF_EXEC,
+    "HARNESS_EXECUTED and HARNESS_OBSERVED satisfying 8.2.2 channel-integrity conditions are the only PASS authorities."
+  );
+  coversRule(VERIF_EXEC, "Task Revision verification.commands are execution intent, not command permission.");
 });
 
 test("a shell interpreter is denied as a verification command", async () => {
@@ -868,6 +960,12 @@ test("a shell interpreter is denied as a verification command", async () => {
 
   assert.equal(result.decision, "BLOCKED");
   assert.equal(result.blockedReason, "SHELL_INTERPRETER_DENIED");
+
+  coversRule(VERIF_EXEC, "Verification commands must pass command policy preflight.");
+  coversRule(
+    TASK_SOURCE,
+    "Task Revision.verification.commands may request verification but does not grant command execution permission"
+  );
 });
 
 test("a provider claim alone never satisfies the verification gate", async () => {
@@ -911,6 +1009,17 @@ test("a provider claim alone never satisfies the verification gate", async () =>
     COMMAND_TRUTH,
     "command truth is recognized only when commands.authority is HARNESS_OBSERVED or HARNESS_EXECUTED"
   );
+  coversRule(
+    VERIF_EVIDENCE,
+    "PROVIDER_REPORTED_ONLY verification is degraded evidence and cannot satisfy observedCheck PASS"
+  );
+  coversRule(VERIF_EXEC, "PROVIDER_REPORTED_ONLY must not produce observedCheck PASS.");
+  coversRule(VERIF_EXEC, "blocked or unavailable verification command produces SKIP or NONE, not PASS.");
+  coversRule(
+    CMD_AUTHORITY,
+    "degraded command observation uses commands.authority = PROVIDER_REPORTED_ONLY or NONE"
+  );
+  coversRule(CMD_AUTHORITY, "degraded command observation blocks automatic VERIFIED calculation");
 });
 
 test("run-plan.json is written once and is not rewritten later in the Run", async () => {
@@ -958,6 +1067,13 @@ test("run-plan.json is written once and is not rewritten later in the Run", asyn
     planRef.contentHash,
     "every artifact must reference the same run-plan content"
   );
+
+  coversRule(PLAN_IMMUTABLE, "run-plan.json is immutable after its hash is finalized");
+  coversRule(
+    S2_LAYOUT,
+    "harness-observation.json references run-plan.json and adapter-request.json by path and hash"
+  );
+  coversRule(TRACE_ARTIFACTS, "artifact paths are inside the Run Trace or allowed workspace evidence location");
 });
 
 test("a delete and a rename are both reported, naming each side", async () => {

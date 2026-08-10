@@ -4,6 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { discoverWorkspace } from "../src/workspace.ts";
+import { coversRule } from "./rule-coverage.ts";
+
+const DISCOVERY = "WORKSPACE_DISCOVERY_RESOLVES_SINGLE_WORKSPACE_CONTRACT";
 
 test("discoverWorkspace finds nearest parent .codefleet config", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-workspace-"));
@@ -26,6 +29,11 @@ test("discoverWorkspace finds nearest parent .codefleet config", async () => {
   assert.equal(discovery.configRef.path, ".codefleet/config.json");
   assert.equal(discovery.configRef.present, true);
   assert.equal(discovery.localOverlayRef.present, false);
+
+  coversRule(DISCOVERY, "workspaceRootRef equals .");
+  coversRule(DISCOVERY, "metadataRootRef equals .codefleet");
+  coversRule(DISCOVERY, "configRef.path equals .codefleet/config.json");
+  coversRule(DISCOVERY, "workspaceId equals Project Profile workspace.id after Project Profile validation");
 });
 
 test("discoverWorkspace supports explicit workspace", async () => {
@@ -39,4 +47,9 @@ test("discoverWorkspace supports explicit workspace", async () => {
   assert.equal(discovery.discoveryMode, "EXPLICIT");
   assert.equal(discovery.selectedBy, "explicit-workspace");
   assert.equal(discovery.workspaceId, "default");
+
+  coversRule(
+    DISCOVERY,
+    "exactly one selectedWorkspaceRootRealPath is resolved by explicit --workspace or nearest-parent discovery"
+  );
 });

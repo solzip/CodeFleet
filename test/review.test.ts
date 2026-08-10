@@ -13,6 +13,8 @@ const BUNDLE = "REVIEW_DECISION_REQUIRES_FROZEN_EVIDENCE_BUNDLE";
 const HASH = "REVIEW_EVIDENCE_ABSENCE_AND_HASH_MISMATCH_HAVE_DIFFERENT_EFFECTS";
 const RECORD = "RUN_RECORD_IS_LOCAL_DERIVED_NARRATIVE";
 const MIG = "LOCAL_REVIEW_MIGRATION_STATUS_IS_DERIVED";
+const V02 = "REVIEW_MODEL_V02_IS_LOCAL_MIGRATION_PATH";
+const SUMMARY_LAYOUT = "RUN_SUMMARY_VERIFICATION_AND_LOCAL_REVIEW_LAYOUT_FIXED";
 
 // Running now requires an approval bound to the exact task content, so every
 // fixture approves before it runs.
@@ -85,6 +87,13 @@ test("review writes an evidence bundle and a local decision that is not final tr
   coversRule(BUNDLE, "ReviewEvidenceBundle references the Run evidence considered at decision time");
   coversRule(BUNDLE, "ReviewEvidenceBundle records observedResultSnapshot and observedCheckSnapshot");
   coversRule(BUNDLE, "ReviewEvidenceBundle records verificationGateResult calculated by CodeFleet");
+  coversRule(V02, "normal v0.2 review creates ReviewEvidenceBundle before writing review-decision.local.json.");
+  coversRule(
+    V02,
+    "review-decision.local.json has finalDecisionTruth false and migrationTarget RUN_REVIEW_DECIDED."
+  );
+  coversRule(SUMMARY_LAYOUT, "local review artifact is explicitly marked finalDecisionTruth false");
+  coversRule(SUMMARY_LAYOUT, "local review artifact contains migrationTarget RUN_REVIEW_DECIDED");
 });
 
 test("local review never produces VERIFIED or queue progression", async () => {
@@ -115,6 +124,11 @@ test("ACCEPTED is refused when the verification gate is not satisfied", async ()
   await assert.rejects(
     () => reviewRun(root, runId, { decision: "ACCEPTED", reason: "looks fine" }),
     /ACCEPTED local review is not allowed/
+  );
+
+  coversRule(
+    V02,
+    "ACCEPTED local review requires successful normalized result, satisfied or waived verification gate, and no unresolved path violation."
   );
 });
 
@@ -208,6 +222,15 @@ test("a capability gap can be waived by a human, item by item", async () => {
   const waived = localReview.waivedCapabilityGaps as { reason: string; justification: string }[];
   assert.equal(waived.length, gaps.length, "every waived gap is recorded by name");
   assert.ok(waived.every((entry) => entry.justification.length > 0));
+
+  coversRule(
+    V02,
+    "a CAPABILITY_GAP blocks ACCEPTED unless a human waives that specific reason with a justification."
+  );
+  coversRule(
+    V02,
+    "a waived ACCEPTED records evidenceCompleteness WAIVED_INCOMPLETE and lists every waived reason."
+  );
 });
 
 test("an evidence defect cannot be waived by anyone", async () => {
@@ -231,6 +254,12 @@ test("an evidence defect cannot be waived by anyone", async () => {
         waiveJustification: "trying to waive a hash mismatch"
       }),
     /evidence defect cannot be waived/
+  );
+
+  coversRule(V02, "an EVIDENCE_DEFECT in the bundle blocks ACCEPTED and cannot be waived by any actor.");
+  coversRule(
+    V02,
+    "a local review degraded by EVIDENCE_DEFECT cannot be ACCEPTED and cannot be used as acceptance evidence."
   );
 });
 
@@ -321,6 +350,8 @@ test("a review that did not waive its gaps records INCOMPLETE, not COMPLETE", as
   const localReview = await readJson(path.join(root, ".codefleet", "runs", runId, "review-decision.local.json"));
   assert.equal(localReview.evidenceCompleteness, "INCOMPLETE");
   assert.notEqual(localReview.bundleStatus, "COMPLETE");
+
+  coversRule(V02, "review-decision.local.json references ReviewEvidenceBundle when bundleStatus is COMPLETE.");
 });
 
 test("an evidence defect is reported once, naming the artifact", async () => {
