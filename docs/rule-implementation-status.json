@@ -91,7 +91,7 @@
     "POLICY_RULE_ID_IS_UNIQUE_WITH_REF_RECORDED_ORIGIN": {
       "status": "NOT_IMPLEMENTED",
       "evidence": "src/config.ts",
-      "detail": "no named policy rules exist to have ids: definedByRef appears nowhere in src, and nothing parses or uniqueness-checks a rule id across the Core and Profile id space. The policies block itself IS read as of 3380691 (loadCommandPolicy, loadHarnessPolicy), but those are fixed known keys, not id-bearing rules."
+      "detail": "no named policy rules exist to have ids: definedByRef appears nowhere in src, and nothing parses or uniqueness-checks a rule id across the Core and Profile id space. The policies block itself IS read as of 3fbe0b5 (loadCommandPolicy, loadHarnessPolicy), but those are fixed known keys, not id-bearing rules."
     },
     "PROFILE_CONFIG_IS_WORKSPACE_CONTRACT": {
       "status": "NOT_IMPLEMENTED",

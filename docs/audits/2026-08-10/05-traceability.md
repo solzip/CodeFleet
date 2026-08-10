@@ -2,9 +2,9 @@
 
 ```text
 점검 일시   : 2026-08-10
-점검 대상   : 3d793ec0802147c6d3825be36cbb1c893f52d951 (codeFleet/)
-             점검 시각의 작업 트리 기준. src/ 는 직전 커밋 15274570 와 바이트 동일하고,
-             3d793ec 는 README 한/영 분리와 task-001.yaml verification 블록만 담는다.
+점검 대상   : 70fa598c39ae42038c26992a099caec18cb2657f (codeFleet/)
+             점검 시각의 작업 트리 기준. src/ 는 직전 커밋 35f70be4 와 바이트 동일하고,
+             70fa598 는 README 한/영 분리와 task-001.yaml verification 블록만 담는다.
 점검 범위   : src/run.ts, src/ledger.ts, src/task-ledger.ts, src/review.ts, src/cli.ts,
              src/workspace.ts, src/workspace-snapshot.ts, src/run-record.ts
 측정 근거   : npm test — 128 tests, 128 pass
