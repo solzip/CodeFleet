@@ -171,7 +171,7 @@ Open the run result:
 
 ## Execute Mode
 
-Dry-run is the supported default for v0.1. To let the Codex adapter launch a process, change `.codefleet/config.json`:
+Dry-run is the supported default. To let the Codex adapter launch a process, change `.codefleet/config.json`:
 
 ```json
 {
@@ -183,11 +183,47 @@ Dry-run is the supported default for v0.1. To let the Codex adapter launch a pro
       "command": "codex",
       "args": ["exec", "-"]
     }
+  },
+  "policies": {
+    "harness": { "allowDegradedCommandObservation": true }
   }
 }
 ```
 
 The generated prompt is passed to the configured command on stdin. Treat execute mode as an adapter hook that may need adjustment for your installed Codex CLI.
+
+### Why execute mode needs `allowDegradedCommandObservation`
+
+Without it, `codefleet run` refuses to start and writes no Run directory:
+
+```text
+Run Planning is blocked: this Run may execute commands, and no Harness-visible
+command channel exists to observe them.
+```
+
+CodeFleet has no command proxy, sandbox log, or container exec log. An agent running under execute mode can run any command, and the only record of what it ran is the agent's own transcript — a claim, not an observation. Such a claim can never satisfy command policy, verification, or VERIFIED.
+
+Setting the flag does not make those commands observed. It records that you decided to proceed anyway. Every Run under it keeps `COMMAND_CHANNEL_NOT_HARNESS_VISIBLE` in its unavailable reasons and still requires a human review.
+
+### Command policy
+
+`policies.commands` is enforced for commands the Harness runs itself, which today means verification commands:
+
+```json
+{
+  "policies": {
+    "commands": {
+      "allowedCommands": [{ "argv": ["npm", "test"] }],
+      "deniedCommands": [{ "argv": ["git", "push"] }],
+      "destructiveCommands": [{ "categoryId": "INFRA_APPLY", "argv": ["terraform", "apply"] }]
+    }
+  }
+}
+```
+
+Matchers are argv token lists, compared as written. There is no glob and no regex: a token containing `*`, `?`, or bracket characters is rejected rather than accepted and quietly never matched. `matchMode` is `PREFIX` (default) or `EXACT`. Denied is evaluated first and wins; an empty `allowedCommands` does not constrain, a non-empty one does. A destructive entry needs an `UPPER_SNAKE_CASE` `categoryId`, because approval is granted per category.
+
+Commands the agent runs on its own are **not** judged against this policy. The Harness never saw them, so treating a transcript claim as a violation would mean believing the claim.
 
 ## Roadmap
 

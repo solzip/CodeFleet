@@ -154,6 +154,21 @@ export async function runTask(
     );
   }
 
+  // Run Planning is blocked when the Run may execute commands that no
+  // Harness-visible channel can observe. CodeFleet has no command proxy or
+  // sandbox log yet, so that channel never exists, and running anyway means
+  // producing a Run whose command evidence can only ever be a provider claim.
+  // Allowing it is a decision a person makes in the profile, in writing.
+  const commandChannelBlock = blockedCommandChannelReason({
+    commandExecution: config.mode === "execute",
+    requireHarnessVisibleCommandChannel: config.policies.commands.requireHarnessVisibleCommandChannel,
+    harnessVisibleCommandChannel: HARNESS_VISIBLE_COMMAND_CHANNEL,
+    allowDegradedCommandObservation: config.policies.harness.allowDegradedCommandObservation
+  });
+  if (commandChannelBlock !== null) {
+    throw new Error(commandChannelBlock);
+  }
+
   const projectPath = await resolveWorkspaceProjectPath(discovery.selectedWorkspaceRootRealPath, task.projectPath);
   const startedAtDate = new Date();
   const runId = await nextRunId(rootDir, startedAtDate);
@@ -798,6 +813,41 @@ function runSummaryUnavailableReasons(input: {
     reasons.add("DRY_RUN_NOT_EXECUTED");
   }
   return Array.from(reasons).sort();
+}
+
+// There is no command proxy, sandbox log, or container exec log. This constant
+// is the single place that claim is made, so implementing such a channel is one
+// edit and not a search.
+const HARNESS_VISIBLE_COMMAND_CHANNEL = false;
+
+export function blockedCommandChannelReason(input: {
+  commandExecution: boolean;
+  requireHarnessVisibleCommandChannel: boolean;
+  harnessVisibleCommandChannel: boolean;
+  allowDegradedCommandObservation: boolean;
+}): string | null {
+  if (!input.commandExecution) {
+    return null;
+  }
+  if (input.harnessVisibleCommandChannel) {
+    return null;
+  }
+  if (!input.requireHarnessVisibleCommandChannel || input.allowDegradedCommandObservation) {
+    return null;
+  }
+  return [
+    "Run Planning is blocked: this Run may execute commands, and no Harness-visible",
+    "command channel exists to observe them.",
+    "",
+    "Command evidence would be a provider claim only, which cannot satisfy command",
+    "policy, verification, or VERIFIED.",
+    "",
+    "To run anyway, record the decision in .codefleet/config.json:",
+    '  "policies": { "harness": { "allowDegradedCommandObservation": true } }',
+    "",
+    "Every Run under that setting keeps COMMAND_CHANNEL_NOT_HARNESS_VISIBLE and",
+    "requires a human review."
+  ].join("\n");
 }
 
 function addUnavailableReason(reasons: Set<string>, value: unknown): void {

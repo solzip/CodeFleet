@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { loadCommandPolicy } from "../src/config.ts";
+import { loadCommandPolicy, loadHarnessPolicy } from "../src/config.ts";
 import { validateCommandMatchers } from "../src/command-policy.ts";
 import { coversRule } from "./rule-coverage.ts";
 
@@ -96,6 +96,34 @@ test("every problem in a matcher list is reported, not just the first", () => {
       [3, "NOT_AN_OBJECT"]
     ]
   );
+});
+
+test("an absent harness policy defaults to refusing unobservable command execution", () => {
+  const policy = loadHarnessPolicy(undefined);
+
+  // AND, false wins. Running commands nobody can observe must be a written
+  // decision, so an absent block cannot amount to one.
+  assert.equal(policy.allowDegradedCommandObservation, false);
+  assert.equal(policy.approvalRequiredForDestructiveCommands, true);
+  assert.equal(policy.requireIsolationForMutation, true);
+});
+
+test("policies.harness rejects unknown keys, bad modes, and non-boolean switches", () => {
+  assert.throws(
+    () => loadHarnessPolicy({ allowDegradedCommandObservations: true }),
+    /unknown key\(s\) in policies\.harness: allowDegradedCommandObservations/
+  );
+  assert.throws(() => loadHarnessPolicy({ allowedModes: ["COMMAND_EXEC", "YOLO"] }), /unknown mode\(s\): YOLO/);
+  assert.throws(() => loadHarnessPolicy({ maxMode: "SUPER" }), /maxMode must be one of/);
+  assert.throws(() => loadHarnessPolicy({ allowDegradedCommandObservation: "true" }), /must be a boolean/);
+});
+
+test("a partial harness policy keeps the strict default for what it did not say", () => {
+  const policy = loadHarnessPolicy({ allowDegradedCommandObservation: true });
+
+  assert.equal(policy.allowDegradedCommandObservation, true);
+  assert.equal(policy.approvalRequiredForDestructiveCommands, true);
+  assert.deepEqual(policy.allowedModes, ["DRY_RUN", "SUGGEST_ONLY", "WORKSPACE_EDIT", "COMMAND_EXEC"]);
 });
 
 test("a valid command policy loads with its entries intact", () => {

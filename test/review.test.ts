@@ -303,6 +303,9 @@ async function seedVerifiedWorkspace(): Promise<{ root: string; runId: string }>
       version: "0.1.0",
       defaultAgent: "codex",
       mode: "execute",
+      // Commands run outside any Harness-visible channel, which Run Planning
+      // blocks unless the profile records that decision.
+      policies: { harness: { allowDegradedCommandObservation: true } },
       agents: { codex: { command: process.execPath, args: ["tools/agent.mjs"] } },
       workspace: { id: "verified-test" }
     })}\n`,

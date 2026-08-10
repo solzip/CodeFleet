@@ -106,7 +106,7 @@
     "PROFILE_POLICY_BLOCK_KEYS_FIXED": {
       "status": "IMPLEMENTED_UNTESTED",
       "evidence": "src/config.ts",
-      "detail": "loadCommandPolicy rejects unknown keys inside policies.commands, but the policies block itself still accepts any top-level key, so the rule's own condition about the nine allowed block names is unenforced."
+      "detail": "policies.commands and policies.harness each reject unknown keys inside themselves, but the policies block still accepts any block name, so the rule's own condition about the nine allowed names is unenforced."
     },
     "ADAPTER_CANNOT_EXPAND_CAPABILITIES": {
       "status": "NOT_IMPLEMENTED",

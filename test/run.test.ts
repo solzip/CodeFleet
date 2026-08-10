@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { runTask } from "../src/run.ts";
+import { blockedCommandChannelReason, runTask } from "../src/run.ts";
 import { approveTask } from "../src/task-ledger.ts";
 import { findTaskPath } from "../src/task.ts";
 import { coversRule } from "./rule-coverage.ts";
@@ -263,6 +263,9 @@ test("the workspace snapshot sees a change git is configured to ignore", async (
       version: "0.1.0",
       defaultAgent: "codex",
       mode: "execute",
+      // Commands run outside any Harness-visible channel, which Run Planning
+      // blocks unless the profile records that decision.
+      policies: { harness: { allowDegradedCommandObservation: true } },
       agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
       workspace: { id: "snapshot-e2e" }
     })}\n`,
@@ -374,6 +377,9 @@ test("a provider-reported command is recorded but never becomes command truth", 
       version: "0.1.0",
       defaultAgent: "codex",
       mode: "execute",
+      // Commands run outside any Harness-visible channel, which Run Planning
+      // blocks unless the profile records that decision.
+      policies: { harness: { allowDegradedCommandObservation: true } },
       agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
       workspace: { id: "transcript-test" }
     })}\n`,
@@ -474,7 +480,12 @@ async function seedCommandPolicyRun(
       mode: "execute",
       agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
       workspace: { id: label },
-      policies: { commands: commandsPolicy }
+      policies: {
+        commands: commandsPolicy,
+        // Commands run outside any Harness-visible channel, which Run Planning
+        // blocks unless the profile records that decision.
+        harness: { allowDegradedCommandObservation: true }
+      }
     })}\n`,
     "utf8"
   );
@@ -504,6 +515,78 @@ async function seedCommandPolicyRun(
   const execution = await runTask(root, "sample");
   return { root, runDir: execution.runDir };
 }
+
+test("a Run that may execute unobservable commands is blocked before any artifact", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-channel-"));
+  await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
+  await mkdir(path.join(root, ".codefleet", "runs"), { recursive: true });
+  await writeFile(path.join(root, "agent.mjs"), "\n", "utf8");
+  await writeFile(
+    path.join(root, ".codefleet", "config.json"),
+    // No policies block at all: the strict default must apply.
+    `${JSON.stringify({
+      version: "0.1.0",
+      defaultAgent: "codex",
+      mode: "execute",
+      agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
+      workspace: { id: "channel-test" }
+    })}\n`,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "tasks", "sample.yaml"),
+    [
+      "id: sample",
+      "title: Sample task",
+      "projectPath: .",
+      "goal: Exercise the command channel block",
+      "scope:",
+      "  include: [src/**]",
+      "  exclude: []",
+      "constraints: []",
+      "doneCriteria: [done]",
+      "workflow: [edit]",
+      "status: READY",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  await approveForTest(root, "sample");
+
+  await assert.rejects(() => runTask(root, "sample"), /Run Planning is blocked/);
+
+  // Blocked at planning means no Run Trace: there is nothing to review, and a
+  // half-written Run directory would look like an attempt that happened.
+  assert.deepEqual(await readdir(path.join(root, ".codefleet", "runs")), []);
+
+  coversRule(
+    "COMMAND_EXECUTION_REQUIRES_OBSERVABLE_AUTHORITY_OR_DEGRADED_POLICY",
+    "if commandExecution is true and no Harness-visible command channel exists, Run Planning is blocked by default"
+  );
+  coversRule(
+    "COMMAND_EXECUTION_REQUIRES_OBSERVABLE_AUTHORITY_OR_DEGRADED_POLICY",
+    "degraded command observation may be allowed only by explicit policy"
+  );
+});
+
+test("the command channel block turns on and off for exactly one reason each", () => {
+  const base = {
+    commandExecution: true,
+    requireHarnessVisibleCommandChannel: true,
+    harnessVisibleCommandChannel: false,
+    allowDegradedCommandObservation: false
+  };
+
+  assert.match(String(blockedCommandChannelReason(base)), /Run Planning is blocked/);
+
+  // A dry run executes nothing, so there is nothing to observe.
+  assert.equal(blockedCommandChannelReason({ ...base, commandExecution: false }), null);
+  // An observable channel removes the reason entirely.
+  assert.equal(blockedCommandChannelReason({ ...base, harnessVisibleCommandChannel: true }), null);
+  // Either switch alone is enough to permit it, and both are written decisions.
+  assert.equal(blockedCommandChannelReason({ ...base, allowDegradedCommandObservation: true }), null);
+  assert.equal(blockedCommandChannelReason({ ...base, requireHarnessVisibleCommandChannel: false }), null);
+});
 
 test("a denied verification command is blocked and recorded as a command violation", async () => {
   // The whole point of policies.commands: before this was wired, this command
@@ -802,6 +885,9 @@ test("changed-files evidence includes untracked files created during the Run", a
       version: "0.1.0",
       defaultAgent: "codex",
       mode: "execute",
+      // Commands run outside any Harness-visible channel, which Run Planning
+      // blocks unless the profile records that decision.
+      policies: { harness: { allowDegradedCommandObservation: true } },
       agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
       workspace: { id: "untracked-test" }
     })}\n`,
@@ -875,6 +961,9 @@ test("an out-of-scope untracked file is recorded as a path violation", async () 
       version: "0.1.0",
       defaultAgent: "codex",
       mode: "execute",
+      // Commands run outside any Harness-visible channel, which Run Planning
+      // blocks unless the profile records that decision.
+      policies: { harness: { allowDegradedCommandObservation: true } },
       agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
       workspace: { id: "path-policy-test" }
     })}\n`,
@@ -960,6 +1049,9 @@ test("a nested repository degrades the path policy evaluation instead of claimin
       version: "0.1.0",
       defaultAgent: "codex",
       mode: "execute",
+      // Commands run outside any Harness-visible channel, which Run Planning
+      // blocks unless the profile records that decision.
+      policies: { harness: { allowDegradedCommandObservation: true } },
       agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
       workspace: { id: "nested-test" }
     })}\n`,
@@ -1018,6 +1110,9 @@ test("verification commands are executed by the Harness and open the gate", asyn
       version: "0.1.0",
       defaultAgent: "codex",
       mode: "execute",
+      // Commands run outside any Harness-visible channel, which Run Planning
+      // blocks unless the profile records that decision.
+      policies: { harness: { allowDegradedCommandObservation: true } },
       agents: { codex: { command: process.execPath, args: ["tools/agent.mjs"] } },
       workspace: { id: "verify-test" }
     })}\n`,
@@ -1246,6 +1341,9 @@ test("a delete and a rename are both reported, naming each side", async () => {
       version: "0.1.0",
       defaultAgent: "codex",
       mode: "execute",
+      // Commands run outside any Harness-visible channel, which Run Planning
+      // blocks unless the profile records that decision.
+      policies: { harness: { allowDegradedCommandObservation: true } },
       agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
       workspace: { id: "rename-test" }
     })}\n`,
@@ -1325,6 +1423,9 @@ test("a symlink whose target leaves the workspace is recorded as a violation", a
       version: "0.1.0",
       defaultAgent: "codex",
       mode: "execute",
+      // Commands run outside any Harness-visible channel, which Run Planning
+      // blocks unless the profile records that decision.
+      policies: { harness: { allowDegradedCommandObservation: true } },
       agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
       workspace: { id: "symlink-test" }
     })}\n`,
@@ -1525,6 +1626,9 @@ test("artifacts report what was scanned, so nothing examined differs from nothin
       version: "0.1.0",
       defaultAgent: "codex",
       mode: "execute",
+      // Commands run outside any Harness-visible channel, which Run Planning
+      // blocks unless the profile records that decision.
+      policies: { harness: { allowDegradedCommandObservation: true } },
       agents: { codex: { command: process.execPath, args: ["tools/agent.mjs"] } },
       workspace: { id: "scope-test" }
     })}\n`,

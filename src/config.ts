@@ -4,8 +4,10 @@ import { validateCommandMatchers } from "./command-policy.ts";
 import {
   DEFAULT_COMMAND_POLICY,
   DEFAULT_CONFIG,
+  DEFAULT_HARNESS_POLICY,
   type CodeFleetConfig,
-  type CommandPolicyConfig
+  type CommandPolicyConfig,
+  type HarnessPolicyConfig
 } from "./types.ts";
 
 export interface InitResult {
@@ -49,8 +51,71 @@ export async function loadConfig(rootDir: string): Promise<CodeFleetConfig> {
       ...parsed.agents
     },
     policies: {
-      commands: loadCommandPolicy((parsed.policies as Record<string, unknown> | undefined)?.commands)
+      commands: loadCommandPolicy((parsed.policies as Record<string, unknown> | undefined)?.commands),
+      harness: loadHarnessPolicy((parsed.policies as Record<string, unknown> | undefined)?.harness)
     }
+  };
+}
+
+const HARNESS_POLICY_KEYS = new Set(Object.keys(DEFAULT_HARNESS_POLICY));
+const HARNESS_MODES = ["DRY_RUN", "SUGGEST_ONLY", "WORKSPACE_EDIT", "COMMAND_EXEC"];
+
+export function loadHarnessPolicy(raw: unknown): HarnessPolicyConfig {
+  if (raw === undefined || raw === null) {
+    return DEFAULT_HARNESS_POLICY;
+  }
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("Invalid Project Profile: policies.harness must be an object.");
+  }
+
+  const block = raw as Record<string, unknown>;
+  const errors: string[] = [];
+
+  const unknown = Object.keys(block).filter((key) => !HARNESS_POLICY_KEYS.has(key));
+  if (unknown.length > 0) {
+    errors.push(`unknown key(s) in policies.harness: ${unknown.sort().join(", ")}`);
+  }
+
+  for (const key of [
+    "requireIsolationForMutation",
+    "allowDegradedCommandObservation",
+    "approvalRequiredForDestructiveCommands"
+  ] as const) {
+    if (block[key] !== undefined && typeof block[key] !== "boolean") {
+      errors.push(`policies.harness.${key} must be a boolean`);
+    }
+  }
+
+  if (block.allowedModes !== undefined) {
+    if (!Array.isArray(block.allowedModes)) {
+      errors.push("policies.harness.allowedModes must be an array");
+    } else {
+      const bad = block.allowedModes.filter((mode) => !HARNESS_MODES.includes(mode as string));
+      if (bad.length > 0) {
+        errors.push(`policies.harness.allowedModes has unknown mode(s): ${bad.join(", ")}`);
+      }
+    }
+  }
+  if (block.maxMode !== undefined && !HARNESS_MODES.includes(block.maxMode as string)) {
+    errors.push(`policies.harness.maxMode must be one of ${HARNESS_MODES.join(", ")}`);
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`Invalid Project Profile:\n${errors.map((line) => `  - ${line}`).join("\n")}`);
+  }
+
+  return {
+    allowedModes: (block.allowedModes as string[] | undefined) ?? DEFAULT_HARNESS_POLICY.allowedModes,
+    maxMode: (block.maxMode as string | undefined) ?? DEFAULT_HARNESS_POLICY.maxMode,
+    requireIsolationForMutation:
+      (block.requireIsolationForMutation as boolean | undefined) ??
+      DEFAULT_HARNESS_POLICY.requireIsolationForMutation,
+    allowDegradedCommandObservation:
+      (block.allowDegradedCommandObservation as boolean | undefined) ??
+      DEFAULT_HARNESS_POLICY.allowDegradedCommandObservation,
+    approvalRequiredForDestructiveCommands:
+      (block.approvalRequiredForDestructiveCommands as boolean | undefined) ??
+      DEFAULT_HARNESS_POLICY.approvalRequiredForDestructiveCommands
   };
 }
 

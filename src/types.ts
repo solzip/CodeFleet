@@ -26,9 +26,31 @@ export interface CommandPolicyConfig {
   allowProviderReportedCommandTruth: boolean;
 }
 
+// policies.harness. Only the two command-observation switches are enforced
+// today; the mode fields are accepted so a profile can carry them, and the
+// status file records that they are not yet applied.
+export interface HarnessPolicyConfig {
+  allowedModes: string[];
+  maxMode: string;
+  requireIsolationForMutation: boolean;
+  allowDegradedCommandObservation: boolean;
+  approvalRequiredForDestructiveCommands: boolean;
+}
+
 export interface ProfilePolicies {
   commands: CommandPolicyConfig;
+  harness: HarnessPolicyConfig;
 }
+
+export const DEFAULT_HARNESS_POLICY: HarnessPolicyConfig = {
+  allowedModes: ["DRY_RUN", "SUGGEST_ONLY", "WORKSPACE_EDIT", "COMMAND_EXEC"],
+  maxMode: "COMMAND_EXEC",
+  requireIsolationForMutation: true,
+  // AND, false wins. Running commands nobody can observe is a decision someone
+  // has to make on purpose, so silence is not that decision.
+  allowDegradedCommandObservation: false,
+  approvalRequiredForDestructiveCommands: true
+};
 
 export interface CodeFleetConfig {
   version: string;
@@ -159,6 +181,7 @@ export const DEFAULT_CONFIG: CodeFleetConfig = {
     }
   },
   policies: {
-    commands: DEFAULT_COMMAND_POLICY
+    commands: DEFAULT_COMMAND_POLICY,
+    harness: DEFAULT_HARNESS_POLICY
   }
 };
