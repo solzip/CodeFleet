@@ -435,3 +435,71 @@ test("an out-of-scope untracked file is recorded as a path violation", async () 
   assert.equal(summary.evaluated, true);
   assert.equal(summary.hasViolation, true);
 });
+
+test("a nested repository degrades the path policy evaluation instead of claiming completeness", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-nested-"));
+  await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await mkdir(path.join(root, "vendor", "lib"), { recursive: true });
+  await writeFile(path.join(root, "src", "keep.js"), "export const a = 1;\n", "utf8");
+  await writeFile(path.join(root, ".gitignore"), ".codefleet/\n", "utf8");
+
+  const { spawnSync } = await import("node:child_process");
+  const git = (cwd: string, args: string[]): void => {
+    spawnSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", ...args], { cwd });
+  };
+  git(root, ["init"]);
+  git(root, ["add", "-A"]);
+  git(root, ["commit", "-m", "init"]);
+  // A repository inside the workspace: git status stops at its boundary.
+  git(path.join(root, "vendor", "lib"), ["init"]);
+
+  await writeFile(
+    path.join(root, "agent.mjs"),
+    [
+      'import { writeFileSync } from "node:fs";',
+      `writeFileSync("src/keep.js", ${JSON.stringify("export const a = 2;\n")});`,
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "config.json"),
+    `${JSON.stringify({
+      version: "0.1.0",
+      defaultAgent: "codex",
+      mode: "execute",
+      agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
+      workspace: { id: "nested-test" }
+    })}\n`,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "tasks", "sample.yaml"),
+    [
+      "id: sample",
+      "title: Sample task",
+      "projectPath: .",
+      "goal: Exercise nested repo detection",
+      "scope:",
+      '  include: ["src/**"]',
+      '  exclude: []',
+      "constraints: []",
+      "doneCriteria: [Artifacts exist]",
+      "workflow: [Edit files]",
+      "status: READY",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  const execution = await runTask(root, "sample");
+  const observation = await readJson(path.join(execution.runDir, "harness-observation.json"));
+  const evaluation = (observation.policyChecks as {
+    pathPolicyEvaluation: { evaluated: boolean; unavailableReason: string };
+  }).pathPolicyEvaluation;
+
+  assert.equal(evaluation.evaluated, false, "a nested repo makes the evaluation incomplete");
+  assert.match(evaluation.unavailableReason, /^NESTED_REPO_NOT_TRAVERSED:/);
+  assert.match(evaluation.unavailableReason, /vendor\/lib/);
+});

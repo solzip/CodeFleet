@@ -23,7 +23,8 @@ export interface PatternValidation {
 export type ViolationCode =
   | "PATH_MATCHES_DENIED_PATHS"
   | "PATH_OUTSIDE_ALLOWED_PATHS"
-  | "PATH_NOT_WORKSPACE_RELATIVE";
+  | "PATH_NOT_WORKSPACE_RELATIVE"
+  | "SYMLINK_TARGET_ESCAPES_WORKSPACE";
 
 export interface PathViolation {
   path: string;
@@ -169,9 +170,23 @@ export function evaluatePathPolicy(input: {
   allowedPaths: string[];
   deniedPaths: string[];
   caseSensitive: boolean;
+  /** Changed paths that are symlinks resolving outside the workspace root. */
+  symlinkEscapes?: string[];
+  /** Nested repositories or submodules found under the workspace. */
+  nestedRepoPaths?: string[];
 }): PathPolicyEvaluation {
   const { changedFiles, allowedPaths, deniedPaths, caseSensitive } = input;
+  const symlinkEscapes = input.symlinkEscapes ?? [];
+  const nestedRepoPaths = input.nestedRepoPaths ?? [];
   const violations: PathViolation[] = [];
+
+  for (const escaped of symlinkEscapes) {
+    violations.push({
+      path: escaped,
+      violationCode: "SYMLINK_TARGET_ESCAPES_WORKSPACE",
+      matchedPattern: ""
+    });
+  }
 
   for (const filePath of changedFiles) {
     if (filePath.startsWith("/") || /^[A-Za-z]:/.test(filePath) || filePath.split("/").includes("..")) {
@@ -206,6 +221,22 @@ export function evaluatePathPolicy(input: {
         matchedPattern: ""
       });
     }
+  }
+
+  // git status does not descend into a nested repository or submodule, so
+  // changes inside one are invisible here. Claiming a complete evaluation over
+  // input we cannot see is the failure this design exists to prevent, so the
+  // evaluation degrades instead.
+  if (nestedRepoPaths.length > 0) {
+    return {
+      evaluated: false,
+      caseSensitive,
+      allowedPaths,
+      deniedPaths,
+      checkedPaths: changedFiles,
+      violations,
+      unavailableReason: `NESTED_REPO_NOT_TRAVERSED:${nestedRepoPaths.join(",")}`
+    };
   }
 
   return {

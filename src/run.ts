@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { copyFile, mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { copyFile, lstat, mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createAgentAdapter } from "./agent.ts";
 import { loadConfig } from "./config.ts";
@@ -274,18 +274,26 @@ export async function runTask(
   // Path policy can only be evaluated when changed-files evidence is itself
   // trustworthy. If the observation is degraded, the evaluation stays
   // unavailable rather than reporting "no violations" over partial input.
+  // Enforcement reads the derived effectivePolicy, not the Task scope. The two
+  // are identical today, but guardrails and Local Overlay narrow the derived
+  // copy, and enforcing the un-narrowed source would widen permission.
+  const enforcedAllowedPaths = effectivePolicy.capabilities.allowedPaths;
+  const enforcedDeniedPaths = effectivePolicy.capabilities.deniedPaths;
+
   const pathPolicy = changedFilesEvidence.unavailableReason === undefined
     ? evaluatePathPolicy({
         changedFiles: changedFilesEvidence.files,
-        allowedPaths: task.scope.include,
-        deniedPaths: task.scope.exclude,
-        caseSensitive: await detectCaseSensitivity(projectPath)
+        allowedPaths: enforcedAllowedPaths,
+        deniedPaths: enforcedDeniedPaths,
+        caseSensitive: await detectCaseSensitivity(projectPath),
+        symlinkEscapes: await findEscapingSymlinks(projectPath, changedFilesEvidence.files),
+        nestedRepoPaths: await findNestedRepositories(projectPath)
       })
     : {
         evaluated: false,
         caseSensitive: true,
-        allowedPaths: task.scope.include,
-        deniedPaths: task.scope.exclude,
+        allowedPaths: enforcedAllowedPaths,
+        deniedPaths: enforcedDeniedPaths,
         checkedPaths: [],
         violations: [],
         unavailableReason: changedFilesEvidence.unavailableReason
@@ -797,6 +805,68 @@ function pathViolationSummary(harnessObservation: Record<string, unknown>): {
     violations,
     unavailableReason: ""
   };
+}
+
+// A changed path may be a symlink whose target resolves outside the workspace.
+// Matching the link's own path against allowedPaths would say nothing about
+// where a write through it actually lands.
+async function findEscapingSymlinks(projectPath: string, changedFiles: string[]): Promise<string[]> {
+  const escaping: string[] = [];
+  const rootReal = await realpath(projectPath).catch(() => projectPath);
+
+  for (const file of changedFiles) {
+    const absolute = path.join(projectPath, file);
+    try {
+      const info = await lstat(absolute);
+      if (!info.isSymbolicLink()) {
+        continue;
+      }
+      const target = await realpath(absolute);
+      const relative = path.relative(rootReal, target);
+      if (relative.startsWith("..") || path.isAbsolute(relative)) {
+        escaping.push(file);
+      }
+    } catch {
+      // A broken symlink resolves nowhere, so it cannot escape the workspace.
+    }
+  }
+
+  return escaping;
+}
+
+// git status stops at a nested repository or submodule boundary, so changes
+// inside one never appear in changed-files evidence.
+async function findNestedRepositories(projectPath: string): Promise<string[]> {
+  const found: string[] = [];
+
+  const walk = async (dir: string, relative: string, depth: number): Promise<void> => {
+    if (depth > 3) {
+      return;
+    }
+    let entries: Awaited<ReturnType<typeof readdir>>;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name === "node_modules" || entry.name === ".codefleet") {
+        continue;
+      }
+      const childRelative = relative === "" ? entry.name : `${relative}/${entry.name}`;
+      if (entry.name === ".git") {
+        if (relative !== "") {
+          found.push(relative);
+        }
+        continue;
+      }
+      await walk(path.join(dir, entry.name), childRelative, depth + 1);
+    }
+  };
+
+  await walk(projectPath, "", 0);
+  return found;
 }
 
 // Windows and macOS default to case-insensitive filesystems. Detection keeps
