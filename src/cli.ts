@@ -2,7 +2,17 @@
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { initProject, loadConfig } from "./config.ts";
-import { createObjective, detectDrift, rebuildSnapshot, replayObjective, type ObjectiveKind } from "./ledger.ts";
+import {
+  attachTask,
+  createObjective,
+  detectDrift,
+  rebuildSnapshot,
+  reorderQueue,
+  replayObjective,
+  transitionQueueItem,
+  type ObjectiveKind,
+  type QueueTransitionEvent
+} from "./ledger.ts";
 import { breakLock, lockPathFor, readHolder } from "./mutation.ts";
 import { renderPrompt } from "./prompt.ts";
 import { reviewRun, type ReviewDecision } from "./review.ts";
@@ -218,6 +228,63 @@ async function handleObjective(cwd: string, options: CliOptions, args: string[])
     return;
   }
 
+  if (subcommand === "attach") {
+    const id = requireArg(objectiveId, "objective-id");
+    const taskId = requireArg(args[2], "task-id");
+    const flags = parseReviewFlags(args.slice(3));
+    const { taskPath } = await loadTaskForValidation(rootDir, taskId);
+    const { createHash } = await import("node:crypto");
+    const { readFile } = await import("node:fs/promises");
+    const hash = createHash("sha256").update(await readFile(taskPath)).digest("hex");
+
+    const outcome = await attachTask(rootDir, {
+      objectiveId: id,
+      taskId,
+      taskRevision: Number(flags.revision ?? "1"),
+      taskRevisionHash: hash,
+      actorId: flags.actor ?? "local-user",
+      reason: flags.reason ?? "task attached"
+    });
+    reportOutcome(outcome, `attached ${taskId} to ${id}`);
+    return;
+  }
+
+  const transitions: Record<string, QueueTransitionEvent> = {
+    block: "QUEUE_ITEM_BLOCKED",
+    unblock: "QUEUE_ITEM_UNBLOCKED",
+    skip: "QUEUE_ITEM_SKIPPED",
+    unskip: "QUEUE_ITEM_UNSKIPPED",
+    "cancel-item": "QUEUE_ITEM_CANCELED"
+  };
+  if (subcommand !== undefined && transitions[subcommand] !== undefined) {
+    const id = requireArg(objectiveId, "objective-id");
+    const itemId = requireArg(args[2], "queue-item-id");
+    const flags = parseReviewFlags(args.slice(3));
+    const outcome = await transitionQueueItem(rootDir, {
+      objectiveId: id,
+      objectiveQueueItemId: itemId,
+      type: transitions[subcommand],
+      actorId: flags.actor ?? "local-user",
+      reason: requireArg(flags.reason, "--reason")
+    });
+    reportOutcome(outcome, `${subcommand}: ${itemId}`);
+    return;
+  }
+
+  if (subcommand === "reorder") {
+    const id = requireArg(objectiveId, "objective-id");
+    const flags = parseReviewFlags(args.slice(2));
+    const order = requireArg(flags.order, "--order").split(",").map((v) => v.trim()).filter((v) => v.length > 0);
+    const outcome = await reorderQueue(rootDir, {
+      objectiveId: id,
+      futureOrder: order,
+      actorId: flags.actor ?? "local-user",
+      reason: requireArg(flags.reason, "--reason")
+    });
+    reportOutcome(outcome, `reordered ${id}`);
+    return;
+  }
+
   if (subcommand === "status") {
     const id = requireArg(objectiveId, "objective-id");
     const { snapshot } = await replayObjective(rootDir, id);
@@ -229,6 +296,15 @@ async function handleObjective(cwd: string, options: CliOptions, args: string[])
     console.log(`replayStatus: ${snapshot.replay.replayStatus}`);
     console.log(`lastSeq: ${snapshot.replay.lastSeq}`);
     console.log(`drift: ${drift === null ? "none" : `${drift.checkId} — ${drift.detail}`}`);
+    console.log(`cursor: ${snapshot.cursor.objectiveQueueItemId || "(none)"}`);
+    if (snapshot.queue.length === 0) {
+      console.log("queue: (empty)");
+    } else {
+      console.log("queue:");
+      for (const item of snapshot.queue) {
+        console.log(`  ${item.objectiveQueueItemId}  ${item.storedState}/${item.derivedState}`);
+      }
+    }
     for (const finding of snapshot.replay.findings) {
       console.log(`finding: ${finding.failureClass} ${finding.checkId} — ${finding.detail}`);
     }
@@ -242,7 +318,27 @@ async function handleObjective(cwd: string, options: CliOptions, args: string[])
     return;
   }
 
-  throw new Error("Usage: codefleet objective create|status|rebuild <objective-id>");
+  throw new Error(
+    "Usage: codefleet objective create|attach|block|unblock|skip|unskip|cancel-item|reorder|status|rebuild <objective-id>"
+  );
+}
+
+function reportOutcome(
+  outcome: { mutationId: string; alreadyApplied: boolean; failedPhase: string | null; failureMessage: string; applied: boolean },
+  successLine: string
+): void {
+  console.log(`mutationId: ${outcome.mutationId}`);
+  if (outcome.alreadyApplied) {
+    console.log("already applied; no new ledger event appended");
+    return;
+  }
+  if (outcome.failedPhase !== null) {
+    throw new Error(
+      `${outcome.failedPhase} failed: ${outcome.failureMessage}` +
+        (outcome.applied ? " (ledger event was appended and is kept)" : "")
+    );
+  }
+  console.log(successLine);
 }
 
 async function handleLock(cwd: string, options: CliOptions, args: string[]): Promise<void> {
@@ -274,6 +370,8 @@ interface ReviewFlags {
   waiveReason?: string;
   title?: string;
   kind?: string;
+  revision?: string;
+  order?: string;
 }
 
 function parseReviewFlags(argv: string[]): ReviewFlags {
@@ -288,7 +386,9 @@ function parseReviewFlags(argv: string[]): ReviewFlags {
     "--waive-gap": "waiveGap",
     "--waive-reason": "waiveReason",
     "--title": "title",
-    "--kind": "kind"
+    "--kind": "kind",
+    "--revision": "revision",
+    "--order": "order"
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -388,6 +488,9 @@ Usage:
   codefleet [--workspace <path>] status
   codefleet [--workspace <path>] runs
   codefleet [--workspace <path>] objective create <id> --title <text> [--kind ONE_OFF|SEQUENCE|WORKSTREAM]
+  codefleet [--workspace <path>] objective attach <id> <task-id> [--revision N]
+  codefleet [--workspace <path>] objective block|unblock|skip|unskip|cancel-item <id> <queue-item-id> --reason <text>
+  codefleet [--workspace <path>] objective reorder <id> --order <id,id> --reason <text>
   codefleet [--workspace <path>] objective status <id>
   codefleet [--workspace <path>] objective rebuild <id>
   codefleet [--workspace <path>] lock status|break

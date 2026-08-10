@@ -26,7 +26,7 @@ Phase 11     대기      설계 확정 후 구현 재개
 ```
 
 ```text
-전체 98단계 중 93단계 완료
+전체 98단계 중 94단계 완료
 FINAL RULE 82개
 설계 진행도: 100% (미고정 항목 없음)
 구현 진행도: 약 60-70%
@@ -335,8 +335,13 @@ Phase 10에서 반복된 판단 기준:
         - OBJECTIVE_CREATED append -> replay -> objective.json 재생
         - 구조 손상 시 replay BLOCKED, snapshot drift 는 rebuild 로만 복구
         - CLI: objective create|status|rebuild, lock status|break
-[ ] 94. Task attach + Queue                                            <- 다음, 미착수
-[ ] 95. Task approval (승인된 것만 run)
+[x] 94. Task attach + Queue
+        - TASK_ATTACHED + queue 상태 이벤트 5종 + QUEUE_REORDERED
+        - 전이표 강제: CANCELED terminal, SKIPPED->WAITING 은 명시 unskip 만
+        - reason 필수, 같은 전이 반복은 no-op
+        - SEQUENCE 는 derived NEXT 최대 1개, reorder 는 future segment 만
+        - CLI: objective attach|block|unblock|skip|unskip|cancel-item|reorder
+[ ] 95. Task approval (승인된 것만 run)                                <- 다음, 미착수
 [ ] 96. RUN_REVIEW_DECIDED 이관
 [ ] 97. VERIFIED 계산 + Queue 진행
 [ ] 98. 이후 final 슬라이스 (carry-forward / export / CAPABILITY_GAP) (workspace snapshot / provider transcript / agent command 관측)

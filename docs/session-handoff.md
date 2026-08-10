@@ -51,7 +51,7 @@ has resumed.
 
 Design is complete. The Harness now executes verification commands itself.
 The next topic is closing the remaining v0.2 evidence gaps.
-The next implementation topic is Task attach and Queue, on top of the ledger.
+The next implementation topic is Task approval, so only an approved revision can run.
 ```
 
 ## Product Definition
@@ -119,6 +119,8 @@ Current implementation status:
 - The Mutation Engine is the only window for state change: M4 ledger append is the commit point, the workspace lock is fail-fast and never auto-broken, and an identical repeat is a no-op by mutationId.
 - The Objective ledger is append-only JSONL; objective.json is rebuilt from replay, and a hand-edited snapshot is READ_MODEL_DRIFT repaired by rebuild, never by patching the ledger.
 - A structurally broken ledger blocks replay rather than deriving a plausible snapshot.
+- Queue state is stored as WAITING / BLOCKED / SKIPPED / CANCELED and enforced against the fixed transition table; CANCELED is terminal and SKIPPED returns to WAITING only through an explicit unskip with a reason.
+- NEXT is derived, never stored, and a SEQUENCE Objective has at most one; QUEUE_REORDERED declares a new future order and refuses to touch decided items.
 - Missing final evidence is represented as unavailable / degraded reason instead of truth.
 ```
 

@@ -4,12 +4,16 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
+  attachTask,
   createObjective,
   detectDrift,
   ledgerPath,
   rebuildSnapshot,
+  reorderQueue,
   replayObjective,
-  snapshotPath
+  snapshotPath,
+  transitionQueueItem,
+  type QueueTransitionEvent
 } from "../src/ledger.ts";
 import { computeMutationId, lockPathFor, readHolder } from "../src/mutation.ts";
 
@@ -156,4 +160,147 @@ test("an unparseable ledger line is a structural failure, not a skipped line", a
   const { snapshot } = await replayObjective(root, "auth-fix");
   assert.equal(snapshot.replay.replayStatus, "BLOCKED");
   assert.ok(snapshot.replay.findings.some((f) => f.checkId === "LEDGER_JSONL_PARSE"));
+});
+
+async function attach(root: string, objectiveId: string, taskId: string, revision = 1) {
+  return attachTask(root, {
+    objectiveId,
+    taskId,
+    taskRevision: revision,
+    taskRevisionHash: `hash-${taskId}-${revision}`,
+    actorId: "tester",
+    reason: "attached"
+  });
+}
+
+async function transition(root: string, objectiveId: string, itemId: string, type: QueueTransitionEvent) {
+  return transitionQueueItem(root, {
+    objectiveId,
+    objectiveQueueItemId: itemId,
+    type,
+    actorId: "tester",
+    reason: "because"
+  });
+}
+
+test("attaching tasks builds the queue and a SEQUENCE Objective derives one NEXT", async () => {
+  const root = await seed();
+  await create(root, "auth", "Auth work");
+  await attach(root, "auth", "login");
+  await attach(root, "auth", "logout");
+
+  const { snapshot } = await replayObjective(root, "auth");
+  assert.deepEqual(
+    snapshot.queue.map((item) => [item.objectiveQueueItemId, item.storedState, item.derivedState]),
+    [
+      ["auth:login:1", "WAITING", "NEXT"],
+      ["auth:logout:1", "WAITING", "NONE"]
+    ]
+  );
+  assert.equal(snapshot.cursor.objectiveQueueItemId, "auth:login:1");
+});
+
+test("skipping an item moves NEXT to the following one", async () => {
+  const root = await seed();
+  await create(root, "auth", "Auth work");
+  await attach(root, "auth", "login");
+  await attach(root, "auth", "logout");
+
+  await transition(root, "auth", "auth:login:1", "QUEUE_ITEM_SKIPPED");
+
+  const { snapshot } = await replayObjective(root, "auth");
+  assert.equal(snapshot.queue[0].storedState, "SKIPPED");
+  assert.equal(snapshot.queue[1].derivedState, "NEXT");
+  assert.equal(snapshot.cursor.objectiveQueueItemId, "auth:logout:1");
+});
+
+test("CANCELED is terminal and cannot be transitioned out of", async () => {
+  const root = await seed();
+  await create(root, "auth", "Auth work");
+  await attach(root, "auth", "login");
+  await transition(root, "auth", "auth:login:1", "QUEUE_ITEM_CANCELED");
+
+  await assert.rejects(
+    () => transition(root, "auth", "auth:login:1", "QUEUE_ITEM_UNBLOCKED"),
+    /CANCELED -> WAITING is not an allowed transition/
+  );
+});
+
+test("SKIPPED returns to WAITING only through an explicit unskip", async () => {
+  const root = await seed();
+  await create(root, "auth", "Auth work");
+  await attach(root, "auth", "login");
+
+  await transition(root, "auth", "auth:login:1", "QUEUE_ITEM_SKIPPED");
+  await transition(root, "auth", "auth:login:1", "QUEUE_ITEM_UNSKIPPED");
+
+  const { snapshot } = await replayObjective(root, "auth");
+  assert.equal(snapshot.queue[0].storedState, "WAITING");
+});
+
+test("a queue transition requires a reason and repeating it is a no-op", async () => {
+  const root = await seed();
+  await create(root, "auth", "Auth work");
+  await attach(root, "auth", "login");
+
+  await assert.rejects(
+    () =>
+      transitionQueueItem(root, {
+        objectiveId: "auth",
+        objectiveQueueItemId: "auth:login:1",
+        type: "QUEUE_ITEM_BLOCKED",
+        actorId: "tester",
+        reason: "   "
+      }),
+    /requires a reason/
+  );
+
+  await transition(root, "auth", "auth:login:1", "QUEUE_ITEM_BLOCKED");
+  const repeat = await transition(root, "auth", "auth:login:1", "QUEUE_ITEM_BLOCKED");
+  assert.equal(repeat.alreadyApplied, true);
+});
+
+test("a task cannot be attached twice at a different revision", async () => {
+  const root = await seed();
+  await create(root, "auth", "Auth work");
+  await attach(root, "auth", "login", 1);
+
+  const conflicting = await attach(root, "auth", "login", 2);
+  assert.equal(conflicting.failedPhase, "M2_PRECHECK");
+  assert.match(conflicting.failureMessage, /already attached at revision 1/);
+});
+
+test("reorder moves the future segment and refuses to touch history", async () => {
+  const root = await seed();
+  await create(root, "auth", "Auth work");
+  await attach(root, "auth", "login");
+  await attach(root, "auth", "logout");
+  await attach(root, "auth", "profile");
+  await transition(root, "auth", "auth:login:1", "QUEUE_ITEM_SKIPPED");
+
+  // A decided item is history and naming it is an error.
+  await assert.rejects(
+    () =>
+      reorderQueue(root, {
+        objectiveId: "auth",
+        futureOrder: ["auth:login:1", "auth:logout:1"],
+        actorId: "tester",
+        reason: "reorder"
+      }),
+    /not in the future segment/
+  );
+
+  await reorderQueue(root, {
+    objectiveId: "auth",
+    futureOrder: ["auth:profile:1", "auth:logout:1"],
+    actorId: "tester",
+    reason: "profile first"
+  });
+
+  const { snapshot } = await replayObjective(root, "auth");
+  assert.deepEqual(
+    snapshot.queue.map((item) => item.objectiveQueueItemId),
+    ["auth:login:1", "auth:profile:1", "auth:logout:1"]
+  );
+  assert.equal(snapshot.queue[1].derivedState, "NEXT", "NEXT follows the new future order");
 });
