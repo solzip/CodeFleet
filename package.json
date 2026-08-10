@@ -9,7 +9,11 @@
   },
   "scripts": {
     "codefleet": "node ./src/cli.ts",
-    "test": "node --test"
+    "pretest": "node ./scripts/reset-rule-coverage.mjs",
+    "test": "node --test",
+    "posttest": "node ./scripts/check-rule-coverage.mjs",
+    "coverage:baseline": "node ./scripts/check-rule-coverage.mjs --update-baseline",
+    "coverage:uncovered": "node ./scripts/check-rule-coverage.mjs --list-uncovered"
   },
   "engines": {
     "node": ">=24"

@@ -16,6 +16,16 @@ import {
   type QueueTransitionEvent
 } from "../src/ledger.ts";
 import { computeMutationId, lockPathFor, readHolder } from "../src/mutation.ts";
+import { coversRule } from "./rule-coverage.ts";
+
+const MUT_ID = "MUTATION_ID_IS_INTENT_DERIVED_AND_IDEMPOTENT";
+const LOCK = "MUTATION_LOCK_IS_FAIL_FAST_AND_EXCLUDES_RUN_EXECUTION";
+const REPLAY = "OBJECTIVE_LEDGER_REPLAY_IS_SOURCE_OF_SNAPSHOT";
+const REPLAY_FAIL = "OBJECTIVE_LEDGER_REPLAY_FAILURES_BLOCK_DERIVED_PROGRESS";
+const VERIFIED = "VERIFIED_REQUIRES_ACCEPTED_REVIEW_AND_SATISFIED_GATES";
+const IMPORT = "LOCAL_REVIEW_IMPORT_APPENDS_LEDGER_DECISION";
+const CONFLICT = "REVIEW_DECISION_MIGRATION_CONFLICTS_ARE_EXPLICIT";
+const PHASES = "MUTATION_COMMAND_PHASES_ARE_FIXED";
 
 async function seed(): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-ledger-"));
@@ -44,6 +54,13 @@ test("mutationId is derived from intent and ignores reason, actor, and time", ()
   // A different semantic payload is a different mutation.
   assert.notEqual(computeMutationId({ ...base, semanticPayload: { title: "U", kind: "SEQUENCE" } }), same);
   assert.notEqual(computeMutationId({ ...base, targetId: "b" }), same);
+
+  coversRule(
+    MUT_ID,
+    "mutationId is computed deterministically from mutationKind, target identity, targetHash, and semantic payload."
+  );
+  coversRule(MUT_ID, "mutationId excludes wall-clock time, execution order, actorId, and free-text reason.");
+  coversRule(MUT_ID, "a mutation whose semantic payload differs produces a different mutationId.");
 });
 
 test("repeating the same command appends no second event", async () => {
@@ -62,6 +79,8 @@ test("repeating the same command appends no second event", async () => {
 
   const lines = (await readFile(ledgerPath(root, "auth-fix"), "utf8")).trim().split("\n");
   assert.equal(lines.length, 1, "the ledger must still hold exactly one event");
+
+  coversRule(MUT_ID, "a mutationId already present in the ledger results in a no-op at M3.");
 });
 
 test("creating the same objective with different content is a conflict, not a no-op", async () => {
@@ -98,6 +117,10 @@ test("the lock fails fast and names its holder, and is never broken automaticall
 
   // The stale lock is still there: removing it is an explicit human action.
   assert.notEqual(await readHolder(lockPath), null);
+
+  coversRule(LOCK, "acquisition failure returns immediately with holder identity and does not wait.");
+  coversRule(LOCK, "stale lock is never released automatically.");
+  coversRule(LOCK, "lock file records holder pid, host, startedAt, mutationId, and mutationKind.");
 });
 
 test("the lock is released on every exit path, including a blocked mutation", async () => {
@@ -105,6 +128,9 @@ test("the lock is released on every exit path, including a blocked mutation", as
   const failed = await create(root, "Invalid ID", "Fix auth");
   assert.equal(failed.failedPhase, "M2_PRECHECK");
   assert.equal(await readHolder(lockPathFor(root)), null, "M7 must run even when M2 blocked");
+
+  coversRule(PHASES, "M7 runs on every exit path after M1 succeeds.");
+  coversRule(PHASES, "failure before M4 leaves no durable change.");
 });
 
 test("a snapshot edited by hand is READ_MODEL_DRIFT and rebuild restores it", async () => {
@@ -123,6 +149,9 @@ test("a snapshot edited by hand is READ_MODEL_DRIFT and rebuild restores it", as
   const rebuilt = await rebuildSnapshot(root, "auth-fix");
   assert.equal(rebuilt.title, "Fix auth");
   assert.equal(await detectDrift(root, "auth-fix"), null);
+
+  coversRule(REPLAY, "objective.json is treated as read model only.");
+  coversRule(REPLAY_FAIL, "READ_MODEL_DRIFT allows rebuild only when source replay is valid.");
 });
 
 test("a structurally broken ledger blocks replay instead of deriving a plausible snapshot", async () => {
@@ -150,6 +179,9 @@ test("a structurally broken ledger blocks replay instead of deriving a plausible
   assert.ok(snapshot.replay.findings.some((f) => f.checkId === "SEQ_CONTIGUOUS"));
   // The injected CLOSED must not have been applied.
   assert.notEqual(snapshot.status, "CLOSED");
+
+  coversRule(REPLAY, "replay validates eventId uniqueness and contiguous seq before deriving state.");
+  coversRule(REPLAY_FAIL, "LEDGER_STRUCTURAL_FAILURE blocks all Objective derived state.");
 });
 
 test("an unparseable ledger line is a structural failure, not a skipped line", async () => {
@@ -400,6 +432,16 @@ test("importing a local review appends a decision event carrying its migration s
   // Re-importing the identical artifact is a no-op, not a second decision.
   const again = await importReview(root);
   assert.equal(again.alreadyApplied, true);
+
+  coversRule(
+    IMPORT,
+    "migration appends a new RUN_REVIEW_DECIDED event or detects an identical already-imported event."
+  );
+  coversRule(
+    IMPORT,
+    "appended RUN_REVIEW_DECIDED records migrationSource LOCAL_REVIEW_DECISION and migrationSourceRef/hash."
+  );
+  coversRule(CONFLICT, "identical already-imported decision is idempotent and appends no event.");
 });
 
 test("a waived acceptance carries its waived gaps into the ledger", async () => {
@@ -456,6 +498,12 @@ test("the same reviewDecisionId with a different bundle blocks migration", async
   });
   assert.equal(conflicting.failedPhase, "M2_PRECHECK");
   assert.match(conflicting.failureMessage, /already imported with a different bundle hash/);
+
+  coversRule(
+    CONFLICT,
+    "same reviewDecisionId with different ReviewEvidenceBundle hash is REVIEW_INTEGRITY and blocks import."
+  );
+  coversRule(IMPORT, "reviewDecisionId collision with different bundle hash blocks migration.");
 });
 
 test("an accepted review with a satisfied gate derives VERIFIED and moves the cursor", async () => {
@@ -475,6 +523,13 @@ test("an accepted review with a satisfied gate derives VERIFIED and moves the cu
   assert.equal(after.queue[0].effectiveReviewDecisionId, "run-1-review-001");
   assert.equal(after.queue[1].derivedState, "NEXT", "the cursor moves to the next item");
   assert.equal(after.cursor.objectiveQueueItemId, "auth:logout:1");
+
+  coversRule(VERIFIED, "VERIFIED requires latest effective RUN_REVIEW_DECIDED.decision == ACCEPTED");
+  coversRule(VERIFIED, "VERIFIED requires verificationGateResult in {SATISFIED, WAIVED_ALLOWED}");
+  coversRule(
+    VERIFIED,
+    "VERIFIED is calculated for objectiveQueueItemId + taskId + taskRevision, not runId alone"
+  );
 });
 
 test("VERIFIED needs all three of accepted, gate satisfied, and a successful result", async () => {
@@ -498,6 +553,12 @@ test("VERIFIED needs all three of accepted, gate satisfied, and a successful res
     // An unverified item keeps the cursor rather than letting the queue advance.
     assert.equal(snapshot.queue[0].derivedState, "NEXT");
   }
+
+  coversRule(VERIFIED, "REJECTED and NEEDS_CHANGES cannot produce VERIFIED");
+  coversRule(
+    VERIFIED,
+    "VERIFIED requires normalized Run result to be successful according to Run Summary policy"
+  );
 });
 
 test("a waived acceptance still derives VERIFIED, and the ledger says it was waived", async () => {

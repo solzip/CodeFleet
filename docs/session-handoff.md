@@ -266,6 +266,28 @@ Done in this slice (src/workspace-snapshot.ts, test/workspace-snapshot.test.ts):
    that gitignores the file the agent creates.
 ```
 
+Design-to-code coverage, added 2026-08-10:
+
+```text
+npm test now ends with a coverage number over FINAL RULE condition lines.
+
+  86 of 545 condition lines claimed by a passing test  (15.8%)
+  25 of 83 rules touched, 2 fully covered, 58 with no claim at all
+
+A claim is coversRule(ruleId, "condition text") called inside a test body, so
+only a passing test records one. An unknown ruleId, a condition quote that is
+not in the rule, zero claims, or coverage below the baseline all fail the run.
+The checker is itself tested in test/rule-coverage.test.ts.
+
+Before this existed, "is it implemented as designed?" had no answer that could
+be re-derived. The doc header said "구현 진행도 약 60-70%" with nothing behind it.
+
+What 15.8% does NOT mean: the 58 unclaimed rules are a mix of not-implemented
+and implemented-but-unmapped, and nobody has separated the two yet. Separating
+them is the first step of the next slice, not a guess to publish.
+  npm run coverage:uncovered
+```
+
 Next implementation slice:
 
 ```text

@@ -36,6 +36,7 @@ Phase 11     진행 중   97단계 완료, 98번 진행 중
 
 ```text
 FINAL RULE                    83개
+condition 줄                  545줄
 scanScope 를 요구받는 규칙    27개 / 누락 0
 enum 필드                     52개 / 값 집합 분기 8개 (0.13 에 선언, 미수정)
 YAML 파싱 실패                0
@@ -43,7 +44,13 @@ id 형식 위반 / 중복           0
 status != FINAL               0
 taxonomy 밖 category/severity 0
 
-테스트                        100 pass / 0 fail
+테스트                        108 pass / 0 fail
+
+설계 대비 검증 커버리지
+  claim 이 붙은 condition       86 / 545  (15.8%)
+  한 줄이라도 검증되는 규칙     25 / 83
+  전부 검증되는 규칙            2 / 83
+  claim 이 하나도 없는 규칙     58 (condition 398줄)
 
 완전 구성 Run 의 남은 gap     adapter 가 무엇을 내놓느냐에 달려 있다
   구조화 transcript 를 냄        1건 (COMMAND_CHANNEL_NOT_HARNESS_VISIBLE)
@@ -51,8 +58,37 @@ taxonomy 밖 category/severity 0
   모르는 형식을 냄               2건 (+ PROVIDER_TRANSCRIPT_FORMAT_UNRECOGNIZED)
 ```
 
-이 수치는 손으로 세지 않는다. `test/design-rules.test.ts` 가 매 실행마다 출력하고,
-검사 대상이 0건이면 통과가 아니라 실패한다.
+이 수치는 손으로 세지 않는다. `npm test` 가 매 실행마다 출력하고, 검사 대상이
+0건이면 통과가 아니라 실패한다.
+
+## 설계 대비 검증 커버리지를 어떻게 세는가
+
+```text
+단위는 규칙이 아니라 condition 줄이다.
+= 규칙 하나에 condition 이 11줄인데 테스트 하나 붙였다고 "그 규칙 검증됨" 이 되면
+  숫자가 실제보다 커진다.
+
+claim 은 통과한 테스트만 남긴다.
+= 테스트 본문 안에서 coversRule(ruleId, "condition 원문") 을 호출한다.
+= 실패하거나 실행되지 않은 테스트는 아무것도 남기지 않는다.
+= 주석이나 표는 의도를 기록하고, 이건 실행을 기록한다.
+
+지어낸 claim 은 즉시 실패한다.
+= 없는 ruleId -> 실패
+= 규칙에 없는 condition 인용 -> 실패
+= claim 0건 -> 실패 (검사 대상 0건은 통과가 아니다)
+= baseline 보다 낮아지면 실패 (docs/rule-coverage-baseline.json)
+
+검사기 자신도 검사받는다.
+= test/rule-coverage.test.ts 가 위 4가지 실패를 각각 재현한다.
+```
+
+**이 수치가 말하지 않는 것**: claim 은 "통과한 테스트가 이 condition 을 검사한다고
+주장했다" 는 뜻이지 "그 condition 이 올바르게 구현됐다" 는 뜻이 아니다. 또한
+58개 미claim 규칙 중 무엇이 *미구현* 이고 무엇이 *구현됐지만 미매핑* 인지는 아직
+분류되지 않았다. 그 분류가 다음 작업의 첫 단계다.
+
+목록은 `npm run coverage:uncovered` 로 뽑는다.
 
 ---
 

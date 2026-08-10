@@ -6,6 +6,11 @@ import {
   normalizeCommand,
   preflightCommand
 } from "../src/command-policy.ts";
+import { coversRule } from "./rule-coverage.ts";
+
+const NORM = "COMMAND_NORMALIZATION_IS_ARGV_BASED_AND_SHELL_FREE";
+const MATCHER = "COMMAND_MATCHER_IS_ARGV_PREFIX_WITHOUT_PATTERN_LANGUAGE";
+const DESTRUCTIVE = "DESTRUCTIVE_COMMAND_CATEGORY_IS_APPROVAL_UNIT";
 
 function preflight(argv: string[], overrides: Partial<Parameters<typeof preflightCommand>[0]> = {}) {
   return preflightCommand({
@@ -24,6 +29,12 @@ test("argv[0] is normalized to its basename and the original is preserved", () =
   assert.deepEqual(normalized.argv, ["npm", "test"]);
   assert.equal(normalized.argv0Original, "/usr/local/bin/npm");
   assert.equal(normalized.cwd, "/repo");
+
+  coversRule(NORM, "command is accepted as an argv array and is never parsed from a command-line string.");
+  coversRule(
+    NORM,
+    "argv[0] is normalized to its basename while the original path is preserved as evidence."
+  );
 });
 
 test("a shell interpreter is denied at argv[0] whatever the path or case", () => {
@@ -33,6 +44,8 @@ test("a shell interpreter is denied at argv[0] whatever the path or case", () =>
     assert.equal(result.blockedReason, "SHELL_INTERPRETER_DENIED");
   }
   assert.equal(isShellInterpreter("npm"), false);
+
+  coversRule(NORM, "shell interpreter invocation is denied at argv[0].");
 });
 
 test("PREFIX matches a leading run of tokens, EXACT requires the whole argv", () => {
@@ -42,6 +55,11 @@ test("PREFIX matches a leading run of tokens, EXACT requires the whole argv", ()
   assert.equal(matchesCommand(["npm", "test"], { argv: ["npm", "test"], matchMode: "EXACT" }, true), true);
   assert.equal(matchesCommand(argv, { argv: ["npm", "run"] }, true), false);
   assert.equal(matchesCommand(["npmtest"], { argv: ["npm"] }, true), false);
+
+  coversRule(MATCHER, "matcher entries are argv token lists with matchMode PREFIX or EXACT.");
+  coversRule(MATCHER, "PREFIX matches when entry argv equals the leading tokens of the normalized argv.");
+  coversRule(MATCHER, "EXACT matches when entry argv equals the whole normalized argv.");
+  coversRule(MATCHER, "matcher entries contain no regular expression and no glob pattern language.");
 });
 
 test("allowed matching is case-sensitive and denied matching is case-insensitive", () => {
@@ -55,6 +73,9 @@ test("allowed matching is case-sensitive and denied matching is case-insensitive
     preflight(["NPM", "test"], { deniedCommands: [{ argv: ["npm", "test"] }] }).blockedReason,
     "MATCHES_DENIED_COMMANDS"
   );
+
+  coversRule(MATCHER, "allowedCommands matching is case-sensitive.");
+  coversRule(MATCHER, "deniedCommands and destructiveCommands matching is case-insensitive.");
 });
 
 test("denied wins over allowed", () => {
@@ -88,6 +109,12 @@ test("a destructive category is blocked unless a covering approval exists", () =
   });
   assert.equal(approved.decision, "ALLOWED");
   assert.equal(approved.destructiveCategoryId, "INFRA_APPLY");
+
+  coversRule(DESTRUCTIVE, "every destructive entry declares a categoryId.");
+  coversRule(
+    DESTRUCTIVE,
+    "matching a destructive entry blocks execution unless a covering durable approval exists."
+  );
 });
 
 test("command execution disabled blocks before any matching", () => {

@@ -7,6 +7,13 @@ import test from "node:test";
 import { runTask } from "../src/run.ts";
 import { approveTask } from "../src/task-ledger.ts";
 import { findTaskPath } from "../src/task.ts";
+import { coversRule } from "./rule-coverage.ts";
+
+const SNAPSHOT = "HARNESS_WORKSPACE_SNAPSHOT_IS_STATE_EVIDENCE";
+const COMMAND_TRUTH = "COMMAND_TRUTH_REQUIRES_HARNESS_VISIBLE_CHANNEL";
+const UNTRACKED = "GENERATED_UNTRACKED_AND_GITIGNORED_FILES_ARE_POLICY_SUBJECTS";
+const DELETE_RENAME = "DELETE_AND_RENAME_CHECK_SOURCE_AND_TARGET";
+const SYMLINK = "SYMLINK_TARGET_MUST_NOT_ESCAPE_PATH_POLICY";
 
 // Running now requires an approval bound to the exact task content, so every
 // fixture approves before it runs.
@@ -285,6 +292,10 @@ test("the workspace snapshot sees a change git is configured to ignore", async (
   const record = await readFile(path.join(execution.runDir, "run-record.md"), "utf8");
   assert.match(record, /added 1, modified 1, removed 0/);
   assert.match(record, /added: src\/generated\.js/);
+
+  coversRule(SNAPSHOT, "preRunStateRef references a HarnessWorkspaceSnapshot with phase = PRE_RUN");
+  coversRule(SNAPSHOT, "postRunStateRef references a HarnessWorkspaceSnapshot with phase = POST_RUN");
+  coversRule(UNTRACKED, "gitignored files inside scoped snapshot coverage do not bypass path policy");
 });
 
 test("a provider-reported command is recorded but never becomes command truth", async () => {
@@ -390,6 +401,11 @@ test("a provider-reported command is recorded but never becomes command truth", 
     reasons.includes("COMMAND_CHANNEL_NOT_HARNESS_VISIBLE"),
     "the observation gap must remain: parsing a transcript did not make commands observable"
   );
+
+  coversRule(COMMAND_TRUTH, "PROVIDER_REPORTED_ONLY commands are not command truth");
+  coversRule(COMMAND_TRUTH, "provider transcript claims are not command truth");
+  coversRule(COMMAND_TRUTH, "command policy compliance cannot be satisfied from PROVIDER_REPORTED_ONLY");
+  coversRule(COMMAND_TRUTH, "verification command evidence cannot be satisfied from PROVIDER_REPORTED_ONLY");
 });
 
 test("runTask rejects projectPath outside the workspace before S2 artifacts", async () => {
@@ -607,6 +623,8 @@ test("changed-files evidence includes untracked files created during the Run", a
     changes.changedFiles.every((file) => !file.startsWith(".codefleet/")),
     "CodeFleet's own run artifacts are not agent changes"
   );
+
+  coversRule(UNTRACKED, "untracked files do not bypass path policy");
 });
 
 test("an out-of-scope untracked file is recorded as a path violation", async () => {
@@ -683,6 +701,12 @@ test("an out-of-scope untracked file is recorded as a path violation", async () 
   }).pathViolationSummary;
   assert.equal(summary.evaluated, true);
   assert.equal(summary.hasViolation, true);
+
+  coversRule(
+    UNTRACKED,
+    "generated / untracked / gitignored files outside allowedPaths are violations unless explicitly allowed by policy"
+  );
+  coversRule(UNTRACKED, "generated / untracked / gitignored files matching deniedPaths are violations");
 });
 
 test("a nested repository degrades the path policy evaluation instead of claiming completeness", async () => {
@@ -824,6 +848,11 @@ test("verification commands are executed by the Harness and open the gate", asyn
   const authority = runSummary.evidenceAuthority as Record<string, string>;
   assert.equal(authority.verificationAuthority, "HARNESS_EXECUTED");
   assert.equal(authority.commandEvidenceAuthority, "NONE");
+
+  coversRule(
+    COMMAND_TRUTH,
+    "HARNESS_EXECUTED command truth must come from Execution Harness direct command execution"
+  );
 });
 
 test("a shell interpreter is denied as a verification command", async () => {
@@ -877,6 +906,11 @@ test("a provider claim alone never satisfies the verification gate", async () =>
   assert.equal(evidence.observedCheck, "NONE");
   assert.equal(evidence.verificationGateResult, "NOT_SATISFIED");
   assert.equal(evidence.verificationGateReason, "MISSING");
+
+  coversRule(
+    COMMAND_TRUTH,
+    "command truth is recognized only when commands.authority is HARNESS_OBSERVED or HARNESS_EXECUTED"
+  );
 });
 
 test("run-plan.json is written once and is not rewritten later in the Run", async () => {
@@ -990,6 +1024,9 @@ test("a delete and a rename are both reported, naming each side", async () => {
   // policy subject on their own.
   assert.ok(changed.includes("src/old.js"), "the rename source must be reported");
   assert.ok(changed.includes("src/new.js"), "the rename target must be reported");
+
+  coversRule(DELETE_RENAME, "DELETE evaluates the deleted source path");
+  coversRule(DELETE_RENAME, "RENAME evaluates both source path and target path");
 });
 
 test("a symlink whose target leaves the workspace is recorded as a violation", async (t) => {
@@ -1070,6 +1107,8 @@ test("a symlink whose target leaves the workspace is recorded as a violation", a
     ),
     `expected a symlink escape violation, got ${JSON.stringify(violations)}`
   );
+
+  coversRule(SYMLINK, "symlink target realPath must remain inside selectedWorkspaceRootRealPath");
 });
 
 test("an unapproved Task cannot run and leaves no Run Trace", async () => {

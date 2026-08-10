@@ -4,6 +4,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { captureWorkspaceSnapshot, collectSnapshotGaps, computeDelta } from "../src/workspace-snapshot.ts";
+import { coversRule } from "./rule-coverage.ts";
+
+const SNAPSHOT = "HARNESS_WORKSPACE_SNAPSHOT_IS_STATE_EVIDENCE";
 
 const OK = async () => ({ code: 0, stdout: "", stderr: "" });
 const FAIL = async () => ({ code: 1, stdout: "", stderr: "boom" });
@@ -48,6 +51,8 @@ test("a scoped snapshot hashes exactly the files the scope covers", async () => 
     assert.equal(snapshot.scopedFiles.scopeBasis, "EFFECTIVE_ALLOWED_PATHS");
     assert.equal(snapshot.git.untrackedPolicy, "SNAPSHOT");
     assert.equal(snapshot.stateHash.algorithm, "sha256");
+
+    coversRule(SNAPSHOT, "scoped file snapshot is used for Git-missed files and path policy evidence");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -93,6 +98,14 @@ test("each evidence section fails on its own, and every failure is named", async
       "PRE_RUN_SCOPED_FILES_UNAVAILABLE:NO_SCOPE_PATTERNS",
       "PRE_RUN_STATE_HASH_UNAVAILABLE:NO_STATE_INPUT_AVAILABLE"
     ]);
+
+    coversRule(SNAPSHOT, "HarnessWorkspaceSnapshot records git status evidence or an explicit unavailableReason");
+    coversRule(SNAPSHOT, "HarnessWorkspaceSnapshot records git diff evidence or an explicit unavailableReason");
+    coversRule(
+      SNAPSHOT,
+      "HarnessWorkspaceSnapshot records scoped file snapshot evidence or an explicit unavailableReason"
+    );
+    coversRule(SNAPSHOT, "HarnessWorkspaceSnapshot records stateHash or an explicit unavailableReason");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -118,6 +131,8 @@ test("the delta is post minus pre and separates added, modified, and removed", a
     assert.deepEqual(delta.removed, ["src/gone.ts"]);
     assert.equal(delta.unavailableReason, "");
     assert.notEqual(pre.stateHash.value, post.stateHash.value);
+
+    coversRule(SNAPSHOT, "Run delta is interpreted as postRunState minus preRunState");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

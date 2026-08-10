@@ -7,3 +7,4 @@ node_modules/
 .codefleet/objectives/
 .codefleet/locks/
 .codefleet/tasks/*/
+.rule-coverage/

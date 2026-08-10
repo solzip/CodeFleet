@@ -7,6 +7,12 @@ import { reviewRun } from "../src/review.ts";
 import { runTask } from "../src/run.ts";
 import { approveTask } from "../src/task-ledger.ts";
 import { findTaskPath } from "../src/task.ts";
+import { coversRule } from "./rule-coverage.ts";
+
+const BUNDLE = "REVIEW_DECISION_REQUIRES_FROZEN_EVIDENCE_BUNDLE";
+const HASH = "REVIEW_EVIDENCE_ABSENCE_AND_HASH_MISMATCH_HAVE_DIFFERENT_EFFECTS";
+const RECORD = "RUN_RECORD_IS_LOCAL_DERIVED_NARRATIVE";
+const MIG = "LOCAL_REVIEW_MIGRATION_STATUS_IS_DERIVED";
 
 // Running now requires an approval bound to the exact task content, so every
 // fixture approves before it runs.
@@ -75,6 +81,10 @@ test("review writes an evidence bundle and a local decision that is not final tr
   assert.equal(bundle.documentKind, "REVIEW_EVIDENCE_BUNDLE");
   assert.equal(bundle.runId, runId);
   assert.equal(bundle.reviewDecisionId, execution.reviewDecisionId);
+
+  coversRule(BUNDLE, "ReviewEvidenceBundle references the Run evidence considered at decision time");
+  coversRule(BUNDLE, "ReviewEvidenceBundle records observedResultSnapshot and observedCheckSnapshot");
+  coversRule(BUNDLE, "ReviewEvidenceBundle records verificationGateResult calculated by CodeFleet");
 });
 
 test("local review never produces VERIFIED or queue progression", async () => {
@@ -94,6 +104,9 @@ test("local review never produces VERIFIED or queue progression", async () => {
   assert.equal(safeguards.acceptanceEvidence, false);
   assert.ok(!raw.includes("VERIFIED\""), "local review must not record a VERIFIED state");
   assert.equal(localReview.localReviewStatus === "MIGRATION_READY", false);
+
+  coversRule(RECORD, "run-record.md is not decision truth and cannot produce VERIFIED or queue progression.");
+  coversRule(MIG, "DEGRADED_RECORDED is derived only from REJECTED or NEEDS_CHANGES with explicit degraded or unavailable evidence.");
 });
 
 test("ACCEPTED is refused when the verification gate is not satisfied", async () => {
@@ -327,6 +340,10 @@ test("an evidence defect is reported once, naming the artifact", async () => {
   const hashLines = message.split("\n").filter((line) => line.includes("hash") || line.includes("HASH_INVALID"));
   assert.equal(hashLines.length, 1, `hash invalidity must be reported once, got:\n${message}`);
   assert.match(hashLines[0], /HASH_INVALID:.*harness-observation\.json/);
+
+  coversRule(HASH, "referenced artifact hash mismatch is REVIEW_INTEGRITY failure");
+  coversRule(HASH, "hash mismatch makes the Review Decision ineffective until corrected");
+  coversRule(MIG, "MIGRATION_BLOCKED is derived when required migration fields or hashes are invalid.");
 });
 
 test("the decision record cannot state a claim its own bundle contradicts", async () => {
@@ -361,6 +378,10 @@ test("the decision record cannot state a claim its own bundle contradicts", asyn
     [localReview.localReviewStatus, localReview.evidenceCompleteness].join("/"),
     "MIGRATION_READY/INCOMPLETE"
   );
+
+  coversRule(BUNDLE, "ReviewEvidenceBundle records computedRisk and commandEvidenceAuthority");
+  coversRule(BUNDLE, "ReviewEvidenceBundle records pathViolationSummary");
+  coversRule(BUNDLE, "ReviewEvidenceBundle stores hashes for referenced artifacts when available");
 });
 
 test("every Run leaves a readable record, and it does not hide what is unknown", async () => {
@@ -387,4 +408,11 @@ test("every Run leaves a readable record, and it does not hide what is unknown",
   assert.match(text, /decision\s*:\s*REJECTED/);
   assert.match(text, /Reason: not acceptable/);
   assert.match(text, /not final decision truth/);
+
+  coversRule(RECORD, "run-record.md is created for every Run, independently of any export.");
+  coversRule(RECORD, "run-record.md is derived from existing artifacts and states no claim they do not carry.");
+  coversRule(
+    RECORD,
+    "run-record.md lists every unavailableReason with its CAPABILITY_GAP or EVIDENCE_DEFECT classification."
+  );
 });
