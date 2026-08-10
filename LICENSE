@@ -1,0 +1,27 @@
+Copyright (c) 2026 solzip. All rights reserved.
+
+This repository is published for reading and evaluation only. It is not
+open source, and no license to use the software is granted.
+
+You may view this repository and its history, and fork it through GitHub
+for the sole purpose of reading the source. Nothing else is permitted.
+
+Without prior written permission from the copyright holder, you may not:
+
+  - use this software, in whole or in part, for any purpose, whether
+    commercial or non-commercial;
+  - run, copy, modify, merge, publish, distribute, sublicense, or sell
+    copies of this software;
+  - incorporate any part of this software, its design documents, or its
+    fixed rule set into another work, including as training data for a
+    machine learning model.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+This notice applies to every file in this repository, including the design
+documents under docs/, unless a file states otherwise.

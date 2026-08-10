@@ -8,3 +8,5 @@ node_modules/
 .codefleet/locks/
 .codefleet/tasks/*/
 .rule-coverage/
+.codefleet/config.json
+.codefleet/local.json

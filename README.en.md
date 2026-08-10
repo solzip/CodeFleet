@@ -332,6 +332,19 @@ Setting the flag does not make those commands observed. It records that you deci
 
 The generated prompt is passed to the configured command on stdin. Treat execute mode as an adapter hook that may need adjustment for your installed Codex CLI.
 
+### Before You Enable It
+
+Execute mode runs the agent **in your real working directory**. The four
+things below are not implemented yet, and their consequences land in that
+repository.
+
+- **No isolation and no rollback.** `isolation.mode` is always `NONE`. The agent edits the working directory itself — not a branch, a worktree, or a container. Whether the Run fails or the review rejects it, CodeFleet reverts nothing. The workspace snapshot stores hashes, not content, so it cannot restore anything. Recovery is entirely up to your own use of git. **Run with a clean working tree.**
+- **No timeout and no output cap.** The adapter process has no time limit. If the agent never exits, `codefleet run` waits forever and stdout accumulates in memory without a bound. Ctrl-C is the only way out, and it leaves an incomplete Run directory behind.
+- **Nothing prevents concurrent runs.** A Run takes no lock, and `runId` is derived from the date and a directory counter. Two Runs started together compute the same `runId`, overwrite each other's artifacts, and edit the same working directory. **Run one at a time.**
+- **Scope violations are not blocked in advance.** `scope` is passed in the prompt; the adapter does not enforce it. An edit outside scope is found in the diff after the Run and blocks ACCEPTED at review — by which point the change is already on disk.
+
+Each item is recorded with file:line evidence in the audit under `docs/audits/`.
+
 ### Command policy
 
 `policies.commands` is enforced for commands the Harness runs itself, which today means verification commands:
@@ -401,6 +414,10 @@ codefleet [--workspace <path>] review <run-id> --decision <ACCEPTED|REJECTED|NEE
 - Stronger YAML support through a dedicated parser package if needed.
 
 Export to external tools is limited to the sanitized Run Summary export seam. A web dashboard, a central task DB, and a general-purpose agent platform are explicit non-goals, not deferred work.
+
+## License
+
+This repository is not open source. It is published for reading and evaluation only, and no license to use the software is granted. See [LICENSE](LICENSE) for the full terms.
 
 ## Documentation
 
