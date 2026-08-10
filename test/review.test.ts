@@ -5,6 +5,19 @@ import path from "node:path";
 import test from "node:test";
 import { reviewRun } from "../src/review.ts";
 import { runTask } from "../src/run.ts";
+import { approveTask } from "../src/task-ledger.ts";
+import { findTaskPath } from "../src/task.ts";
+
+// Running now requires an approval bound to the exact task content, so every
+// fixture approves before it runs.
+async function approveForTest(root: string, taskId: string): Promise<void> {
+  await approveTask(root, {
+    taskId,
+    taskPath: await findTaskPath(root, taskId),
+    actorId: "tester",
+    reason: "approved for test"
+  });
+}
 
 async function seedWorkspace(): Promise<{ root: string; runId: string }> {
   const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-review-"));
@@ -33,6 +46,8 @@ async function seedWorkspace(): Promise<{ root: string; runId: string }> {
     ].join("\n"),
     "utf8"
   );
+
+  await approveForTest(root, "sample");
 
   const execution = await runTask(root, "sample");
   return { root, runId: execution.result.runId };
@@ -273,6 +288,8 @@ async function seedVerifiedWorkspace(): Promise<{ root: string; runId: string }>
     ].join("\n"),
     "utf8"
   );
+
+  await approveForTest(root, "sample");
 
   const execution = await runTask(root, "sample");
   return { root, runId: execution.result.runId };

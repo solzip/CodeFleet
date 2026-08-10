@@ -5,6 +5,19 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { runTask } from "../src/run.ts";
+import { approveTask } from "../src/task-ledger.ts";
+import { findTaskPath } from "../src/task.ts";
+
+// Running now requires an approval bound to the exact task content, so every
+// fixture approves before it runs.
+async function approveForTest(root: string, taskId: string): Promise<void> {
+  await approveTask(root, {
+    taskId,
+    taskPath: await findTaskPath(root, taskId),
+    actorId: "tester",
+    reason: "approved for test"
+  });
+}
 
 test("runTask writes run-plan and S2 artifacts before legacy result", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-run-"));
@@ -33,6 +46,8 @@ test("runTask writes run-plan and S2 artifacts before legacy result", async () =
     ].join("\n"),
     "utf8"
   );
+
+  await approveForTest(root, "sample");
 
   const execution = await runTask(root, "sample");
 
@@ -249,6 +264,8 @@ test("runTask preserves S2 artifacts when adapter creation fails", async () => {
     "utf8"
   );
 
+  await approveForTest(root, "sample");
+
   const execution = await runTask(root, "sample");
 
   const adapterRequest = await readJson(path.join(execution.runDir, "adapter-request.json"));
@@ -347,6 +364,8 @@ test("changed-files evidence includes untracked files created during the Run", a
     "utf8"
   );
 
+  await approveForTest(root, "sample");
+
   const execution = await runTask(root, "sample");
   const observation = await readJson(path.join(execution.runDir, "harness-observation.json"));
   const changes = observation.changes as { changedFiles: string[]; unavailableReason: string };
@@ -415,6 +434,8 @@ test("an out-of-scope untracked file is recorded as a path violation", async () 
     ].join("\n"),
     "utf8"
   );
+
+  await approveForTest(root, "sample");
 
   const execution = await runTask(root, "sample");
   const observation = await readJson(path.join(execution.runDir, "harness-observation.json"));
@@ -493,6 +514,8 @@ test("a nested repository degrades the path policy evaluation instead of claimin
     "utf8"
   );
 
+  await approveForTest(root, "sample");
+
   const execution = await runTask(root, "sample");
   const observation = await readJson(path.join(execution.runDir, "harness-observation.json"));
   const evaluation = (observation.policyChecks as {
@@ -552,6 +575,8 @@ test("verification commands are executed by the Harness and open the gate", asyn
     ].join("\n"),
     "utf8"
   );
+
+  await approveForTest(root, "sample");
 
   const execution = await runTask(root, "sample");
   const evidence = await readJson(path.join(execution.runDir, "verification", "verify-001.json"));
@@ -615,6 +640,8 @@ test("a provider claim alone never satisfies the verification gate", async () =>
     "utf8"
   );
 
+  await approveForTest(root, "sample");
+
   const execution = await runTask(root, "sample");
   const evidence = await readJson(path.join(execution.runDir, "verification", "verify-001.json"));
 
@@ -650,6 +677,8 @@ test("run-plan.json is written once and is not rewritten later in the Run", asyn
     ].join("\n"),
     "utf8"
   );
+
+  await approveForTest(root, "sample");
 
   const execution = await runTask(root, "sample");
   const runPlanPath = path.join(execution.runDir, "run-plan.json");
@@ -721,6 +750,8 @@ test("a delete and a rename are both reported, naming each side", async () => {
     ].join("\n"),
     "utf8"
   );
+
+  await approveForTest(root, "sample");
 
   const execution = await runTask(root, "sample");
   const observation = await readJson(path.join(execution.runDir, "harness-observation.json"));
@@ -796,6 +827,8 @@ test("a symlink whose target leaves the workspace is recorded as a violation", a
     "utf8"
   );
 
+  await approveForTest(root, "sample");
+
   const execution = await runTask(root, "sample");
   const observation = await readJson(path.join(execution.runDir, "harness-observation.json"));
   const violations = (observation.policyChecks as { pathViolations: { path: string; violationCode: string }[] })
@@ -809,4 +842,94 @@ test("a symlink whose target leaves the workspace is recorded as a violation", a
     ),
     `expected a symlink escape violation, got ${JSON.stringify(violations)}`
   );
+});
+
+test("an unapproved Task cannot run and leaves no Run Trace", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-approval-"));
+  await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
+  await mkdir(path.join(root, ".codefleet", "runs"), { recursive: true });
+  await writeFile(
+    path.join(root, ".codefleet", "config.json"),
+    `${JSON.stringify({ version: "0.1.0", defaultAgent: "codex", mode: "dry-run", workspace: { id: "approval-test" } })}\n`,
+    "utf8"
+  );
+  const taskYaml = [
+    "id: sample",
+    "title: Sample task",
+    "projectPath: .",
+    "goal: Exercise approval gating",
+    "scope:",
+    '  include: ["src/**"]',
+    "  exclude: []",
+    "constraints: []",
+    "doneCriteria: [Artifacts exist]",
+    "workflow: [IMPLEMENT]",
+    "status: READY",
+    ""
+  ].join("\n");
+  await writeFile(path.join(root, ".codefleet", "tasks", "sample.yaml"), taskYaml, "utf8");
+
+  await assert.rejects(() => runTask(root, "sample"), /not approved for execution.*NO_REVISION_CREATED/s);
+  assert.deepEqual(await readdir(path.join(root, ".codefleet", "runs")), [], "a refused Task writes no Run");
+
+  await approveForTest(root, "sample");
+  const execution = await runTask(root, "sample");
+
+  // The Run Plan records which approval authorised it.
+  const runPlan = await readJson(path.join(execution.runDir, "run-plan.json"));
+  const approval = runPlan.approval as { taskRevision: number; approvalTargetHash: string; approvedBy: string };
+  assert.equal(approval.taskRevision, 1);
+  assert.equal(approval.approvedBy, "tester");
+  assert.equal(approval.approvalTargetHash.length, 64);
+});
+
+test("editing a Task after approval revokes its executability", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-reapprove-"));
+  await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
+  await writeFile(
+    path.join(root, ".codefleet", "config.json"),
+    `${JSON.stringify({ version: "0.1.0", defaultAgent: "codex", mode: "dry-run", workspace: { id: "reapprove-test" } })}\n`,
+    "utf8"
+  );
+  const taskPath = path.join(root, ".codefleet", "tasks", "sample.yaml");
+  const body = (goal: string): string =>
+    [
+      "id: sample",
+      "title: Sample task",
+      "projectPath: .",
+      `goal: ${goal}`,
+      "scope:",
+      '  include: ["src/**"]',
+      "  exclude: []",
+      "constraints: []",
+      "doneCriteria: [Artifacts exist]",
+      "workflow: [IMPLEMENT]",
+      "status: READY",
+      ""
+    ].join("\n");
+
+  await writeFile(taskPath, body("original goal"), "utf8");
+  await approveForTest(root, "sample");
+  await runTask(root, "sample");
+
+  // Approval named the old content hash and does not extend to the edit.
+  await writeFile(taskPath, body("a different goal entirely"), "utf8");
+  await assert.rejects(
+    () => runTask(root, "sample"),
+    /TASK_CONTENT_CHANGED_AFTER_APPROVAL/
+  );
+
+  // Re-approving the edited content is refused until the old approval is
+  // invalidated explicitly, so approval never carries across an edit silently.
+  const { approveTask: approve, invalidateApproval } = await import("../src/task-ledger.ts");
+  const blocked = await approve(root, { taskId: "sample", taskPath, actorId: "tester", reason: "re-approve" });
+  assert.equal(blocked.failedPhase, "M2_PRECHECK");
+  assert.match(blocked.failureMessage, /approved for different content; invalidate it first/);
+
+  await invalidateApproval(root, { taskId: "sample", taskPath, actorId: "tester", reason: "task edited" });
+  await approve(root, { taskId: "sample", taskPath, actorId: "tester", reason: "re-approved after edit" });
+
+  const execution = await runTask(root, "sample");
+  const runPlan = await readJson(path.join(execution.runDir, "run-plan.json"));
+  assert.equal((runPlan.approval as { taskRevision: number }).taskRevision, 2, "a new revision was created");
 });

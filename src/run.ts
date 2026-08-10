@@ -6,6 +6,7 @@ import { createAgentAdapter } from "./agent.ts";
 import { loadConfig } from "./config.ts";
 import { renderPrompt } from "./prompt.ts";
 import { loadTask } from "./task.ts";
+import { contentHashOf, replayApproval } from "./task-ledger.ts";
 import type { AgentRunInput, AgentRunResult, RunResultFile } from "./types.ts";
 import { normalizeCommand, preflightCommand, type CommandMatcher, type DestructiveMatcher } from "./command-policy.ts";
 import { evaluatePathPolicy, type PathViolation } from "./path-policy.ts";
@@ -128,6 +129,17 @@ export async function runTask(
   const config = await loadConfig(rootDir);
   const { task, taskPath } = await loadTask(rootDir, taskId);
   const projectPath = await resolveWorkspaceProjectPath(discovery.selectedWorkspaceRootRealPath, task.projectPath);
+
+  // A Run needs a valid approval bound to exactly this content. This is checked
+  // before any artifact is written, so an unapproved Task leaves no Run Trace.
+  const approval = await replayApproval(rootDir, taskId, await contentHashOf(taskPath));
+  if (approval.blockedReason.length > 0) {
+    throw new Error(
+      `Task is not approved for execution: ${taskId} (${approval.blockedReason}).
+` +
+        "Run 'codefleet task approve " + taskId + " --reason <text>' first."
+    );
+  }
   const startedAtDate = new Date();
   const runId = await nextRunId(rootDir, startedAtDate);
   const runPlanId = `${runId}:plan`;
@@ -203,6 +215,12 @@ export async function runTask(
     runId,
     taskId: task.id,
     createdAt: formatDateTimeWithOffset(startedAtDate),
+    approval: {
+      taskRevision: approval.approvedRevision,
+      approvalTargetHash: approval.approvedHash,
+      approvedBy: approval.approvedBy,
+      approvedAt: approval.approvedAt
+    },
     sourceRefs: {
       taskRevisionRef: sourceTaskRef,
       taskSnapshotRef,

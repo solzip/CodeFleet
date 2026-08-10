@@ -6,3 +6,4 @@ node_modules/
 .codefleet/reviews/
 .codefleet/objectives/
 .codefleet/locks/
+.codefleet/tasks/*/

@@ -18,6 +18,7 @@ import { renderPrompt } from "./prompt.ts";
 import { reviewRun, type ReviewDecision } from "./review.ts";
 import { runTask, listRuns } from "./run.ts";
 import { formatValidationErrors, loadTask, loadTaskForValidation } from "./task.ts";
+import { approveTask, contentHashOf, invalidateApproval, replayApproval } from "./task-ledger.ts";
 import { discoverWorkspace, type WorkspaceDiscovery } from "./workspace.ts";
 
 interface CliOptions {
@@ -112,22 +113,50 @@ async function handlePrompt(cwd: string, options: CliOptions, taskId: string): P
 async function handleTask(cwd: string, options: CliOptions, args: string[]): Promise<void> {
   const rootDir = await workspaceRoot(cwd, options);
   const [subcommand, taskId] = args;
-  if (subcommand !== "validate") {
-    throw new Error("Usage: codefleet task validate <task-id>");
-  }
-
   const id = requireArg(taskId, "task-id");
   await loadConfig(rootDir);
-  const { validation } = await loadTaskForValidation(rootDir, id);
 
-  if (validation.errors.length > 0) {
-    throw new Error(formatValidationErrors(id, validation));
+  if (subcommand === "validate") {
+    const { validation } = await loadTaskForValidation(rootDir, id);
+    if (validation.errors.length > 0) {
+      throw new Error(formatValidationErrors(id, validation));
+    }
+    console.log(`Task is valid: ${id}`);
+    for (const warning of validation.warnings) {
+      console.log(`warning: ${warning}`);
+    }
+    return;
   }
 
-  console.log(`Task is valid: ${id}`);
-  for (const warning of validation.warnings) {
-    console.log(`warning: ${warning}`);
+  if (subcommand === "approve" || subcommand === "invalidate") {
+    const { taskPath, validation } = await loadTaskForValidation(rootDir, id);
+    if (subcommand === "approve" && validation.errors.length > 0) {
+      // An invalid Task cannot become an executable contract.
+      throw new Error(formatValidationErrors(id, validation));
+    }
+    const flags = parseReviewFlags(args.slice(2));
+    const reason = requireArg(flags.reason, "--reason");
+    const actorId = flags.actor ?? "local-user";
+    const outcome =
+      subcommand === "approve"
+        ? await approveTask(rootDir, { taskId: id, taskPath, actorId, reason })
+        : await invalidateApproval(rootDir, { taskId: id, taskPath, actorId, reason });
+    reportOutcome(outcome, `${subcommand}d: ${id}`);
+    return;
   }
+
+  if (subcommand === "status") {
+    const { taskPath } = await loadTaskForValidation(rootDir, id);
+    const state = await replayApproval(rootDir, id, await contentHashOf(taskPath));
+    console.log(`task: ${id}`);
+    console.log(`latestRevision: ${state.latestRevision}`);
+    console.log(`approvedRevision: ${state.approvedRevision ?? "(none)"}`);
+    console.log(`approvedBy: ${state.approvedBy || "(none)"}`);
+    console.log(`executable: ${state.blockedReason.length === 0 ? "yes" : `no (${state.blockedReason})`}`);
+    return;
+  }
+
+  throw new Error("Usage: codefleet task validate|approve|invalidate|status <task-id>");
 }
 
 async function handleStatus(cwd: string, options: CliOptions): Promise<void> {
@@ -484,7 +513,8 @@ Usage:
   codefleet [--workspace <path>] init
   codefleet [--workspace <path>] run <task-id>
   codefleet [--workspace <path>] prompt <task-id>
-  codefleet [--workspace <path>] task validate <task-id>
+  codefleet [--workspace <path>] task validate|status <task-id>
+  codefleet [--workspace <path>] task approve|invalidate <task-id> --reason <text>
   codefleet [--workspace <path>] status
   codefleet [--workspace <path>] runs
   codefleet [--workspace <path>] objective create <id> --title <text> [--kind ONE_OFF|SEQUENCE|WORKSTREAM]

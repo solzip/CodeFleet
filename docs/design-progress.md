@@ -26,7 +26,7 @@ Phase 11     대기      설계 확정 후 구현 재개
 ```
 
 ```text
-전체 98단계 중 94단계 완료
+전체 98단계 중 95단계 완료
 FINAL RULE 82개
 설계 진행도: 100% (미고정 항목 없음)
 구현 진행도: 약 60-70%
@@ -341,8 +341,14 @@ Phase 10에서 반복된 판단 기준:
         - reason 필수, 같은 전이 반복은 no-op
         - SEQUENCE 는 derived NEXT 최대 1개, reorder 는 future segment 만
         - CLI: objective attach|block|unblock|skip|unskip|cancel-item|reorder
-[ ] 95. Task approval (승인된 것만 run)                                <- 다음, 미착수
-[ ] 96. RUN_REVIEW_DECIDED 이관
+[x] 95. Task approval — 승인된 것만 run
+        - Task ledger 별도 파일, approval 은 revision 에 바인딩
+        - 승인 없는 Task 는 run 거부, Run Trace 를 남기지 않음
+        - 편집하면 content hash 가 바뀌어 기존 승인이 덮지 않음
+        - 재승인은 명시적 invalidate 이후에만 가능
+        - run-plan.json 에 어느 승인으로 실행됐는지 기록
+        - CLI: task approve|invalidate|status
+[ ] 96. RUN_REVIEW_DECIDED 이관                                        <- 다음, 미착수
 [ ] 97. VERIFIED 계산 + Queue 진행
 [ ] 98. 이후 final 슬라이스 (carry-forward / export / CAPABILITY_GAP) (workspace snapshot / provider transcript / agent command 관측)
 [ ] 87. 이후 final 슬라이스

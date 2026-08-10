@@ -51,7 +51,7 @@ has resumed.
 
 Design is complete. The Harness now executes verification commands itself.
 The next topic is closing the remaining v0.2 evidence gaps.
-The next implementation topic is Task approval, so only an approved revision can run.
+The next implementation topic is importing local reviews into the Objective ledger.
 ```
 
 ## Product Definition
@@ -121,6 +121,8 @@ Current implementation status:
 - A structurally broken ledger blocks replay rather than deriving a plausible snapshot.
 - Queue state is stored as WAITING / BLOCKED / SKIPPED / CANCELED and enforced against the fixed transition table; CANCELED is terminal and SKIPPED returns to WAITING only through an explicit unskip with a reason.
 - NEXT is derived, never stored, and a SEQUENCE Objective has at most one; QUEUE_REORDERED declares a new future order and refuses to touch decided items.
+- The Task ledger owns approval, replayed from events rather than stored on the task file, and approval binds to a content hash.
+- An unapproved Task cannot run and leaves no Run Trace; editing after approval revokes executability, and re-approval requires an explicit invalidation first.
 - Missing final evidence is represented as unavailable / degraded reason instead of truth.
 ```
 
