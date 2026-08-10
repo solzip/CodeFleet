@@ -304,3 +304,32 @@ test("reorder moves the future segment and refuses to touch history", async () =
   );
   assert.equal(snapshot.queue[1].derivedState, "NEXT", "NEXT follows the new future order");
 });
+
+test("replaying an Objective that was never created is BLOCKED, not a clean OPEN", async () => {
+  const root = await seed();
+  await mkdir(path.join(root, ".codefleet", "objectives", "ghost"), { recursive: true });
+
+  const { snapshot } = await replayObjective(root, "ghost");
+
+  // Replaying nothing must not read like replaying a healthy ledger. Without
+  // this the snapshot reported status OPEN and replayStatus COMPLETE for an
+  // Objective that does not exist.
+  assert.equal(snapshot.replay.replayStatus, "BLOCKED");
+  assert.deepEqual(snapshot.replay.unavailableReasons, ["OBJECTIVE_NOT_CREATED"]);
+  assert.equal(snapshot.replay.scanScope.eventsRead, 0);
+  assert.equal(snapshot.replay.scanScope.eventsApplied, 0);
+  assert.equal(snapshot.replay.scanScope.findingsByClass.REFERENCE_FAILURE, 1);
+});
+
+test("replay reports how many events it read and applied", async () => {
+  const root = await seed();
+  await create(root, "auth", "Auth work");
+  await attach(root, "auth", "login");
+  await transition(root, "auth", "auth:login:1", "QUEUE_ITEM_SKIPPED");
+
+  const { snapshot } = await replayObjective(root, "auth");
+  assert.equal(snapshot.replay.replayStatus, "COMPLETE");
+  assert.equal(snapshot.replay.scanScope.eventsRead, 3);
+  assert.equal(snapshot.replay.scanScope.eventsApplied, 3);
+  assert.deepEqual(snapshot.replay.scanScope.findingsByClass, {});
+});

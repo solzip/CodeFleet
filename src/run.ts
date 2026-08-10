@@ -105,6 +105,11 @@ interface RunSummary {
     verificationGateResult: VerificationGateResult;
     verificationGateReason: VerificationGateReason;
     derivedFromVerificationAttemptIds: string[];
+    scanScope: {
+      attemptsRecorded: number;
+      attemptsExecuted: number;
+      attemptsBlocked: number;
+    };
   };
   evidenceAuthority: {
     commandEvidenceAuthority: string;
@@ -598,7 +603,12 @@ function buildRunSummary(input: {
       observedCheck,
       verificationGateResult,
       verificationGateReason,
-      derivedFromVerificationAttemptIds: verificationAttemptId === null ? [] : [verificationAttemptId]
+      derivedFromVerificationAttemptIds: verificationAttemptId === null ? [] : [verificationAttemptId],
+      scanScope: input.verificationEvidence?.scanScope ?? {
+        attemptsRecorded: 0,
+        attemptsExecuted: 0,
+        attemptsBlocked: 0
+      }
     },
     evidenceAuthority: {
       commandEvidenceAuthority: commandEvidenceAuthority(input.harnessObservation),

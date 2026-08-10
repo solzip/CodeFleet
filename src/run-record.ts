@@ -79,12 +79,18 @@ export function renderRunRecord(input: RunRecordInput): string {
     .map((entry) => record(entry))
     .filter((entry) => typeof entry.path === "string");
   const pathEvaluation = record(policyChecks.pathPolicyEvaluation);
+  const pathScope = record(pathEvaluation.scanScope);
   if (pathEvaluation.evaluated !== true) {
     lines.push(
       `Path policy was not evaluated: ${str(pathEvaluation.unavailableReason, "reason not recorded")}`
     );
   } else if (violations.length === 0) {
-    lines.push("No path violation.");
+    // Saying "no violation" without saying how much was looked at leaves the
+    // reader unable to tell a clean run from an unexamined one.
+    lines.push(
+      `No path violation. ${num(pathScope.pathsChecked)} path(s) checked against ` +
+        `${num(pathScope.allowedPatterns)} allowed and ${num(pathScope.deniedPatterns)} denied pattern(s).`
+    );
   } else {
     lines.push("Path violations:");
     lines.push("");
@@ -96,6 +102,7 @@ export function renderRunRecord(input: RunRecordInput): string {
 
   lines.push("## What was verified");
   lines.push("");
+  const verifyScope = record(record(runSummary.check).scanScope);
   lines.push("```text");
   lines.push(`observedCheck          : ${str(check.observedCheck, "NONE")}`);
   lines.push(`verificationGateResult : ${str(check.verificationGateResult, "NOT_SATISFIED")}`);
@@ -103,6 +110,9 @@ export function renderRunRecord(input: RunRecordInput): string {
   lines.push(`verificationAuthority  : ${str(authority.verificationAuthority, "NONE")}`);
   lines.push(`commandEvidenceAuthority: ${str(authority.commandEvidenceAuthority, "NONE")}`);
   lines.push(`computedRisk           : ${str(policy.computedRisk, "UNKNOWN")}`);
+  lines.push(
+    `attempts               : ${num(verifyScope.attemptsExecuted)} executed of ${num(verifyScope.attemptsRecorded)} recorded, ${num(verifyScope.attemptsBlocked)} blocked`
+  );
   lines.push("```");
   lines.push("");
 
@@ -182,6 +192,10 @@ function record(value: unknown): Record<string, unknown> {
 
 function list(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+function num(value: unknown): number {
+  return typeof value === "number" ? value : 0;
 }
 
 function str(value: unknown, fallback: string): string {

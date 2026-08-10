@@ -128,7 +128,10 @@ test("runTask writes run-plan and S2 artifacts before legacy result", async () =
     observedCheck: "NONE",
     verificationGateResult: "NOT_SATISFIED",
     verificationGateReason: "MISSING",
-    derivedFromVerificationAttemptIds: ["verify-001"]
+    derivedFromVerificationAttemptIds: ["verify-001"],
+    // No verification plan means nothing was attempted, and the counts say so
+    // rather than leaving a reader to infer it from the gate reason.
+    scanScope: { attemptsRecorded: 0, attemptsExecuted: 0, attemptsBlocked: 0 }
   });
   const runSummaryInputs = runSummary.inputs as {
     runPlanRef: { path: string };

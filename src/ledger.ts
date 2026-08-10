@@ -99,6 +99,13 @@ export interface ObjectiveSnapshot {
     generatedAt: string;
     unavailableReasons: string[];
     findings: ReplayFinding[];
+    // Replaying no events and replaying a healthy ledger must not look the
+    // same. An Objective with no OBJECTIVE_CREATED has nothing to derive from.
+    scanScope: {
+      eventsRead: number;
+      eventsApplied: number;
+      findingsByClass: Record<string, number>;
+    };
   };
 }
 
@@ -194,13 +201,26 @@ export async function replayObjective(rootDir: string, objectiveId: string): Pro
   });
 
   const structural = findings.some((f) => f.failureClass === "LEDGER_STRUCTURAL_FAILURE");
+  // An Objective that was never created cannot be reported as an OPEN one with
+  // a clean replay. There is no source to derive any state from.
+  const created = ordered.some((event) => event.type === "OBJECTIVE_CREATED");
+  if (!structural && !created) {
+    findings.push({
+      failureClass: "REFERENCE_FAILURE",
+      checkId: "OBJECTIVE_CREATED_PRESENT",
+      detail: `no OBJECTIVE_CREATED event for ${objectiveId}`,
+      affectedSeq: null
+    });
+  }
   let status: ObjectiveStatus = "OPEN";
   let kind: ObjectiveKind = "ONE_OFF";
   let title = "";
   const queue: QueueItem[] = [];
 
-  if (!structural) {
+  let eventsApplied = 0;
+  if (!structural && created) {
     for (const event of ordered) {
+      eventsApplied += 1;
       if (event.type === "OBJECTIVE_CREATED") {
         status = "OPEN";
         kind = (event.payload.kind as ObjectiveKind) ?? "ONE_OFF";
@@ -248,13 +268,25 @@ export async function replayObjective(rootDir: string, objectiveId: string): Pro
     queue,
     cursor: { objectiveQueueItemId: cursorOf(queue), derived: true },
     replay: {
-      replayStatus: structural ? "BLOCKED" : "COMPLETE",
+      replayStatus: structural || !created ? "BLOCKED" : "COMPLETE",
       lastSeq: ordered.length === 0 ? 0 : ordered[ordered.length - 1].seq,
       sourceHash,
       generatedAt: new Date().toISOString(),
       // A blocked replay must not present itself as a fresh complete snapshot.
-      unavailableReasons: structural ? ["LEDGER_STRUCTURAL_FAILURE"] : [],
-      findings
+      unavailableReasons: structural
+        ? ["LEDGER_STRUCTURAL_FAILURE"]
+        : created
+          ? []
+          : ["OBJECTIVE_NOT_CREATED"],
+      findings,
+      scanScope: {
+        eventsRead: events.length,
+        eventsApplied,
+        findingsByClass: findings.reduce<Record<string, number>>((acc, finding) => {
+          acc[finding.failureClass] = (acc[finding.failureClass] ?? 0) + 1;
+          return acc;
+        }, {})
+      }
     }
   };
 
