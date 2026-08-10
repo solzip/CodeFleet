@@ -199,6 +199,10 @@ test("runTask rejects projectPath outside the workspace before S2 artifacts", as
     "utf8"
   );
 
+  // Approved, so the refusal below is genuinely about the path rather than a
+  // missing approval that would be reported first.
+  await approveForTest(root, "sample");
+
   await assert.rejects(() => runTask(root, "sample"), /workspace-relative/);
   assert.deepEqual(await readdir(path.join(root, ".codefleet", "runs")), []);
 });
@@ -231,6 +235,8 @@ test("runTask rejects file projectPath before S2 artifacts", async () => {
     ].join("\n"),
     "utf8"
   );
+
+  await approveForTest(root, "sample");
 
   await assert.rejects(() => runTask(root, "sample"), /workspace directory/);
   assert.deepEqual(await readdir(path.join(root, ".codefleet", "runs")), []);
@@ -932,4 +938,40 @@ test("editing a Task after approval revokes its executability", async () => {
   const execution = await runTask(root, "sample");
   const runPlan = await readJson(path.join(execution.runDir, "run-plan.json"));
   assert.equal((runPlan.approval as { taskRevision: number }).taskRevision, 2, "a new revision was created");
+});
+
+test("approval is refused before a bad projectPath is reported", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-order-"));
+  await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
+  await mkdir(path.join(root, ".codefleet", "runs"), { recursive: true });
+  await writeFile(
+    path.join(root, ".codefleet", "config.json"),
+    `${JSON.stringify({ version: "0.1.0", defaultAgent: "codex", mode: "dry-run", workspace: { id: "order-test" } })}\n`,
+    "utf8"
+  );
+  // Both wrong at once: unapproved and pointing outside the workspace.
+  await writeFile(
+    path.join(root, ".codefleet", "tasks", "sample.yaml"),
+    [
+      "id: sample",
+      "title: Sample task",
+      "projectPath: ../outside",
+      "goal: Exercise refusal order",
+      "scope:",
+      '  include: ["src/**"]',
+      "  exclude: []",
+      "constraints: []",
+      "doneCriteria: [Artifacts exist]",
+      "workflow: [IMPLEMENT]",
+      "status: READY",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  // Approval answers whether this may run at all, so it is reported first.
+  // Telling someone to fix a path when they have not approved sends them the
+  // wrong way.
+  await assert.rejects(() => runTask(root, "sample"), /not approved for execution/);
+  assert.deepEqual(await readdir(path.join(root, ".codefleet", "runs")), []);
 });

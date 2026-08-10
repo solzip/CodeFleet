@@ -128,10 +128,10 @@ export async function runTask(
   const discovery = workspaceDiscovery ?? await discoverWorkspace({ cwd: rootDir, workspace: rootDir });
   const config = await loadConfig(rootDir);
   const { task, taskPath } = await loadTask(rootDir, taskId);
-  const projectPath = await resolveWorkspaceProjectPath(discovery.selectedWorkspaceRootRealPath, task.projectPath);
-
-  // A Run needs a valid approval bound to exactly this content. This is checked
-  // before any artifact is written, so an unapproved Task leaves no Run Trace.
+  // Approval is checked before anything else about how to run. It answers
+  // whether this contract may execute at all; projectPath only answers where.
+  // Reporting a path problem to someone who has not approved sends them the
+  // wrong way, and no artifact is written either way.
   const approval = await replayApproval(rootDir, taskId, await contentHashOf(taskPath));
   if (approval.blockedReason.length > 0) {
     throw new Error(
@@ -140,6 +140,8 @@ export async function runTask(
         "Run 'codefleet task approve " + taskId + " --reason <text>' first."
     );
   }
+
+  const projectPath = await resolveWorkspaceProjectPath(discovery.selectedWorkspaceRootRealPath, task.projectPath);
   const startedAtDate = new Date();
   const runId = await nextRunId(rootDir, startedAtDate);
   const runPlanId = `${runId}:plan`;

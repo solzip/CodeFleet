@@ -348,6 +348,8 @@ Phase 10에서 반복된 판단 기준:
         - 재승인은 명시적 invalidate 이후에만 가능
         - run-plan.json 에 어느 승인으로 실행됐는지 기록
         - CLI: task approve|invalidate|status
+        - 승인 검사는 projectPath 해석보다 먼저 (실행 자격이 실행 방법보다 앞선다)
+        - 픽스처 전수 검사 추가 — 승인 없이 runTask 를 부르면 테스트가 깨진다
 [ ] 96. RUN_REVIEW_DECIDED 이관                                        <- 다음, 미착수
 [ ] 97. VERIFIED 계산 + Queue 진행
 [ ] 98. 이후 final 슬라이스 (carry-forward / export / CAPABILITY_GAP) (workspace snapshot / provider transcript / agent command 관측)
