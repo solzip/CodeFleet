@@ -34,7 +34,7 @@ class CodexAdapter implements AgentAdapter {
     }
 
     const prompt = await readFile(input.promptPath, "utf8");
-    const commandConfig = input.config.agents?.codex ?? {};
+    const commandConfig = input.config.adapterCommand;
     const command = commandConfig.command ?? "codex";
     const args = commandConfig.args ?? ["exec", "-"];
 

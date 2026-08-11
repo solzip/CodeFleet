@@ -32,7 +32,7 @@ CodeFleet은 Codex 러너, 프롬프트 생성기, AI CLI 래퍼, 중앙 프로�
 
 구현되지 않은 것 — 암시하지 않고 명시한다:
 
-- **AgentRole**은 `docs/concept-foundation.md` §11에 설계되어 있으나 코드가 없다. 모든 Run이 `defaultAgent`를 사용하므로 아직 역할 기반 위임이 아니다.
+- **AgentRole**은 `docs/concept-foundation.md` §11에 설계되어 있으나 코드가 없다. 모든 Run이 `defaults.run.agentAdapter` 하나를 사용하므로 아직 역할 기반 위임이 아니다.
 - **Risk 엔진** — `computedRisk`는 항상 `UNKNOWN`이다 (`RISK_ENGINE_NOT_IMPLEMENTED_V02`).
 - **실행 격리** — `isolation.mode`는 항상 `NONE`이다.
 - **Harness가 볼 수 있는 command 채널** — 에이전트가 스스로 실행한 명령은 관측되지 않는다. [Execute 모드](#execute-모드) 참고.
@@ -68,19 +68,29 @@ Windows PowerShell에서 npm 스크립트 실행이 제한된다면 `cmd.exe /c 
 codefleet init
 ```
 
-`.codefleet/tasks/`, `.codefleet/runs/`, `.codefleet/config.json`을 만든다. 나머지 디렉터리 — `objectives/`, `reviews/`, `prompts/`, `locks/` — 는 처음 필요할 때 생성된다.
+`.codefleet/tasks/`, `.codefleet/runs/`, `.codefleet/config.json`, `.codefleet/local.json`을 만든다. 나머지 디렉터리 — `objectives/`, `reviews/`, `prompts/`, `locks/` — 는 처음 필요할 때 생성된다.
 
-`init`이 쓰는 config:
+`.codefleet/config.json`이 **Project Profile**이다. 커밋되고 공유되는 워크스페이스 정책이다.
 
 ```json
 {
-  "version": "0.1.0",
-  "defaultAgent": "codex",
-  "mode": "dry-run",
-  "agents": {
-    "codex": { "command": "codex", "args": ["exec", "-"] }
+  "schemaVersion": "1.0.0",
+  "project": { "id": "", "name": "" },
+  "workspace": { "id": "codefleet-workspace" },
+  "defaults": {
+    "task": { "harnessMode": "DRY_RUN" },
+    "run": { "agentAdapter": "codex", "isolationMode": "NONE" }
   },
   "policies": {
+    "harness": {
+      "allowedModes": ["DRY_RUN", "SUGGEST_ONLY", "WORKSPACE_EDIT", "COMMAND_EXEC"],
+      "maxMode": "COMMAND_EXEC",
+      "requireIsolationForMutation": true,
+      "allowDegradedCommandObservation": false,
+      "approvalRequiredForDestructiveCommands": true
+    },
+    "agentAdapters": { "allowedAdapters": ["codex"] },
+    "files": {},
     "commands": {
       "allowedCommands": [],
       "deniedCommands": [],
@@ -88,18 +98,42 @@ codefleet init
       "requireHarnessVisibleCommandChannel": true,
       "allowProviderReportedCommandTruth": false
     },
-    "harness": {
-      "allowedModes": ["DRY_RUN", "SUGGEST_ONLY", "WORKSPACE_EDIT", "COMMAND_EXEC"],
-      "maxMode": "COMMAND_EXEC",
-      "requireIsolationForMutation": true,
-      "allowDegradedCommandObservation": false,
-      "approvalRequiredForDestructiveCommands": true
-    }
+    "risk": {},
+    "verification": {},
+    "redaction": {},
+    "carryForward": {},
+    "agentRoles": {}
+  },
+  "references": {},
+  "localPolicy": {
+    "mergeMode": "RESTRICT_ONLY",
+    "overlayPath": ".codefleet/local.json",
+    "allowedLocalKeys": ["adapterCommand"]
   }
 }
 ```
 
-모든 policy 기본값은 각 스위치의 가장 엄격한 쪽이다. 아무것도 말하지 않은 프로파일을 "전부 허용"으로 읽어서는 안 되기 때문이다. policy 블록의 알 수 없는 키는 무시하지 않고 거부한다. 오타 난 `deniedCommands`는 가득 찬 denylist처럼 보이는 빈 denylist이기 때문이다.
+**top-level 키 7개와 `policies` 키 9개는 정확히 이 집합이어야 한다.** 빠진 키도 낯선 키도 똑같이 거부된다. 한쪽만 막으면 `policies`를 통째로 빠뜨린 프로파일이 "전부 허용"으로 읽히고, 그건 정책을 쓴 사람이 의도한 적 없는 상태다. 비어 있는 블록이라도 명시적으로 `{}`를 써야 "정책이 없다"와 "블록을 빠뜨렸다"가 구분된다.
+
+모든 policy 기본값은 각 스위치의 가장 엄격한 쪽이다. 아무것도 말하지 않은 프로파일을 "전부 허용"으로 읽어서는 안 되기 때문이다. policy 블록의 알 수 없는 키도 무시하지 않고 거부한다. 오타 난 `deniedCommands`는 가득 찬 denylist처럼 보이는 빈 denylist이기 때문이다.
+
+### Local Overlay
+
+Project Profile은 **런타임 증거, 로컬 머신 상태, 자격증명을 담을 수 없다.** 커밋되어 공유되는 파일이기 때문이다. 어댑터 실행 경로가 대표적이다 — 그건 한 사람의 머신이지 워크스페이스의 정책이 아니다. 그래서 `.codefleet/local.json`으로 간다:
+
+```json
+{
+  "adapterCommand": { "command": "codex", "args": ["exec", "-"] }
+}
+```
+
+Overlay는 **좁힐 수만 있다**(`mergeMode: "RESTRICT_ONLY"`). `allowedLocalKeys`에 없는 키는 적용되지 않고 위반으로 기록된다. Overlay가 두 번째 검토받지 않은 정책 소스가 되지 못하게 하기 위해서다.
+
+Profile 로더는 모든 깊이의 키 이름과 문자열 값을 훑어 다음을 거부하고, **몇 개를 훑었는지 함께 보고한다**. 0건 검사와 0건 발견이 같아 보이면 안 되기 때문이다:
+
+- 런타임/로컬 상태를 가리키는 키 이름 (`stdout`, `diff`, `token`, `command`, `args`, `model` 등)
+- 눈으로 식별 가능한 자격증명 형식의 값 (GitHub 토큰, AWS 액세스 키, 개인키 블록 등)
+- 경로형 필드의 절대 경로. 워크스페이스 상대 경로여야 한다
 
 ## 1. Objective
 
@@ -315,7 +349,7 @@ codefleet lock break --task <id>   # 해당 Task의 남아 있는 Run 락 해제
 
 ## Execute 모드
 
-Codex 어댑터가 프로세스를 실행하게 하려면 `.codefleet/config.json`의 `mode`를 `execute`로 바꾼다. 추가 플래그 없이는 `codefleet run`이 시작을 거부하고 Run 디렉터리를 만들지 않는다:
+Codex 어댑터가 프로세스를 실행하게 하려면 `.codefleet/config.json`의 `defaults.task.harnessMode`를 `COMMAND_EXEC`로 바꾼다. 네 모드 중 파일 편집과 명령 실행을 모두 켜는 것은 이것뿐이다. 추가 플래그 없이는 `codefleet run`이 시작을 거부하고 Run 디렉터리를 만들지 않는다:
 
 ```text
 Run Planning is blocked: this Run may execute commands, and no Harness-visible
@@ -393,7 +427,8 @@ codefleet [--workspace <path>] review <run-id> --decision <ACCEPTED|REJECTED|NEE
 
 ```text
 .codefleet/
-  config.json                        Project Profile
+  config.json                        Project Profile. 커밋되는 워크스페이스 정책
+  local.json                         Local Overlay. 커밋하지 않는 머신 로컬 값
   tasks/<task-id>.yaml               Task 계약
   tasks/<task-id>/task-ledger.jsonl  revision과 승인
   objectives/<id>/ledger.jsonl       append-only Objective 이벤트

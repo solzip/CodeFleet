@@ -400,7 +400,7 @@ async function executeRun(
       mode: config.mode
     },
     selectedAgentAdapter: {
-      adapterId: config.defaultAgent
+      adapterId: config.agentAdapter
     },
     effectivePolicy,
     computedRisk: {
@@ -437,7 +437,7 @@ async function executeRun(
     taskSnapshotRef,
     promptRef,
     selectedAgentAdapter: {
-      adapterId: config.defaultAgent
+      adapterId: config.agentAdapter
     },
     capabilities,
     workingDirectoryRef: task.projectPath,
@@ -464,7 +464,7 @@ async function executeRun(
   await writeJson(preRunSnapshotPath, preRunSnapshot);
   const preRunSnapshotRef = await fileRef(rootDir, preRunSnapshotPath);
 
-  const agentName = config.defaultAgent;
+  const agentName = config.agentAdapter;
   const agentResult = await runAgentSafely(agentName, {
     task,
     runDir,

@@ -17,6 +17,7 @@ import {
 } from "../src/ledger.ts";
 import { computeMutationId, lockPathFor, readHolder } from "../src/mutation.ts";
 import { coversRule } from "./rule-coverage.ts";
+import { profileJson, writeLocalOverlay } from "./profile-fixture.ts";
 
 const MUT_ID = "MUTATION_ID_IS_INTENT_DERIVED_AND_IDEMPOTENT";
 const LOCK = "MUTATION_LOCK_IS_FAIL_FAST_AND_EXCLUDES_RUN_EXECUTION";
@@ -34,7 +35,7 @@ async function seed(): Promise<string> {
   await mkdir(path.join(root, ".codefleet"), { recursive: true });
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({ version: "0.1.0", defaultAgent: "codex", mode: "dry-run", workspace: { id: "ledger-test" } })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "ledger-test", harnessMode: "DRY_RUN" }), null, 2)}\n`,
     "utf8"
   );
   return root;

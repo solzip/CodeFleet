@@ -168,9 +168,10 @@ async function handleStatus(cwd: string, options: CliOptions): Promise<void> {
   const runs = await listRuns(rootDir);
 
   console.log("CodeFleet status");
-  console.log(`version: ${config.version}`);
-  console.log(`defaultAgent: ${config.defaultAgent}`);
-  console.log(`mode: ${config.mode}`);
+  console.log(`schemaVersion: ${config.schemaVersion}`);
+  console.log(`agentAdapter: ${config.agentAdapter}`);
+  console.log(`harnessMode: ${config.harnessMode}`);
+  console.log(`isolationMode: ${config.isolationMode}`);
   console.log(`workspace: ${discovery.workspaceId}`);
   console.log(`discovery: ${discovery.discoveryMode}`);
   console.log(`tasks: ${tasks.length}`);

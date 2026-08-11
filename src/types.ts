@@ -52,11 +52,32 @@ export const DEFAULT_HARNESS_POLICY: HarnessPolicyConfig = {
   approvalRequiredForDestructiveCommands: true
 };
 
+// The four requested harness modes. `mode` below is the derived two-value view
+// the Run currently acts on; the four-value axis is what the Profile stores and
+// what policies.harness bounds.
+export type HarnessMode = "DRY_RUN" | "SUGGEST_ONLY" | "WORKSPACE_EDIT" | "COMMAND_EXEC";
+
+export const HARNESS_MODES: HarnessMode[] = [
+  "DRY_RUN",
+  "SUGGEST_ONLY",
+  "WORKSPACE_EDIT",
+  "COMMAND_EXEC"
+];
+
+// A derived read model over the Project Profile and its Local Overlay, not a
+// second source of truth. Every field here is computed at load time; nothing
+// writes back to it, and the Profile stays the only thing on disk.
 export interface CodeFleetConfig {
-  version: string;
-  defaultAgent: string;
+  schemaVersion: string;
+  workspaceId: string;
+  harnessMode: HarnessMode;
+  /** COMMAND_EXEC is the only mode that both edits files and runs commands. */
   mode: CodeFleetMode;
-  agents?: Record<string, AgentCommandConfig>;
+  /** Resolved AdapterId. Provider-agnostic: never a command path or model name. */
+  agentAdapter: string;
+  isolationMode: string;
+  /** Comes from the Local Overlay. The Profile may not carry a command path. */
+  adapterCommand: AgentCommandConfig;
   policies: ProfilePolicies;
 }
 
@@ -170,16 +191,48 @@ export interface RunResultFile {
   error?: string;
 }
 
-export const DEFAULT_CONFIG: CodeFleetConfig = {
-  version: "0.1.0",
-  defaultAgent: "codex",
-  mode: "dry-run",
-  agents: {
-    codex: {
-      command: "codex",
-      args: ["exec", "-"]
-    }
+/** What `codefleet init` writes. Shaped by PROFILE_TOP_LEVEL_KEYS_FIXED. */
+export const DEFAULT_PROFILE = {
+  schemaVersion: "1.0.0",
+  project: { id: "", name: "" },
+  workspace: { id: "codefleet-workspace" },
+  defaults: {
+    task: { harnessMode: "DRY_RUN" },
+    run: { agentAdapter: "codex", isolationMode: "NONE" }
   },
+  policies: {
+    harness: DEFAULT_HARNESS_POLICY,
+    agentAdapters: { allowedAdapters: ["codex"] },
+    files: {},
+    commands: DEFAULT_COMMAND_POLICY,
+    risk: {},
+    verification: {},
+    redaction: {},
+    carryForward: {},
+    agentRoles: {}
+  },
+  references: {},
+  localPolicy: {
+    mergeMode: "RESTRICT_ONLY",
+    overlayPath: ".codefleet/local.json",
+    // The adapter command is one machine's path, not the workspace's policy.
+    allowedLocalKeys: ["adapterCommand"]
+  }
+};
+
+/** What `codefleet init` writes to the Local Overlay. Never committed. */
+export const DEFAULT_LOCAL_OVERLAY = {
+  adapterCommand: { command: "codex", args: ["exec", "-"] }
+};
+
+export const DEFAULT_CONFIG: CodeFleetConfig = {
+  schemaVersion: "1.0.0",
+  workspaceId: "codefleet-workspace",
+  harnessMode: "DRY_RUN",
+  mode: "dry-run",
+  agentAdapter: "codex",
+  isolationMode: "NONE",
+  adapterCommand: {},
   policies: {
     commands: DEFAULT_COMMAND_POLICY,
     harness: DEFAULT_HARNESS_POLICY

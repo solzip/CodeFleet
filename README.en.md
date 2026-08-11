@@ -38,7 +38,7 @@ Implemented today: the Objective ledger and queue, Task revision and approval le
 
 Not implemented, and named here rather than implied:
 
-- **AgentRole** is designed in `docs/concept-foundation.md` §11 but has no code. Every Run uses `defaultAgent`, so delegation is not role-based yet.
+- **AgentRole** is designed in `docs/concept-foundation.md` §11 but has no code. Every Run uses the single `defaults.run.agentAdapter`, so delegation is not role-based yet.
 - **Risk engine** — `computedRisk` is always `UNKNOWN` (`RISK_ENGINE_NOT_IMPLEMENTED_V02`).
 - **Execution isolation** — `isolation.mode` is always `NONE`.
 - **Harness-visible command channel** — commands the agent runs on its own are never observed. See [Execute Mode](#execute-mode).
@@ -74,19 +74,29 @@ On Windows PowerShell, if npm script execution is restricted, use `cmd.exe /c np
 codefleet init
 ```
 
-This creates `.codefleet/tasks/`, `.codefleet/runs/`, and `.codefleet/config.json`. The remaining directories — `objectives/`, `reviews/`, `prompts/`, `locks/` — are created on first use.
+This creates `.codefleet/tasks/`, `.codefleet/runs/`, `.codefleet/config.json`, and `.codefleet/local.json`. The remaining directories — `objectives/`, `reviews/`, `prompts/`, `locks/` — are created on first use.
 
-The config `init` writes:
+`.codefleet/config.json` is the **Project Profile**: workspace policy, committed and shared.
 
 ```json
 {
-  "version": "0.1.0",
-  "defaultAgent": "codex",
-  "mode": "dry-run",
-  "agents": {
-    "codex": { "command": "codex", "args": ["exec", "-"] }
+  "schemaVersion": "1.0.0",
+  "project": { "id": "", "name": "" },
+  "workspace": { "id": "codefleet-workspace" },
+  "defaults": {
+    "task": { "harnessMode": "DRY_RUN" },
+    "run": { "agentAdapter": "codex", "isolationMode": "NONE" }
   },
   "policies": {
+    "harness": {
+      "allowedModes": ["DRY_RUN", "SUGGEST_ONLY", "WORKSPACE_EDIT", "COMMAND_EXEC"],
+      "maxMode": "COMMAND_EXEC",
+      "requireIsolationForMutation": true,
+      "allowDegradedCommandObservation": false,
+      "approvalRequiredForDestructiveCommands": true
+    },
+    "agentAdapters": { "allowedAdapters": ["codex"] },
+    "files": {},
     "commands": {
       "allowedCommands": [],
       "deniedCommands": [],
@@ -94,18 +104,42 @@ The config `init` writes:
       "requireHarnessVisibleCommandChannel": true,
       "allowProviderReportedCommandTruth": false
     },
-    "harness": {
-      "allowedModes": ["DRY_RUN", "SUGGEST_ONLY", "WORKSPACE_EDIT", "COMMAND_EXEC"],
-      "maxMode": "COMMAND_EXEC",
-      "requireIsolationForMutation": true,
-      "allowDegradedCommandObservation": false,
-      "approvalRequiredForDestructiveCommands": true
-    }
+    "risk": {},
+    "verification": {},
+    "redaction": {},
+    "carryForward": {},
+    "agentRoles": {}
+  },
+  "references": {},
+  "localPolicy": {
+    "mergeMode": "RESTRICT_ONLY",
+    "overlayPath": ".codefleet/local.json",
+    "allowedLocalKeys": ["adapterCommand"]
   }
 }
 ```
 
-Every policy default is the strict end of its switch. A profile that says nothing must not be read as a profile that permits everything. An unknown key in a policy block is refused rather than ignored, because a typo'd `deniedCommands` is an empty denylist that looks like a full one.
+**The seven top-level keys and the nine `policies` keys are exact sets.** A missing key is refused the same way an unexpected one is. Refusing only unexpected keys would let a profile omit `policies` entirely and read as a profile that permits everything — a state nobody who wrote that policy intended. An empty block must still be written as `{}`, so "no policy here" stays distinguishable from "forgot the block".
+
+Every policy default is the strict end of its switch. A profile that says nothing must not be read as a profile that permits everything. An unknown key inside a policy block is refused rather than ignored, because a typo'd `deniedCommands` is an empty denylist that looks like a full one.
+
+### Local Overlay
+
+The Project Profile may not carry **runtime evidence, local machine state, or credentials**, because it is committed and shared. The adapter command path is the clearest case: it is one person's machine, not the workspace's policy. It goes in `.codefleet/local.json`:
+
+```json
+{
+  "adapterCommand": { "command": "codex", "args": ["exec", "-"] }
+}
+```
+
+The overlay may only narrow (`mergeMode: "RESTRICT_ONLY"`). A key not listed in `allowedLocalKeys` is recorded as a violation and dropped rather than applied, so the overlay cannot become a second, unreviewed policy source.
+
+The Profile loader walks every key name and string value at every depth, refuses the following, and **reports how many it inspected** — nothing examined must not look like nothing found:
+
+- key names that denote runtime or local state (`stdout`, `diff`, `token`, `command`, `args`, `model`, and the rest of the set)
+- values in credential formats that are unambiguous on sight (GitHub tokens, AWS access keys, private key blocks)
+- absolute paths in path-valued fields, which must be workspace-relative
 
 ## 1. Objective
 
@@ -321,7 +355,7 @@ All commands accept `--workspace <path>` to select the workspace explicitly inst
 
 ## Execute Mode
 
-To let the Codex adapter launch a process, set `mode` to `execute` in `.codefleet/config.json`. Without an additional flag, `codefleet run` then refuses to start and writes no Run directory:
+To let the Codex adapter launch a process, set `defaults.task.harnessMode` to `COMMAND_EXEC` in `.codefleet/config.json`. Of the four requested modes it is the only one that both edits files and runs commands. Without an additional flag, `codefleet run` then refuses to start and writes no Run directory:
 
 ```text
 Run Planning is blocked: this Run may execute commands, and no Harness-visible
@@ -400,7 +434,8 @@ codefleet [--workspace <path>] review <run-id> --decision <ACCEPTED|REJECTED|NEE
 
 ```text
 .codefleet/
-  config.json                        the Project Profile
+  config.json                        the Project Profile: committed workspace policy
+  local.json                         the Local Overlay: machine-local, never committed
   tasks/<task-id>.yaml               the Task contract
   tasks/<task-id>/task-ledger.jsonl  revisions and approvals
   objectives/<id>/ledger.jsonl       append-only Objective events

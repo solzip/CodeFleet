@@ -8,6 +8,7 @@ import { blockedCommandChannelReason, runTask } from "../src/run.ts";
 import { approveTask } from "../src/task-ledger.ts";
 import { findTaskPath } from "../src/task.ts";
 import { coversRule } from "./rule-coverage.ts";
+import { profileJson, writeLocalOverlay } from "./profile-fixture.ts";
 
 const SNAPSHOT = "HARNESS_WORKSPACE_SNAPSHOT_IS_STATE_EVIDENCE";
 const COMMAND_TRUTH = "COMMAND_TRUTH_REQUIRES_HARNESS_VISIBLE_CHANNEL";
@@ -44,7 +45,7 @@ test("runTask writes run-plan and S2 artifacts before legacy result", async () =
   await mkdir(path.join(root, ".codefleet", "runs"), { recursive: true });
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({ version: "0.1.0", defaultAgent: "codex", mode: "dry-run", workspace: { id: "run-test" } })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "run-test", harnessMode: "DRY_RUN" }), null, 2)}\n`,
     "utf8"
   );
   await writeFile(
@@ -259,18 +260,10 @@ test("the workspace snapshot sees a change git is configured to ignore", async (
   );
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({
-      version: "0.1.0",
-      defaultAgent: "codex",
-      mode: "execute",
-      // Commands run outside any Harness-visible channel, which Run Planning
-      // blocks unless the profile records that decision.
-      policies: { harness: { allowDegradedCommandObservation: true } },
-      agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
-      workspace: { id: "snapshot-e2e" }
-    })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "snapshot-e2e", harnessMode: "COMMAND_EXEC", policies: { harness: { allowDegradedCommandObservation: true } } }), null, 2)}\n`,
     "utf8"
   );
+  await writeLocalOverlay(root, { command: process.execPath, args: ["agent.mjs"] });
   await writeFile(
     path.join(root, ".codefleet", "tasks", "sample.yaml"),
     [
@@ -373,18 +366,10 @@ test("a provider-reported command is recorded but never becomes command truth", 
   );
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({
-      version: "0.1.0",
-      defaultAgent: "codex",
-      mode: "execute",
-      // Commands run outside any Harness-visible channel, which Run Planning
-      // blocks unless the profile records that decision.
-      policies: { harness: { allowDegradedCommandObservation: true } },
-      agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
-      workspace: { id: "transcript-test" }
-    })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "transcript-test", harnessMode: "COMMAND_EXEC", policies: { harness: { allowDegradedCommandObservation: true } } }), null, 2)}\n`,
     "utf8"
   );
+  await writeLocalOverlay(root, { command: process.execPath, args: ["agent.mjs"] });
   await writeFile(
     path.join(root, ".codefleet", "tasks", "sample.yaml"),
     [
@@ -474,21 +459,15 @@ async function seedCommandPolicyRun(
   await writeFile(path.join(root, "agent.mjs"), "\n", "utf8");
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({
-      version: "0.1.0",
-      defaultAgent: "codex",
-      mode: "execute",
-      agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
-      workspace: { id: label },
-      policies: {
+    `${JSON.stringify(profileJson({ workspaceId: label, harnessMode: "COMMAND_EXEC", policies: {
         commands: commandsPolicy,
         // Commands run outside any Harness-visible channel, which Run Planning
         // blocks unless the profile records that decision.
         harness: { allowDegradedCommandObservation: true }
-      }
-    })}\n`,
+      } }), null, 2)}\n`,
     "utf8"
   );
+  await writeLocalOverlay(root, { command: process.execPath, args: ["agent.mjs"] });
   await writeFile(
     path.join(root, ".codefleet", "tasks", "sample.yaml"),
     [
@@ -524,15 +503,10 @@ test("a Run that may execute unobservable commands is blocked before any artifac
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
     // No policies block at all: the strict default must apply.
-    `${JSON.stringify({
-      version: "0.1.0",
-      defaultAgent: "codex",
-      mode: "execute",
-      agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
-      workspace: { id: "channel-test" }
-    })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "channel-test", harnessMode: "COMMAND_EXEC" }), null, 2)}\n`,
     "utf8"
   );
+  await writeLocalOverlay(root, { command: process.execPath, args: ["agent.mjs"] });
   await writeFile(
     path.join(root, ".codefleet", "tasks", "sample.yaml"),
     [
@@ -687,7 +661,7 @@ test("runTask rejects projectPath outside the workspace before S2 artifacts", as
   await mkdir(path.join(root, ".codefleet", "runs"), { recursive: true });
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({ version: "0.1.0", defaultAgent: "codex", mode: "dry-run", workspace: { id: "path-test" } })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "path-test", harnessMode: "DRY_RUN" }), null, 2)}\n`,
     "utf8"
   );
   await writeFile(
@@ -724,7 +698,7 @@ test("runTask rejects file projectPath before S2 artifacts", async () => {
   await writeFile(path.join(root, "README.md"), "not a working directory\n", "utf8");
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({ version: "0.1.0", defaultAgent: "codex", mode: "dry-run", workspace: { id: "file-path-test" } })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "file-path-test", harnessMode: "DRY_RUN" }), null, 2)}\n`,
     "utf8"
   );
   await writeFile(
@@ -758,7 +732,7 @@ test("runTask preserves S2 artifacts when adapter creation fails", async () => {
   await mkdir(path.join(root, ".codefleet", "runs"), { recursive: true });
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({ version: "0.1.0", defaultAgent: "missing-adapter", mode: "dry-run", workspace: { id: "failure-test" } })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "failure-test", agentAdapter: "missing-adapter", harnessMode: "DRY_RUN" }), null, 2)}\n`,
     "utf8"
   );
   await writeFile(
@@ -881,18 +855,10 @@ test("changed-files evidence includes untracked files created during the Run", a
   );
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({
-      version: "0.1.0",
-      defaultAgent: "codex",
-      mode: "execute",
-      // Commands run outside any Harness-visible channel, which Run Planning
-      // blocks unless the profile records that decision.
-      policies: { harness: { allowDegradedCommandObservation: true } },
-      agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
-      workspace: { id: "untracked-test" }
-    })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "untracked-test", harnessMode: "COMMAND_EXEC", policies: { harness: { allowDegradedCommandObservation: true } } }), null, 2)}\n`,
     "utf8"
   );
+  await writeLocalOverlay(root, { command: process.execPath, args: ["agent.mjs"] });
   await writeFile(
     path.join(root, ".codefleet", "tasks", "sample.yaml"),
     [
@@ -957,18 +923,10 @@ test("an out-of-scope untracked file is recorded as a path violation", async () 
   );
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({
-      version: "0.1.0",
-      defaultAgent: "codex",
-      mode: "execute",
-      // Commands run outside any Harness-visible channel, which Run Planning
-      // blocks unless the profile records that decision.
-      policies: { harness: { allowDegradedCommandObservation: true } },
-      agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
-      workspace: { id: "path-policy-test" }
-    })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "path-policy-test", harnessMode: "COMMAND_EXEC", policies: { harness: { allowDegradedCommandObservation: true } } }), null, 2)}\n`,
     "utf8"
   );
+  await writeLocalOverlay(root, { command: process.execPath, args: ["agent.mjs"] });
   await writeFile(
     path.join(root, ".codefleet", "tasks", "sample.yaml"),
     [
@@ -1045,18 +1003,10 @@ test("a nested repository degrades the path policy evaluation instead of claimin
   );
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({
-      version: "0.1.0",
-      defaultAgent: "codex",
-      mode: "execute",
-      // Commands run outside any Harness-visible channel, which Run Planning
-      // blocks unless the profile records that decision.
-      policies: { harness: { allowDegradedCommandObservation: true } },
-      agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
-      workspace: { id: "nested-test" }
-    })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "nested-test", harnessMode: "COMMAND_EXEC", policies: { harness: { allowDegradedCommandObservation: true } } }), null, 2)}\n`,
     "utf8"
   );
+  await writeLocalOverlay(root, { command: process.execPath, args: ["agent.mjs"] });
   await writeFile(
     path.join(root, ".codefleet", "tasks", "sample.yaml"),
     [
@@ -1106,18 +1056,10 @@ test("verification commands are executed by the Harness and open the gate", asyn
 
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({
-      version: "0.1.0",
-      defaultAgent: "codex",
-      mode: "execute",
-      // Commands run outside any Harness-visible channel, which Run Planning
-      // blocks unless the profile records that decision.
-      policies: { harness: { allowDegradedCommandObservation: true } },
-      agents: { codex: { command: process.execPath, args: ["tools/agent.mjs"] } },
-      workspace: { id: "verify-test" }
-    })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "verify-test", harnessMode: "COMMAND_EXEC", policies: { harness: { allowDegradedCommandObservation: true } } }), null, 2)}\n`,
     "utf8"
   );
+  await writeLocalOverlay(root, { command: process.execPath, args: ["tools/agent.mjs"] });
   await writeFile(
     path.join(root, ".codefleet", "tasks", "sample.yaml"),
     [
@@ -1209,7 +1151,7 @@ test("a provider claim alone never satisfies the verification gate", async () =>
   await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({ version: "0.1.0", defaultAgent: "codex", mode: "dry-run", workspace: { id: "claim-test" } })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "claim-test", harnessMode: "DRY_RUN" }), null, 2)}\n`,
     "utf8"
   );
   await writeFile(
@@ -1263,7 +1205,7 @@ test("run-plan.json is written once and is not rewritten later in the Run", asyn
   await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({ version: "0.1.0", defaultAgent: "codex", mode: "dry-run", workspace: { id: "immutable-test" } })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "immutable-test", harnessMode: "DRY_RUN" }), null, 2)}\n`,
     "utf8"
   );
   await writeFile(
@@ -1337,18 +1279,10 @@ test("a delete and a rename are both reported, naming each side", async () => {
   );
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({
-      version: "0.1.0",
-      defaultAgent: "codex",
-      mode: "execute",
-      // Commands run outside any Harness-visible channel, which Run Planning
-      // blocks unless the profile records that decision.
-      policies: { harness: { allowDegradedCommandObservation: true } },
-      agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
-      workspace: { id: "rename-test" }
-    })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "rename-test", harnessMode: "COMMAND_EXEC", policies: { harness: { allowDegradedCommandObservation: true } } }), null, 2)}\n`,
     "utf8"
   );
+  await writeLocalOverlay(root, { command: process.execPath, args: ["agent.mjs"] });
   await writeFile(
     path.join(root, ".codefleet", "tasks", "sample.yaml"),
     [
@@ -1419,18 +1353,10 @@ test("a symlink whose target leaves the workspace is recorded as a violation", a
   await writeFile(path.join(root, "agent.mjs"), "process.stdout.write('noop\n');\n", "utf8");
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({
-      version: "0.1.0",
-      defaultAgent: "codex",
-      mode: "execute",
-      // Commands run outside any Harness-visible channel, which Run Planning
-      // blocks unless the profile records that decision.
-      policies: { harness: { allowDegradedCommandObservation: true } },
-      agents: { codex: { command: process.execPath, args: ["agent.mjs"] } },
-      workspace: { id: "symlink-test" }
-    })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "symlink-test", harnessMode: "COMMAND_EXEC", policies: { harness: { allowDegradedCommandObservation: true } } }), null, 2)}\n`,
     "utf8"
   );
+  await writeLocalOverlay(root, { command: process.execPath, args: ["agent.mjs"] });
   await writeFile(
     path.join(root, ".codefleet", "tasks", "sample.yaml"),
     [
@@ -1475,7 +1401,7 @@ test("an unapproved Task cannot run and leaves no Run Trace", async () => {
   await mkdir(path.join(root, ".codefleet", "runs"), { recursive: true });
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({ version: "0.1.0", defaultAgent: "codex", mode: "dry-run", workspace: { id: "approval-test" } })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "approval-test", harnessMode: "DRY_RUN" }), null, 2)}\n`,
     "utf8"
   );
   const taskYaml = [
@@ -1513,7 +1439,7 @@ test("editing a Task after approval revokes its executability", async () => {
   await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({ version: "0.1.0", defaultAgent: "codex", mode: "dry-run", workspace: { id: "reapprove-test" } })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "reapprove-test", harnessMode: "DRY_RUN" }), null, 2)}\n`,
     "utf8"
   );
   const taskPath = path.join(root, ".codefleet", "tasks", "sample.yaml");
@@ -1565,7 +1491,7 @@ test("approval is refused before a bad projectPath is reported", async () => {
   await mkdir(path.join(root, ".codefleet", "runs"), { recursive: true });
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({ version: "0.1.0", defaultAgent: "codex", mode: "dry-run", workspace: { id: "order-test" } })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "order-test", harnessMode: "DRY_RUN" }), null, 2)}\n`,
     "utf8"
   );
   // Both wrong at once: unapproved and pointing outside the workspace.
@@ -1622,18 +1548,10 @@ test("artifacts report what was scanned, so nothing examined differs from nothin
 
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({
-      version: "0.1.0",
-      defaultAgent: "codex",
-      mode: "execute",
-      // Commands run outside any Harness-visible channel, which Run Planning
-      // blocks unless the profile records that decision.
-      policies: { harness: { allowDegradedCommandObservation: true } },
-      agents: { codex: { command: process.execPath, args: ["tools/agent.mjs"] } },
-      workspace: { id: "scope-test" }
-    })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "scope-test", harnessMode: "COMMAND_EXEC", policies: { harness: { allowDegradedCommandObservation: true } } }), null, 2)}\n`,
     "utf8"
   );
+  await writeLocalOverlay(root, { command: process.execPath, args: ["tools/agent.mjs"] });
   await writeFile(
     path.join(root, ".codefleet", "tasks", "sample.yaml"),
     [

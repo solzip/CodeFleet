@@ -1,12 +1,18 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { validateCommandMatchers } from "./command-policy.ts";
+import { loadProfile, type LoadedProfile } from "./profile.ts";
 import {
   DEFAULT_COMMAND_POLICY,
   DEFAULT_CONFIG,
   DEFAULT_HARNESS_POLICY,
+  DEFAULT_LOCAL_OVERLAY,
+  DEFAULT_PROFILE,
+  HARNESS_MODES,
+  type AgentCommandConfig,
   type CodeFleetConfig,
   type CommandPolicyConfig,
+  type HarnessMode,
   type HarnessPolicyConfig
 } from "./types.ts";
 
@@ -14,6 +20,7 @@ export interface InitResult {
   rootDir: string;
   codefleetDir: string;
   createdConfig: boolean;
+  createdLocalOverlay: boolean;
 }
 
 export async function initProject(rootDir: string): Promise<InitResult> {
@@ -26,39 +33,84 @@ export async function initProject(rootDir: string): Promise<InitResult> {
   try {
     await readFile(configPath, "utf8");
   } catch {
-    await writeFile(configPath, `${JSON.stringify(DEFAULT_CONFIG, null, 2)}\n`, "utf8");
+    await writeFile(configPath, `${JSON.stringify(DEFAULT_PROFILE, null, 2)}\n`, "utf8");
     createdConfig = true;
   }
 
-  return { rootDir, codefleetDir, createdConfig };
-}
-
-export async function loadConfig(rootDir: string): Promise<CodeFleetConfig> {
-  const configPath = path.join(rootDir, ".codefleet", "config.json");
-  let raw: string;
+  // The adapter command lives here rather than in the Profile, because it is a
+  // path on one machine and the Profile is committed and shared.
+  const overlayPath = path.join(codefleetDir, "local.json");
+  let createdLocalOverlay = false;
   try {
-    raw = await readFile(configPath, "utf8");
+    await readFile(overlayPath, "utf8");
   } catch {
-    throw new Error("CodeFleet is not initialized. Run `codefleet init` first.");
+    await writeFile(overlayPath, `${JSON.stringify(DEFAULT_LOCAL_OVERLAY, null, 2)}\n`, "utf8");
+    createdLocalOverlay = true;
   }
 
-  const parsed = JSON.parse(raw) as Partial<CodeFleetConfig>;
+  return { rootDir, codefleetDir, createdConfig, createdLocalOverlay };
+}
+
+/**
+ * Derives the runtime read model from the Project Profile and its Local Overlay.
+ * Validation lives in profile.ts; this only resolves what the Run acts on.
+ */
+export async function loadConfig(rootDir: string): Promise<CodeFleetConfig> {
+  const loaded = await loadProfile(rootDir);
+  return resolveConfig(loaded);
+}
+
+export function resolveConfig(loaded: LoadedProfile): CodeFleetConfig {
+  const { profile, overlay } = loaded;
+  const defaults = profile.defaults as Record<string, unknown>;
+  const taskDefaults = asObject(defaults.task);
+  const runDefaults = asObject(defaults.run);
+  const policies = profile.policies as Record<string, unknown>;
+
+  const harnessMode = readHarnessMode(taskDefaults.harnessMode);
+
   return {
-    ...DEFAULT_CONFIG,
-    ...parsed,
-    agents: {
-      ...DEFAULT_CONFIG.agents,
-      ...parsed.agents
-    },
+    schemaVersion: profile.schemaVersion,
+    workspaceId: typeof profile.workspace.id === "string" ? profile.workspace.id : "",
+    harnessMode,
+    // Only COMMAND_EXEC both edits files and runs commands, which is what the
+    // Run's two-value `mode` has always meant.
+    mode: harnessMode === "COMMAND_EXEC" ? "execute" : "dry-run",
+    agentAdapter:
+      typeof runDefaults.agentAdapter === "string" ? runDefaults.agentAdapter : DEFAULT_CONFIG.agentAdapter,
+    isolationMode:
+      typeof runDefaults.isolationMode === "string" ? runDefaults.isolationMode : DEFAULT_CONFIG.isolationMode,
+    adapterCommand: readAdapterCommand(overlay.values.adapterCommand),
     policies: {
-      commands: loadCommandPolicy((parsed.policies as Record<string, unknown> | undefined)?.commands),
-      harness: loadHarnessPolicy((parsed.policies as Record<string, unknown> | undefined)?.harness)
+      commands: loadCommandPolicy(policies.commands),
+      harness: loadHarnessPolicy(policies.harness)
     }
   };
 }
 
+function readHarnessMode(value: unknown): HarnessMode {
+  if (typeof value === "string" && (HARNESS_MODES as string[]).includes(value)) {
+    return value as HarnessMode;
+  }
+  // Absent or unreadable resolves to the least capable mode, the same way every
+  // other policy default takes the strict end of its switch.
+  return "DRY_RUN";
+}
+
+function readAdapterCommand(value: unknown): AgentCommandConfig {
+  const block = asObject(value);
+  const command = typeof block.command === "string" ? block.command : undefined;
+  const args = Array.isArray(block.args) ? block.args.filter((a): a is string => typeof a === "string") : undefined;
+  return command === undefined && args === undefined ? {} : { command, args };
+}
+
+function asObject(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
 const HARNESS_POLICY_KEYS = new Set(Object.keys(DEFAULT_HARNESS_POLICY));
-const HARNESS_MODES = ["DRY_RUN", "SUGGEST_ONLY", "WORKSPACE_EDIT", "COMMAND_EXEC"];
 
 export function loadHarnessPolicy(raw: unknown): HarnessPolicyConfig {
   if (raw === undefined || raw === null) {

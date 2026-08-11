@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { profileJson } from "./profile-fixture.ts";
 
 test("CLI status supports explicit --workspace", async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "codefleet-cli-workspace-"));
@@ -12,7 +13,7 @@ test("CLI status supports explicit --workspace", async () => {
   await mkdir(path.join(workspace, ".codefleet", "runs"), { recursive: true });
   await writeFile(
     path.join(workspace, ".codefleet", "config.json"),
-    `${JSON.stringify({ workspace: { id: "cli-workspace" } })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "cli-workspace" }), null, 2)}\n`,
     "utf8"
   );
 

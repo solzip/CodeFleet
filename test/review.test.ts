@@ -8,6 +8,7 @@ import { runTask } from "../src/run.ts";
 import { approveTask } from "../src/task-ledger.ts";
 import { findTaskPath } from "../src/task.ts";
 import { coversRule } from "./rule-coverage.ts";
+import { profileJson, writeLocalOverlay } from "./profile-fixture.ts";
 
 const BUNDLE = "REVIEW_DECISION_REQUIRES_FROZEN_EVIDENCE_BUNDLE";
 const HASH = "REVIEW_EVIDENCE_ABSENCE_AND_HASH_MISMATCH_HAVE_DIFFERENT_EFFECTS";
@@ -33,7 +34,7 @@ async function seedWorkspace(): Promise<{ root: string; runId: string }> {
   await mkdir(path.join(root, ".codefleet", "runs"), { recursive: true });
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({ version: "0.1.0", defaultAgent: "codex", mode: "dry-run", workspace: { id: "review-test" } })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "review-test", harnessMode: "DRY_RUN" }), null, 2)}\n`,
     "utf8"
   );
   await writeFile(
@@ -299,18 +300,10 @@ async function seedVerifiedWorkspace(): Promise<{ root: string; runId: string }>
 
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({
-      version: "0.1.0",
-      defaultAgent: "codex",
-      mode: "execute",
-      // Commands run outside any Harness-visible channel, which Run Planning
-      // blocks unless the profile records that decision.
-      policies: { harness: { allowDegradedCommandObservation: true } },
-      agents: { codex: { command: process.execPath, args: ["tools/agent.mjs"] } },
-      workspace: { id: "verified-test" }
-    })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "verified-test", harnessMode: "COMMAND_EXEC", policies: { harness: { allowDegradedCommandObservation: true } } }), null, 2)}\n`,
     "utf8"
   );
+  await writeLocalOverlay(root, { command: process.execPath, args: ["tools/agent.mjs"] });
   await writeFile(
     path.join(root, ".codefleet", "tasks", "sample.yaml"),
     [

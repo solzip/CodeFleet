@@ -6,7 +6,7 @@
     "IMPLEMENTED_UNTESTED": "code exists but no test exercises the rule's conditions.",
     "NOT_CODE_VERIFIABLE": "a rule about how the design document or the slicing process is written, not about runtime behaviour."
   },
-  "measuredOn": "2026-08-10",
+  "measuredOn": "2026-08-11",
   "rules": {
     "EXPORT_FIELD_ALLOWLIST_IS_CORE_OWNED_EXPOSURE_TIER": {
       "status": "NOT_IMPLEMENTED",
@@ -93,35 +93,10 @@
       "evidence": "src/config.ts",
       "detail": "no named policy rules exist to have ids: definedByRef appears nowhere in src, and nothing parses or uniqueness-checks a rule id across the Core and Profile id space. The policies block itself IS read as of 3fbe0b5 (loadCommandPolicy, loadHarnessPolicy), but those are fixed known keys, not id-bearing rules."
     },
-    "PROFILE_CONFIG_IS_WORKSPACE_CONTRACT": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/config.ts",
-      "detail": "the config path is fixed at .codefleet/config.json, but schemaVersion is neither required nor checked against a supported set."
-    },
-    "PROFILE_TOP_LEVEL_KEYS_FIXED": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/config.ts",
-      "detail": "unknown top-level keys are accepted silently."
-    },
-    "PROFILE_POLICY_BLOCK_KEYS_FIXED": {
-      "status": "IMPLEMENTED_UNTESTED",
-      "evidence": "src/config.ts",
-      "detail": "policies.commands and policies.harness each reject unknown keys inside themselves, but the policies block still accepts any block name, so the rule's own condition about the nine allowed names is unenforced."
-    },
     "ADAPTER_CANNOT_EXPAND_CAPABILITIES": {
       "status": "NOT_IMPLEMENTED",
       "evidence": "src/agent.ts",
       "detail": "capabilities are written into adapter-request.json but the adapter is a spawned process that never reads them, so nothing prevents it exceeding them. The Run's own path policy catches the result after the fact; the capability boundary itself is unenforced."
-    },
-    "PROFILE_DOES_NOT_STORE_RUNTIME_OR_LOCAL_STATE": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/config.ts",
-      "detail": "config.json currently stores agents.codex.command, which is exactly the local command path this rule forbids in the shared profile. Nothing rejects it."
-    },
-    "PROFILE_LOCAL_OVERLAY_RESTRICT_ONLY": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/workspace.ts",
-      "detail": "localOverlayRef is recorded in workspace discovery but no overlay file is read or intersected."
     },
     "PROFILE_EFFECTIVE_POLICY_IS_DERIVED": {
       "status": "IMPLEMENTED_UNTESTED",

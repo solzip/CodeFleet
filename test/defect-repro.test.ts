@@ -33,6 +33,7 @@ import { reviewRun } from "../src/review.ts";
 import { breakRunLock, listRunLocks, runLockPathFor, runTask } from "../src/run.ts";
 import { approveTask, contentHashOf, invalidateApproval, replayApproval } from "../src/task-ledger.ts";
 import { findTaskPath } from "../src/task.ts";
+import { profileJson, writeLocalOverlay } from "./profile-fixture.ts";
 
 async function readJson(filePath: string): Promise<Record<string, unknown>> {
   return JSON.parse(await readFile(filePath, "utf8")) as Record<string, unknown>;
@@ -78,16 +79,10 @@ async function seedVerifiedWorkspace(): Promise<string> {
 
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({
-      version: "0.1.0",
-      defaultAgent: "codex",
-      mode: "execute",
-      policies: { harness: { allowDegradedCommandObservation: true } },
-      agents: { codex: { command: process.execPath, args: ["tools/agent.mjs"] } },
-      workspace: { id: "defect-repro" }
-    })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "defect-repro", harnessMode: "COMMAND_EXEC", policies: { harness: { allowDegradedCommandObservation: true } } }), null, 2)}\n`,
     "utf8"
   );
+  await writeLocalOverlay(root, { command: process.execPath, args: ["tools/agent.mjs"] });
   await writeFile(path.join(root, ".codefleet", "tasks", "sample.yaml"), taskYaml("Reach DONE at revision 1"), "utf8");
 
   return root;
@@ -229,7 +224,7 @@ test("concurrent runs of one task do not share a runId", async () => {
     await mkdir(path.join(root, ".codefleet", "runs"), { recursive: true });
     await writeFile(
       path.join(root, ".codefleet", "config.json"),
-      `${JSON.stringify({ version: "0.1.0", defaultAgent: "codex", mode: "dry-run", workspace: { id: "concurrent-test" } })}\n`,
+      `${JSON.stringify(profileJson({ workspaceId: "concurrent-test", harnessMode: "DRY_RUN" }), null, 2)}\n`,
       "utf8"
     );
     await writeFile(
@@ -305,7 +300,7 @@ test("a stale run lock blocks, names its holder, and is never broken automatical
   await mkdir(path.join(root, ".codefleet", "runs"), { recursive: true });
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify({ version: "0.1.0", defaultAgent: "codex", mode: "dry-run", workspace: { id: "runlock-test" } })}\n`,
+    `${JSON.stringify(profileJson({ workspaceId: "runlock-test", harnessMode: "DRY_RUN" }), null, 2)}\n`,
     "utf8"
   );
   await writeFile(
@@ -397,7 +392,7 @@ test("concurrent runs of different tasks do not share a runId", async () => {
     await mkdir(path.join(root, ".codefleet", "runs"), { recursive: true });
     await writeFile(
       path.join(root, ".codefleet", "config.json"),
-      `${JSON.stringify({ version: "0.1.0", defaultAgent: "codex", mode: "dry-run", workspace: { id: "multitask-test" } })}\n`,
+      `${JSON.stringify(profileJson({ workspaceId: "multitask-test", harnessMode: "DRY_RUN" }), null, 2)}\n`,
       "utf8"
     );
 
