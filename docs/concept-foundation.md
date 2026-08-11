@@ -5284,6 +5284,35 @@ NOT_FINAL_YET:
   재생  replayStatus
   관측 축 셋은 같은 질문에 답하면서 값 집합이 서로 다르다.
   S5 export를 구현할 때 외부에 어느 어휘로 말할지 함께 정한다.
+
+- policies.autoAdvanceOnDone의 위치가 FINAL 규칙 두 개 사이에서 모순이다
+  2026-08-11 Profile 스키마 구현 중 발견. 어느 쪽도 아직 고르지 않았다.
+
+  PROFILE_POLICY_BLOCK_KEYS_FIXED
+    policies 키는 정확히 harness / agentAdapters / files / commands / risk /
+    verification / redaction / carryForward / agentRoles 아홉 개다.
+  PROFILE_POLICY_AUTO_ADVANCE_ON_DONE_IS_BOOLEAN
+    policies.autoAdvanceOnDone을 sourceOfTruth / inputs / evidence /
+    repairBehavior 네 필드에서 가리키고, 첫 조건이 "absent or boolean"이다.
+
+  아홉 개에 그냥 더하는 해법은 성립하지 않는다. "정확히"는 빠진 키도 위반이라는
+  뜻이고(evidence에 missingPolicyKeys가 있다), 그러면 absent가 불법이 되어
+  상대 규칙의 첫 조건과 다시 충돌한다.
+
+  증거 분포:
+    9키 집합 쪽  네 곳. 위 규칙, PROJECT_PROFILE_POLICY_BLOCK_INTERNAL_SCHEMA의
+                 아홉 개 열거, 5.1의 JSON 스켈레톤, "각 블록의 책임" 산문.
+    policies.    한 곳. 5.1.3의 하위 섹션과 바로 뒤 규칙뿐이며, 그 섹션의 다른
+    autoAdvance  하위 절은 전부 defaults.task.* 다.
+    OnDone 쪽
+
+  소비 측은 이 위치에 의존하지 않는다. SYSTEM_POLICY_AUTO_REVIEW_DECISION_IS_BOUNDED는
+  effectivePolicy.autoAdvanceOnDone만 읽는다. 따라서 어디로 정하든 이전 비용은 작다.
+
+  구현 상태: 검증하지 않는다. 어느 쪽으로 정해도 한쪽 규칙을 어기게 되므로,
+  틀린 것을 강제하느니 강제하지 않는 쪽을 골랐다. 전체 구현을 마친 뒤 검토
+  과정에서 정한다. 그 시점에는 auto-review 경계 구현이 이 값을 실제로 읽고 있어
+  판단 근거가 지금보다 많다.
 ```
 
 이 항목들은 2026-08-10 감사에서 기계 검사로 발견했다. `authority` 하나만 실제로 문제를 일으켰고, 나머지는 아직 아무것도 깨뜨리지 않았다. 실해가 확인되지 않은 것을 추측으로 순위 매겨 고치지 않고, 목록으로 남겨 두었다가 실제로 걸릴 때 고친다.

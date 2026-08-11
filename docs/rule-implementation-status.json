@@ -105,8 +105,8 @@
     },
     "PROFILE_POLICY_AUTO_ADVANCE_ON_DONE_IS_BOOLEAN": {
       "status": "NOT_IMPLEMENTED",
-      "evidence": "src/run.ts",
-      "detail": "autoAdvanceOnDone is written as a hardcoded false, never read from a profile or validated."
+      "evidence": "docs/concept-foundation.md",
+      "detail": "Not implemented on purpose. This rule and PROFILE_POLICY_BLOCK_KEYS_FIXED contradict each other over whether policies.autoAdvanceOnDone may exist, and enforcing either one breaks the other. Recorded in 0.13 NOT_FINAL_YET; to be decided in the review pass after implementation."
     },
     "TASK_REVISION_REQUIRED_GATES_ARE_CONCRETE": {
       "status": "NOT_IMPLEMENTED",
