@@ -14,6 +14,7 @@
 
 import { readFile } from "node:fs/promises";
 import { validateRequiredGates } from "./required-gates.ts";
+import { validateRedactionRules } from "./redaction.ts";
 import { validateRiskRules } from "./risk.ts";
 import path from "node:path";
 
@@ -219,6 +220,7 @@ export async function loadProfile(rootDir: string): Promise<LoadedProfile> {
   checkDefaultsTaskWorkflow(document, findings);
   checkDefaultsRequiredGates(document, findings);
   checkRiskRules(document, findings);
+  checkRedactionRules(document, findings);
 
   if (findings.length > 0) {
     throw new ProfileValidationError(profilePath, findings);
@@ -573,6 +575,19 @@ function checkRiskRules(document: Record<string, unknown>, findings: ProfileFind
   for (const finding of validateRiskRules(block.riskRules, "/policies/risk/riskRules")) {
     findings.push({
       checkId: "RISK_RULE_REUSES_FIXED_MATCHERS",
+      jsonPointer: finding.jsonPointer,
+      detail: finding.detail
+    });
+  }
+}
+
+// A rule using unsupported syntax fails Profile validation, so an unusable rule
+// is caught before any export can be attempted with it.
+function checkRedactionRules(document: Record<string, unknown>, findings: ProfileFinding[]): void {
+  const block = asObject(asObject(document.policies).redaction);
+  for (const finding of validateRedactionRules(block.redactionRules, "/policies/redaction/redactionRules")) {
+    findings.push({
+      checkId: "REDACTION_RULE_FAILURE_BLOCKS_EXPORT",
       jsonPointer: finding.jsonPointer,
       detail: finding.detail
     });
