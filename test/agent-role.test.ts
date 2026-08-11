@@ -221,7 +221,12 @@ test("the role contributes an upper bound to the Run Plan, never a grant", async
     string,
     unknown
   >;
-  (doc.policies as Record<string, unknown>).harness = { allowDegradedCommandObservation: true };
+  // Replacing the block loses the fixture's default, so the isolation decision
+  // is restated here rather than inherited by accident.
+  (doc.policies as Record<string, unknown>).harness = {
+    allowDegradedCommandObservation: true,
+    requireIsolationForMutation: false
+  };
   await writeFile(path.join(root, ".codefleet", "config.json"), `${JSON.stringify(doc, null, 2)}\n`, "utf8");
 
   await writeFile(

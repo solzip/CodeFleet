@@ -30,7 +30,7 @@ export interface ProfileOverrides {
 }
 
 export function profileJson(overrides: ProfileOverrides = {}): Record<string, unknown> {
-  return {
+  const doc = {
     schemaVersion: "1.0.0",
     project: { id: "fixture", name: "Fixture" },
     workspace: { id: overrides.workspaceId ?? "fixture-workspace" },
@@ -56,13 +56,26 @@ export function profileJson(overrides: ProfileOverrides = {}): Record<string, un
       agentRoles: {},
       ...(overrides.policies ?? {})
     },
+    // Merged last so a fixture that replaces the whole harness block still gets
+    // it. These fixtures run unisolated on purpose: they assert Run behaviour,
+    // not the isolation requirement, and stating it here keeps that a decision
+    // rather than a default nobody noticed. The requirement itself is asserted
+    // in test/isolation.test.ts.
+
     references: {},
     localPolicy: {
       mergeMode: "RESTRICT_ONLY",
       overlayPath: ".codefleet/local.json",
       allowedLocalKeys: overrides.allowedLocalKeys ?? ["adapterCommand"]
     }
-  };
+  } as Record<string, unknown>;
+
+  const policies = doc.policies as Record<string, unknown>;
+  const harness = (policies.harness ?? {}) as Record<string, unknown>;
+  if (harness.requireIsolationForMutation === undefined) {
+    policies.harness = { ...harness, requireIsolationForMutation: false };
+  }
+  return doc;
 }
 
 export async function writeProfile(rootDir: string, overrides: ProfileOverrides = {}): Promise<void> {

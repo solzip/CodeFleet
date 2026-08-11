@@ -152,6 +152,9 @@ export interface AgentRunInput {
   promptPath: string;
   projectPath: string;
   config: CodeFleetConfig;
+  /** What the AdapterRequest permitted. The adapter reads it and refuses beyond it. */
+  capabilities?: { fileEdit: boolean; commandExecution: boolean };
+  limits?: { timeoutMs?: number; outputCapBytes?: number };
 }
 
 // A command the provider says it ran. Never command truth: the Harness did not
@@ -183,6 +186,13 @@ export interface AgentRunResult {
   exitCode: number | null;
   stdout: string;
   stderr: string;
+  /** Bytes dropped by the output cap, and the limits that were in force. */
+  scanScope?: {
+    stdoutTruncatedBytes: number;
+    stderrTruncatedBytes: number;
+    timeoutMs: number;
+    outputCapBytes: number;
+  };
   // Provider-agnostic by contract. The adapter owns the parsing rule; Core
   // never learns which provider produced this or how it was recognized.
   providerTranscript?: ProviderTranscriptReading;

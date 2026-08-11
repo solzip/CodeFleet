@@ -40,12 +40,24 @@ class CodexAdapter implements AgentAdapter {
       };
     }
 
+    // The adapter reads what it was permitted to do. Before this it received a
+    // prompt and nothing else, so "the agent was not allowed to run commands"
+    // was a sentence in a file the agent never had to open.
+    if (input.capabilities !== undefined && input.capabilities.commandExecution !== true) {
+      return {
+        status: "FAILED",
+        exitCode: null,
+        stdout: "",
+        stderr: "Adapter refused to launch: AdapterRequest capabilities do not permit command execution.\n"
+      };
+    }
+
     const prompt = await readFile(input.promptPath, "utf8");
     const commandConfig = input.config.adapterCommand;
     const command = commandConfig.command ?? "codex";
     const args = commandConfig.args ?? ["exec", "-"];
 
-    const result = await runCommand(command, args, prompt, input.projectPath);
+    const result = await runCommand(command, args, prompt, input.projectPath, { limits: input.limits });
     return { ...result, providerTranscript: readProviderTranscript(result.stdout) };
   }
 }
@@ -138,33 +150,109 @@ function transcriptUnavailableReason(jsonLinesParsed: number, commandsFound: num
   return "";
 }
 
+/** Defaults, not policy. A Profile may narrow them; nothing may remove them. */
+export const DEFAULT_ADAPTER_TIMEOUT_MS = 30 * 60 * 1000;
+export const DEFAULT_ADAPTER_OUTPUT_CAP_BYTES = 16 * 1024 * 1024;
+
+export interface ProcessLimits {
+  timeoutMs: number;
+  outputCapBytes: number;
+}
+
+export interface RunCommandOptions {
+  limits?: Partial<ProcessLimits>;
+  /**
+   * Variables the child may see. The parent's environment is not inherited:
+   * an adapter that receives every credential the operator happens to have
+   * exported is a credential boundary that does not exist.
+   */
+  env?: Record<string, string>;
+}
+
 export function runCommand(
   command: string,
   args: string[],
   stdin: string,
-  cwd: string
+  cwd: string,
+  options: RunCommandOptions = {}
 ): Promise<AgentRunResult> {
+  const timeoutMs = options.limits?.timeoutMs ?? DEFAULT_ADAPTER_TIMEOUT_MS;
+  const outputCapBytes = options.limits?.outputCapBytes ?? DEFAULT_ADAPTER_OUTPUT_CAP_BYTES;
+
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd,
       shell: false,
-      stdio: ["pipe", "pipe", "pipe"]
+      stdio: ["pipe", "pipe", "pipe"],
+      // An explicit environment rather than process.env. PATH is kept because
+      // resolving the adapter binary needs it; nothing else is passed unless
+      // the caller named it.
+      env: options.env ?? { PATH: process.env.PATH ?? "" }
     });
 
     let stdout = "";
     let stderr = "";
+    let stdoutTruncatedBytes = 0;
+    let stderrTruncatedBytes = 0;
+    let settled = false;
+
+    const finish = (result: AgentRunResult): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      resolve({
+        ...result,
+        // The truncated byte count travels with the output, so a capped
+        // transcript is distinguishable from one that simply ended.
+        scanScope: { stdoutTruncatedBytes, stderrTruncatedBytes, timeoutMs, outputCapBytes }
+      } as AgentRunResult);
+    };
+
+    // Killing on timeout is what makes an agent that never exits a failed Run
+    // rather than a CLI that waits forever.
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      finish({
+        status: "FAILED",
+        exitCode: null,
+        stdout,
+        stderr: `${stderr}Adapter exceeded the ${timeoutMs} ms limit and was terminated.\n`
+      });
+    }, timeoutMs);
 
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => {
+    child.stdout.on("data", (chunk: string) => {
+      const room = outputCapBytes - Buffer.byteLength(stdout);
+      if (room <= 0) {
+        stdoutTruncatedBytes += Buffer.byteLength(chunk);
+        return;
+      }
+      if (Buffer.byteLength(chunk) > room) {
+        stdoutTruncatedBytes += Buffer.byteLength(chunk) - room;
+        stdout += chunk.slice(0, room);
+        return;
+      }
       stdout += chunk;
     });
-    child.stderr.on("data", (chunk) => {
+    child.stderr.on("data", (chunk: string) => {
+      const room = outputCapBytes - Buffer.byteLength(stderr);
+      if (room <= 0) {
+        stderrTruncatedBytes += Buffer.byteLength(chunk);
+        return;
+      }
+      if (Buffer.byteLength(chunk) > room) {
+        stderrTruncatedBytes += Buffer.byteLength(chunk) - room;
+        stderr += chunk.slice(0, room);
+        return;
+      }
       stderr += chunk;
     });
 
     child.on("error", (error) => {
-      resolve({
+      finish({
         status: "FAILED",
         exitCode: null,
         stdout,
@@ -173,7 +261,7 @@ export function runCommand(
     });
 
     child.on("close", (code) => {
-      resolve({
+      finish({
         status: code === 0 ? "SUCCEEDED" : "FAILED",
         exitCode: code,
         stdout,

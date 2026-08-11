@@ -9,6 +9,12 @@ import { loadTask } from "./task.ts";
 import { contentHashOf, replayApproval } from "./task-ledger.ts";
 import type { AgentRunInput, AgentRunResult, RunResultFile } from "./types.ts";
 import { normalizeCommand, preflightCommand, type CommandMatcher, type DestructiveMatcher } from "./command-policy.ts";
+import {
+  checkIsolationRequirement,
+  prepareIsolation,
+  type PreparedIsolation
+} from "./isolation.ts";
+import { replayObjective } from "./ledger.ts";
 import { evaluatePathPolicy, type PathViolation } from "./path-policy.ts";
 import { evaluateRisk, type RiskRule } from "./risk.ts";
 import {
@@ -147,6 +153,44 @@ interface RunSummary {
     acceptanceEvidence: false;
     degradedReasons: string[];
   };
+}
+
+/**
+ * Whether an Objective queue decision forbids running this Task. A Task attached
+ * to no Objective is not blocked: the queue has expressed no opinion about it.
+ */
+export async function blockedQueueReason(rootDir: string, taskId: string): Promise<string | null> {
+  let objectiveIds: string[];
+  try {
+    objectiveIds = await readdir(path.join(rootDir, ".codefleet", "objectives"));
+  } catch {
+    return null;
+  }
+
+  for (const objectiveId of objectiveIds) {
+    const { snapshot } = await replayObjective(rootDir, objectiveId);
+    const items = snapshot.queue.filter((item) => item.taskId === taskId);
+    if (items.length === 0) {
+      continue;
+    }
+    // A replay that could not be trusted must not be read as permission.
+    if (snapshot.replay.replayStatus !== "COMPLETE") {
+      return (
+        `Run is blocked: ${objectiveId} holds this Task but its ledger replay is ` +
+        `${snapshot.replay.replayStatus}, so the queue decision cannot be read.`
+      );
+    }
+    for (const item of items) {
+      if (item.storedState === "BLOCKED" || item.storedState === "CANCELED" || item.storedState === "SKIPPED") {
+        return (
+          `Run is blocked: ${item.objectiveQueueItemId} is ${item.storedState} in ${objectiveId}. ` +
+          "Reverse that decision explicitly before running."
+        );
+      }
+    }
+  }
+
+  return null;
 }
 
 export class RunLockHeldError extends Error {
@@ -302,6 +346,14 @@ async function executeRun(
 ` +
         "Run 'codefleet task approve " + taskId + " --reason <text>' first."
     );
+  }
+
+  // The Task ledger owns approval; the Objective ledger owns whether the queue
+  // still wants this Task run. Checking only the first let a Task that someone
+  // blocked or cancelled with a written reason run anyway.
+  const queueBlock = await blockedQueueReason(rootDir, taskId);
+  if (queueBlock !== null) {
+    throw new Error(queueBlock);
   }
 
   // Run Planning is blocked when the Run may execute commands that no
@@ -621,13 +673,34 @@ async function executeRun(
   await writeJson(preRunSnapshotPath, preRunSnapshot);
   const preRunSnapshotRef = await fileRef(rootDir, preRunSnapshotPath);
 
+  // The isolated tree is prepared after the plan is written and before the
+  // adapter is handed control, so the Run Plan already records which mode was
+  // asked for and the adapter never sees the workspace when one is in force.
+  const prepared = await prepareIsolation({ projectPath, runId, mode: isolation.mode });
+  const requirement = checkIsolationRequirement({
+    requireIsolationForMutation: config.policies.harness.requireIsolationForMutation,
+    fileEdit: capabilities.fileEdit,
+    prepared
+  });
+  if (requirement.blocked) {
+    await prepared.discard();
+    throw new Error(requirement.reason);
+  }
+
   const agentName = config.agentAdapter;
   const agentResult = await runAgentSafely(agentName, {
     task,
     runDir,
     promptPath,
-    projectPath,
-    config
+    projectPath: prepared.workPath,
+    config,
+    // The adapter is handed the capabilities the AdapterRequest recorded, so
+    // "the agent was not allowed to run commands" stops being a sentence in a
+    // file the agent never opens.
+    capabilities: {
+      fileEdit: capabilities.fileEdit,
+      commandExecution: capabilities.commandExecution
+    }
   });
 
   await writeFile(stdoutLogPath, agentResult.stdout, "utf8");
