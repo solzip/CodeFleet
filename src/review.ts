@@ -52,6 +52,10 @@ interface ReviewEvidenceBundle {
   runId: string;
   runPlanId: string;
   taskId: string;
+  // The revision this decision is about. A Review Decision identifies its
+  // subject as objectiveQueueItemId + taskId + taskRevision, so a bundle that
+  // cannot say which revision it reviewed cannot be migrated at all.
+  taskRevision: number | null;
   bundleStatus: "COMPLETE" | "DEGRADED";
   unavailableReasons: string[];
   runSummaryRef: FileRef;
@@ -102,6 +106,8 @@ interface LocalReviewDecision {
   reviewDecisionId: string;
   runId: string;
   taskId: string;
+  /** Copied from the bundle. Migration reads it; it is never defaulted. */
+  taskRevision: number | null;
   decision: ReviewDecision;
   actorKind: "HUMAN";
   actorId: string;
@@ -216,6 +222,7 @@ export async function reviewRun(
     reviewDecisionId,
     runId,
     taskId: bundle.taskId,
+    taskRevision: bundle.taskRevision,
     decision: options.decision,
     actorKind: "HUMAN",
     actorId: options.actorId ?? "local-user",
@@ -353,6 +360,26 @@ async function buildEvidenceBundle(input: {
     }
   }
 
+  // The revision is read from the Run Plan the bundle already resolved and
+  // hash-checked, not re-derived from the task file. The Run Plan records the
+  // approval that authorised this Run, and that is the revision the decision is
+  // about. A missing one is an EVIDENCE_DEFECT rather than a default, because a
+  // decision that silently claims revision 1 lands on a queue item nobody
+  // attached and can never be corrected from inside the ledger.
+  const runPlanRef = resolved.runPlanRef ?? null;
+  let taskRevision: number | null = null;
+  if (runPlanRef !== null) {
+    const runPlan = await readJson(path.join(rootDir, runPlanRef.path));
+    const declared = asRecord(runPlan ?? {}).approval;
+    const value = asRecord(declared).taskRevision;
+    if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+      taskRevision = value;
+    }
+  }
+  if (taskRevision === null) {
+    unavailableReasons.push("MISSING_INPUT_REF:runPlanRef#/approval/taskRevision");
+  }
+
   const result = asRecord(runSummary.result);
   const check = asRecord(runSummary.check);
   const evidenceAuthority = asRecord(runSummary.evidenceAuthority);
@@ -392,6 +419,7 @@ async function buildEvidenceBundle(input: {
     runId,
     runPlanId: asString(runSummary.runPlanId, ""),
     taskId: asString(runSummary.taskId, ""),
+    taskRevision,
     bundleStatus,
     unavailableReasons,
     runSummaryRef,
@@ -552,6 +580,7 @@ function assertLocalReview(value: LocalReviewDecision, bundle: ReviewEvidenceBun
   const errors: string[] = [];
 
   const copied: [string, unknown, unknown][] = [
+    ["taskRevision", value.taskRevision, bundle.taskRevision],
     ["bundleStatus", value.bundleStatus, bundle.bundleStatus],
     ["observedResultSnapshot", value.observedResultSnapshot, bundle.observedResultSnapshot],
     ["observedCheckSnapshot", value.observedCheckSnapshot, bundle.observedCheckSnapshot],

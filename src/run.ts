@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { copyFile, lstat, mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { copyFile, lstat, mkdir, open, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createAgentAdapter } from "./agent.ts";
 import { loadConfig } from "./config.ts";
@@ -133,7 +133,141 @@ interface RunSummary {
   };
 }
 
+export class RunLockHeldError extends Error {
+  readonly holder: RunLockHolder | null;
+
+  constructor(taskId: string, holder: RunLockHolder | null) {
+    super(
+      holder === null
+        ? `A run of ${taskId} is already in progress.`
+        : `A run of ${taskId} is already in progress: pid ${holder.pid} on ${holder.host} since ${holder.startedAt} (${holder.runId || "before the runId was reserved"}).`
+    );
+    this.name = "RunLockHeldError";
+    this.holder = holder;
+  }
+}
+
+export interface RunLockHolder {
+  pid: number;
+  host: string;
+  startedAt: string;
+  taskId: string;
+  runId: string;
+}
+
+export interface RunLockEntry {
+  taskId: string;
+  /** Null when the lock file exists but cannot be read. It still blocks. */
+  holder: RunLockHolder | null;
+}
+
+// A Run that dies without releasing leaves its lock behind, and a lock nobody
+// can clear is a dead end rather than a safeguard. Breaking it stays an explicit
+// human action, the same as the mutation lock.
+//
+// Every run-*.lock file is reported, including one whose contents cannot be
+// parsed. What blocks a Run is the file existing, not the file being readable,
+// so dropping the unreadable ones would report "no locks" about a workspace
+// where a Task cannot run.
+export async function listRunLocks(rootDir: string): Promise<RunLockEntry[]> {
+  const locksDir = path.join(rootDir, ".codefleet", "locks");
+  let fileNames: string[];
+  try {
+    fileNames = await readdir(locksDir);
+  } catch {
+    return [];
+  }
+
+  const locks: RunLockEntry[] = [];
+  for (const fileName of fileNames) {
+    if (!fileName.startsWith("run-") || !fileName.endsWith(".lock")) {
+      continue;
+    }
+    const holder = await readRunLockHolder(path.join(locksDir, fileName));
+    locks.push({
+      taskId: holder?.taskId ?? decodeURIComponent(fileName.slice("run-".length, -".lock".length)),
+      holder
+    });
+  }
+  return locks;
+}
+
+export async function breakRunLock(rootDir: string, taskId: string): Promise<RunLockEntry | null> {
+  const lockPath = runLockPathFor(rootDir, taskId);
+  try {
+    await stat(lockPath);
+  } catch {
+    return null;
+  }
+
+  const holder = await readRunLockHolder(lockPath);
+  await rm(lockPath, { force: true });
+  return { taskId, holder };
+}
+
+export function runLockPathFor(rootDir: string, taskId: string): string {
+  // One lock per Task, not one per workspace. The Mutation Engine's workspace
+  // lock is fixed as "not held across Run execution", so a Run cannot borrow it;
+  // this reuses the same exclusive-create discipline on a separate file.
+  return path.join(rootDir, ".codefleet", "locks", `run-${encodeURIComponent(taskId)}.lock`);
+}
+
+// Nothing stopped the same Task from being run twice at once. Both runs derived
+// their runId from the same directory listing, got the same id, and then wrote
+// over each other inside one Run Trace while both reported success. The lock
+// answers "may this Task run now"; reserveRunDir below answers "which id is
+// mine", and both are needed because two different Tasks race on the id too.
 export async function runTask(
+  rootDir: string,
+  taskId: string,
+  workspaceDiscovery?: WorkspaceDiscovery
+): Promise<RunExecution> {
+  const lockPath = runLockPathFor(rootDir, taskId);
+  await acquireRunLock(lockPath, taskId);
+  try {
+    return await executeRun(rootDir, taskId, workspaceDiscovery);
+  } finally {
+    await rm(lockPath, { force: true });
+  }
+}
+
+async function acquireRunLock(lockPath: string, taskId: string): Promise<void> {
+  await mkdir(path.dirname(lockPath), { recursive: true });
+  const holder: RunLockHolder = {
+    pid: process.pid,
+    host: process.env.COMPUTERNAME ?? process.env.HOSTNAME ?? "unknown",
+    startedAt: new Date().toISOString(),
+    taskId,
+    runId: ""
+  };
+
+  try {
+    const handle = await open(lockPath, "wx");
+    await handle.writeFile(
+      `${JSON.stringify({ schemaVersion: "1.0", documentKind: "RUN_LOCK", holder }, null, 2)}\n`,
+      "utf8"
+    );
+    await handle.close();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      throw error;
+    }
+    // Fail fast and name the holder, the same way the mutation lock does. A
+    // stale lock is never broken automatically.
+    throw new RunLockHeldError(taskId, await readRunLockHolder(lockPath));
+  }
+}
+
+async function readRunLockHolder(lockPath: string): Promise<RunLockHolder | null> {
+  try {
+    const parsed = JSON.parse(await readFile(lockPath, "utf8")) as { holder?: RunLockHolder };
+    return parsed.holder ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function executeRun(
   rootDir: string,
   taskId: string,
   workspaceDiscovery?: WorkspaceDiscovery
@@ -171,11 +305,8 @@ export async function runTask(
 
   const projectPath = await resolveWorkspaceProjectPath(discovery.selectedWorkspaceRootRealPath, task.projectPath);
   const startedAtDate = new Date();
-  const runId = await nextRunId(rootDir, startedAtDate);
+  const { runId, runDir } = await reserveRunDir(rootDir, startedAtDate);
   const runPlanId = `${runId}:plan`;
-  const runDir = path.join(rootDir, ".codefleet", "runs", runId);
-
-  await mkdir(runDir, { recursive: true });
 
   const runPlanPath = path.join(runDir, "run-plan.json");
   const promptPath = path.join(runDir, "prompt.md");
@@ -1342,24 +1473,47 @@ async function runAgentSafely(agentName: string, input: AgentRunInput): Promise<
   }
 }
 
-async function nextRunId(rootDir: string, date: Date): Promise<string> {
+// Deriving the id from a directory listing and creating the directory afterwards
+// are two steps, and concurrent Runs used to interleave between them: both read
+// the same listing, both picked the same id, and mkdir with recursive: true
+// accepted the second one silently, so one Run Trace ended up holding two Runs'
+// artifacts. Creating the directory is now the reservation itself — exclusive,
+// non-recursive, and retried on collision — so a taken id is taken.
+async function reserveRunDir(rootDir: string, date: Date): Promise<{ runId: string; runDir: string }> {
   const datePart = formatDate(date);
   const runsDir = path.join(rootDir, ".codefleet", "runs");
-  let entries: string[] = [];
+  await mkdir(runsDir, { recursive: true });
 
+  let entries: string[] = [];
   try {
     entries = await readdir(runsDir);
   } catch {
-    await mkdir(runsDir, { recursive: true });
+    entries = [];
   }
 
-  const last = entries
+  let candidate = entries
     .map((entry) => entry.match(new RegExp(`^${datePart}_(\\d{3})$`)))
     .filter((match): match is RegExpMatchArray => match !== null)
     .map((match) => Number(match[1]))
     .reduce((max, value) => Math.max(max, value), 0);
 
-  return `${datePart}_${String(last + 1).padStart(3, "0")}`;
+  // 999 Runs in one day is the id format's ceiling, not a policy. Exhausting it
+  // must say so rather than overwrite the last Run of the day.
+  while (candidate < 999) {
+    candidate += 1;
+    const runId = `${datePart}_${String(candidate).padStart(3, "0")}`;
+    const runDir = path.join(runsDir, runId);
+    try {
+      await mkdir(runDir);
+      return { runId, runDir };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error(`No runId is available for ${datePart}: 999 Runs already exist for that date.`);
 }
 
 async function captureGitDiff(projectPath: string): Promise<{ content: string; unavailableReason?: string }> {

@@ -850,11 +850,24 @@ export async function importLocalReview(
   const bundleRef = (localReview.reviewEvidenceBundleRef ?? {}) as { path?: string; contentHash?: string };
   const bundleHash = String(bundleRef.contentHash ?? "");
 
+  // A missing revision used to default to 1 here. That turned "this artifact
+  // does not say which revision it decided" into "it decided revision 1", which
+  // is a claim nothing supports: the event was appended, the CLI reported
+  // success, and the queue item it named never existed. There is no default that
+  // can be right, so the absence is carried as absent and refused at precheck.
+  const declaredRevision = localReview.taskRevision;
+  const taskRevision =
+    typeof declaredRevision === "number" && Number.isInteger(declaredRevision) && declaredRevision > 0
+      ? declaredRevision
+      : null;
+  const taskId = String(localReview.taskId ?? "");
+  const objectiveQueueItemId = `${objectiveId}:${taskId}:${taskRevision ?? 0}`;
+
   const payload: ReviewDecisionEventPayload = {
     reviewDecisionId,
-    objectiveQueueItemId: `${objectiveId}:${String(localReview.taskId ?? "")}:${Number(localReview.taskRevision ?? 1)}`,
-    taskId: String(localReview.taskId ?? ""),
-    taskRevision: Number(localReview.taskRevision ?? 1),
+    objectiveQueueItemId,
+    taskId,
+    taskRevision: taskRevision ?? 0,
     runId,
     decision: String(localReview.decision ?? ""),
     actorKind: String(localReview.actorKind ?? "HUMAN"),
@@ -895,6 +908,25 @@ export async function importLocalReview(
         }
         if (bundleHash.length === 0) {
           throw new Error("local review has no ReviewEvidenceBundle hash");
+        }
+        if (taskRevision === null) {
+          throw new Error("local review does not record the taskRevision it decided on");
+        }
+        // Replay records a REFERENCE_FAILURE for a decision that names an
+        // unknown queue item, but replayStatus stays COMPLETE and postcheck
+        // passes, so the import reported success and left an event that can
+        // never derive VERIFIED. Refusing here keeps it out of an append-only
+        // ledger, where the only remedy would be a corrective event that no
+        // command can write yet.
+        const attached = events.some(
+          (event) =>
+            event.type === "TASK_ATTACHED" &&
+            event.payload.objectiveQueueItemId === objectiveQueueItemId
+        );
+        if (!attached) {
+          throw new Error(
+            `${objectiveQueueItemId} is not attached to ${objectiveId}; nothing to record a decision against`
+          );
         }
 
         // Same decision id with a different bundle means two different

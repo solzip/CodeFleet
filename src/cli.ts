@@ -17,7 +17,7 @@ import {
 import { breakLock, lockPathFor, readHolder } from "./mutation.ts";
 import { renderPrompt } from "./prompt.ts";
 import { reviewRun, type ReviewDecision } from "./review.ts";
-import { runTask, listRuns } from "./run.ts";
+import { breakRunLock, listRunLocks, runTask, listRuns } from "./run.ts";
 import { formatValidationErrors, loadTask, loadTaskForValidation } from "./task.ts";
 import { approveTask, contentHashOf, invalidateApproval, replayApproval } from "./task-ledger.ts";
 import { discoverWorkspace, type WorkspaceDiscovery } from "./workspace.ts";
@@ -402,15 +402,41 @@ async function handleLock(cwd: string, options: CliOptions, args: string[]): Pro
   if (subcommand === "status") {
     const holder = await readHolder(lockPathFor(rootDir));
     console.log(holder === null ? "lock: free" : `lock: held by pid ${holder.pid} on ${holder.host} since ${holder.startedAt} (${holder.mutationKind})`);
+
+    // Run locks are per Task and separate from the mutation lock. Reporting the
+    // count says nothing was found rather than leaving nothing examined and
+    // nothing found looking the same.
+    const runLocks = await listRunLocks(rootDir);
+    console.log(`run locks: ${runLocks.length}`);
+    for (const { taskId, holder } of runLocks) {
+      console.log(
+        holder === null
+          ? `  ${taskId}: present but unreadable, and it still blocks runs`
+          : `  ${taskId}: pid ${holder.pid} on ${holder.host} since ${holder.startedAt}` +
+            ` (${holder.runId || "before the runId was reserved"})`
+      );
+    }
     return;
   }
   if (subcommand === "break") {
+    const taskId = parseReviewFlags(args.slice(1)).task;
+    if (taskId !== undefined) {
+      const broken = await breakRunLock(rootDir, taskId);
+      console.log(
+        broken === null
+          ? `no run lock to break for ${taskId}`
+          : broken.holder === null
+            ? `broke unreadable run lock for ${taskId}`
+            : `broke run lock for ${broken.taskId} held by pid ${broken.holder.pid}`
+      );
+      return;
+    }
     const holder = await breakLock(rootDir);
     console.log(holder === null ? "no lock to break" : `broke lock held by pid ${holder.pid} (${holder.mutationKind})`);
     return;
   }
 
-  throw new Error("Usage: codefleet lock status|break");
+  throw new Error("Usage: codefleet lock status|break [--task <task-id>]");
 }
 
 interface ReviewFlags {
@@ -426,6 +452,7 @@ interface ReviewFlags {
   kind?: string;
   revision?: string;
   order?: string;
+  task?: string;
 }
 
 function parseReviewFlags(argv: string[]): ReviewFlags {
@@ -442,7 +469,8 @@ function parseReviewFlags(argv: string[]): ReviewFlags {
     "--title": "title",
     "--kind": "kind",
     "--revision": "revision",
-    "--order": "order"
+    "--order": "order",
+    "--task": "task"
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -549,7 +577,7 @@ Usage:
   codefleet [--workspace <path>] objective reorder <id> --order <id,id> --reason <text>
   codefleet [--workspace <path>] objective status <id>
   codefleet [--workspace <path>] objective rebuild <id>
-  codefleet [--workspace <path>] lock status|break
+  codefleet [--workspace <path>] lock status|break [--task <task-id>]
   codefleet [--workspace <path>] review <run-id> --decision <ACCEPTED|REJECTED|NEEDS_CHANGES> --reason <text>
 
 Review options:

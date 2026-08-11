@@ -73,7 +73,7 @@ execution through logs, diffs, tests, and review evidence.
 ```text
 Final model / concept design: complete
 Implementation: 155 of 545 FINAL RULE condition lines are claimed by a passing
-                test (28.4%). 128 tests, 0 failing.
+                test (28.4%). 134 tests, 0 failing.
 ```
 
 There is no separate implementation percentage. "about 25-35%" stood here with
@@ -152,6 +152,9 @@ Current implementation status:
 - A matcher token containing pattern characters, an unknown key under policies.commands, and a destructive entry without a well-formed categoryId each fail the profile, because each one otherwise produces an empty denylist that looks like a full one.
 - A Run whose every verification command was blocked by policy records VERIFICATION_BLOCKED_BY_COMMAND_POLICY with a count, instead of authority NONE with no reason. That path was unreachable while the matchers were always empty.
 - policies.harness is read. An execute-mode Run whose commands no Harness-visible channel can see is refused at planning time, before any Run directory exists; proceeding requires policies.harness.allowDegradedCommandObservation, which records the decision without making anything observed.
+- review-decision.local.json records the taskRevision it decided on, read from the Run Plan approval the bundle already hash-checks. Migration refuses a local review that does not name one and refuses a decision whose objectiveQueueItemId was never attached, instead of defaulting the revision to 1 and appending an event that reports success and can never derive VERIFIED.
+- A Run holds a per-Task lock for its duration, separate from the mutation lock because that one is fixed as not held across Run execution. A second run of the same Task is refused fail-fast and names the holder; codefleet lock status|break --task reports and clears them, including a lock file that cannot be parsed but still blocks.
+- runId is reserved by creating the Run directory exclusively rather than derived from a directory listing and created afterwards, so two Runs of different Tasks cannot land in one Run Trace.
 ```
 
 ## Fixed Model
@@ -388,6 +391,25 @@ Three candidates remain, with their measured sizes:
 Not a candidate: a Harness-visible command channel. It is the current
 bottleneck but not an unclaimed rule — see Current Bottleneck for why it needs
 a proxy or sandbox rather than an implementation slice.
+```
+
+From the 2026-08-10 audit, P0-5 and P0-3 are closed:
+
+```text
+Those two were the audit's own first recommendation, because they were the only
+P0s with no entry in docs/rule-implementation-status.json — the "believed
+implemented, actually broken" kind. Each was pinned by a failing test first, in
+test/defect-repro.test.ts, and both now pass.
+
+Note on the second: the audit said to reproduce it with two concurrent runs.
+Two collide only 0/20 to 2/10 of the time, so that test passed against broken
+code. It reproduces at 8 concurrent runs 39/40 of the time. Measure the race
+before trusting a test that races.
+
+Still open from that audit: P0-1, P0-2, P0-4, P0-6, and the P1 list. The
+suggested first slice is unchanged except that its lock step is now done —
+worktree isolation, spawn timeout and output ceiling, and REJECTED discarding
+the worktree.
 ```
 
 Standing constraint for any of them:

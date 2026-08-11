@@ -453,6 +453,7 @@ test("importing a local review appends a decision event carrying its migration s
 test("a waived acceptance carries its waived gaps into the ledger", async () => {
   const root = await seed();
   await create(root, "auth", "Auth work");
+  await attach(root, "auth", "login");
 
   await importReview(root, {
     localReviewStatus: "MIGRATION_READY_WAIVED",
@@ -495,6 +496,7 @@ test("only a migration-ready local review can be imported", async () => {
 test("the same reviewDecisionId with a different bundle blocks migration", async () => {
   const root = await seed();
   await create(root, "auth", "Auth work");
+  await attach(root, "auth", "login");
   await importReview(root);
 
   // Two different decisions claiming one identity. Overwriting silently would
@@ -512,6 +514,54 @@ test("the same reviewDecisionId with a different bundle blocks migration", async
   coversRule(IMPORT, "reviewDecisionId collision with different bundle hash blocks migration.");
   coversRule(LATEST, "Review Decision must have effective ReviewEvidenceBundle");
   coversRule(DURABLE, "RUN_REVIEW_DECIDED includes reviewEvidenceBundleRef and reviewEvidenceBundleHash");
+});
+
+// The two tests above had to start attaching the task once migration began
+// checking that the queue item exists. These two make that fixture edit
+// falsifiable: if the check were removed, they would fail rather than pass
+// quietly alongside the edited fixtures.
+test("a decision naming a queue item nobody attached is refused before it is appended", async () => {
+  const root = await seed();
+  await create(root, "auth", "Auth work");
+
+  const orphan = await importReview(root);
+  assert.equal(orphan.failedPhase, "M2_PRECHECK");
+  assert.match(orphan.failureMessage, /auth:login:1 is not attached to auth/);
+
+  // Attached at revision 1, but the review says it decided revision 2. The
+  // revision is read, not assumed, so this is the same refusal.
+  await attach(root, "auth", "login", 1);
+  const wrongRevision = await importReview(root, { taskRevision: 2 });
+  assert.equal(wrongRevision.failedPhase, "M2_PRECHECK");
+  assert.match(wrongRevision.failureMessage, /auth:login:2 is not attached to auth/);
+
+  // Replay records a REFERENCE_FAILURE for such an event but keeps
+  // replayStatus COMPLETE, so an appended one would report success forever.
+  // Nothing may reach the append-only ledger.
+  const lines = (await readFile(ledgerPath(root, "auth"), "utf8")).trim().split("\n");
+  assert.equal(lines.length, 2, "only OBJECTIVE_CREATED and TASK_ATTACHED may be present");
+  assert.equal(
+    lines.filter((line) => (JSON.parse(line) as { type: string }).type === "RUN_REVIEW_DECIDED").length,
+    0
+  );
+});
+
+test("a local review that does not say which revision it decided is refused, not defaulted", async () => {
+  const root = await seed();
+  await create(root, "auth", "Auth work");
+  await attach(root, "auth", "login");
+
+  // This used to become revision 1 through `?? 1` and import cleanly onto a
+  // queue item that happened to exist, which is how a missing field passed for
+  // a decided one.
+  const outcome = await importReview(root, { taskRevision: undefined });
+  assert.equal(outcome.failedPhase, "M2_PRECHECK");
+  assert.match(outcome.failureMessage, /does not record the taskRevision/);
+
+  for (const bad of [0, -1, 1.5, "1", null]) {
+    const rejected = await importReview(root, { taskRevision: bad });
+    assert.equal(rejected.failedPhase, "M2_PRECHECK", `${JSON.stringify(bad)} must not import`);
+  }
 });
 
 test("an accepted review with a satisfied gate derives VERIFIED and moves the cursor", async () => {
