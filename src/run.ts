@@ -10,6 +10,7 @@ import { contentHashOf, replayApproval } from "./task-ledger.ts";
 import type { AgentRunInput, AgentRunResult, RunResultFile } from "./types.ts";
 import { normalizeCommand, preflightCommand, type CommandMatcher, type DestructiveMatcher } from "./command-policy.ts";
 import { evaluatePathPolicy, type PathViolation } from "./path-policy.ts";
+import { evaluateRisk, type RiskRule } from "./risk.ts";
 import {
   computeRoleEffectiveRestrictions,
   meetMode,
@@ -414,6 +415,25 @@ async function executeRun(
     deniedCommands: commandPolicy.deniedCommands,
     destructiveCommands: commandPolicy.destructiveCommands
   };
+  // Risk is evaluated at planning time from what the plan itself knows: the
+  // Task scope and the verification commands. Changed files do not exist yet,
+  // so a PATH or DIFF rule reports as not-evaluable rather than not-matched.
+  const riskEvaluation = evaluateRisk({
+    rules: config.riskRules as RiskRule[],
+    subject: {
+      changedPaths: [],
+      scopePatterns: [...task.scope.include, ...task.scope.exclude],
+      commands: (task.verification?.commands ?? []).map((entry) => entry.command),
+      fields: {
+        agentRole: roleResolution.roleId,
+        harnessMode: effectiveMode,
+        isolationMode: isolation.mode
+      },
+      caseSensitivePaths: true
+    },
+    evidenceAvailable: true
+  });
+
   const verificationPlanSeed = {
     commands: (task.verification?.commands ?? []).map((entry) => ({
       commandId: entry.commandId,
@@ -517,8 +537,10 @@ async function executeRun(
     },
     effectivePolicy,
     computedRisk: {
-      level: "UNKNOWN",
-      reasons: ["RISK_ENGINE_NOT_IMPLEMENTED_V02"]
+      level: riskEvaluation.level,
+      reasons: riskEvaluation.reasons,
+      matchedRuleIds: riskEvaluation.matchedRuleIds,
+      scanScope: riskEvaluation.scanScope
     },
     isolation: {
       mode: isolation.mode,

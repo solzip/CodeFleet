@@ -43,21 +43,6 @@
       "evidence": "src/",
       "detail": "neither redaction nor export is implemented, so the blocking relation has nothing to enforce."
     },
-    "RISK_RULE_REUSES_FIXED_MATCHERS": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/run.ts",
-      "detail": "computedRisk.level is the constant UNKNOWN with reason RISK_ENGINE_NOT_IMPLEMENTED_V02. No risk rule is evaluated."
-    },
-    "RISK_RULE_CONJUNCTION_IS_FLAT_AND_NEGATION_IS_DENIED": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/run.ts",
-      "detail": "no risk rule structure is parsed or evaluated."
-    },
-    "UNKNOWN_RISK_IS_UNRESOLVED_STATE_NOT_HIGH_SEVERITY": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/run.ts",
-      "detail": "UNKNOWN is emitted as a constant, not derived from an unresolved evaluation, so the rule's distinction is untested."
-    },
     "SYSTEM_POLICY_AUTO_REVIEW_DECISION_IS_BOUNDED": {
       "status": "NOT_IMPLEMENTED",
       "evidence": "src/ledger.ts",

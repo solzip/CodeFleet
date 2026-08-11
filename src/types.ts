@@ -84,6 +84,8 @@ export interface CodeFleetConfig {
   defaultAgentRole?: string;
   /** policies.agentRoles: allowedAgentRoles and any custom roles. */
   agentRoles: Record<string, unknown>;
+  /** policies.risk.riskRules, already validated by the Profile loader. */
+  riskRules: unknown[];
   /** Comes from the Local Overlay. The Profile may not carry a command path. */
   adapterCommand: AgentCommandConfig;
   policies: ProfilePolicies;
@@ -247,6 +249,7 @@ export const DEFAULT_CONFIG: CodeFleetConfig = {
   agentAdapter: "codex",
   allowedAdapters: ["codex"],
   agentRoles: {},
+  riskRules: [],
   isolationMode: "NONE",
   adapterCommand: {},
   policies: {

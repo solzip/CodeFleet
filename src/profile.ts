@@ -14,6 +14,7 @@
 
 import { readFile } from "node:fs/promises";
 import { validateRequiredGates } from "./required-gates.ts";
+import { validateRiskRules } from "./risk.ts";
 import path from "node:path";
 
 export const PROFILE_SCHEMA_VERSION = "1.0.0";
@@ -217,6 +218,7 @@ export async function loadProfile(rootDir: string): Promise<LoadedProfile> {
   checkDefaultsRun(document, findings);
   checkDefaultsTaskWorkflow(document, findings);
   checkDefaultsRequiredGates(document, findings);
+  checkRiskRules(document, findings);
 
   if (findings.length > 0) {
     throw new ProfileValidationError(profilePath, findings);
@@ -560,6 +562,17 @@ function checkDefaultsRequiredGates(document: Record<string, unknown>, findings:
   })) {
     findings.push({
       checkId: "PROFILE_DEFAULTS_REQUIRED_GATES_SCHEMA",
+      jsonPointer: finding.jsonPointer,
+      detail: finding.detail
+    });
+  }
+}
+
+function checkRiskRules(document: Record<string, unknown>, findings: ProfileFinding[]): void {
+  const block = asObject(asObject(document.policies).risk);
+  for (const finding of validateRiskRules(block.riskRules, "/policies/risk/riskRules")) {
+    findings.push({
+      checkId: "RISK_RULE_REUSES_FIXED_MATCHERS",
       jsonPointer: finding.jsonPointer,
       detail: finding.detail
     });
