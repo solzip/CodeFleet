@@ -10,10 +10,10 @@
 // it and the edits are gone; keep it and they can be inspected. That is what
 // makes REJECTED mean something operationally rather than only in the record.
 
-import { spawn } from "node:child_process";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { gitProcessEnv, ISOLATION_COMMAND_TIMEOUT_MS, runCommand } from "./agent.ts";
 
 export type IsolationMode = "NONE" | "GIT_WORKTREE" | "TEMP_WORKSPACE" | "CONTAINER";
 
@@ -47,26 +47,22 @@ export interface PreparedIsolation {
   detail: string;
 }
 
-function run(
+/**
+ * Every git call this module makes goes through the same bounded runner the
+ * adapter uses. `git worktree add` checks out the repository, so it gets the
+ * isolation ceiling rather than the shorter one evidence reads use, and it sees
+ * a named environment rather than everything the operator happens to export.
+ */
+async function run(
   command: string,
   args: string[],
   cwd: string
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
-  return new Promise((resolve) => {
-    const child = spawn(command, args, { cwd, shell: false, stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk: string) => {
-      stderr += chunk;
-    });
-    child.on("error", (error) => resolve({ code: null, stdout, stderr: error.message }));
-    child.on("close", (code) => resolve({ code, stdout, stderr }));
+  const result = await runCommand(command, args, "", cwd, {
+    limits: { timeoutMs: ISOLATION_COMMAND_TIMEOUT_MS, outputCapBytes: 4 * 1024 * 1024 },
+    env: gitProcessEnv()
   });
+  return { code: result.exitCode, stdout: result.stdout, stderr: result.stderr };
 }
 
 function firstLine(value: string): string {

@@ -150,9 +150,78 @@ function transcriptUnavailableReason(jsonLinesParsed: number, commandsFound: num
   return "";
 }
 
+// Every process CodeFleet starts has a ceiling, and the ceilings live here so
+// that adding a new kind of child means picking one rather than inventing one.
+// They are constants: reading them from the Profile is a separate change.
+//
+// The four kinds are not interchangeable. An agent session, a test suite, a
+// read of git state, and a repository checkout have different honest durations,
+// and giving them one number would either cut a normal run short or leave a
+// hung one running for half an hour.
+
 /** Defaults, not policy. A Profile may narrow them; nothing may remove them. */
 export const DEFAULT_ADAPTER_TIMEOUT_MS = 30 * 60 * 1000;
 export const DEFAULT_ADAPTER_OUTPUT_CAP_BYTES = 16 * 1024 * 1024;
+
+/** A test suite, not an agent session. */
+export const VERIFICATION_COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
+export const VERIFICATION_COMMAND_OUTPUT_CAP_BYTES = 4 * 1024 * 1024;
+
+/**
+ * Reading git state takes seconds on a healthy repository. The cap is generous
+ * because truncating a diff corrupts evidence rather than merely shortening a
+ * log, so hitting it must stay exceptional.
+ */
+export const GIT_EVIDENCE_TIMEOUT_MS = 2 * 60 * 1000;
+export const GIT_EVIDENCE_OUTPUT_CAP_BYTES = 32 * 1024 * 1024;
+
+/** `git worktree add` checks out the repository; minutes are normal. */
+export const ISOLATION_COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
+
+/**
+ * Capturing created-file content costs one git call per file, so a per-call
+ * limit alone leaves the total unbounded in the number of files. This is the
+ * ceiling on that loop as a whole; files past it are named, not collected.
+ */
+export const NEW_FILE_CAPTURE_BUDGET_MS = 60 * 1000;
+
+// Names, never values, and only those a child genuinely needs. The boundary
+// exists to keep credentials — AWS_SECRET_ACCESS_KEY, GITHUB_TOKEN,
+// DATABASE_URL — out of processes that have no use for them.
+const OS_ESSENTIAL_ENV = ["SystemRoot", "SYSTEMROOT", "COMSPEC", "PATHEXT", "TEMP", "TMP", "windir"];
+
+// git resolves configuration from the user's home directory. Cutting that off
+// would silently change what a diff says — core.autocrlf alone can rewrite
+// every line ending — so protecting the evidence must not begin by altering it.
+const GIT_HOME_ENV = ["HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH"];
+
+// GIT_* that select where git's own files live. None of them is a secret; all
+// of them break git outright on an installation that relies on them.
+const GIT_SETTING_ENV = [
+  "GIT_EXEC_PATH",
+  "GIT_TEMPLATE_DIR",
+  "GIT_CONFIG_GLOBAL",
+  "GIT_CONFIG_SYSTEM",
+  "GIT_CONFIG_NOSYSTEM",
+  "GIT_SSL_CAINFO",
+  "GIT_SSL_CAPATH"
+];
+
+/**
+ * The environment a git child may see: PATH, what the OS needs to start a
+ * process at all, git's own configuration lookup, and nothing else. Only names
+ * present in the parent are passed on, so this never invents a value.
+ */
+export function gitProcessEnv(): Record<string, string> {
+  const env: Record<string, string> = { PATH: process.env.PATH ?? "" };
+  for (const name of [...OS_ESSENTIAL_ENV, ...GIT_HOME_ENV, ...GIT_SETTING_ENV]) {
+    const value = process.env[name];
+    if (typeof value === "string") {
+      env[name] = value;
+    }
+  }
+  return env;
+}
 
 export interface ProcessLimits {
   timeoutMs: number;

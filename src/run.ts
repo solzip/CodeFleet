@@ -1,8 +1,18 @@
 import { createHash } from "node:crypto";
 import { copyFile, lstat, mkdir, open, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { spawn } from "node:child_process";
-import { createAgentAdapter, isAdapterLocallyAvailable, LOCAL_ADAPTER_REGISTRY } from "./agent.ts";
+import {
+  createAgentAdapter,
+  gitProcessEnv,
+  isAdapterLocallyAvailable,
+  runCommand,
+  GIT_EVIDENCE_OUTPUT_CAP_BYTES,
+  GIT_EVIDENCE_TIMEOUT_MS,
+  LOCAL_ADAPTER_REGISTRY,
+  NEW_FILE_CAPTURE_BUDGET_MS,
+  VERIFICATION_COMMAND_OUTPUT_CAP_BYTES,
+  VERIFICATION_COMMAND_TIMEOUT_MS
+} from "./agent.ts";
 import { loadConfig } from "./config.ts";
 import { renderPrompt } from "./prompt.ts";
 import { loadTask } from "./task.ts";
@@ -66,6 +76,7 @@ interface VerificationAttempt {
   logRef: FileRef | UnavailableRef;
   result: ObservedCheck;
   blockedReason: string;
+  scanScope?: { stdoutTruncatedBytes: number; timeoutMs: number; outputCapBytes: number };
   unavailableReason: string;
 }
 
@@ -722,7 +733,7 @@ async function executeRun(
     workspaceRootRef: ".",
     selectedWorkspaceRootRealPath: discovery.selectedWorkspaceRootRealPath,
     workingDirectoryRef: task.projectPath,
-    runProcess
+    runProcess: runGitEvidenceProcess
   });
   await writeJson(preRunSnapshotPath, preRunSnapshot);
   const preRunSnapshotRef = await fileRef(rootDir, preRunSnapshotPath);
@@ -761,7 +772,7 @@ async function executeRun(
     workspaceRootRef: ".",
     selectedWorkspaceRootRealPath: discovery.selectedWorkspaceRootRealPath,
     workingDirectoryRef: task.projectPath,
-    runProcess
+    runProcess: runGitEvidenceProcess
   });
   await writeJson(postRunSnapshotPath, postRunSnapshot);
   const postRunSnapshotRef = await fileRef(rootDir, postRunSnapshotPath);
@@ -1251,6 +1262,11 @@ function runSummaryUnavailableReasons(input: {
     addUnavailableReason(reasons, pathEvaluation);
   }
   addUnavailableReason(reasons, input.verificationEvidence);
+  // A capped or killed verification command is a fact about this Run, and the
+  // attempt is the only place that fact exists.
+  for (const attempt of input.verificationEvidence?.attempts ?? []) {
+    addUnavailableReason(reasons, attempt);
+  }
   if (input.verificationEvidence === null) {
     reasons.add("VERIFICATION_EVIDENCE_NOT_AVAILABLE");
   }
@@ -1326,6 +1342,8 @@ async function runVerificationCommands(input: {
   deniedCommands: CommandMatcher[];
   destructiveCommands: DestructiveMatcher[];
   cwdRef: string;
+  timeoutMs?: number;
+  outputCapBytes?: number;
 }): Promise<VerificationAttempt[]> {
   if (input.commands.length === 0) {
     return [];
@@ -1367,7 +1385,12 @@ async function runVerificationCommands(input: {
       continue;
     }
 
-    const result = await runProcess(normalized.argv[0], normalized.argv.slice(1), input.projectPath);
+    const result = await runProcess(normalized.argv[0], normalized.argv.slice(1), input.projectPath, {
+      limits: {
+        timeoutMs: input.timeoutMs ?? VERIFICATION_COMMAND_TIMEOUT_MS,
+        outputCapBytes: input.outputCapBytes ?? VERIFICATION_COMMAND_OUTPUT_CAP_BYTES
+      }
+    });
     const endedAt = formatDateTimeWithOffset(new Date());
     const stdoutPath = path.join(logDir, `${planned.commandId}.stdout.log`);
     const stderrPath = path.join(logDir, `${planned.commandId}.stderr.log`);
@@ -1388,7 +1411,19 @@ async function runVerificationCommands(input: {
       logRef: await fileRef(input.rootDir, stdoutPath),
       result: result.code === 0 ? "PASS" : "FAIL",
       blockedReason: "",
-      unavailableReason: ""
+      // The gate reads the exit code, so a capped log does not change the
+      // verdict. It still has to be visible: a reviewer reading a truncated log
+      // must not take it for the whole run.
+      scanScope: {
+        stdoutTruncatedBytes: result.truncatedBytes,
+        timeoutMs: result.timeoutMs,
+        outputCapBytes: result.outputCapBytes
+      },
+      unavailableReason: result.timedOut
+        ? `VERIFICATION_COMMAND_TIMED_OUT:${planned.commandId}`
+        : result.truncatedBytes > 0
+          ? "VERIFICATION_OUTPUT_TRUNCATED"
+          : ""
     });
   }
 
@@ -2012,14 +2047,27 @@ export interface NewFileCapture {
  */
 export async function captureNewFileContent(
   projectPath: string,
-  newFiles: string[]
+  newFiles: string[],
+  budgetMs: number = NEW_FILE_CAPTURE_BUDGET_MS
 ): Promise<NewFileCapture> {
   const parts: string[] = [];
   const notCaptured: { path: string; reason: string }[] = [];
+  const deadline = Date.now() + budgetMs;
   let bytesCaptured = 0;
   let captured = 0;
+  let truncatedReason = "";
 
   for (const file of newFiles) {
+    // One call per file means a per-call limit leaves the total unbounded in the
+    // number of files. Past the budget the remaining files are named without
+    // being read, which is an exclusion this Run knows the extent of.
+    if (Date.now() >= deadline) {
+      notCaptured.push({
+        path: file,
+        reason: `the ${budgetMs} ms budget for reading created files was exhausted`
+      });
+      continue;
+    }
     let size: number;
     try {
       size = (await stat(path.join(projectPath, file))).size;
@@ -2044,16 +2092,25 @@ export async function captureNewFileContent(
 
     // --no-index exits 1 when the two inputs differ, which is the normal result
     // here and not a failure.
-    const result = await runProcess(
-      "git",
+    const result = await runGitEvidence(
       ["-c", `safe.directory=${projectPath}`, "diff", "--no-ext-diff", "--no-index", "--", "/dev/null", file],
       projectPath
     );
     if (result.code !== 0 && result.code !== 1) {
       notCaptured.push({
         path: file,
-        reason: firstLine(result.stderr) || "git diff --no-index failed"
+        reason: result.timedOut
+          ? `reading it exceeded the ${result.timeoutMs} ms limit`
+          : firstLine(result.stderr) || "git diff --no-index failed"
       });
+      continue;
+    }
+    // Cut output is the one case where what is missing cannot be described, so
+    // it outranks every exclusion this function decided on its own.
+    if (result.truncatedBytes > 0) {
+      truncatedReason = evidenceTruncationReason(result, "GIT_DIFF_NEW_FILE");
+      notCaptured.push({ path: file, reason: `its patch was cut at the ${result.outputCapBytes} byte output limit` });
+      parts.push(result.stdout);
       continue;
     }
     parts.push(result.stdout);
@@ -2082,7 +2139,14 @@ export async function captureNewFileContent(
   return {
     content: parts.join(""),
     notCaptured,
-    unavailableReason: notCaptured.length > 0 ? "NEW_FILE_CONTENT_NOT_CAPTURED" : "",
+    // Truncation wins over exclusion: a human can open a file that was skipped
+    // for its size, but nobody can describe bytes that were dropped.
+    unavailableReason:
+      truncatedReason.length > 0
+        ? truncatedReason
+        : notCaptured.length > 0
+          ? "NEW_FILE_CONTENT_NOT_CAPTURED"
+          : "",
     scanScope: {
       newFilesFound: newFiles.length,
       contentCaptured: captured,
@@ -2111,7 +2175,10 @@ async function captureGitDiff(
     }
   };
 
-  const result = await runProcess("git", ["-c", `safe.directory=${projectPath}`, "diff", "--no-ext-diff", "--", "."], projectPath);
+  const result = await runGitEvidence(
+    ["-c", `safe.directory=${projectPath}`, "diff", "--no-ext-diff", "--", "."],
+    projectPath
+  );
   if (result.code !== 0) {
     return {
       content: [
@@ -2120,9 +2187,16 @@ async function captureGitDiff(
         result.stderr.trim() || "No stderr output was produced.",
         ""
       ].join("\n"),
-      unavailableReason: "GIT_DIFF_FAILED",
+      unavailableReason: result.timedOut ? "GIT_DIFF_TIMED_OUT" : "GIT_DIFF_FAILED",
       newFileCapture: empty
     };
+  }
+
+  // A patch cut off mid-hunk describes a change nobody can reconstruct, and it
+  // looks exactly like a complete one. It is a defect, not a gap.
+  const diffTruncated = evidenceTruncationReason(result, "GIT_DIFF");
+  if (diffTruncated.length > 0) {
+    return { content: result.stdout, unavailableReason: diffTruncated, newFileCapture: empty };
   }
 
   const untracked = await captureUntrackedFiles(projectPath);
@@ -2146,12 +2220,13 @@ async function captureGitDiff(
 
 /** Untracked paths only. Modifications and deletions are already in the diff. */
 async function captureUntrackedFiles(projectPath: string): Promise<string[] | null> {
-  const result = await runProcess(
-    "git",
+  const result = await runGitEvidence(
     ["-c", `safe.directory=${projectPath}`, "status", "--porcelain=v1", "--untracked-files=all", "--", "."],
     projectPath
   );
-  if (result.code !== 0) {
+  // A truncated listing is a listing of unknown length, so it cannot be read as
+  // the set of created files.
+  if (result.code !== 0 || result.truncatedBytes > 0) {
     return null;
   }
 
@@ -2175,15 +2250,20 @@ async function captureUntrackedFiles(projectPath: string): Promise<string[] | nu
 // creates a new file would leave no trace in changed-files evidence. Untracked
 // files are policy subjects, so changed-files truth must include them.
 async function captureGitChangedFiles(projectPath: string): Promise<{ files: string[]; unavailableReason?: string }> {
-  const result = await runProcess(
-    "git",
+  const result = await runGitEvidence(
     ["-c", `safe.directory=${projectPath}`, "status", "--porcelain=v1", "--untracked-files=all", "--", "."],
     projectPath
   );
-  if (result.code !== 0) {
+  const truncated = evidenceTruncationReason(result, "GIT_STATUS");
+  if (result.code !== 0 || truncated.length > 0) {
     return {
       files: [],
-      unavailableReason: "GIT_CHANGED_FILES_FAILED"
+      unavailableReason:
+        truncated.length > 0
+          ? truncated
+          : result.timedOut
+            ? "GIT_CHANGED_FILES_TIMED_OUT"
+            : "GIT_CHANGED_FILES_FAILED"
     };
   }
 
@@ -2240,40 +2320,79 @@ function isCodefleetMetadataPath(value: string): boolean {
   return value === ".codefleet" || value.startsWith(".codefleet/");
 }
 
-function runProcess(command: string, args: string[], cwd: string): Promise<{ code: number | null; stdout: string; stderr: string }> {
-  return new Promise((resolve) => {
-    let stdout = "";
-    let stderr = "";
+export interface HarnessProcessResult {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+  /** Bytes the output cap dropped. Above zero means the output is partial. */
+  truncatedBytes: number;
+  /** True only when a timeout was observed, never as a default for "unknown". */
+  timedOut: boolean;
+  timeoutMs: number;
+  outputCapBytes: number;
+}
 
-    try {
-      const child = spawn(command, args, {
-        cwd,
-        shell: false,
-        stdio: ["ignore", "pipe", "pipe"]
-      });
+/**
+ * Every child the Harness starts itself. It used to spawn directly with no time
+ * limit, no output limit and the parent's whole environment, which meant the
+ * boundary put around the agent stopped exactly where the evidence began.
+ * Delegating to runCommand gives all of them one implementation of the limits,
+ * so a new kind of child cannot quietly get none.
+ */
+export function runProcess(
+  command: string,
+  args: string[],
+  cwd: string,
+  options: { limits?: { timeoutMs: number; outputCapBytes: number }; env?: Record<string, string> } = {}
+): Promise<HarnessProcessResult> {
+  const timeoutMs = options.limits?.timeoutMs ?? VERIFICATION_COMMAND_TIMEOUT_MS;
+  const outputCapBytes = options.limits?.outputCapBytes ?? VERIFICATION_COMMAND_OUTPUT_CAP_BYTES;
 
-      child.stdout.setEncoding("utf8");
-      child.stderr.setEncoding("utf8");
-      child.stdout.on("data", (chunk) => {
-        stdout += chunk;
-      });
-      child.stderr.on("data", (chunk) => {
-        stderr += chunk;
-      });
-      child.on("error", (error) => {
-        resolve({ code: null, stdout, stderr: `${stderr}${error.message}\n` });
-      });
-      child.on("close", (code) => {
-        resolve({ code, stdout, stderr });
-      });
-    } catch (error) {
-      resolve({
-        code: null,
-        stdout,
-        stderr: `${error instanceof Error ? error.message : String(error)}\n`
-      });
-    }
+  return runCommand(command, args, "", cwd, {
+    limits: { timeoutMs, outputCapBytes },
+    env: options.env ?? { PATH: process.env.PATH ?? "" }
+  }).then((result) => {
+    const scanScope = result.scanScope ?? {
+      stdoutTruncatedBytes: 0,
+      stderrTruncatedBytes: 0,
+      timeoutMs,
+      outputCapBytes
+    };
+    return {
+      code: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      truncatedBytes: scanScope.stdoutTruncatedBytes + scanScope.stderrTruncatedBytes,
+      // runCommand reports a timeout by killing the child and resolving with a
+      // null exit code and that sentence in stderr. Reading it back here keeps
+      // one implementation of the limit and one of its detection.
+      timedOut: result.exitCode === null && / limit and was terminated\./.test(result.stderr),
+      timeoutMs: scanScope.timeoutMs,
+      outputCapBytes: scanScope.outputCapBytes
+    };
   });
+}
+
+/** Reading git state, with the limits and environment that kind of call gets. */
+function runGitEvidence(args: string[], cwd: string): Promise<HarnessProcessResult> {
+  return runGitEvidenceProcess("git", args, cwd);
+}
+
+/** The same boundary in the shape the workspace snapshot asks for. */
+function runGitEvidenceProcess(command: string, args: string[], cwd: string): Promise<HarnessProcessResult> {
+  return runProcess(command, args, cwd, {
+    limits: { timeoutMs: GIT_EVIDENCE_TIMEOUT_MS, outputCapBytes: GIT_EVIDENCE_OUTPUT_CAP_BYTES },
+    env: gitProcessEnv()
+  });
+}
+
+/**
+ * Truncated evidence is not shortened evidence. The bytes that were dropped are
+ * exactly the ones nobody can describe, so a patch or a status listing that was
+ * cut cannot be read as a complete account of the change and cannot be waived.
+ */
+function evidenceTruncationReason(result: HarnessProcessResult, what: string): string {
+  return result.truncatedBytes > 0 ? `EVIDENCE_TRUNCATED:${what}` : "";
 }
 
 async function writeJson(filePath: string, value: unknown): Promise<void> {

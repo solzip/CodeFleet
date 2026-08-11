@@ -18,7 +18,14 @@ export interface RunRecordInput {
   localReview?: Record<string, unknown> | null;
 }
 
-const EVIDENCE_DEFECT_PREFIXES = ["HASH_INVALID", "ARTIFACT_NOT_READABLE", "MISSING_INPUT_REF"];
+const EVIDENCE_DEFECT_PREFIXES = [
+  "HASH_INVALID",
+  "ARTIFACT_NOT_READABLE",
+  "MISSING_INPUT_REF",
+  // Output that was cut is output whose missing part nobody can name, so no
+  // person can stand in for it the way they can for something never collected.
+  "EVIDENCE_TRUNCATED"
+];
 
 function classify(reason: string): "CAPABILITY_GAP" | "EVIDENCE_DEFECT" {
   return EVIDENCE_DEFECT_PREFIXES.includes(reason.split(":")[0]) ? "EVIDENCE_DEFECT" : "CAPABILITY_GAP";

@@ -45,7 +45,14 @@ export interface EvidenceGap {
 // the repository and stand in for it. An EVIDENCE_DEFECT means this Run's
 // evidence is missing or does not match its recorded hash, which nobody can
 // stand in for, so it is never waivable.
-const EVIDENCE_DEFECT_PREFIXES = ["HASH_INVALID", "ARTIFACT_NOT_READABLE", "MISSING_INPUT_REF"];
+const EVIDENCE_DEFECT_PREFIXES = [
+  "HASH_INVALID",
+  "ARTIFACT_NOT_READABLE",
+  "MISSING_INPUT_REF",
+  // Output that was cut is output whose missing part nobody can name, so no
+  // person can stand in for it the way they can for something never collected.
+  "EVIDENCE_TRUNCATED"
+];
 
 export function classifyGap(reason: string): GapKind {
   const head = reason.split(":")[0];
