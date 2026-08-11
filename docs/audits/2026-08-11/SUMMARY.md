@@ -120,9 +120,9 @@ queue length: 0
 | P1-14 | 모든 테스트 픽스처가 `isolationMode: NONE` + `requireIsolationForMutation: false`를 고정. 기본값이 켜져 있는 자세가 종단으로 한 번도 실행되지 않음 | `test/profile-fixture.ts:44, 75-77` |
 | P1-15 | 어댑터의 capabilities 거부에 테스트 0건. 문자열 `"Adapter refused to launch"`는 `src/agent.ts:51`에만 존재 | grep 전수 |
 | P1-16 | `status: DONE` Task의 순차 재실행이 여전히 경고뿐이고, `loadTask`가 warnings를 버린다 | `src/task.ts:76-81`, `src/task.ts:18-21` |
-| P1-17 | timeout kill이 SIGTERM 1회뿐. SIGKILL 에스컬레이션도, 프로세스 그룹 종료도 없음 | `src/agent.ts:216`, grep `SIGKILL`/`killSignal`/`detached` 0건 |
+| P1-17 | timeout kill이 SIGTERM 1회뿐. SIGKILL 에스컬레이션도, 프로세스 그룹 종료도 없음. **2단계에서 실측 확인** — 아래 | `src/agent.ts:216`, grep `SIGKILL`/`killSignal`/`detached` 0건 |
 | P1-18 | `task.projectPath`가 하위 디렉터리인 Task에서 경로 기준이 어긋나 범위 안 파일까지 위반으로 판정된다 | 아래 |
-| P1-19 | 검증 커맨드 env가 `PATH`뿐이라 `JAVA_HOME`/`SystemRoot` 등을 필요로 하는 빌드 도구가 실패할 수 있다 (2단계에서 등재, fail-closed) | `src/run.ts` 검증 커맨드 호출의 기본 env, `fixes/stage2-process-boundaries.md` §4 |
+| P1-19 | 검증 커맨드 env가 `PATH`뿐이라 `mvn`/`gradle` 계열 검증 커맨드가 **구조적으로** 실패한다. fail-closed이지만 실사용 검증 전에 P1-13과 함께 해소돼야 한다 — 아래 | `src/run.ts` 검증 커맨드 호출의 기본 env, `fixes/stage2-process-boundaries.md` §4 |
 
 ### P1-18 상세 — 하위 디렉터리 Task의 경로 기준 불일치
 
@@ -144,6 +144,27 @@ pathViolations          : services/api/outside-the-scope.txt  PATH_OUTSIDE_ALLOW
 **성격**: fail-closed다. 범위 안 파일을 위반으로 **과다** 보고하므로 잘못된 수락으로 이어지지 않고 ACCEPTED를 막는다. 그래서 P0가 아니라 P1이다. 다만 하위 디렉터리 Task는 현재 사실상 사용 불가 상태이며, 사용자에게는 "정상 파일이 범위 위반으로 나온다"로 보인다.
 
 **주의**: 수정은 `captureGitChangedFiles`의 경로 기준을 projectPath로 정규화하는 방향이 될 텐데, 이 함수는 P0-11 수정(`fixes/stage1b-evidence-completeness.md`)이 손댄 `captureGitDiff`·`captureUntrackedFiles`와 같은 기준을 공유해야 한다. 세 곳을 함께 고쳐야 한다.
+
+### P1-17 상세 — 2단계 실측 근거
+
+2단계에서 `runProcess`를 수정 전 형태로 되돌려 종단 테스트를 돌렸을 때, 테스트 러너를 300초에 강제 종료한 뒤에도 자식이 남아 있었다:
+
+```
+ProcessId : 39476
+Cmd       : <node> forever.mjs
+```
+
+이것은 상한이 없던 때의 관측이지만, **상한이 생긴 뒤에도 kill 자체는 SIGTERM 1회뿐**이라는 사실은 그대로다(`src/agent.ts` `runCommand`). 2단계가 모든 자식을 `runCommand`로 모았으므로 이 한계도 이제 **어댑터뿐 아니라 검증 커맨드·git 호출 전부가 공유한다.** POSIX에서 SIGTERM 핸들러를 단 프로세스, 그리고 모든 플랫폼에서 손자 프로세스는 살아남는다.
+
+해소하려면 SIGTERM 후 유예를 두고 SIGKILL로 올리고, 손자까지 잡으려면 `detached: true` + 프로세스 그룹 종료(win32는 `taskkill /T`)가 필요하다.
+
+### P1-19 상세 — 실사용 검증 전에 해소돼야 한다
+
+**성격을 정확히 적는다.** fail-closed인 것은 맞다 — 도구가 뜨지 않으면 비-0 exit이 되고 attempt가 `FAIL`, 게이트가 `NOT_SATISFIED`로 간다. 잘못된 수락으로 이어지지 않는다.
+
+그러나 **fail-closed는 "안전하다"이지 "쓸 수 있다"가 아니다.** `mvn`은 `JAVA_HOME`, gradle은 `JAVA_HOME`과 `GRADLE_USER_HOME`, Windows의 여러 런타임은 `SystemRoot`를 요구한다. 지금 검증 커맨드에 전달되는 것은 `PATH` 하나이므로, 이 계열의 검증 커맨드는 **작업 내용과 무관하게 항상 실패한다.** 사용자에게는 "로컬에서 되는 명령이 CodeFleet 안에서만 실패한다"로 보이고, 검증 게이트는 영원히 `NOT_SATISFIED`에 머문다.
+
+따라서 이것은 여유 있게 미룰 P1이 아니다. **실사용 검증(real-world validation)에 들어가기 전에 P1-13(프로파일에서 상한 읽기)과 함께 해소돼야 한다** — 둘 다 같은 설정 블록(검증 커맨드에 무엇을 허용할 것인가)에 속하고, 하나만 고치면 나머지 절반이 남는다.
 
 ## 다음 액션 제안
 

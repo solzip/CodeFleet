@@ -10,7 +10,8 @@
              2단계 착수 전 게이트(fixes/stage2-precheck.md §5)에서 발견됐다.
 상태        : P0-7 · P0-8 해소 (fixes/stage1-isolation.md)
              P0-11 해소 (fixes/stage1b-evidence-completeness.md)
-             P0-9 · P0-10 미착수
+             P0-10 해소 (fixes/stage2-process-boundaries.md)
+             P0-9 해소 (fixes/stage3-4-failopen-and-surfacing.md)
 ```
 
 ---

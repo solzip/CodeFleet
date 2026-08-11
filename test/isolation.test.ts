@@ -11,7 +11,7 @@ import path from "node:path";
 import test from "node:test";
 import { DEFAULT_ADAPTER_OUTPUT_CAP_BYTES, DEFAULT_ADAPTER_TIMEOUT_MS, runCommand } from "../src/agent.ts";
 import { checkIsolationRequirement, pathExists, prepareIsolation } from "../src/isolation.ts";
-import { attachTask, createObjective, transitionQueueItem } from "../src/ledger.ts";
+import { attachTask, createObjective, ledgerPath, transitionQueueItem } from "../src/ledger.ts";
 import { reviewRun } from "../src/review.ts";
 import {
   blockedQueueReason,
@@ -769,6 +769,111 @@ test("a failed discard reaches the review bundle and blocks an unwaived accept",
 });
 
 // ---------------------------------------------------------------- P0-2 -----
+
+// P0-9. The gate held a check written for exactly this — "a replay that could
+// not be trusted must not be read as permission" — behind a filter that a
+// broken ledger never gets past, because a ledger that fails to parse yields an
+// empty queue. So a Task somebody cancelled in writing ran anyway, and moving
+// the objectives directory did the same thing.
+async function queueGateWorkspace(name: string): Promise<string> {
+  const root = await mkdtemp(path.join(os.tmpdir(), `codefleet-${name}-`));
+  await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
+  await mkdir(path.join(root, ".codefleet", "runs"), { recursive: true });
+  await writeFile(
+    path.join(root, ".codefleet", "config.json"),
+    `${JSON.stringify(profileJson({ workspaceId: name }), null, 2)}\n`,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "tasks", "sample.yaml"),
+    [
+      "id: sample",
+      "title: Sample task",
+      "projectPath: .",
+      "goal: Exercise the queue gate against an unreadable ledger",
+      "scope:",
+      "  include: [src/**]",
+      "  exclude: []",
+      "constraints: []",
+      "doneCriteria: [done]",
+      "workflow: [PLAN]",
+      "status: READY",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  return root;
+}
+
+test("a ledger that cannot be replayed blocks the Run instead of reading as permission", async () => {
+  const root = await queueGateWorkspace("queue-corrupt");
+  await approveTask(root, {
+    taskId: "sample",
+    taskPath: await findTaskPath(root, "sample"),
+    actorId: "tester",
+    reason: "approved for test"
+  });
+  await createObjective(root, {
+    objectiveId: "auth",
+    title: "Auth",
+    kind: "SEQUENCE",
+    actorId: "tester",
+    reason: "created"
+  });
+  await attachTask(root, {
+    objectiveId: "auth",
+    taskId: "sample",
+    taskRevision: 1,
+    taskRevisionHash: "h",
+    actorId: "tester",
+    reason: "attached"
+  });
+  await transitionQueueItem(root, {
+    objectiveId: "auth",
+    objectiveQueueItemId: "auth:sample:1",
+    type: "QUEUE_ITEM_CANCELED",
+    actorId: "tester",
+    reason: "requirement withdrawn"
+  });
+
+  // The decision is on the record. Breaking the file must not erase it.
+  await writeFile(ledgerPath(root, "auth"), "{ this is not json\n", "utf8");
+
+  const reason = await blockedQueueReason(root, "sample");
+  assert.match(String(reason), /auth/, "the objective whose ledger failed has to be named");
+  assert.match(String(reason), /cannot be read/i);
+  // The remedy belongs in the refusal: a Run blocked with no way forward is a
+  // dead end rather than a safeguard.
+  assert.match(String(reason), /repair|restore/i, "the refusal has to say what to do about it");
+  await assert.rejects(() => runTask(root, "sample"), /auth/);
+});
+
+test("an objectives directory that cannot be listed blocks the Run; an absent one does not", async () => {
+  const root = await queueGateWorkspace("queue-unreadable");
+  await approveTask(root, {
+    taskId: "sample",
+    taskPath: await findTaskPath(root, "sample"),
+    actorId: "tester",
+    reason: "approved for test"
+  });
+
+  // Nothing has been attached anywhere, so there is no objectives directory at
+  // all. That is an absence of opinion, not an unreadable one.
+  assert.equal(await blockedQueueReason(root, "sample"), null);
+  const ran = await runTask(root, "sample");
+  assert.ok(ran.result.runId.length > 0);
+
+  // A file where the directory should be fails readdir with ENOTDIR. Any error
+  // other than "it is not there" means the queue could not be read, and unread
+  // is not the same as empty.
+  await writeFile(path.join(root, ".codefleet", "objectives"), "not a directory\n", "utf8");
+  await assert.rejects(
+    () => blockedQueueReason(root, "sample"),
+    /objectives/i,
+    "an unreadable objectives directory must not resolve to no opinion"
+  );
+  await assert.rejects(() => runTask(root, "sample"), /objectives/i);
+});
 
 test("a queue decision blocks the Run, and an unattached Task is not blocked", async () => {
   const root = await gitRepo();

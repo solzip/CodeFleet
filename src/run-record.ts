@@ -27,6 +27,64 @@ const EVIDENCE_DEFECT_PREFIXES = [
   "EVIDENCE_TRUNCATED"
 ];
 
+/**
+ * One line per kind of process the Run started, each stating the ceiling, the
+ * usage and the dropped bytes separately. "not measured" is its own outcome:
+ * a subject that never ran must not report the same zero as one that ran and
+ * stayed inside its limit.
+ */
+function renderLimitLines(limits: Record<string, unknown>): string[] {
+  const lines: string[] = [];
+  const label = (name: string): string => name.padEnd(14);
+
+  const adapter = record(limits.adapter);
+  if (adapter.measured === true) {
+    const dropped = num(adapter.stdoutTruncatedBytes) + num(adapter.stderrTruncatedBytes);
+    lines.push(
+      `${label("adapter")}limit ${num(adapter.timeoutMs)} ms / ${num(adapter.outputCapBytes)} B` +
+        `   used ${num(adapter.stdoutBytes) + num(adapter.stderrBytes)} B   truncated ${dropped} B`
+    );
+  } else {
+    lines.push(`${label("adapter")}not measured: ${str(adapter.unavailableReason, "no process ran")}`);
+  }
+
+  const verification = record(limits.verification);
+  if (verification.measured === true) {
+    lines.push(
+      `${label("verification")}limit ${num(verification.timeoutMs)} ms / ${num(verification.outputCapBytes)} B` +
+        `   used ${num(verification.outputBytes)} B   truncated ${num(verification.truncatedBytes)} B` +
+        `   (${num(verification.truncatedCalls)} of ${num(verification.calls)} command(s) truncated,` +
+        ` ${num(verification.timedOutCalls)} timed out)`
+    );
+  } else {
+    lines.push(`${label("verification")}not measured: ${str(verification.unavailableReason, "no command ran")}`);
+  }
+
+  const git = record(limits.gitEvidence);
+  if (git.measured === true) {
+    lines.push(
+      `${label("git evidence")}limit ${num(git.timeoutMs)} ms / ${num(git.outputCapBytes)} B` +
+        `   used ${num(git.outputBytes)} B   truncated ${num(git.truncatedBytes)} B` +
+        `   (${num(git.calls)} call(s), ${num(git.truncatedCalls)} truncated, ${num(git.timedOutCalls)} timed out)`
+    );
+  } else {
+    lines.push(`${label("git evidence")}not measured: ${str(git.unavailableReason, "no call was made")}`);
+  }
+
+  const created = record(limits.newFileCapture);
+  if (created.measured === true) {
+    lines.push(
+      `${label("created files")}limit ${num(created.perFileLimitBytes)} B per file / ` +
+        `${num(created.totalLimitBytes)} B per Run / ${num(created.budgetMs)} ms budget` +
+        `   captured ${num(created.bytesCaptured)} B   not captured ${num(created.contentNotCaptured)} file(s)`
+    );
+  } else {
+    lines.push(`${label("created files")}not measured: this Run created no file`);
+  }
+
+  return lines;
+}
+
 function classify(reason: string): "CAPABILITY_GAP" | "EVIDENCE_DEFECT" {
   return EVIDENCE_DEFECT_PREFIXES.includes(reason.split(":")[0]) ? "EVIDENCE_DEFECT" : "CAPABILITY_GAP";
 }
@@ -107,6 +165,22 @@ export function renderRunRecord(input: RunRecordInput): string {
     } else if (isolation.discarded === true) {
       lines.push("The tree was discarded when the Run finished, so those edits are gone.");
     }
+    lines.push("");
+  }
+
+  // Before the evidence, not after it. A reader who learns halfway down that
+  // output was dropped has already taken the sections above as complete, and
+  // the whole point of counting the dropped bytes is that they change how the
+  // rest is read.
+  const limits = record(harnessObservation.resourceLimits);
+  if (Object.keys(limits).length > 0) {
+    lines.push("## What the limits did");
+    lines.push("");
+    lines.push("```text");
+    for (const line of renderLimitLines(limits)) {
+      lines.push(line);
+    }
+    lines.push("```");
     lines.push("");
   }
 

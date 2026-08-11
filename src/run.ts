@@ -76,7 +76,14 @@ interface VerificationAttempt {
   logRef: FileRef | UnavailableRef;
   result: ObservedCheck;
   blockedReason: string;
-  scanScope?: { stdoutTruncatedBytes: number; timeoutMs: number; outputCapBytes: number };
+  scanScope?: {
+    outputBytes: number;
+    stdoutTruncatedBytes: number;
+    stderrTruncatedBytes: number;
+    truncatedBytes: number;
+    timeoutMs: number;
+    outputCapBytes: number;
+  };
   unavailableReason: string;
 }
 
@@ -171,25 +178,52 @@ interface RunSummary {
  * to no Objective is not blocked: the queue has expressed no opinion about it.
  */
 export async function blockedQueueReason(rootDir: string, taskId: string): Promise<string | null> {
+  const objectivesDir = path.join(rootDir, ".codefleet", "objectives");
   let objectiveIds: string[];
   try {
-    objectiveIds = await readdir(path.join(rootDir, ".codefleet", "objectives"));
-  } catch {
-    return null;
+    objectiveIds = await readdir(objectivesDir);
+  } catch (error) {
+    // No objectives directory means no Objective has ever been created, and a
+    // queue that does not exist holds no decision. Every other error means the
+    // queue could not be read, and unread is not the same as empty — swallowing
+    // them let a Task somebody cancelled run because a directory was in the way.
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return null;
+    }
+    throw new Error(
+      `Run is blocked: the Objective queue at .codefleet/objectives could not be read ` +
+        `(${(error as NodeJS.ErrnoException).code ?? "unknown error"}), so CodeFleet cannot tell ` +
+        "whether a decision forbids this Task.\n" +
+        "Repair or restore that directory before running."
+    );
   }
 
   for (const objectiveId of objectiveIds) {
     const { snapshot } = await replayObjective(rootDir, objectiveId);
+    // Ordered before the queue is filtered, not after. A ledger that fails to
+    // parse produces an empty queue, so a check placed behind "does this
+    // Objective hold the Task" never ran in the one case it was written for.
+    // An Objective whose ledger cannot be replayed might hold a decision about
+    // any Task, so it blocks every Task rather than the ones it appears to name.
+    if (snapshot.replay.replayStatus !== "COMPLETE") {
+      const findings = snapshot.replay.findings
+        .map((finding) => `  - ${finding.checkId}: ${finding.detail}`)
+        .slice(0, 5);
+      return [
+        `Run is blocked: the ledger of Objective ${objectiveId} replayed as ` +
+          `${snapshot.replay.replayStatus}, so its queue decisions cannot be read.`,
+        "An Objective that cannot be replayed may hold a decision about any Task, so no Task",
+        "runs while one is unreadable. This is deliberate: the alternative is running work",
+        "somebody stopped in writing.",
+        ...findings,
+        "",
+        `Repair or restore .codefleet/objectives/${objectiveId}/ledger.jsonl, then run`,
+        `'codefleet objective status ${objectiveId}' to confirm the replay is COMPLETE.`
+      ].join("\n");
+    }
     const items = snapshot.queue.filter((item) => item.taskId === taskId);
     if (items.length === 0) {
       continue;
-    }
-    // A replay that could not be trusted must not be read as permission.
-    if (snapshot.replay.replayStatus !== "COMPLETE") {
-      return (
-        `Run is blocked: ${objectiveId} holds this Task but its ledger replay is ` +
-        `${snapshot.replay.replayStatus}, so the queue decision cannot be read.`
-      );
     }
     for (const item of items) {
       if (item.storedState === "BLOCKED" || item.storedState === "CANCELED" || item.storedState === "SKIPPED") {
@@ -720,6 +754,12 @@ async function executeRun(
   // shape of claim this product exists to refuse.
   const observedPath = prepared.workPath;
 
+  // One accumulator for this Run's git evidence calls. Every one of them goes
+  // through it, so the Run can state how many it made rather than implying it.
+  const gitEvidenceUsage = newProcessUsage(GIT_EVIDENCE_TIMEOUT_MS, GIT_EVIDENCE_OUTPUT_CAP_BYTES);
+  const runGitEvidence = gitEvidenceRunner(gitEvidenceUsage);
+  const runGitEvidenceProcess = gitEvidenceProcessRunner(gitEvidenceUsage);
+
   // Captured before the adapter is given control. A snapshot taken any later
   // would already contain the agent's changes and the delta would read empty.
   // The scope patterns come from the derived effectivePolicy, not the Task, for
@@ -756,12 +796,12 @@ async function executeRun(
 
   await writeFile(stdoutLogPath, agentResult.stdout, "utf8");
   await writeFile(stderrLogPath, agentResult.stderr, "utf8");
-  const diffEvidence = await captureGitDiff(observedPath);
+  const diffEvidence = await captureGitDiff(observedPath, runGitEvidence);
   await writeFile(diffPath, diffEvidence.content, "utf8");
   const stdoutRef = await fileRef(rootDir, stdoutLogPath);
   const stderrRef = await fileRef(rootDir, stderrLogPath);
   const diffRef = await fileRef(rootDir, diffPath);
-  const changedFilesEvidence = await captureGitChangedFiles(observedPath);
+  const changedFilesEvidence = await captureGitChangedFiles(observedPath, runGitEvidence);
 
   const postRunSnapshot = await captureWorkspaceSnapshot({
     projectPath: observedPath,
@@ -1000,6 +1040,16 @@ async function executeRun(
         unavailableReason: pathPolicy.unavailableReason
       }
     },
+    // What each kind of child was allowed, what it used, and what was dropped.
+    // The counts existed before this and were discarded at the boundary that
+    // produced them, which made a capped transcript indistinguishable from a
+    // complete one.
+    resourceLimits: buildResourceLimits({
+      agentResult,
+      attempts: verificationAttempts,
+      gitEvidenceUsage,
+      newFileCapture: diffEvidence.newFileCapture
+    }),
     observationSource: {
       kind: "HARNESS",
       method: "GIT_DIFF"
@@ -1029,6 +1079,11 @@ async function executeRun(
     synthetic: agentResult.status === "DRY_RUN" || agentResult.exitCode === null,
     exitCode: agentResult.exitCode,
     status: agentResult.status,
+    // runCommand counted what it dropped and the count stopped at its return
+    // value. A capped transcript looked exactly like one that ended.
+    scanScope: agentResult.scanScope ?? {
+      unavailableReason: "ADAPTER_PROCESS_NOT_STARTED"
+    },
     providerReportedObservations: {
       degraded: true,
       reason: "PROVIDER_REPORTED_OBSERVATIONS_ARE_NOT_CORE_TRUTH",
@@ -1415,7 +1470,10 @@ async function runVerificationCommands(input: {
       // verdict. It still has to be visible: a reviewer reading a truncated log
       // must not take it for the whole run.
       scanScope: {
-        stdoutTruncatedBytes: result.truncatedBytes,
+        outputBytes: Buffer.byteLength(result.stdout) + Buffer.byteLength(result.stderr),
+        stdoutTruncatedBytes: result.stdoutTruncatedBytes,
+        stderrTruncatedBytes: result.stderrTruncatedBytes,
+        truncatedBytes: result.truncatedBytes,
         timeoutMs: result.timeoutMs,
         outputCapBytes: result.outputCapBytes
       },
@@ -2048,8 +2106,12 @@ export interface NewFileCapture {
 export async function captureNewFileContent(
   projectPath: string,
   newFiles: string[],
-  budgetMs: number = NEW_FILE_CAPTURE_BUDGET_MS
+  options: { budgetMs?: number; runGitEvidence?: GitEvidenceRunner } = {}
 ): Promise<NewFileCapture> {
+  const budgetMs = options.budgetMs ?? NEW_FILE_CAPTURE_BUDGET_MS;
+  const runGitEvidence =
+    options.runGitEvidence ??
+    gitEvidenceRunner(newProcessUsage(GIT_EVIDENCE_TIMEOUT_MS, GIT_EVIDENCE_OUTPUT_CAP_BYTES));
   const parts: string[] = [];
   const notCaptured: { path: string; reason: string }[] = [];
   const deadline = Date.now() + budgetMs;
@@ -2159,7 +2221,8 @@ export async function captureNewFileContent(
 }
 
 async function captureGitDiff(
-  projectPath: string
+  projectPath: string,
+  runGitEvidence: GitEvidenceRunner
 ): Promise<{ content: string; unavailableReason?: string; newFileCapture: NewFileCapture }> {
   const empty: NewFileCapture = {
     content: "",
@@ -2199,7 +2262,7 @@ async function captureGitDiff(
     return { content: result.stdout, unavailableReason: diffTruncated, newFileCapture: empty };
   }
 
-  const untracked = await captureUntrackedFiles(projectPath);
+  const untracked = await captureUntrackedFiles(projectPath, runGitEvidence);
   if (untracked === null) {
     // Tracked changes are still evidence; what is unknown is whether anything
     // was created. Reporting that as "nothing was created" is the failure this
@@ -2214,12 +2277,15 @@ async function captureGitDiff(
     };
   }
 
-  const newFileCapture = await captureNewFileContent(projectPath, untracked);
+  const newFileCapture = await captureNewFileContent(projectPath, untracked, { runGitEvidence });
   return { content: `${result.stdout}${newFileCapture.content}`, newFileCapture };
 }
 
 /** Untracked paths only. Modifications and deletions are already in the diff. */
-async function captureUntrackedFiles(projectPath: string): Promise<string[] | null> {
+async function captureUntrackedFiles(
+  projectPath: string,
+  runGitEvidence: GitEvidenceRunner
+): Promise<string[] | null> {
   const result = await runGitEvidence(
     ["-c", `safe.directory=${projectPath}`, "status", "--porcelain=v1", "--untracked-files=all", "--", "."],
     projectPath
@@ -2249,7 +2315,10 @@ async function captureUntrackedFiles(projectPath: string): Promise<string[] | nu
 // `git diff --name-only` reports tracked modifications only, so an agent that
 // creates a new file would leave no trace in changed-files evidence. Untracked
 // files are policy subjects, so changed-files truth must include them.
-async function captureGitChangedFiles(projectPath: string): Promise<{ files: string[]; unavailableReason?: string }> {
+async function captureGitChangedFiles(
+  projectPath: string,
+  runGitEvidence: GitEvidenceRunner
+): Promise<{ files: string[]; unavailableReason?: string }> {
   const result = await runGitEvidence(
     ["-c", `safe.directory=${projectPath}`, "status", "--porcelain=v1", "--untracked-files=all", "--", "."],
     projectPath
@@ -2326,6 +2395,8 @@ export interface HarnessProcessResult {
   stderr: string;
   /** Bytes the output cap dropped. Above zero means the output is partial. */
   truncatedBytes: number;
+  stdoutTruncatedBytes: number;
+  stderrTruncatedBytes: number;
   /** True only when a timeout was observed, never as a default for "unknown". */
   timedOut: boolean;
   timeoutMs: number;
@@ -2363,6 +2434,8 @@ export function runProcess(
       stdout: result.stdout,
       stderr: result.stderr,
       truncatedBytes: scanScope.stdoutTruncatedBytes + scanScope.stderrTruncatedBytes,
+      stdoutTruncatedBytes: scanScope.stdoutTruncatedBytes,
+      stderrTruncatedBytes: scanScope.stderrTruncatedBytes,
       // runCommand reports a timeout by killing the child and resolving with a
       // null exit code and that sentence in stderr. Reading it back here keeps
       // one implementation of the limit and one of its detection.
@@ -2373,17 +2446,171 @@ export function runProcess(
   });
 }
 
-/** Reading git state, with the limits and environment that kind of call gets. */
-function runGitEvidence(args: string[], cwd: string): Promise<HarnessProcessResult> {
-  return runGitEvidenceProcess("git", args, cwd);
+/**
+ * What one kind of child process was allowed and what it actually used.
+ *
+ * measured stays false until a call happens, because a subject that never ran
+ * and a subject that ran without hitting its ceiling are different facts and
+ * reporting both as "0 bytes dropped" claims a measurement nobody took.
+ */
+interface ResourceLimitsReport {
+  adapter: {
+    measured: boolean;
+    timeoutMs: number | null;
+    outputCapBytes: number | null;
+    stdoutBytes: number;
+    stderrBytes: number;
+    stdoutTruncatedBytes: number;
+    stderrTruncatedBytes: number;
+    unavailableReason: string;
+  };
+  verification: {
+    measured: boolean;
+    timeoutMs: number | null;
+    outputCapBytes: number | null;
+    calls: number;
+    outputBytes: number;
+    truncatedBytes: number;
+    truncatedCalls: number;
+    timedOutCalls: number;
+    unavailableReason: string;
+  };
+  gitEvidence: ProcessUsage & { unavailableReason: string };
+  newFileCapture: {
+    measured: boolean;
+    perFileLimitBytes: number;
+    totalLimitBytes: number;
+    budgetMs: number;
+    filesFound: number;
+    bytesCaptured: number;
+    contentNotCaptured: number;
+    unavailableReason: string;
+  };
+}
+
+/**
+ * Every subject reports the same three things: the ceiling it ran under, what
+ * it used, and what was dropped. measured false means no process of that kind
+ * ran, which is why the ceilings are null there — stating one would describe a
+ * limit nothing was ever checked against.
+ */
+function buildResourceLimits(input: {
+  agentResult: AgentRunResult;
+  attempts: VerificationAttempt[];
+  gitEvidenceUsage: ProcessUsage;
+  newFileCapture: NewFileCapture;
+}): ResourceLimitsReport {
+  const adapterScope = input.agentResult.scanScope;
+  const executed = input.attempts.filter((attempt) => attempt.scanScope !== undefined);
+  const verification = executed.reduce(
+    (acc, attempt) => {
+      const scope = attempt.scanScope as NonNullable<VerificationAttempt["scanScope"]>;
+      return {
+        outputBytes: acc.outputBytes + scope.outputBytes,
+        truncatedBytes: acc.truncatedBytes + scope.truncatedBytes,
+        truncatedCalls: acc.truncatedCalls + (scope.truncatedBytes > 0 ? 1 : 0),
+        timedOutCalls:
+          acc.timedOutCalls + (attempt.unavailableReason.startsWith("VERIFICATION_COMMAND_TIMED_OUT") ? 1 : 0)
+      };
+    },
+    { outputBytes: 0, truncatedBytes: 0, truncatedCalls: 0, timedOutCalls: 0 }
+  );
+  const first = executed[0]?.scanScope;
+
+  return {
+    adapter: {
+      measured: adapterScope !== undefined,
+      timeoutMs: adapterScope?.timeoutMs ?? null,
+      outputCapBytes: adapterScope?.outputCapBytes ?? null,
+      stdoutBytes: Buffer.byteLength(input.agentResult.stdout),
+      stderrBytes: Buffer.byteLength(input.agentResult.stderr),
+      stdoutTruncatedBytes: adapterScope?.stdoutTruncatedBytes ?? 0,
+      stderrTruncatedBytes: adapterScope?.stderrTruncatedBytes ?? 0,
+      unavailableReason: adapterScope === undefined ? "ADAPTER_PROCESS_NOT_STARTED" : ""
+    },
+    verification: {
+      measured: executed.length > 0,
+      timeoutMs: first?.timeoutMs ?? null,
+      outputCapBytes: first?.outputCapBytes ?? null,
+      calls: executed.length,
+      ...verification,
+      unavailableReason: executed.length === 0 ? "NO_VERIFICATION_COMMAND_EXECUTED" : ""
+    },
+    gitEvidence: {
+      ...input.gitEvidenceUsage,
+      unavailableReason: input.gitEvidenceUsage.measured ? "" : "NO_GIT_EVIDENCE_CALL_MADE"
+    },
+    newFileCapture: {
+      measured: input.newFileCapture.scanScope.newFilesFound > 0,
+      perFileLimitBytes: input.newFileCapture.scanScope.perFileLimitBytes,
+      totalLimitBytes: input.newFileCapture.scanScope.totalLimitBytes,
+      budgetMs: NEW_FILE_CAPTURE_BUDGET_MS,
+      filesFound: input.newFileCapture.scanScope.newFilesFound,
+      bytesCaptured: input.newFileCapture.scanScope.bytesCaptured,
+      contentNotCaptured: input.newFileCapture.scanScope.contentNotCaptured,
+      unavailableReason: input.newFileCapture.unavailableReason
+    }
+  };
+}
+
+export interface ProcessUsage {
+  measured: boolean;
+  timeoutMs: number;
+  outputCapBytes: number;
+  calls: number;
+  outputBytes: number;
+  truncatedBytes: number;
+  truncatedCalls: number;
+  timedOutCalls: number;
+}
+
+export function newProcessUsage(timeoutMs: number, outputCapBytes: number): ProcessUsage {
+  return {
+    measured: false,
+    timeoutMs,
+    outputCapBytes,
+    calls: 0,
+    outputBytes: 0,
+    truncatedBytes: 0,
+    truncatedCalls: 0,
+    timedOutCalls: 0
+  };
+}
+
+function recordUsage(usage: ProcessUsage, result: HarnessProcessResult): HarnessProcessResult {
+  usage.measured = true;
+  usage.calls += 1;
+  usage.outputBytes += Buffer.byteLength(result.stdout) + Buffer.byteLength(result.stderr);
+  usage.truncatedBytes += result.truncatedBytes;
+  if (result.truncatedBytes > 0) {
+    usage.truncatedCalls += 1;
+  }
+  if (result.timedOut) {
+    usage.timedOutCalls += 1;
+  }
+  return result;
+}
+
+export type GitEvidenceRunner = (args: string[], cwd: string) => Promise<HarnessProcessResult>;
+
+/**
+ * Reading git state, with the limits and environment that kind of call gets.
+ * The accumulator is passed in rather than held in module state: two Runs in
+ * one process would otherwise report each other's numbers.
+ */
+export function gitEvidenceRunner(usage: ProcessUsage): GitEvidenceRunner {
+  return (args, cwd) => gitEvidenceProcessRunner(usage)("git", args, cwd);
 }
 
 /** The same boundary in the shape the workspace snapshot asks for. */
-function runGitEvidenceProcess(command: string, args: string[], cwd: string): Promise<HarnessProcessResult> {
-  return runProcess(command, args, cwd, {
-    limits: { timeoutMs: GIT_EVIDENCE_TIMEOUT_MS, outputCapBytes: GIT_EVIDENCE_OUTPUT_CAP_BYTES },
-    env: gitProcessEnv()
-  });
+export function gitEvidenceProcessRunner(
+  usage: ProcessUsage
+): (command: string, args: string[], cwd: string) => Promise<HarnessProcessResult> {
+  return (command, args, cwd) =>
+    runProcess(command, args, cwd, {
+      limits: { timeoutMs: GIT_EVIDENCE_TIMEOUT_MS, outputCapBytes: GIT_EVIDENCE_OUTPUT_CAP_BYTES },
+      env: gitProcessEnv()
+    }).then((result) => recordUsage(usage, result));
 }
 
 /**

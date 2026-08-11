@@ -14,6 +14,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
+  DEFAULT_ADAPTER_OUTPUT_CAP_BYTES,
   DEFAULT_ADAPTER_TIMEOUT_MS,
   GIT_EVIDENCE_OUTPUT_CAP_BYTES,
   GIT_EVIDENCE_TIMEOUT_MS,
@@ -355,6 +356,126 @@ test("a Run whose diff was cut off cannot be accepted, even with the reason waiv
       }),
     /evidence defect cannot be waived: EVIDENCE_TRUNCATED:GIT_DIFF/
   );
+});
+
+// The counts existed and were thrown away: runCommand measured what it dropped,
+// and nothing carried the number into an artifact. A 16 MB transcript cut to
+// 16 MB looks exactly like one that ended. Stage 2 added three more kinds of
+// child, so all four report the ceiling they ran under, what they used, and
+// what was dropped — and "nothing was dropped" never looks like "nobody counted".
+test("every process the Run started reports its ceiling, its usage, and what was dropped", async () => {
+  const root = await workspaceWithVerification({
+    name: "limits-surfaced",
+    checkSource: [
+      `process.stdout.write("x".repeat(${VERIFICATION_COMMAND_OUTPUT_CAP_BYTES + 5000}));`,
+      "process.exit(0);",
+      ""
+    ].join("\n")
+  });
+  await approveTask(root, {
+    taskId: "sample",
+    taskPath: await findTaskPath(root, "sample"),
+    actorId: "tester",
+    reason: "approved for test"
+  });
+
+  const execution = await runTask(root, "sample");
+  const observation = await readRunJson(execution.runDir, "harness-observation.json");
+  const adapterResult = await readRunJson(execution.runDir, "adapter-result.json");
+  const limits = observation.resourceLimits as Record<string, any>;
+
+  // 1. The adapter's own counts reach its artifact. This is the field the
+  //    re-audit found missing from adapter-result.json.
+  assert.ok(adapterResult.scanScope, "adapter-result.json must carry the adapter's scanScope");
+  assert.equal(adapterResult.scanScope.outputCapBytes, DEFAULT_ADAPTER_OUTPUT_CAP_BYTES);
+  assert.equal(adapterResult.scanScope.timeoutMs, DEFAULT_ADAPTER_TIMEOUT_MS);
+  assert.equal(adapterResult.scanScope.stdoutTruncatedBytes, 0);
+
+  // 2. All four subjects are accounted for, each with its own ceiling.
+  assert.equal(limits.adapter.measured, true);
+  assert.equal(limits.adapter.outputCapBytes, DEFAULT_ADAPTER_OUTPUT_CAP_BYTES);
+  assert.equal(limits.verification.measured, true);
+  assert.equal(limits.verification.outputCapBytes, VERIFICATION_COMMAND_OUTPUT_CAP_BYTES);
+  assert.equal(limits.verification.timeoutMs, VERIFICATION_COMMAND_TIMEOUT_MS);
+  assert.ok(limits.verification.truncatedBytes > 0, "the capped verification output must be counted");
+  assert.equal(limits.verification.truncatedCalls, 1);
+  assert.equal(limits.gitEvidence.measured, true);
+  assert.equal(limits.gitEvidence.outputCapBytes, GIT_EVIDENCE_OUTPUT_CAP_BYTES);
+  assert.ok(limits.gitEvidence.calls > 0, "the git evidence calls must be counted, not assumed");
+  assert.equal(limits.gitEvidence.truncatedBytes, 0);
+  assert.equal(limits.newFileCapture.budgetMs, NEW_FILE_CAPTURE_BUDGET_MS);
+
+  // 3. Usage is reported apart from the ceiling, so a Run that came nowhere
+  //    near its limit reads differently from one that hit it.
+  assert.ok(limits.verification.outputBytes > 0);
+  assert.ok(limits.gitEvidence.outputBytes >= 0);
+
+  // 4. A person reading the one human document sees it, and sees it before the
+  //    evidence rather than after.
+  const record = await readFile(path.join(execution.runDir, "run-record.md"), "utf8");
+  const limitsAt = record.indexOf("## What the limits did");
+  const changedAt = record.indexOf("## What changed");
+  assert.ok(limitsAt > 0, `run-record.md must report the limits, got:\n${record.slice(0, 400)}`);
+  assert.ok(
+    limitsAt < changedAt,
+    "the reader must learn output was dropped before reading the evidence, not after"
+  );
+  assert.match(record, /truncated/i);
+  assert.match(record, new RegExp(String(VERIFICATION_COMMAND_OUTPUT_CAP_BYTES)));
+});
+
+test("a limit nobody measured is not reported as a limit nothing hit", async () => {
+  // dry-run never starts an adapter process, so there is no measurement to
+  // report. Saying "0 bytes truncated" would claim a check that never ran.
+  const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-unmeasured-"));
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await mkdir(path.join(root, ".codefleet", "tasks"), { recursive: true });
+  await writeFile(path.join(root, "src", "app.js"), "export const ok = true;\n", "utf8");
+  await writeFile(path.join(root, ".gitignore"), ".codefleet/\n", "utf8");
+  const { spawnSync } = await import("node:child_process");
+  for (const args of [["init"], ["add", "-A"], ["commit", "-m", "init"]]) {
+    spawnSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", ...args], { cwd: root });
+  }
+  await writeFile(
+    path.join(root, ".codefleet", "config.json"),
+    `${JSON.stringify(profileJson({ workspaceId: "unmeasured", harnessMode: "DRY_RUN" }), null, 2)}\n`,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, ".codefleet", "tasks", "sample.yaml"),
+    [
+      "id: sample",
+      "title: Sample task",
+      "projectPath: .",
+      "goal: Plan only",
+      "scope:",
+      "  include: [src/**]",
+      "  exclude: []",
+      "constraints: []",
+      "doneCriteria: [done]",
+      "workflow: [PLAN]",
+      "status: READY",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  await approveTask(root, {
+    taskId: "sample",
+    taskPath: await findTaskPath(root, "sample"),
+    actorId: "tester",
+    reason: "approved for test"
+  });
+
+  const execution = await runTask(root, "sample");
+  const observation = await readRunJson(execution.runDir, "harness-observation.json");
+  const limits = observation.resourceLimits as Record<string, any>;
+
+  assert.equal(limits.adapter.measured, false, "a dry run started no adapter process");
+  assert.equal(limits.verification.measured, false, "this Task declares no verification command");
+
+  const record = await readFile(path.join(execution.runDir, "run-record.md"), "utf8");
+  assert.match(record, /## What the limits did/);
+  assert.match(record, /not measured/i, "an unmeasured subject says so rather than reporting zero");
 });
 
 test("a git child sees a named environment, not everything the operator exported", async () => {
