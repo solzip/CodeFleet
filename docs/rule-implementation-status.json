@@ -8,16 +8,6 @@
   },
   "measuredOn": "2026-08-11",
   "rules": {
-    "CORRECTIVE_EVENT_REQUIRES_VALID_LEDGER_AND_WRONG_DECISION": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/ledger.ts",
-      "detail": "supersede and invalidate references are read during replay, but no command appends a corrective event."
-    },
-    "POLICY_RULE_ID_IS_UNIQUE_WITH_REF_RECORDED_ORIGIN": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/config.ts",
-      "detail": "no named policy rules exist to have ids: definedByRef appears nowhere in src, and nothing parses or uniqueness-checks a rule id across the Core and Profile id space. The policies block itself IS read as of 3fbe0b5 (loadCommandPolicy, loadHarnessPolicy), but those are fixed known keys, not id-bearing rules."
-    },
     "PROFILE_EFFECTIVE_POLICY_IS_DERIVED": {
       "status": "IMPLEMENTED_UNTESTED",
       "evidence": "src/run.ts",

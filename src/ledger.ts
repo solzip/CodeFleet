@@ -848,6 +848,128 @@ function readResultReviewGate(payload: Record<string, unknown>): DecisionGateSna
   };
 }
 
+export type RepairKind = "REBUILD_SNAPSHOT" | "SOURCE_RESTORE" | "CORRECTIVE_EVENT" | "POLICY_SOURCE_REPAIR";
+
+export interface RepairRouting {
+  allowed: RepairKind[];
+  preferred: RepairKind | null;
+  detail: string;
+}
+
+/**
+ * Which repair a classified failure permits. Routing by class rather than by
+ * judgement is the point: a corrective event is an append to an append-only
+ * ledger, so reaching for one to fix a broken read model would write a decision
+ * that was never made in order to paper over a derivation bug.
+ */
+export function repairRoutingFor(failureClass: ReplayFailureClass): RepairRouting {
+  switch (failureClass) {
+    case "READ_MODEL_DRIFT":
+      return {
+        allowed: ["REBUILD_SNAPSHOT"],
+        preferred: "REBUILD_SNAPSHOT",
+        detail: "the source is valid and only the derived snapshot disagrees, so it is recomputed"
+      };
+    case "REFERENCE_FAILURE":
+      // A corrective event is allowed here only when the decision the event
+      // recorded is itself wrong. A dangling reference is usually a missing
+      // source, and restoring it is not a new decision.
+      return {
+        allowed: ["SOURCE_RESTORE", "CORRECTIVE_EVENT"],
+        preferred: "SOURCE_RESTORE",
+        detail: "restore the referenced source first; a corrective event only when the recorded decision is wrong"
+      };
+    case "POLICY_EVALUATION_FAILURE":
+      return {
+        allowed: ["POLICY_SOURCE_REPAIR"],
+        preferred: "POLICY_SOURCE_REPAIR",
+        detail: "repair the policy source or update the policy explicitly; the ledger is not where a policy is fixed"
+      };
+    case "LEDGER_STRUCTURAL_FAILURE":
+      // Nothing derived from a broken ledger can be trusted, including the
+      // judgement that a corrective event is the right repair.
+      return {
+        allowed: [],
+        preferred: null,
+        detail: "repair the ledger source first; neither rebuild nor a corrective event is permitted until then"
+      };
+  }
+}
+
+export interface CorrectiveEventInput {
+  objectiveId: string;
+  failureClass: ReplayFailureClass;
+  supersedesReviewDecisionId: string;
+  reason: string;
+  actorId: string;
+}
+
+/**
+ * Appends a corrective RUN_REVIEW_DECIDED. Refused unless the classified failure
+ * routes to a corrective event and the event it supersedes actually exists.
+ */
+export async function appendCorrectiveEvent(
+  rootDir: string,
+  input: CorrectiveEventInput
+): Promise<MutationOutcome<LedgerEvent>> {
+  const { objectiveId, failureClass, supersedesReviewDecisionId, reason, actorId } = input;
+  const routing = repairRoutingFor(failureClass);
+
+  return runMutation(
+    rootDir,
+    {
+      mutationKind: "REVIEW_DECISION_CORRECTION",
+      targetId: objectiveId,
+      semanticPayload: { supersedesReviewDecisionId, failureClass }
+    },
+    {
+      ...objectiveSteps(rootDir, objectiveId, (events) => {
+        if (!routing.allowed.includes("CORRECTIVE_EVENT")) {
+          throw new Error(
+            `${failureClass} does not permit a corrective event: ${routing.detail}`
+          );
+        }
+        const target = events.find(
+          (event) =>
+            event.type === "RUN_REVIEW_DECIDED" &&
+            (event.payload as unknown as ReviewDecisionEventPayload).reviewDecisionId ===
+              supersedesReviewDecisionId
+        );
+        if (target === undefined) {
+          throw new Error(
+            `${supersedesReviewDecisionId} is not in the ledger; a correction supersedes a decision that was made`
+          );
+        }
+      }),
+      isAlreadyApplied: async (): Promise<boolean> => {
+        const { events } = await readEvents(rootDir, objectiveId);
+        return events.some(
+          (event) =>
+            event.type === "RUN_REVIEW_DECIDED" &&
+            (event.payload as Record<string, unknown>).supersedesReviewDecisionId === supersedesReviewDecisionId
+        );
+      },
+      append: async (mutationId): Promise<LedgerEvent> => {
+        const { events } = await readEvents(rootDir, objectiveId);
+        const target = events.find(
+          (event) =>
+            event.type === "RUN_REVIEW_DECIDED" &&
+            (event.payload as unknown as ReviewDecisionEventPayload).reviewDecisionId ===
+              supersedesReviewDecisionId
+        );
+        const previous = target?.payload as unknown as ReviewDecisionEventPayload;
+        return appendEvent(rootDir, objectiveId, mutationId, "RUN_REVIEW_DECIDED", actorId, reason, {
+          ...previous,
+          reviewDecisionId: supersedesReviewDecisionId + ":corrected",
+          supersedesReviewDecisionId,
+          correctsFailureClass: failureClass,
+          decision: "REJECTED"
+        });
+      }
+    }
+  );
+}
+
 export interface ReviewDecisionEventPayload {
   reviewDecisionId: string;
   objectiveQueueItemId: string;

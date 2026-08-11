@@ -14,6 +14,7 @@
 
 import { readFile } from "node:fs/promises";
 import { validateRequiredGates } from "./required-gates.ts";
+import { validatePolicyRuleIds } from "./policy-rule-id.ts";
 import { validateRedactionRules } from "./redaction.ts";
 import { validateRiskRules } from "./risk.ts";
 import path from "node:path";
@@ -221,6 +222,7 @@ export async function loadProfile(rootDir: string): Promise<LoadedProfile> {
   checkDefaultsRequiredGates(document, findings);
   checkRiskRules(document, findings);
   checkRedactionRules(document, findings);
+  checkPolicyRuleIds(document, findings);
 
   if (findings.length > 0) {
     throw new ProfileValidationError(profilePath, findings);
@@ -592,6 +594,29 @@ function checkRedactionRules(document: Record<string, unknown>, findings: Profil
       detail: finding.detail
     });
   }
+}
+
+// Risk rules and redaction rules share one id space with Core. A Profile that
+// reuses a Core id would make the same id resolve to two different rules.
+function checkPolicyRuleIds(document: Record<string, unknown>, findings: ProfileFinding[]): void {
+  const policies = asObject(document.policies);
+  const groups = [
+    { rules: asRuleArray(asObject(policies.risk).riskRules), pointer: "/policies/risk/riskRules" },
+    { rules: asRuleArray(asObject(policies.redaction).redactionRules), pointer: "/policies/redaction/redactionRules" }
+  ];
+  for (const finding of validatePolicyRuleIds(groups)) {
+    findings.push({
+      checkId: "POLICY_RULE_ID_IS_UNIQUE_WITH_REF_RECORDED_ORIGIN",
+      jsonPointer: finding.jsonPointer,
+      detail: finding.detail
+    });
+  }
+}
+
+function asRuleArray(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.filter((v): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v))
+    : [];
 }
 
 function readLocalPolicy(document: Record<string, unknown>, findings: ProfileFinding[]): LocalPolicy {
