@@ -75,6 +75,8 @@ export interface CodeFleetConfig {
   mode: CodeFleetMode;
   /** Resolved AdapterId. Provider-agnostic: never a command path or model name. */
   agentAdapter: string;
+  /** policies.agentAdapters.allowedAdapters. Resolution is checked against it. */
+  allowedAdapters: string[];
   isolationMode: string;
   /** Comes from the Local Overlay. The Profile may not carry a command path. */
   adapterCommand: AgentCommandConfig;
@@ -231,6 +233,7 @@ export const DEFAULT_CONFIG: CodeFleetConfig = {
   harnessMode: "DRY_RUN",
   mode: "dry-run",
   agentAdapter: "codex",
+  allowedAdapters: ["codex"],
   isolationMode: "NONE",
   adapterCommand: {},
   policies: {

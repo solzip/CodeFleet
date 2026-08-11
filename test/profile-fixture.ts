@@ -42,7 +42,7 @@ export function profileJson(overrides: ProfileOverrides = {}): Record<string, un
     },
     policies: {
       harness: overrides.harness ?? {},
-      agentAdapters: { allowedAdapters: overrides.allowedAdapters ?? ["codex", "missing-adapter"] },
+      agentAdapters: { allowedAdapters: overrides.allowedAdapters ?? ["codex"] },
       files: {},
       commands: overrides.commands ?? {},
       risk: {},

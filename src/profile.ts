@@ -41,6 +41,22 @@ export const PROFILE_POLICY_KEYS = [
 
 export const LOCAL_OVERLAY_PATH = ".codefleet/local.json";
 
+export const REQUIRE_EXPLICIT = "REQUIRE_EXPLICIT";
+
+export const ISOLATION_MODES = ["NONE", "GIT_WORKTREE", "TEMP_WORKSPACE", "CONTAINER"] as const;
+
+export const WORKFLOW_STAGES = ["PLAN", "INSPECT", "APPLY", "VERIFY", "REVIEW"] as const;
+
+// Stage names that only ever appear in a Run Summary. Accepting one here would
+// let a Profile declare a workflow the planner has no stage for.
+const RUN_SUMMARY_ONLY_STAGES = ["BUILD", "FIX", "CHECK", "DOCS", "OPS"];
+
+// A stable, provider-agnostic AdapterId. Lowercase kebab excludes every shape
+// the design names as forbidden in one rule: a path has a separator, a model
+// name has a dot or an uppercase segment, a CLI option starts with a dash, and a
+// token has neither shape but fails the character class anyway.
+const ADAPTER_ID = /^[a-z][a-z0-9-]*$/;
+
 // Key names that name runtime evidence, local machine state, or a credential.
 // Compared case-insensitively against every key at every depth, because the
 // rule quantifies over "no JSON pointer or key name", not over the top level.
@@ -196,6 +212,9 @@ export async function loadProfile(rootDir: string): Promise<LoadedProfile> {
 
   const scan = scanForForbiddenState(document, findings);
   const localPolicy = readLocalPolicy(document, findings);
+  checkAgentAdaptersBlock(document, findings);
+  checkDefaultsRun(document, findings);
+  checkDefaultsTaskWorkflow(document, findings);
 
   if (findings.length > 0) {
     throw new ProfileValidationError(profilePath, findings);
@@ -396,6 +415,135 @@ function scanForForbiddenState(
 
   walk(document, "", "");
   return scope;
+}
+
+export function allowedAdaptersOf(document: Record<string, unknown>): string[] {
+  const block = asObject(asObject(document.policies).agentAdapters);
+  return Array.isArray(block.allowedAdapters)
+    ? block.allowedAdapters.filter((id): id is string => typeof id === "string")
+    : [];
+}
+
+function checkAgentAdaptersBlock(document: Record<string, unknown>, findings: ProfileFinding[]): void {
+  const block = asObject(document.policies).agentAdapters;
+  if (block === undefined) {
+    return; // already reported by the exact-keys check
+  }
+  const list = asObject(block).allowedAdapters;
+
+  if (!Array.isArray(list) || list.length === 0) {
+    findings.push({
+      checkId: "PROFILE_POLICY_AGENT_ADAPTERS_BLOCK",
+      jsonPointer: "/policies/agentAdapters/allowedAdapters",
+      detail: "allowedAdapters must be a non-empty array; an empty one permits no Run at all"
+    });
+    return;
+  }
+
+  list.forEach((id, index) => {
+    if (typeof id !== "string" || !ADAPTER_ID.test(id)) {
+      findings.push({
+        checkId: "PROFILE_POLICY_AGENT_ADAPTERS_BLOCK",
+        jsonPointer: `/policies/agentAdapters/allowedAdapters/${index}`,
+        detail:
+          `${JSON.stringify(id)} is not a stable provider-agnostic AdapterId. ` +
+          "It must match [a-z][a-z0-9-]*, which excludes a model name, command path, " +
+          "executable path, token, API key, CLI option, and transcript parsing rule"
+      });
+    }
+  });
+}
+
+function checkDefaultsRun(document: Record<string, unknown>, findings: ProfileFinding[]): void {
+  const run = asObject(asObject(document.defaults).run);
+
+  const adapter = run.agentAdapter;
+  if (adapter !== undefined) {
+    if (typeof adapter !== "string" || (adapter !== REQUIRE_EXPLICIT && !ADAPTER_ID.test(adapter))) {
+      findings.push({
+        checkId: "PROFILE_DEFAULTS_RUN_AGENT_ADAPTER_SCHEMA",
+        jsonPointer: "/defaults/run/agentAdapter",
+        detail: `must be ${REQUIRE_EXPLICIT} or a stable AdapterId, got ${JSON.stringify(adapter)}`
+      });
+    } else if (adapter !== REQUIRE_EXPLICIT) {
+      const allowed = allowedAdaptersOf(document);
+      if (allowed.length > 0 && !allowed.includes(adapter)) {
+        // A default the policy forbids is a Profile that contradicts itself, and
+        // every Run planned from it would be refused at resolution instead.
+        findings.push({
+          checkId: "PROFILE_DEFAULTS_RUN_AGENT_ADAPTER_SCHEMA",
+          jsonPointer: "/defaults/run/agentAdapter",
+          detail: `${adapter} is not in policies.agentAdapters.allowedAdapters (${allowed.join(", ")})`
+        });
+      }
+    }
+  }
+
+  const isolation = run.isolationMode;
+  if (isolation !== undefined) {
+    const accepted = [REQUIRE_EXPLICIT, ...ISOLATION_MODES];
+    if (typeof isolation !== "string" || !accepted.includes(isolation)) {
+      findings.push({
+        checkId: "PROFILE_DEFAULTS_RUN_ISOLATION_MODE_SCHEMA",
+        jsonPointer: "/defaults/run/isolationMode",
+        detail:
+          `must be one of ${accepted.join(", ")}, got ${JSON.stringify(isolation)}. ` +
+          "It names a mode, never a local path, container id, image tag, socket path, credential, or shell command"
+      });
+    }
+  }
+}
+
+function checkDefaultsTaskWorkflow(document: Record<string, unknown>, findings: ProfileFinding[]): void {
+  const workflow = asObject(asObject(document.defaults).task).workflow;
+  if (workflow === undefined) {
+    return;
+  }
+  if (workflow === null || typeof workflow !== "object" || Array.isArray(workflow)) {
+    findings.push({
+      checkId: "PROFILE_DEFAULTS_TASK_WORKFLOW_SCHEMA",
+      jsonPointer: "/defaults/task/workflow",
+      detail: "workflow must be an object with a stages array"
+    });
+    return;
+  }
+
+  const stages = (workflow as Record<string, unknown>).stages;
+  if (!Array.isArray(stages) || stages.length === 0) {
+    findings.push({
+      checkId: "PROFILE_DEFAULTS_TASK_WORKFLOW_SCHEMA",
+      jsonPointer: "/defaults/task/workflow/stages",
+      detail: "workflow.stages must be a non-empty ordered array"
+    });
+    return;
+  }
+
+  stages.forEach((stage, index) => {
+    const pointer = `/defaults/task/workflow/stages/${index}`;
+    if (stage === REQUIRE_EXPLICIT) {
+      findings.push({
+        checkId: "PROFILE_DEFAULTS_TASK_WORKFLOW_SCHEMA",
+        jsonPointer: pointer,
+        detail: `${REQUIRE_EXPLICIT} is not a stage; a workflow default that defers every stage defaults nothing`
+      });
+      return;
+    }
+    if (typeof stage === "string" && RUN_SUMMARY_ONLY_STAGES.includes(stage)) {
+      findings.push({
+        checkId: "PROFILE_DEFAULTS_TASK_WORKFLOW_SCHEMA",
+        jsonPointer: pointer,
+        detail: `${stage} is a Run Summary label, not a workflow stage`
+      });
+      return;
+    }
+    if (typeof stage !== "string" || !(WORKFLOW_STAGES as readonly string[]).includes(stage)) {
+      findings.push({
+        checkId: "PROFILE_DEFAULTS_TASK_WORKFLOW_SCHEMA",
+        jsonPointer: pointer,
+        detail: `must be one of ${WORKFLOW_STAGES.join(", ")}, got ${JSON.stringify(stage)}`
+      });
+    }
+  });
 }
 
 function readLocalPolicy(document: Record<string, unknown>, findings: ProfileFinding[]): LocalPolicy {

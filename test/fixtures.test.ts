@@ -35,7 +35,10 @@ async function scanRunTaskCallSites(): Promise<CallSite[]> {
       const assertsRefusal = line.includes("rejects") || (lines[index - 1]?.includes("rejects") ?? false);
       const starts = lines.slice(0, index).map((entry) => entry.startsWith("test("));
       const body = lines.slice(Math.max(0, starts.lastIndexOf(true)), index).join("\n");
-      const approves = /approveForTest|approveTask|approve\(root/.test(body);
+      // Helpers that approve are enumerated by name rather than matched loosely.
+      // A pattern like /approve/i would let any identifier containing the word
+      // satisfy the check without approving anything.
+      const approves = /approveForTest|approveTask|approve\(root|seedApprovedTask/.test(body);
 
       sites.push({
         file,

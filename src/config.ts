@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { validateCommandMatchers } from "./command-policy.ts";
-import { loadProfile, type LoadedProfile } from "./profile.ts";
+import { allowedAdaptersOf, loadProfile, type LoadedProfile } from "./profile.ts";
 import {
   DEFAULT_COMMAND_POLICY,
   DEFAULT_CONFIG,
@@ -78,6 +78,7 @@ export function resolveConfig(loaded: LoadedProfile): CodeFleetConfig {
     mode: harnessMode === "COMMAND_EXEC" ? "execute" : "dry-run",
     agentAdapter:
       typeof runDefaults.agentAdapter === "string" ? runDefaults.agentAdapter : DEFAULT_CONFIG.agentAdapter,
+    allowedAdapters: allowedAdaptersOf(profile as unknown as Record<string, unknown>),
     isolationMode:
       typeof runDefaults.isolationMode === "string" ? runDefaults.isolationMode : DEFAULT_CONFIG.isolationMode,
     adapterCommand: readAdapterCommand(overlay.values.adapterCommand),

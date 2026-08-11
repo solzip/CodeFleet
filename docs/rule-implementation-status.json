@@ -93,11 +93,6 @@
       "evidence": "src/config.ts",
       "detail": "no named policy rules exist to have ids: definedByRef appears nowhere in src, and nothing parses or uniqueness-checks a rule id across the Core and Profile id space. The policies block itself IS read as of 3fbe0b5 (loadCommandPolicy, loadHarnessPolicy), but those are fixed known keys, not id-bearing rules."
     },
-    "ADAPTER_CANNOT_EXPAND_CAPABILITIES": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/agent.ts",
-      "detail": "capabilities are written into adapter-request.json but the adapter is a spawned process that never reads them, so nothing prevents it exceeding them. The Run's own path policy catches the result after the fact; the capability boundary itself is unenforced."
-    },
     "PROFILE_EFFECTIVE_POLICY_IS_DERIVED": {
       "status": "IMPLEMENTED_UNTESTED",
       "evidence": "src/run.ts",
@@ -107,26 +102,6 @@
       "status": "NOT_IMPLEMENTED",
       "evidence": "src/config.ts",
       "detail": "requiredGates appear in run.ts as a hardcoded literal, never read from or validated against a profile."
-    },
-    "PROFILE_DEFAULTS_RUN_AGENT_ADAPTER_SCHEMA": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/config.ts",
-      "detail": "no defaults.run.agentAdapter schema is validated."
-    },
-    "PROFILE_DEFAULTS_RUN_ISOLATION_MODE_SCHEMA": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/run.ts",
-      "detail": "isolation.mode is the constant NONE; no profile value is read."
-    },
-    "PROFILE_DEFAULTS_TASK_WORKFLOW_SCHEMA": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/config.ts",
-      "detail": "no defaults.task.workflow schema is validated."
-    },
-    "PROFILE_POLICY_AGENT_ADAPTERS_BLOCK": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/config.ts",
-      "detail": "allowedAdapters is never read; any defaultAgent string is accepted."
     },
     "PROFILE_POLICY_AUTO_ADVANCE_ON_DONE_IS_BOOLEAN": {
       "status": "NOT_IMPLEMENTED",
@@ -147,11 +122,6 @@
       "status": "IMPLEMENTED_UNTESTED",
       "evidence": "src/prompt.ts",
       "detail": "workflow is rendered into the prompt and never enforced, which is what the rule requires, but no test asserts that it cannot become policy."
-    },
-    "RUN_PLAN_AGENT_ADAPTER_RESOLUTION": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/run.ts",
-      "detail": "selectedAgentAdapter is copied from config.defaultAgent with no resolution order, no allowedAdapters check, and no recorded resolution source."
     },
     "REVIEW_DECISION_ACTOR_MUST_SATISFY_RESULT_REVIEW_GATE": {
       "status": "NOT_IMPLEMENTED",

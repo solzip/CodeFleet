@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { copyFile, lstat, mkdir, open, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { createAgentAdapter } from "./agent.ts";
+import { createAgentAdapter, isAdapterLocallyAvailable, LOCAL_ADAPTER_REGISTRY } from "./agent.ts";
 import { loadConfig } from "./config.ts";
 import { renderPrompt } from "./prompt.ts";
 import { loadTask } from "./task.ts";
@@ -303,6 +303,19 @@ async function executeRun(
     throw new Error(commandChannelBlock);
   }
 
+  // The adapter is resolved before any artifact exists. REQUIRE_EXPLICIT is a
+  // deferral, not a value, so a Run that still holds one has not been planned;
+  // and an adapter the policy forbids or this build cannot run must stop here
+  // rather than after a Run Trace exists to explain.
+  const adapterResolution = resolveAgentAdapter(config);
+  if (adapterResolution.blockedReason !== "") {
+    throw new Error(adapterResolution.blockedReason);
+  }
+  const isolation = resolveIsolation(config);
+  if (isolation.blockedReason !== "") {
+    throw new Error(isolation.blockedReason);
+  }
+
   const projectPath = await resolveWorkspaceProjectPath(discovery.selectedWorkspaceRootRealPath, task.projectPath);
   const startedAtDate = new Date();
   const { runId, runDir } = await reserveRunDir(rootDir, startedAtDate);
@@ -400,7 +413,20 @@ async function executeRun(
       mode: config.mode
     },
     selectedAgentAdapter: {
-      adapterId: config.agentAdapter
+      adapterId: adapterResolution.selectedAgentAdapter
+    },
+    adapterResolution: {
+      selectionSource: adapterResolution.selectionSource,
+      policyAllowed: adapterResolution.policyAllowed,
+      locallyAvailable: adapterResolution.locallyAvailable,
+      evidence: {
+        allowedAdaptersRef: `${toRelativePath(rootDir, discovery.configRef.path)}#/policies/agentAdapters/allowedAdapters`,
+        localRegistry: adapterResolution.localRegistry
+      },
+      scanScope: {
+        allowedAdaptersDeclared: adapterResolution.allowedAdapters.length,
+        localRegistrySize: adapterResolution.localRegistry.length
+      }
     },
     effectivePolicy,
     computedRisk: {
@@ -408,8 +434,8 @@ async function executeRun(
       reasons: ["RISK_ENGINE_NOT_IMPLEMENTED_V02"]
     },
     isolation: {
-      mode: "NONE",
-      reason: "V0.2_MINIMAL_LOCAL_TRANSPORT"
+      mode: isolation.mode,
+      reason: isolation.reason
     },
     verificationPlan,
     artifactPlan,
@@ -443,6 +469,22 @@ async function executeRun(
     workingDirectoryRef: task.projectPath,
     providerSpecific: false
   };
+
+  // The request is the only record of what the adapter was permitted to do, so
+  // it is checked against the effective policy before it becomes that record.
+  // The two are built from the same source today; this fails the moment they
+  // stop agreeing, rather than letting a widened request pass as the contract.
+  const expansions = findCapabilityExpansions(
+    adapterRequest.capabilities as unknown as Record<string, unknown>,
+    effectivePolicy.capabilities as unknown as Record<string, unknown>
+  );
+  if (expansions.length > 0) {
+    throw new Error(
+      "AdapterRequest exceeds the effective policy and cannot be issued:\n" +
+        expansions.map((e) => `  - ${e.detail}`).join("\n")
+    );
+  }
+
   await writeJson(adapterRequestPath, adapterRequest);
   const adapterRequestRef = await fileRef(rootDir, adapterRequestPath);
 
@@ -1457,6 +1499,134 @@ async function detectCaseSensitivity(projectPath: string): Promise<boolean> {
 function changedFilesAuthority(harnessObservation: Record<string, unknown>): string {
   const changes = harnessObservation.changes as Record<string, unknown> | undefined;
   return typeof changes?.unavailableReason === "string" && changes.unavailableReason.length > 0 ? "NONE" : "HARNESS_OBSERVED";
+}
+
+export interface AdapterResolution {
+  selectedAgentAdapter: string;
+  selectionSource: "PROFILE_DEFAULT" | "REQUIRE_EXPLICIT_UNRESOLVED";
+  policyAllowed: boolean;
+  locallyAvailable: boolean;
+  allowedAdapters: string[];
+  localRegistry: string[];
+  blockedReason: string;
+}
+
+// Selection reads the Profile and writes nothing back to it. Run Planning may
+// not edit the Project Profile, the Local Overlay, or the Task Revision while
+// choosing, so this takes the resolved config and returns a record.
+export function resolveAgentAdapter(config: CodeFleetConfig): AdapterResolution {
+  const selected = config.agentAdapter;
+  const allowedAdapters = config.allowedAdapters;
+  const localRegistry = [...LOCAL_ADAPTER_REGISTRY];
+
+  if (selected === "REQUIRE_EXPLICIT") {
+    return {
+      selectedAgentAdapter: selected,
+      selectionSource: "REQUIRE_EXPLICIT_UNRESOLVED",
+      policyAllowed: false,
+      locallyAvailable: false,
+      allowedAdapters,
+      localRegistry,
+      blockedReason:
+        "Run Planning is blocked: defaults.run.agentAdapter is REQUIRE_EXPLICIT and no Run Option chose an adapter.\n" +
+        `Set defaults.run.agentAdapter to one of: ${allowedAdapters.join(", ") || "(none allowed)"}`
+    };
+  }
+
+  const policyAllowed = allowedAdapters.includes(selected);
+  const locallyAvailable = isAdapterLocallyAvailable(selected);
+
+  let blockedReason = "";
+  if (!policyAllowed) {
+    blockedReason =
+      `Run Planning is blocked: adapter ${selected} is not in policies.agentAdapters.allowedAdapters ` +
+      `(${allowedAdapters.join(", ") || "empty"}).`;
+  } else if (!locallyAvailable) {
+    // Policy-allowed and locally-missing are different failures. Reporting them
+    // as one would send someone to edit the Profile over a missing build.
+    blockedReason =
+      `Run Planning is blocked: adapter ${selected} is allowed by policy but is not in this build's ` +
+      `adapter registry (${localRegistry.join(", ")}).`;
+  }
+
+  return {
+    selectedAgentAdapter: selected,
+    selectionSource: "PROFILE_DEFAULT",
+    policyAllowed,
+    locallyAvailable,
+    allowedAdapters,
+    localRegistry,
+    blockedReason
+  };
+}
+
+export interface IsolationResolution {
+  mode: string;
+  reason: string;
+  blockedReason: string;
+}
+
+// The Run Plan records a concrete mode and a reason. REQUIRE_EXPLICIT resolves
+// here or the Run does not start, so no artifact ever carries the deferral.
+export function resolveIsolation(config: CodeFleetConfig): IsolationResolution {
+  if (config.isolationMode === "REQUIRE_EXPLICIT") {
+    return {
+      mode: "",
+      reason: "",
+      blockedReason:
+        "Run Planning is blocked: defaults.run.isolationMode is REQUIRE_EXPLICIT and nothing resolved it.\n" +
+        "Set it to one of NONE, GIT_WORKTREE, TEMP_WORKSPACE, CONTAINER."
+    };
+  }
+  return {
+    mode: config.isolationMode,
+    reason: config.isolationMode === "NONE" ? "V0.2_MINIMAL_LOCAL_TRANSPORT" : "PROFILE_DEFAULT",
+    blockedReason: ""
+  };
+}
+
+export interface CapabilityExpansion {
+  field: string;
+  detail: string;
+}
+
+// An adapter may narrow what it was given and never widen it. Checked on the
+// AdapterRequest before the adapter is handed control, because afterwards the
+// only record of what it was allowed to do is the request itself.
+export function findCapabilityExpansions(
+  requested: Record<string, unknown>,
+  effective: Record<string, unknown>
+): CapabilityExpansion[] {
+  const found: CapabilityExpansion[] = [];
+
+  for (const field of ["fileEdit", "commandExecution"] as const) {
+    if (requested[field] === true && effective[field] !== true) {
+      found.push({ field, detail: `AdapterRequest ${field} is true while effectivePolicy ${field} is not` });
+    }
+  }
+
+  // Allowed lists may only shrink; denied lists may only grow.
+  for (const field of ["allowedPaths", "allowedCommands"] as const) {
+    const extra = asStringSet(requested[field]).filter((v) => !asStringSet(effective[field]).includes(v));
+    if (extra.length > 0) {
+      found.push({ field, detail: `AdapterRequest ${field} adds ${extra.join(", ")}` });
+    }
+  }
+  for (const field of ["deniedPaths", "deniedCommands"] as const) {
+    const dropped = asStringSet(effective[field]).filter((v) => !asStringSet(requested[field]).includes(v));
+    if (dropped.length > 0) {
+      found.push({ field, detail: `AdapterRequest ${field} drops ${dropped.join(", ")}` });
+    }
+  }
+
+  return found;
+}
+
+function asStringSet(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((entry) => (typeof entry === "string" ? entry : JSON.stringify(entry)));
 }
 
 async function runAgentSafely(agentName: string, input: AgentRunInput): Promise<AgentRunResult> {

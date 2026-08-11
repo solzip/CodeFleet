@@ -732,7 +732,15 @@ test("runTask preserves S2 artifacts when adapter creation fails", async () => {
   await mkdir(path.join(root, ".codefleet", "runs"), { recursive: true });
   await writeFile(
     path.join(root, ".codefleet", "config.json"),
-    `${JSON.stringify(profileJson({ workspaceId: "failure-test", agentAdapter: "missing-adapter", harnessMode: "DRY_RUN" }), null, 2)}\n`,
+    `${JSON.stringify(
+      profileJson({
+        workspaceId: "failure-test",
+        harnessMode: "COMMAND_EXEC",
+        policies: { harness: { allowDegradedCommandObservation: true } }
+      }),
+      null,
+      2
+    )}\n`,
     "utf8"
   );
   await writeFile(
@@ -754,6 +762,10 @@ test("runTask preserves S2 artifacts when adapter creation fails", async () => {
     "utf8"
   );
 
+  // A registered adapter whose binary does not exist. Planning now refuses an
+  // adapter that is not in the local registry, so an unknown id can no longer
+  // reach launch; this exercises the launch failure that is still reachable.
+  await writeLocalOverlay(root, { command: path.join(root, "no-such-binary"), args: [] });
   await approveForTest(root, "sample");
 
   const execution = await runTask(root, "sample");
@@ -769,7 +781,7 @@ test("runTask preserves S2 artifacts when adapter creation fails", async () => {
   assert.equal(adapterRequest.documentKind, "ADAPTER_REQUEST");
   assert.equal(harnessObservation.documentKind, "HARNESS_OBSERVATION");
   assert.equal(adapterResult.documentKind, "ADAPTER_RESULT");
-  assert.equal(adapterResult.adapterId, "missing-adapter");
+  assert.equal(adapterResult.adapterId, "codex");
   assert.equal(adapterResult.synthetic, true);
   assert.equal(adapterResult.adapterExecutionStatus, "ADAPTER_FAILED");
   assert.equal(verificationEvidence.authority, "NONE");
@@ -779,8 +791,8 @@ test("runTask preserves S2 artifacts when adapter creation fails", async () => {
   assert.equal((runSummary.safeguards as { acceptanceEvidence: boolean }).acceptanceEvidence, false);
   const adapterError = adapterResult.adapterError as { code: string; message: string };
   assert.equal(adapterError.code, "LAUNCH_FAILED");
-  assert.match(adapterError.message, /Unsupported agent: missing-adapter/);
-  assert.equal(legacyResult.error, "Unsupported agent: missing-adapter");
+  assert.ok(adapterError.message.length > 0, "a launch failure must say why");
+  assert.ok(String(legacyResult.error).length > 0);
 
   coversRule(S2_THREE, "every Run attempt that reaches AdapterRequest creation leaves an AdapterRequest artifact");
   coversRule(S2_THREE, "every Run attempt that reaches AdapterRequest creation leaves a HarnessObservation artifact");

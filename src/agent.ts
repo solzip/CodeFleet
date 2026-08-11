@@ -12,6 +12,13 @@ export interface AgentAdapter {
   run(input: AgentRunInput): Promise<AgentRunResult>;
 }
 
+/** AdapterIds this build can actually run. Resolution checks it before planning. */
+export const LOCAL_ADAPTER_REGISTRY = ["codex"];
+
+export function isAdapterLocallyAvailable(name: string): boolean {
+  return LOCAL_ADAPTER_REGISTRY.includes(name);
+}
+
 export function createAgentAdapter(name: string): AgentAdapter {
   if (name === "codex") {
     return new CodexAdapter();
