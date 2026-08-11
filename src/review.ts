@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import {
+  actorSatisfiesResultReviewGate,
+  evaluateAutoReview,
+  type ActorKind,
+  type DecisionGateSnapshot
+} from "./auto-review.ts";
 import { renderRunRecord } from "./run-record.ts";
 import type { Task } from "./types.ts";
 import type { FileRef } from "./workspace.ts";
@@ -21,6 +27,8 @@ export interface ReviewOptions {
   noteRef?: string;
   aiReviewRef?: string;
   supersedesLocalReviewId?: string;
+  /** Defaults to HUMAN. SYSTEM_POLICY must pass the bounded auto-review. */
+  actorKind?: ActorKind;
   /** Specific CAPABILITY_GAP reasons a human takes responsibility for. */
   waivedGaps?: string[];
   waiveJustification?: string;
@@ -56,6 +64,9 @@ interface ReviewEvidenceBundle {
   // subject as objectiveQueueItemId + taskId + taskRevision, so a bundle that
   // cannot say which revision it reviewed cannot be migrated at all.
   taskRevision: number | null;
+  /** The resultReview gate in force when the Run was planned. */
+  resultReviewGate: DecisionGateSnapshot;
+  autoAdvanceOnDone: boolean;
   bundleStatus: "COMPLETE" | "DEGRADED";
   unavailableReasons: string[];
   runSummaryRef: FileRef;
@@ -109,9 +120,11 @@ interface LocalReviewDecision {
   /** Copied from the bundle. Migration reads it; it is never defaulted. */
   taskRevision: number | null;
   decision: ReviewDecision;
-  actorKind: "HUMAN";
+  actorKind: ActorKind;
   actorId: string;
-  decisionBasis: "HUMAN_REVIEW";
+  decisionBasis: string;
+  /** Travels to the ledger so replay judges by the policy in force. */
+  resultReviewGate: DecisionGateSnapshot;
   reason: string;
   runSummaryRef: FileRef;
   reviewEvidenceBundleRef: FileRef;
@@ -205,6 +218,57 @@ export async function reviewRun(
     );
   }
 
+  const actorKind: ActorKind = options.actorKind ?? "HUMAN";
+  const decisionBasis = actorKind === "SYSTEM_POLICY" ? "SYSTEM_POLICY_AUTO_ACCEPT" : "HUMAN_REVIEW";
+
+  // A decision by a kind of actor the gate does not allow is refused here rather
+  // than written and found ineffective at replay, so the refusal names the gate.
+  const actorCheck = actorSatisfiesResultReviewGate({
+    actorKind,
+    actorId: options.actorId ?? "local-user",
+    decisionBasis,
+    resultReview: bundle.resultReviewGate
+  });
+  if (!actorCheck.effective) {
+    throw new Error(
+      [`This actor cannot make an effective Review Decision for ${runId}:`]
+        .concat(actorCheck.reasons.map((r) => `  - ${r}`))
+        .join("\n")
+    );
+  }
+
+  // SYSTEM_POLICY may only ever append ACCEPTED, and only when every one of the
+  // bounded conditions holds. CodeFleet accepting over its own blind spot is the
+  // failure this rule exists to prevent.
+  if (actorKind === "SYSTEM_POLICY") {
+    const auto = evaluateAutoReview({
+      autoAdvanceOnDone: bundle.autoAdvanceOnDone,
+      resultReview: bundle.resultReviewGate,
+      normalizedResult: bundle.observedResultSnapshot,
+      verificationGateResult: bundle.verificationGateResult,
+      computedRisk: bundle.computedRisk,
+      normalizationStatus: bundle.bundleStatus === "COMPLETE" ? "COMPLETE" : "PARTIAL",
+      evidenceCompleteness: evidenceCompleteness(bundle, acceptance.waived),
+      capabilityGaps: bundle.scanScope.capabilityGaps,
+      evidenceDefects: bundle.scanScope.evidenceDefects,
+      blockingFindings: acceptance.blockedReasons.length,
+      unresolvedRequiredFields: 0,
+      blockingNeedsReview: 0,
+      reviewEvidenceBundleRef: bundlePath,
+      reviewEvidenceBundleHash: (await fileRef(rootDir, bundlePath)).contentHash
+    });
+    if (options.decision !== "ACCEPTED") {
+      throw new Error("SYSTEM_POLICY may append ACCEPTED only; a rejection is a human decision.");
+    }
+    if (!auto.allowed) {
+      throw new Error(
+        [`SYSTEM_POLICY auto-accept is not permitted for ${runId}:`]
+          .concat(auto.blockedReasons.map((r) => `  - ${r}`))
+          .join("\n")
+      );
+    }
+  }
+
   const localReviewPath = path.join(runDir, "review-decision.local.json");
   const statusResult = deriveLocalReviewStatus({
     decision: options.decision,
@@ -224,9 +288,10 @@ export async function reviewRun(
     taskId: bundle.taskId,
     taskRevision: bundle.taskRevision,
     decision: options.decision,
-    actorKind: "HUMAN",
+    actorKind,
     actorId: options.actorId ?? "local-user",
-    decisionBasis: "HUMAN_REVIEW",
+    decisionBasis,
+    resultReviewGate: bundle.resultReviewGate,
     reason: options.reason,
     runSummaryRef: bundle.runSummaryRef,
     reviewEvidenceBundleRef: await fileRef(rootDir, bundlePath),
@@ -368,6 +433,11 @@ async function buildEvidenceBundle(input: {
   // attached and can never be corrected from inside the ledger.
   const runPlanRef = resolved.runPlanRef ?? null;
   let taskRevision: number | null = null;
+  // The gate in force when the Run was planned travels with the decision, so
+  // replay judges the decision by that policy rather than by whatever the
+  // Profile says at replay time.
+  let resultReviewGate: DecisionGateSnapshot = { required: true, allowedActors: ["HUMAN"], explicit: false };
+  let autoAdvanceOnDone = false;
   if (runPlanRef !== null) {
     const runPlan = await readJson(path.join(rootDir, runPlanRef.path));
     const declared = asRecord(runPlan ?? {}).approval;
@@ -375,6 +445,17 @@ async function buildEvidenceBundle(input: {
     if (typeof value === "number" && Number.isInteger(value) && value > 0) {
       taskRevision = value;
     }
+    const effective = asRecord(asRecord(runPlan ?? {}).effectivePolicy);
+    const gate = asRecord(asRecord(effective.requiredGates).resultReview);
+    const actors = asArray(gate.allowedActors).filter(
+      (a): a is ActorKind => a === "HUMAN" || a === "SYSTEM_POLICY"
+    );
+    resultReviewGate = {
+      required: gate.required !== false,
+      allowedActors: actors.length > 0 ? actors : ["HUMAN"],
+      explicit: gate.explicit === true
+    };
+    autoAdvanceOnDone = effective.autoAdvanceOnDone === true;
   }
   if (taskRevision === null) {
     unavailableReasons.push("MISSING_INPUT_REF:runPlanRef#/approval/taskRevision");
@@ -420,6 +501,8 @@ async function buildEvidenceBundle(input: {
     runPlanId: asString(runSummary.runPlanId, ""),
     taskId: asString(runSummary.taskId, ""),
     taskRevision,
+    resultReviewGate,
+    autoAdvanceOnDone,
     bundleStatus,
     unavailableReasons,
     runSummaryRef,

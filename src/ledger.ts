@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { runMutation, writeJsonFile, type MutationOutcome } from "./mutation.ts";
+import { actorSatisfiesResultReviewGate, type ActorKind, type DecisionGateSnapshot } from "./auto-review.ts";
 
 export type ObjectiveStatus = "OPEN" | "CLOSED" | "CANCELED";
 export type ObjectiveKind = "SEQUENCE" | "WORKSTREAM" | "ONE_OFF";
@@ -419,6 +420,26 @@ function applyReviewDecisions(
       continue;
     }
 
+    // The actor gate decides effectiveness, not just auditability. A decision
+    // made by a kind of actor the gate does not allow is recorded in the ledger
+    // and simply never becomes effective, so it can never produce VERIFIED.
+    const gate = readResultReviewGate(payload);
+    const actor = actorSatisfiesResultReviewGate({
+      actorKind: String(payload.actorKind ?? ""),
+      actorId: String(payload.actorId ?? ""),
+      decisionBasis: String(payload.decisionBasis ?? ""),
+      resultReview: gate
+    });
+    if (!actor.effective) {
+      findings.push({
+        failureClass: "POLICY_EVALUATION_FAILURE",
+        checkId: "REVIEW_ACTOR_SATISFIES_RESULT_REVIEW_GATE",
+        detail: `review decision ${decisionId} is not effective: ${actor.reasons.join("; ")}`,
+        affectedSeq: event.seq
+      });
+      continue;
+    }
+
     // Later seq wins for the same identity.
     item.effectiveReviewDecisionId = decisionId;
     item.effectiveDecision = String(payload.decision ?? "");
@@ -808,6 +829,25 @@ export async function reorderQueue(
   );
 }
 
+// The gate the decision was made under. A decision event carries it so replay
+// judges the decision by the policy in force when it was made, not by whatever
+// the Profile says today. Absent, the Core default applies: HUMAN only.
+function readResultReviewGate(payload: Record<string, unknown>): DecisionGateSnapshot {
+  const raw = payload.resultReviewGate;
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return { required: true, allowedActors: ["HUMAN"], explicit: false };
+  }
+  const gate = raw as Record<string, unknown>;
+  const actors = Array.isArray(gate.allowedActors)
+    ? (gate.allowedActors.filter((a) => a === "HUMAN" || a === "SYSTEM_POLICY") as ActorKind[])
+    : (["HUMAN"] as ActorKind[]);
+  return {
+    required: gate.required !== false,
+    allowedActors: actors.length > 0 ? actors : (["HUMAN"] as ActorKind[]),
+    explicit: gate.explicit === true
+  };
+}
+
 export interface ReviewDecisionEventPayload {
   reviewDecisionId: string;
   objectiveQueueItemId: string;
@@ -827,6 +867,7 @@ export interface ReviewDecisionEventPayload {
   waivedCapabilityGaps: { reason: string; acknowledgedBy: string; justification: string }[];
   migrationSource: "LOCAL_REVIEW_DECISION";
   migrationSourceRef: { path: string; hash: string };
+  resultReviewGate: DecisionGateSnapshot;
 }
 
 // Importing a local review appends a new decision event. It never promotes the
@@ -885,7 +926,8 @@ export async function importLocalReview(
       ? (localReview.waivedCapabilityGaps as ReviewDecisionEventPayload["waivedCapabilityGaps"])
       : [],
     migrationSource: "LOCAL_REVIEW_DECISION",
-    migrationSourceRef: localReviewRef
+    migrationSourceRef: localReviewRef,
+    resultReviewGate: readResultReviewGate(localReview)
   };
 
   return runMutation(

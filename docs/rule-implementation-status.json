@@ -8,11 +8,6 @@
   },
   "measuredOn": "2026-08-11",
   "rules": {
-    "SYSTEM_POLICY_AUTO_REVIEW_DECISION_IS_BOUNDED": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/ledger.ts",
-      "detail": "every RUN_REVIEW_DECIDED path requires a human local review import. No system-policy automatic decision exists to bound."
-    },
     "CORRECTIVE_EVENT_REQUIRES_VALID_LEDGER_AND_WRONG_DECISION": {
       "status": "NOT_IMPLEMENTED",
       "evidence": "src/ledger.ts",
@@ -37,11 +32,6 @@
       "status": "IMPLEMENTED_UNTESTED",
       "evidence": "src/prompt.ts",
       "detail": "workflow is rendered into the prompt and never enforced, which is what the rule requires, but no test asserts that it cannot become policy."
-    },
-    "REVIEW_DECISION_ACTOR_MUST_SATISFY_RESULT_REVIEW_GATE": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/review.ts",
-      "detail": "requiredGates.resultReview.allowedActors is always empty and no actor is checked against it."
     },
     "HARNESS_ENFORCEMENT_IS_POLICY_AND_EVIDENCE_BOUNDARY": {
       "status": "IMPLEMENTED_UNTESTED",
