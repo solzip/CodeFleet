@@ -82,6 +82,8 @@ export function resolveConfig(loaded: LoadedProfile): CodeFleetConfig {
     isolationMode:
       typeof runDefaults.isolationMode === "string" ? runDefaults.isolationMode : DEFAULT_CONFIG.isolationMode,
     profileRequiredGates: taskDefaults.requiredGates as Record<string, unknown> | undefined,
+    defaultAgentRole: typeof taskDefaults.agentRole === "string" ? taskDefaults.agentRole : undefined,
+    agentRoles: asObject(policies.agentRoles),
     adapterCommand: readAdapterCommand(overlay.values.adapterCommand),
     policies: {
       commands: loadCommandPolicy(policies.commands),

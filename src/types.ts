@@ -80,6 +80,10 @@ export interface CodeFleetConfig {
   isolationMode: string;
   /** defaults.task.requiredGates, unresolved. The Run Plan merges it. */
   profileRequiredGates?: Record<string, unknown>;
+  /** defaults.task.agentRole, used when the Task names none. */
+  defaultAgentRole?: string;
+  /** policies.agentRoles: allowedAgentRoles and any custom roles. */
+  agentRoles: Record<string, unknown>;
   /** Comes from the Local Overlay. The Profile may not carry a command path. */
   adapterCommand: AgentCommandConfig;
   policies: ProfilePolicies;
@@ -118,6 +122,10 @@ export interface Task {
   verification?: TaskVerification;
   /** Optional in the YAML; the resolved Revision must be concrete. */
   requiredGates?: Record<string, unknown>;
+  /** Classification, not a grant. Contributes an upper bound to effectivePolicy. */
+  agentRole?: string;
+  /** Task-local narrowing. Never widens what the Profile or the role allows. */
+  guardrails?: Record<string, unknown>;
   constraints: string[];
   doneCriteria: string[];
   workflow: string[];
@@ -203,7 +211,7 @@ export const DEFAULT_PROFILE = {
   project: { id: "", name: "" },
   workspace: { id: "codefleet-workspace" },
   defaults: {
-    task: { harnessMode: "DRY_RUN" },
+    task: { harnessMode: "DRY_RUN", agentRole: "BACKEND_IMPLEMENTER" },
     run: { agentAdapter: "codex", isolationMode: "NONE" }
   },
   policies: {
@@ -238,6 +246,7 @@ export const DEFAULT_CONFIG: CodeFleetConfig = {
   mode: "dry-run",
   agentAdapter: "codex",
   allowedAdapters: ["codex"],
+  agentRoles: {},
   isolationMode: "NONE",
   adapterCommand: {},
   policies: {

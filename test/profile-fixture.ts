@@ -15,6 +15,7 @@ import path from "node:path";
 export interface ProfileOverrides {
   workspaceId?: string;
   harnessMode?: "DRY_RUN" | "SUGGEST_ONLY" | "WORKSPACE_EDIT" | "COMMAND_EXEC";
+  agentRole?: string;
   agentAdapter?: string;
   isolationMode?: string;
   allowedAdapters?: string[];
@@ -34,7 +35,10 @@ export function profileJson(overrides: ProfileOverrides = {}): Record<string, un
     project: { id: "fixture", name: "Fixture" },
     workspace: { id: overrides.workspaceId ?? "fixture-workspace" },
     defaults: {
-      task: { harnessMode: overrides.harnessMode ?? "DRY_RUN" },
+      task: {
+        harnessMode: overrides.harnessMode ?? "DRY_RUN",
+        agentRole: overrides.agentRole ?? "INFRA_OPERATOR"
+      },
       run: {
         agentAdapter: overrides.agentAdapter ?? "codex",
         isolationMode: overrides.isolationMode ?? "NONE"

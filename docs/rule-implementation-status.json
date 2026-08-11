@@ -58,26 +58,6 @@
       "evidence": "src/run.ts",
       "detail": "UNKNOWN is emitted as a constant, not derived from an unresolved evaluation, so the rule's distinction is untested."
     },
-    "AGENT_ROLE_IS_CLASSIFICATION_NOT_PERMISSION_GRANT": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/",
-      "detail": "no source file references agentRole."
-    },
-    "AGENT_ROLE_DECLARES_ONLY_WHAT_IT_NARROWS": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/",
-      "detail": "no source file references agentRole."
-    },
-    "ROLE_EFFECTIVE_RESTRICTIONS_IS_DIAGNOSTIC_READ_MODEL": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/",
-      "detail": "no role read model exists."
-    },
-    "GUARDRAIL_IS_TASK_LOCAL_RESTRICTION_SOURCE": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/run.ts",
-      "detail": "the only occurrence of guardrail in src is a comment; Task guardrails are never read or applied."
-    },
     "SYSTEM_POLICY_AUTO_REVIEW_DECISION_IS_BOUNDED": {
       "status": "NOT_IMPLEMENTED",
       "evidence": "src/ledger.ts",

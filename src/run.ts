@@ -11,6 +11,15 @@ import type { AgentRunInput, AgentRunResult, RunResultFile } from "./types.ts";
 import { normalizeCommand, preflightCommand, type CommandMatcher, type DestructiveMatcher } from "./command-policy.ts";
 import { evaluatePathPolicy, type PathViolation } from "./path-policy.ts";
 import {
+  computeRoleEffectiveRestrictions,
+  meetMode,
+  modeRank,
+  resolveAgentRole,
+  resolveGuardrails,
+  validateCustomRole,
+  type CustomRole
+} from "./agent-role.ts";
+import {
   CORE_REQUIRED_GATES,
   mergeRequiredGates,
   validateRequiredGates,
@@ -313,6 +322,43 @@ async function executeRun(
   // deferral, not a value, so a Run that still holds one has not been planned;
   // and an adapter the policy forbids or this build cannot run must stop here
   // rather than after a Run Trace exists to explain.
+  // The role is a classification: it contributes an upper bound and nothing
+  // else. Guardrails then narrow further, never wider.
+  const roleBlock = config.agentRoles;
+  const customRoles: Record<string, CustomRole> = {};
+  for (const [id, value] of Object.entries((roleBlock.customRoles ?? {}) as Record<string, unknown>)) {
+    const findings = validateCustomRole(id, value, `/policies/agentRoles/customRoles/${id}`);
+    if (findings.length > 0) {
+      throw new Error(
+        [`Invalid custom AgentRole ${id}:`]
+          .concat(findings.map((f) => `  - ${f.jsonPointer}: ${f.detail}`))
+          .join("\n")
+      );
+    }
+    customRoles[id] = value as CustomRole;
+  }
+
+  const roleResolution = resolveAgentRole({
+    taskRole: task.agentRole ?? config.defaultAgentRole,
+    allowedAgentRoles: Array.isArray(roleBlock.allowedAgentRoles)
+      ? (roleBlock.allowedAgentRoles as string[])
+      : [],
+    customRoles
+  });
+  if (roleResolution.blockedReason !== "" || roleResolution.role === null) {
+    throw new Error(roleResolution.blockedReason);
+  }
+
+  const guardrailResolution = resolveGuardrails({
+    guardrails: task.guardrails,
+    roleMaxMode: roleResolution.role.defaultMaxMode,
+    profileMaxMode: config.harnessMode
+  });
+  if (guardrailResolution.blockedReason !== "") {
+    throw new Error(guardrailResolution.blockedReason);
+  }
+  const effectiveMode = guardrailResolution.mode;
+
   const adapterResolution = resolveAgentAdapter(config);
   if (adapterResolution.blockedReason !== "") {
     throw new Error(adapterResolution.blockedReason);
@@ -357,9 +403,11 @@ async function executeRun(
   // Command policy comes from the Project Profile, not the Task. A Task states
   // what work it wants; it does not get to widen what the workspace permits.
   const commandPolicy = config.policies.commands;
+  // meet(harnessMode, roleMaxMode, guardrails.mode) already happened above.
+  // WORKSPACE_EDIT and up may edit files; only COMMAND_EXEC may run commands.
   const capabilities = {
-    fileEdit: config.mode === "execute",
-    commandExecution: config.mode === "execute",
+    fileEdit: modeRank(effectiveMode) >= modeRank("WORKSPACE_EDIT"),
+    commandExecution: modeRank(effectiveMode) >= modeRank("COMMAND_EXEC"),
     allowedPaths: task.scope.include,
     deniedPaths: task.scope.exclude,
     allowedCommands: commandPolicy.allowedCommands,
@@ -448,6 +496,12 @@ async function executeRun(
     selectedAgentAdapter: {
       adapterId: adapterResolution.selectedAgentAdapter
     },
+    selectedAgentRole: {
+      roleId: roleResolution.roleId,
+      source: roleResolution.source,
+      effectiveMode
+    },
+    roleEffectiveRestrictions: computeRoleEffectiveRestrictions(roleResolution.roleId, roleResolution.role),
     adapterResolution: {
       selectionSource: adapterResolution.selectionSource,
       policyAllowed: adapterResolution.policyAllowed,
