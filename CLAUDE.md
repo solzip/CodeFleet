@@ -115,13 +115,15 @@ was rewritten to it. One commit from a second identity puts the history back to
 two authors, and the only remedy is another rewrite and a force push. Set it
 repository-locally on each machine rather than relying on a global default.
 
-The address changed once, on 2026-08-11, from `cysph413@naver.com` to
-`solarchive.dev@gmail.com`, to use one address across every project. All 129
-commits were rewritten and force pushed; author and committer dates were
-preserved and no file content changed. Do not reintroduce the old address, and
-do not "restore" it on seeing it in an old clone or a cached fork — a clone
-taken before that date has the old address in every commit and is stale, not
-authoritative.
+The address changed once, on 2026-08-11. All 129 commits were rewritten to the
+address above and force pushed; author and committer dates were preserved and no
+file content changed. The previous address is deliberately not written here —
+recording it would put back in the tree exactly what the rewrite removed from the
+history.
+
+A clone taken before that date carries the previous address in every commit. It
+is stale, not authoritative. Do not "restore" an address found in such a clone,
+and do not copy one out of a local reflog.
 
 ### Line endings
 

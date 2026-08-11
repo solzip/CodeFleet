@@ -5486,7 +5486,7 @@ Workspace Metadata Directory
 예시:
 
 ```text
-hunik-msa/
+example-msa/
   svc-gateway/
   svc-auth/
   docker-compose.yml
@@ -5500,10 +5500,10 @@ hunik-msa/
 이 경우:
 
 ```text
-Workspace Root: hunik-msa/
-Metadata Dir:   hunik-msa/.codefleet/
-Scope 기준:     hunik-msa 기준 상대 경로
-Run 저장:       hunik-msa/.codefleet/runs/*
+Workspace Root: example-msa/
+Metadata Dir:   example-msa/.codefleet/
+Scope 기준:     example-msa 기준 상대 경로
+Run 저장:       example-msa/.codefleet/runs/*
 ```
 
 Workspace discovery implementation slicing은 VERSION_PLAN이다. 최종 계약은 아래 규칙을 따른다.
@@ -7366,8 +7366,8 @@ localPolicy
 ```json
 {
   "project": {
-    "id": "hunik-platform",
-    "name": "Hunik Platform",
+    "id": "example-platform",
+    "name": "Example Platform",
     "domains": ["backend-platform"],
     "stackTags": ["java", "spring", "maven"]
   }

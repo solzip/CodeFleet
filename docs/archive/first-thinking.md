@@ -114,7 +114,7 @@ title: "svc-gateway 401/403 응답 구조 점검"
 type: BACKEND
 agentRole: BACKEND_REVIEWER
 
-projectPath: "C:/work/hunik-msa"
+projectPath: "C:/work/example-msa"
 
 goal: >
 svc-gateway의 401/403 응답이 ApiResponse + Meta 구조를 유지하는지 점검하고,
@@ -584,7 +584,7 @@ allowCommandExecution: false
 
 scope:
 include:
-- "svc-goods/src/main/java/kr/hunik/goods/donation/**"
+- "svc-goods/src/main/java/com/example/goods/donation/**"
 exclude:
 - "**/application*.yml"
 - "**/target/**"
