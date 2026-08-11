@@ -8,41 +8,6 @@
   },
   "measuredOn": "2026-08-11",
   "rules": {
-    "EXPORT_FIELD_ALLOWLIST_IS_CORE_OWNED_EXPOSURE_TIER": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/",
-      "detail": "no source file references exposureTier or an export allowlist. S5 is unimplemented."
-    },
-    "EXPORT_FIELD_PATH_IS_EXPLICIT_LEAF_WITHOUT_WILDCARD": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/",
-      "detail": "no export field path matcher exists."
-    },
-    "EXPORT_SCHEMA_UNKNOWN_FIELD_IS_DROPPED_AND_REPORTED": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/",
-      "detail": "no export schema exists."
-    },
-    "S5_EXPORT_SEAM_USES_SANITIZED_SUMMARY_ONLY": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/",
-      "detail": "no source file references sanitize. The S5 seam has no code."
-    },
-    "REDACTION_PATTERN_IS_LINEAR_TIME_REGEX_SUBSET": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/run-record.ts",
-      "detail": "the only occurrence of redaction in src is a comment in run-record.ts explaining why the record exists separately from an export."
-    },
-    "REDACTION_ACTION_STRICTNESS_ORDER_IS_FIXED": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/",
-      "detail": "no redaction action is implemented."
-    },
-    "REDACTION_RULE_FAILURE_BLOCKS_EXPORT": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/",
-      "detail": "neither redaction nor export is implemented, so the blocking relation has nothing to enforce."
-    },
     "SYSTEM_POLICY_AUTO_REVIEW_DECISION_IS_BOUNDED": {
       "status": "NOT_IMPLEMENTED",
       "evidence": "src/ledger.ts",
