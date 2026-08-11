@@ -6,6 +6,12 @@ CodeFleet is an AI-native development orchestration CLI. It structures a develop
 
 The point is not to call an AI model. The point is that delegated work carries an approval decision, runs inside enforced boundaries, and leaves evidence that does not depend on what the agent claims it did.
 
+> **A note on language.** This file is the only English document in the
+> repository. Everything under `docs/` — including `concept-foundation.md`, the
+> canonical definition — is written in Korean. This README is self-contained and
+> covers the whole CLI surface, so you do not need the Korean documents to use
+> CodeFleet; you need them to read the design reasoning behind it.
+
 ## What CodeFleet Is Not
 
 CodeFleet is not a Codex runner, a prompt generator, an AI CLI wrapper, a central project management tool, a web dashboard, a DB-backed task system, a CI/CD replacement, a deployment tool, a secret manager, or a full sandbox. This scope is fixed and is not planned to widen.
@@ -428,6 +434,12 @@ This repository is not open source. It is published for reading and evaluation o
 GitHub shows no license in its sidebar for this repository. GitHub only recognises standard open source licenses; it does not mean there is no license.
 
 ## Documentation
+
+Every file below is in Korean. The FINAL RULE blocks inside
+`concept-foundation.md` are the exception: their `ruleId`, field names, and
+`condition` lines are English, and they are the part a non-Korean reader can
+still follow, because the tests and the coverage checker read exactly those
+lines.
 
 - `docs/concept-foundation.md` — the canonical product definition, Core/Workspace/Profile/Harness concepts, and the FINAL RULEs.
 - `docs/architecture.md` — text-based architecture overview with diagrams that need no Mermaid rendering.
