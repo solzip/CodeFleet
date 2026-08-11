@@ -5285,34 +5285,39 @@ NOT_FINAL_YET:
   관측 축 셋은 같은 질문에 답하면서 값 집합이 서로 다르다.
   S5 export를 구현할 때 외부에 어느 어휘로 말할지 함께 정한다.
 
-- policies.autoAdvanceOnDone의 위치가 FINAL 규칙 두 개 사이에서 모순이다
-  2026-08-11 Profile 스키마 구현 중 발견. 어느 쪽도 아직 고르지 않았다.
+- policies.autoAdvanceOnDone의 위치가 FINAL 규칙 두 개 사이에서 모순이었다
+  2026-08-11 발견, 같은 날 해소. 아래는 무엇을 근거로 골랐는지의 기록이다.
 
-  PROFILE_POLICY_BLOCK_KEYS_FIXED
-    policies 키는 정확히 harness / agentAdapters / files / commands / risk /
-    verification / redaction / carryForward / agentRoles 아홉 개다.
-  PROFILE_POLICY_AUTO_ADVANCE_ON_DONE_IS_BOOLEAN
-    policies.autoAdvanceOnDone을 sourceOfTruth / inputs / evidence /
-    repairBehavior 네 필드에서 가리키고, 첫 조건이 "absent or boolean"이다.
+  해소: policies는 블록 아홉 개 + 선택적 스칼라 autoAdvanceOnDone 하나다.
+  PROFILE_POLICY_BLOCK_KEYS_FIXED의 condition을 "policies keys"에서
+  "policies block keys ... 그리고 추가로 허용되는 유일한 키는 선택적 스칼라
+  autoAdvanceOnDone"으로 고쳤다.
 
-  아홉 개에 그냥 더하는 해법은 성립하지 않는다. "정확히"는 빠진 키도 위반이라는
-  뜻이고(evidence에 missingPolicyKeys가 있다), 그러면 absent가 불법이 되어
-  상대 규칙의 첫 조건과 다시 충돌한다.
+  아홉 개 목록에 그냥 더하는 해법은 성립하지 않는다. "exactly"는 빠진 키도
+  위반이라는 뜻이라 autoAdvanceOnDone이 필수가 되고, 상대 규칙의 첫 조건
+  "absent or boolean"과 다시 충돌한다. 열거된 선택적 키여야 둘 다 선다.
 
-  증거 분포:
-    9키 집합 쪽  네 곳. 위 규칙, PROJECT_PROFILE_POLICY_BLOCK_INTERNAL_SCHEMA의
-                 아홉 개 열거, 5.1의 JSON 스켈레톤, "각 블록의 책임" 산문.
-    policies.    한 곳. 5.1.3의 하위 섹션과 바로 뒤 규칙뿐이며, 그 섹션의 다른
-    autoAdvance  하위 절은 전부 defaults.task.* 다.
-    OnDone 쪽
+  결정 근거는 등장 횟수가 아니라 다음 세 가지다:
+    1. 그 값은 Profile 어딘가에 반드시 있어야 한다. 자기 규칙의 sourceOfTruth와
+       repairBehavior가 사람에게 그 필드를 설정하라고 지시하고, 정책 병합
+       순서표가 "Project Profile explicit true"를 상태로 다룬다.
+    2. defaults에는 자리가 없다. 문서 전체의 defaults.* 경로는
+       run.{agentAdapter,isolationMode}와 task.{agentRole,harnessMode,
+       requiredGates,workflow} 여섯 개뿐이고 autoAdvanceOnDone은 없다.
+    3. 다른 경로가 문서에 존재하지 않는다. 경로를 명시하는 곳은 5.1.3 한 곳뿐이다.
 
-  소비 측은 이 위치에 의존하지 않는다. SYSTEM_POLICY_AUTO_REVIEW_DECISION_IS_BOUNDED는
-  effectivePolicy.autoAdvanceOnDone만 읽는다. 따라서 어디로 정하든 이전 비용은 작다.
+  양보한 것은 한 문장의 "keys"라는 단어뿐이다. 규칙 id 자체가
+  PROFILE_POLICY_BLOCK_KEYS_FIXED이고, 형제 규칙은 "only supported policy
+  blocks"라 하고, 5.1의 스켈레톤은 블록을 전부 {}로 그리고, 산문은 "각 블록의
+  책임"을 말한다. 스칼라는 블록이 아니므로 그 셋과는 충돌조차 하지 않았다.
 
-  구현 상태: 검증하지 않는다. 어느 쪽으로 정해도 한쪽 규칙을 어기게 되므로,
-  틀린 것을 강제하느니 강제하지 않는 쪽을 골랐다. 전체 구현을 마친 뒤 검토
-  과정에서 정한다. 그 시점에는 auto-review 경계 구현이 이 값을 실제로 읽고 있어
-  판단 근거가 지금보다 많다.
+  능력을 지우는 선택지도 있었다. 9키 집합을 두고 autoAdvanceOnDone에 Profile
+  표현이 없다고 규정하면 SYSTEM_POLICY 자동 수락은 영구히 켤 수 없다. 고르지
+  않은 이유는 이 프로젝트의 안전이 "능력을 없앤다"가 아니라 "능력에 증거 조건을
+  건다"로 설계돼 있기 때문이다. 스위치 하나로는 아무것도 수락되지 않는다.
+  SYSTEM_POLICY_AUTO_REVIEW_DECISION_IS_BOUNDED의 18조건 중 하나일 뿐이고,
+  나머지 17개는 gap 0건과 evidenceCompleteness COMPLETE를 포함한다.
+
 ```
 
 이 항목들은 2026-08-10 감사에서 기계 검사로 발견했다. `authority` 하나만 실제로 문제를 일으켰고, 나머지는 아직 아무것도 깨뜨리지 않았다. 실해가 확인되지 않은 것을 추측으로 순위 매겨 고치지 않고, 목록으로 남겨 두었다가 실제로 걸릴 때 고친다.
@@ -11231,7 +11236,7 @@ preconditions:
 - PROFILE_TOP_LEVEL_KEYS_FIXED passed
 - policies is an object
 condition:
-- "policies keys are exactly harness, agentAdapters, files, commands, risk, verification, redaction, carryForward, agentRoles"
+- "policies block keys are exactly harness, agentAdapters, files, commands, risk, verification, redaction, carryForward, agentRoles, and the only additional permitted key is the optional scalar autoAdvanceOnDone"
 allowedEffect:
 - policy block validators may run
 - policy merge may read the validated policies block

@@ -484,7 +484,13 @@ async function executeRun(
     capabilities,
     requiredGates: mergedGates.gates,
     gateMergeScanScope: mergedGates.scanScope,
-    autoAdvanceOnDone: false
+    // Starts from the Profile candidate and can only be lowered. A Task
+    // guardrail, the Local Overlay, or a Run Option may set it false; none of
+    // them may set it true when the Profile did not.
+    autoAdvanceOnDone: mergeAutoAdvanceOnDone(config.autoAdvanceOnDone, [
+      task.guardrails?.autoAdvanceOnDone,
+      loweringFrom(config)
+    ])
   };
   const effectivePolicy = {
     policyHash: hashJson(effectivePolicySeed),
@@ -1692,6 +1698,23 @@ export function resolveIsolation(config: CodeFleetConfig): IsolationResolution {
     reason: config.isolationMode === "NONE" ? "V0.2_MINIMAL_LOCAL_TRANSPORT" : "PROFILE_DEFAULT",
     blockedReason: ""
   };
+}
+
+/**
+ * OR would let a lower-precedence source hand back a permission the Profile
+ * withheld, so this is AND over every source that expressed an opinion.
+ */
+export function mergeAutoAdvanceOnDone(candidate: boolean, restrictOnlySources: unknown[]): boolean {
+  if (!candidate) {
+    return false;
+  }
+  return !restrictOnlySources.some((value) => value === false);
+}
+
+function loweringFrom(config: CodeFleetConfig): unknown {
+  // Placeholder for Local Overlay and Run Option lowering. Both are restrict
+  // only, so an absent one expresses no opinion rather than permission.
+  return undefined;
 }
 
 export interface CapabilityExpansion {

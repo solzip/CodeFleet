@@ -104,7 +104,7 @@ test("a missing policy block fails the same way an unexpected one does", async (
 
   coversRule(
     POLICY_KEYS,
-    "policies keys are exactly harness, agentAdapters, files, commands, risk, verification, redaction, carryForward, agentRoles"
+    "policies block keys are exactly harness, agentAdapters, files, commands, risk, verification, redaction, carryForward, agentRoles, and the only additional permitted key is the optional scalar autoAdvanceOnDone"
   );
   coversRule(POLICY_INTERNAL, "policies contains only supported policy blocks");
 });

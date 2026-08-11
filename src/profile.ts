@@ -31,6 +31,12 @@ export const PROFILE_TOP_LEVEL_KEYS = [
   "localPolicy"
 ] as const;
 
+/**
+ * The one non-block key `policies` may carry. Enumerated rather than allowing
+ * scalars generally, so a typo like autoAdvance is still an unexpected key.
+ */
+export const PROFILE_POLICY_SCALAR_KEYS = ["autoAdvanceOnDone"] as const;
+
 export const PROFILE_POLICY_KEYS = [
   "harness",
   "agentAdapters",
@@ -315,24 +321,38 @@ function checkPolicyKeys(document: Record<string, unknown>): ProfileFinding[] {
 
   const findings: ProfileFinding[] = [];
   const expected = new Set<string>(PROFILE_POLICY_KEYS);
+  const permittedScalars = new Set<string>(PROFILE_POLICY_SCALAR_KEYS);
   const actual = Object.keys(policies as Record<string, unknown>);
+  // The nine blocks stay required and exact. autoAdvanceOnDone is the one
+  // additional permitted key and is optional, which is why it is excluded from
+  // the missing check but included in the permitted set.
   const missing = [...expected].filter((key) => !actual.includes(key));
-  const unexpected = actual.filter((key) => !expected.has(key));
+  const unexpected = actual.filter((key) => !expected.has(key) && !permittedScalars.has(key));
 
   if (missing.length > 0 || unexpected.length > 0) {
     findings.push({
       checkId: "PROFILE_POLICY_BLOCK_KEYS_FIXED",
       jsonPointer: "/policies",
       detail:
-        `policies keys must be exactly ${[...expected].join(", ")}` +
+        `policies block keys must be exactly ${[...expected].join(", ")}, ` +
+        `plus the optional scalar ${[...permittedScalars].join(", ")}` +
         (missing.length > 0 ? `; missing ${missing.join(", ")}` : "") +
         (unexpected.length > 0 ? `; unexpected ${unexpected.sort().join(", ")}` : "")
     });
   }
 
+  const autoAdvance = (policies as Record<string, unknown>).autoAdvanceOnDone;
+  if (autoAdvance !== undefined && typeof autoAdvance !== "boolean") {
+    findings.push({
+      checkId: "PROFILE_POLICY_AUTO_ADVANCE_ON_DONE_IS_BOOLEAN",
+      jsonPointer: "/policies/autoAdvanceOnDone",
+      detail: `must be absent or boolean, got ${JSON.stringify(autoAdvance)}`
+    });
+  }
+
   for (const key of actual) {
     if (!expected.has(key)) {
-      continue;
+      continue; // scalars and already-reported unexpected keys are not blocks
     }
     const block = (policies as Record<string, unknown>)[key];
     if (block === null || typeof block !== "object" || Array.isArray(block)) {

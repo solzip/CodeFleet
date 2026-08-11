@@ -1,8 +1,8 @@
 {
   "note": "Written by npm run coverage:baseline. Coverage may not fall below this.",
-  "coveredConditions": 337,
+  "coveredConditions": 345,
   "totalConditions": 545,
-  "rulesTouched": 74,
+  "rulesTouched": 75,
   "perRule": {
     "ADAPTER_CANNOT_EXPAND_CAPABILITIES": 6,
     "ADAPTER_REQUEST_AND_RESULT_ARE_RUN_TRACE_ARTIFACTS": 2,
@@ -47,6 +47,7 @@
     "PROFILE_DOES_NOT_STORE_RUNTIME_OR_LOCAL_STATE": 4,
     "PROFILE_LOCAL_OVERLAY_RESTRICT_ONLY": 3,
     "PROFILE_POLICY_AGENT_ADAPTERS_BLOCK": 3,
+    "PROFILE_POLICY_AUTO_ADVANCE_ON_DONE_IS_BOOLEAN": 8,
     "PROFILE_POLICY_BLOCK_KEYS_FIXED": 1,
     "PROFILE_TOP_LEVEL_KEYS_FIXED": 1,
     "PROJECT_PROFILE_POLICY_BLOCK_INTERNAL_SCHEMA": 3,

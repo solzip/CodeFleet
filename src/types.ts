@@ -86,6 +86,8 @@ export interface CodeFleetConfig {
   agentRoles: Record<string, unknown>;
   /** policies.risk.riskRules, already validated by the Profile loader. */
   riskRules: unknown[];
+  /** projectPolicy candidate. Restrict-only sources may lower it, never raise it. */
+  autoAdvanceOnDone: boolean;
   /** Comes from the Local Overlay. The Profile may not carry a command path. */
   adapterCommand: AgentCommandConfig;
   policies: ProfilePolicies;
@@ -250,6 +252,7 @@ export const DEFAULT_CONFIG: CodeFleetConfig = {
   allowedAdapters: ["codex"],
   agentRoles: {},
   riskRules: [],
+  autoAdvanceOnDone: false,
   isolationMode: "NONE",
   adapterCommand: {},
   policies: {

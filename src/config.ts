@@ -85,6 +85,8 @@ export function resolveConfig(loaded: LoadedProfile): CodeFleetConfig {
     defaultAgentRole: typeof taskDefaults.agentRole === "string" ? taskDefaults.agentRole : undefined,
     agentRoles: asObject(policies.agentRoles),
     riskRules: (asObject(policies.risk).riskRules ?? []) as unknown[],
+    // Absent means false. A Profile that says nothing has not enabled it.
+    autoAdvanceOnDone: policies.autoAdvanceOnDone === true,
     adapterCommand: readAdapterCommand(overlay.values.adapterCommand),
     policies: {
       commands: loadCommandPolicy(policies.commands),
