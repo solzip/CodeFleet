@@ -78,6 +78,8 @@ export interface CodeFleetConfig {
   /** policies.agentAdapters.allowedAdapters. Resolution is checked against it. */
   allowedAdapters: string[];
   isolationMode: string;
+  /** defaults.task.requiredGates, unresolved. The Run Plan merges it. */
+  profileRequiredGates?: Record<string, unknown>;
   /** Comes from the Local Overlay. The Profile may not carry a command path. */
   adapterCommand: AgentCommandConfig;
   policies: ProfilePolicies;
@@ -114,6 +116,8 @@ export interface Task {
   goal: string;
   scope: TaskScope;
   verification?: TaskVerification;
+  /** Optional in the YAML; the resolved Revision must be concrete. */
+  requiredGates?: Record<string, unknown>;
   constraints: string[];
   doneCriteria: string[];
   workflow: string[];

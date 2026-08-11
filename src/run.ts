@@ -10,6 +10,12 @@ import { contentHashOf, replayApproval } from "./task-ledger.ts";
 import type { AgentRunInput, AgentRunResult, RunResultFile } from "./types.ts";
 import { normalizeCommand, preflightCommand, type CommandMatcher, type DestructiveMatcher } from "./command-policy.ts";
 import { evaluatePathPolicy, type PathViolation } from "./path-policy.ts";
+import {
+  CORE_REQUIRED_GATES,
+  mergeRequiredGates,
+  validateRequiredGates,
+  type RequiredGates
+} from "./required-gates.ts";
 import { renderRunRecord } from "./run-record.ts";
 import { discoverWorkspace, type FileRef, type WorkspaceDiscovery } from "./workspace.ts";
 import { captureWorkspaceSnapshot, collectSnapshotGaps, computeDelta } from "./workspace-snapshot.ts";
@@ -373,16 +379,43 @@ async function executeRun(
     planHash: hashJson(verificationPlanSeed),
     ...verificationPlanSeed
   };
+  // Gates merge per dimension across Core, the Profile default, and the Task
+  // Revision. computedRisk is UNKNOWN until the risk engine exists, and UNKNOWN
+  // is not LOW, so resultReview stays required rather than being relaxed by a
+  // risk nobody computed.
+  const gateSources = [{ label: "CORE", gates: CORE_REQUIRED_GATES }];
+  const profileGates = (config.profileRequiredGates ?? undefined) as Partial<RequiredGates> | undefined;
+  if (profileGates !== undefined) {
+    gateSources.push({ label: "PROFILE_DEFAULT", gates: profileGates });
+  }
+  if (task.requiredGates !== undefined) {
+    const taskGateFindings = validateRequiredGates(task.requiredGates, {
+      allowRequireExplicit: false,
+      pointer: "requiredGates"
+    });
+    if (taskGateFindings.length > 0) {
+      throw new Error(
+        ["Task Revision requiredGates must be concrete:"]
+          .concat(taskGateFindings.map((f) => `  - ${f.jsonPointer}: ${f.detail}`))
+          .join("\n")
+      );
+    }
+    gateSources.push({ label: "TASK_REVISION", gates: task.requiredGates as Partial<RequiredGates> });
+  }
+
+  const mergedGates = mergeRequiredGates(gateSources, "UNKNOWN");
+  if (mergedGates.blockedReasons.length > 0) {
+    throw new Error(
+      ["Run Planning is blocked: requiredGates did not resolve."]
+        .concat(mergedGates.blockedReasons.map((reason) => `  - ${reason}`))
+        .join("\n")
+    );
+  }
+
   const effectivePolicySeed = {
     capabilities,
-    requiredGates: {
-      runApproval: { required: false, allowedActors: [], explicit: false },
-      resultReview: { required: true, allowedActors: [], explicit: false },
-      verification: {
-        required: true,
-        waiver: { allowed: false, allowedActors: [], explicit: true }
-      }
-    },
+    requiredGates: mergedGates.gates,
+    gateMergeScanScope: mergedGates.scanScope,
     autoAdvanceOnDone: false
   };
   const effectivePolicy = {

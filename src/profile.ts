@@ -13,6 +13,7 @@
 // Overlay, which may only narrow what the Profile already allows.
 
 import { readFile } from "node:fs/promises";
+import { validateRequiredGates } from "./required-gates.ts";
 import path from "node:path";
 
 export const PROFILE_SCHEMA_VERSION = "1.0.0";
@@ -215,6 +216,7 @@ export async function loadProfile(rootDir: string): Promise<LoadedProfile> {
   checkAgentAdaptersBlock(document, findings);
   checkDefaultsRun(document, findings);
   checkDefaultsTaskWorkflow(document, findings);
+  checkDefaultsRequiredGates(document, findings);
 
   if (findings.length > 0) {
     throw new ProfileValidationError(profilePath, findings);
@@ -544,6 +546,24 @@ function checkDefaultsTaskWorkflow(document: Record<string, unknown>, findings: 
       });
     }
   });
+}
+
+// The Profile default may defer with REQUIRE_EXPLICIT; the Task Revision may not.
+function checkDefaultsRequiredGates(document: Record<string, unknown>, findings: ProfileFinding[]): void {
+  const gates = asObject(asObject(document.defaults).task).requiredGates;
+  if (gates === undefined) {
+    return;
+  }
+  for (const finding of validateRequiredGates(gates, {
+    allowRequireExplicit: true,
+    pointer: "/defaults/task/requiredGates"
+  })) {
+    findings.push({
+      checkId: "PROFILE_DEFAULTS_REQUIRED_GATES_SCHEMA",
+      jsonPointer: finding.jsonPointer,
+      detail: finding.detail
+    });
+  }
 }
 
 function readLocalPolicy(document: Record<string, unknown>, findings: ProfileFinding[]): LocalPolicy {

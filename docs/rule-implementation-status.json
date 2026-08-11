@@ -98,25 +98,10 @@
       "evidence": "src/run.ts",
       "detail": "effectivePolicy is derived and hashed in the Run Plan and is what path enforcement reads, but no test asserts the derivation rules themselves."
     },
-    "PROFILE_DEFAULTS_REQUIRED_GATES_SCHEMA": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/config.ts",
-      "detail": "requiredGates appear in run.ts as a hardcoded literal, never read from or validated against a profile."
-    },
     "PROFILE_POLICY_AUTO_ADVANCE_ON_DONE_IS_BOOLEAN": {
       "status": "NOT_IMPLEMENTED",
       "evidence": "docs/concept-foundation.md",
       "detail": "Not implemented on purpose. This rule and PROFILE_POLICY_BLOCK_KEYS_FIXED contradict each other over whether policies.autoAdvanceOnDone may exist, and enforcing either one breaks the other. Recorded in 0.13 NOT_FINAL_YET; to be decided in the review pass after implementation."
-    },
-    "TASK_REVISION_REQUIRED_GATES_ARE_CONCRETE": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/task.ts",
-      "detail": "Task YAML has no requiredGates field; the Run writes a fixed gate literal instead."
-    },
-    "EFFECTIVE_REQUIRED_GATES_MERGE_BY_DIMENSION": {
-      "status": "NOT_IMPLEMENTED",
-      "evidence": "src/run.ts",
-      "detail": "no merge happens: there is one hardcoded gate literal and no profile or revision source to merge with."
     },
     "TASK_WORKFLOW_IS_DRAFT_TEMPLATE_NOT_EXECUTION_POLICY": {
       "status": "IMPLEMENTED_UNTESTED",
