@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { spawn } from "node:child_process";
 import { copyFile, lstat, mkdir, open, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { createAgentAdapter, isAdapterLocallyAvailable, LOCAL_ADAPTER_REGISTRY } from "./agent.ts";
 import { loadConfig } from "./config.ts";
 import { renderPrompt } from "./prompt.ts";
@@ -284,11 +284,24 @@ export async function runTask(
 ): Promise<RunExecution> {
   const lockPath = runLockPathFor(rootDir, taskId);
   await acquireRunLock(lockPath, taskId);
+  // An isolated tree that outlives its Run is a directory on disk and a
+  // registration in the repository that nothing will ever clear. executeRun
+  // fills this in the moment the tree exists, so the tree is released on the
+  // throwing paths too — the same reason the lock is released in a finally.
+  const isolationHandle: IsolationHandle = { prepared: null };
   try {
-    return await executeRun(rootDir, taskId, workspaceDiscovery);
+    return await executeRun(rootDir, taskId, isolationHandle, workspaceDiscovery);
   } finally {
+    if (isolationHandle.prepared !== null) {
+      await isolationHandle.prepared.discard();
+    }
     await rm(lockPath, { force: true });
   }
+}
+
+/** Lets runTask release a tree executeRun created. */
+interface IsolationHandle {
+  prepared: PreparedIsolation | null;
 }
 
 async function acquireRunLock(lockPath: string, taskId: string): Promise<void> {
@@ -330,6 +343,7 @@ async function readRunLockHolder(lockPath: string): Promise<RunLockHolder | null
 async function executeRun(
   rootDir: string,
   taskId: string,
+  isolationHandle: IsolationHandle,
   workspaceDiscovery?: WorkspaceDiscovery
 ): Promise<RunExecution> {
   const discovery = workspaceDiscovery ?? await discoverWorkspace({ cwd: rootDir, workspace: rootDir });
@@ -548,6 +562,32 @@ async function executeRun(
     policyHash: hashJson(effectivePolicySeed),
     ...effectivePolicySeed
   };
+
+  // The isolated tree is prepared before the Run Plan is written, so the plan
+  // records where the Run actually happened rather than only which mode was
+  // asked for. Everything that could still refuse the Run — gates, roles, the
+  // adapter, the isolation mode itself — has already run, so no tree is created
+  // for a Run that was never going to start.
+  const prepared = await prepareIsolation({ projectPath, runId, mode: isolation.mode });
+  const requirement = checkIsolationRequirement({
+    requireIsolationForMutation: config.policies.harness.requireIsolationForMutation,
+    fileEdit: capabilities.fileEdit,
+    prepared
+  });
+  if (requirement.blocked) {
+    const discarded = await prepared.discard();
+    throw new Error(
+      discarded.unavailableReason.length > 0
+        ? `${requirement.reason}\n${discarded.unavailableReason}: ${discarded.detail}`
+        : requirement.reason
+    );
+  }
+
+  // From here the tree exists. runTask holds the other end of this so that a
+  // throw anywhere below still discards it; the normal path discards explicitly
+  // once evidence collection is done, and discard is idempotent.
+  isolationHandle.prepared = prepared;
+
   const runPlan = {
     schemaVersion: "0.2",
     documentKind: "RUN_PLAN",
@@ -602,7 +642,14 @@ async function executeRun(
     },
     isolation: {
       mode: isolation.mode,
-      reason: isolation.reason
+      reason: isolation.reason,
+      // Where the Run actually happened. Without it a reader of an isolated Run
+      // cannot tell which tree the evidence below describes, and cannot find the
+      // edits the Run produced.
+      isolatedPath: prepared.workPath,
+      treeRoot: prepared.treeRoot,
+      unavailableReason: prepared.unavailableReason,
+      detail: prepared.detail
     },
     verificationPlan,
     artifactPlan,
@@ -655,12 +702,19 @@ async function executeRun(
   await writeJson(adapterRequestPath, adapterRequest);
   const adapterRequestRef = await fileRef(rootDir, adapterRequestPath);
 
+  // Every observation below reads observedPath, never projectPath. The agent
+  // runs in the isolated tree, so that is the only tree whose state says
+  // anything about what this Run did. Watching the workspace instead reported
+  // no changes and no violations for a Run that made both, which is the exact
+  // shape of claim this product exists to refuse.
+  const observedPath = prepared.workPath;
+
   // Captured before the adapter is given control. A snapshot taken any later
   // would already contain the agent's changes and the delta would read empty.
   // The scope patterns come from the derived effectivePolicy, not the Task, for
   // the same reason path enforcement does: the derived copy is the narrow one.
   const preRunSnapshot = await captureWorkspaceSnapshot({
-    projectPath,
+    projectPath: observedPath,
     runId,
     phase: "PRE_RUN",
     scopePatterns: effectivePolicy.capabilities.allowedPaths,
@@ -673,26 +727,12 @@ async function executeRun(
   await writeJson(preRunSnapshotPath, preRunSnapshot);
   const preRunSnapshotRef = await fileRef(rootDir, preRunSnapshotPath);
 
-  // The isolated tree is prepared after the plan is written and before the
-  // adapter is handed control, so the Run Plan already records which mode was
-  // asked for and the adapter never sees the workspace when one is in force.
-  const prepared = await prepareIsolation({ projectPath, runId, mode: isolation.mode });
-  const requirement = checkIsolationRequirement({
-    requireIsolationForMutation: config.policies.harness.requireIsolationForMutation,
-    fileEdit: capabilities.fileEdit,
-    prepared
-  });
-  if (requirement.blocked) {
-    await prepared.discard();
-    throw new Error(requirement.reason);
-  }
-
   const agentName = config.agentAdapter;
   const agentResult = await runAgentSafely(agentName, {
     task,
     runDir,
     promptPath,
-    projectPath: prepared.workPath,
+    projectPath: observedPath,
     config,
     // The adapter is handed the capabilities the AdapterRequest recorded, so
     // "the agent was not allowed to run commands" stops being a sentence in a
@@ -705,15 +745,15 @@ async function executeRun(
 
   await writeFile(stdoutLogPath, agentResult.stdout, "utf8");
   await writeFile(stderrLogPath, agentResult.stderr, "utf8");
-  const diffEvidence = await captureGitDiff(projectPath);
+  const diffEvidence = await captureGitDiff(observedPath);
   await writeFile(diffPath, diffEvidence.content, "utf8");
   const stdoutRef = await fileRef(rootDir, stdoutLogPath);
   const stderrRef = await fileRef(rootDir, stderrLogPath);
   const diffRef = await fileRef(rootDir, diffPath);
-  const changedFilesEvidence = await captureGitChangedFiles(projectPath);
+  const changedFilesEvidence = await captureGitChangedFiles(observedPath);
 
   const postRunSnapshot = await captureWorkspaceSnapshot({
-    projectPath,
+    projectPath: observedPath,
     runId,
     phase: "POST_RUN",
     scopePatterns: effectivePolicy.capabilities.allowedPaths,
@@ -764,9 +804,9 @@ async function executeRun(
         changedFiles: changedFilesEvidence.files,
         allowedPaths: enforcedAllowedPaths,
         deniedPaths: enforcedDeniedPaths,
-        caseSensitive: await detectCaseSensitivity(projectPath),
-        symlinkEscapes: await findEscapingSymlinks(projectPath, changedFilesEvidence.files),
-        nestedRepoPaths: await findNestedRepositories(projectPath)
+        caseSensitive: await detectCaseSensitivity(observedPath),
+        symlinkEscapes: await findEscapingSymlinks(observedPath, changedFilesEvidence.files),
+        nestedRepoPaths: await findNestedRepositories(observedPath)
       })
     : {
         evaluated: false,
@@ -787,7 +827,10 @@ async function executeRun(
   const verificationAttempts = await runVerificationCommands({
     runDir,
     rootDir,
-    projectPath,
+    // Verification runs where the work is. Running it against the workspace
+    // while the agent worked in the isolated tree checked code nobody wrote,
+    // and no isolated Run could ever satisfy the gate.
+    projectPath: observedPath,
     verificationAttemptId,
     commands: verificationPlanSeed.commands,
     commandExecution: effectivePolicy.capabilities.commandExecution,
@@ -808,6 +851,11 @@ async function executeRun(
       authority: "HARNESS_EXECUTED"
     }));
 
+  // Every observation is taken. The tree has nothing left to tell, so it goes
+  // now rather than at the end of the process, and the outcome is recorded
+  // below — a discard that failed left a tree behind and must say so.
+  const discardOutcome = await prepared.discard();
+
   const harnessObservation = {
     schemaVersion: "0.2",
     documentKind: "HARNESS_OBSERVATION",
@@ -820,7 +868,27 @@ async function executeRun(
       workspaceRootRef: ".",
       selectedWorkspaceRootRealPath: discovery.selectedWorkspaceRootRealPath,
       workingDirectoryRef: task.projectPath,
-      workingDirectoryRealPath: projectPath,
+      // The tree these observations describe. Under isolation it is not the
+      // workspace, and a reader who assumed otherwise would draw conclusions
+      // about files this Run never touched.
+      workingDirectoryRealPath: observedPath,
+      workspaceRealPath: projectPath,
+      // What the tree was, and what became of it. An isolated Run's edits are
+      // not in the workspace and are not brought back by anything here; saying
+      // so is the difference between a decision recorded and a fact hidden.
+      isolation: {
+        mode: isolation.mode,
+        isolatedPath: prepared.workPath,
+        treeRoot: prepared.treeRoot,
+        // Derived, not assumed: a mode that was requested and could not be
+        // provided leaves the agent in the workspace, and claiming otherwise
+        // would be the same false reading this Run Trace exists to prevent.
+        editsInWorkspace: prepared.workPath === projectPath,
+        modeUnavailableReason: prepared.unavailableReason,
+        discarded: discardOutcome.discarded,
+        unavailableReason: discardOutcome.unavailableReason,
+        detail: discardOutcome.detail
+      },
       preRunStateRef: preRunSnapshotRef,
       postRunStateRef: postRunSnapshotRef,
       preRunStateHash: preRunSnapshot.stateHash.value,
@@ -845,6 +913,14 @@ async function executeRun(
     changes: {
       diffRef,
       changedFiles: changedFilesEvidence.files,
+      // A created file used to appear here by name while its content existed in
+      // no artifact at all. It travels in the patch now; whatever could not
+      // travel is named with the reason rather than left out quietly.
+      newFileCapture: {
+        notCaptured: diffEvidence.newFileCapture.notCaptured,
+        scanScope: diffEvidence.newFileCapture.scanScope,
+        unavailableReason: diffEvidence.newFileCapture.unavailableReason
+      },
       // Independent of git: the delta is postRunState minus preRunState over the
       // scoped snapshot, so a file git never tracks still shows up as changed.
       workspaceDelta: {
@@ -1149,6 +1225,10 @@ function runSummaryUnavailableReasons(input: {
   const workspace = input.harnessObservation.workspace as Record<string, unknown> | undefined;
   addUnavailableReason(reasons, workspace?.preRunStateRef);
   addUnavailableReason(reasons, workspace?.postRunStateRef);
+  // A tree that could not be discarded is still on disk holding this Run's
+  // edits. That is a fact about the Run, so it travels to review rather than
+  // staying in one field of one artifact.
+  addUnavailableReason(reasons, workspace?.isolation);
   for (const gap of Array.isArray(workspace?.snapshotGaps) ? workspace.snapshotGaps : []) {
     if (typeof gap === "string" && gap.length > 0) {
       reasons.add(gap);
@@ -1157,6 +1237,10 @@ function runSummaryUnavailableReasons(input: {
   addUnavailableReason(reasons, input.harnessObservation.changes);
   const changes = input.harnessObservation.changes as Record<string, unknown> | undefined;
   addUnavailableReason(reasons, changes?.workspaceDelta);
+  // A patch missing a created file's content is a partial record of the work,
+  // and after an isolated tree is discarded it is the only record. Review sees
+  // it rather than reading the patch as complete.
+  addUnavailableReason(reasons, changes?.newFileCapture);
   addUnavailableReason(reasons, input.harnessObservation.commands);
   const commands = input.harnessObservation.commands as Record<string, unknown> | undefined;
   addUnavailableReason(reasons, commands?.commandLogRef);
@@ -1891,21 +1975,200 @@ async function reserveRunDir(rootDir: string, date: Date): Promise<{ runId: stri
   throw new Error(`No runId is available for ${datePart}: 999 Runs already exist for that date.`);
 }
 
-async function captureGitDiff(projectPath: string): Promise<{ content: string; unavailableReason?: string }> {
-  const result = await runProcess("git", ["-c", `safe.directory=${projectPath}`, "diff", "--no-ext-diff", "--", "."], projectPath);
-  if (result.code === 0) {
-    return { content: result.stdout };
+/**
+ * Bytes of a created file that will travel in the patch. A patch is evidence a
+ * person reads and a machine may later apply, and neither survives one Run
+ * embedding a checked-in artifact. Files past this are named instead, never
+ * dropped in silence.
+ */
+export const NEW_FILE_CONTENT_LIMIT_BYTES = 1024 * 1024;
+
+/** Ceiling across all created files in one Run, for the same reason. */
+export const NEW_FILE_CONTENT_TOTAL_LIMIT_BYTES = 8 * 1024 * 1024;
+
+export interface NewFileCapture {
+  content: string;
+  notCaptured: { path: string; reason: string }[];
+  unavailableReason: string;
+  scanScope: {
+    newFilesFound: number;
+    contentCaptured: number;
+    contentNotCaptured: number;
+    bytesCaptured: number;
+    perFileLimitBytes: number;
+    totalLimitBytes: number;
+  };
+}
+
+/**
+ * `git diff` reports tracked changes only, so a file the agent created appeared
+ * in changed files by name while its content existed nowhere. Once a Run
+ * discards its isolated tree the patch is the only surviving copy of the work,
+ * and a creation was the one kind of change that copy did not hold.
+ *
+ * `--no-index` is used rather than intent-to-add: `git add -N` would write to
+ * the index, and when a Run is not isolated that index belongs to the operator.
+ * Observation must not mutate what it observes.
+ */
+export async function captureNewFileContent(
+  projectPath: string,
+  newFiles: string[]
+): Promise<NewFileCapture> {
+  const parts: string[] = [];
+  const notCaptured: { path: string; reason: string }[] = [];
+  let bytesCaptured = 0;
+  let captured = 0;
+
+  for (const file of newFiles) {
+    let size: number;
+    try {
+      size = (await stat(path.join(projectPath, file))).size;
+    } catch {
+      notCaptured.push({ path: file, reason: "the file could not be read when the patch was built" });
+      continue;
+    }
+    if (size > NEW_FILE_CONTENT_LIMIT_BYTES) {
+      notCaptured.push({
+        path: file,
+        reason: `${size} bytes exceeds the ${NEW_FILE_CONTENT_LIMIT_BYTES} byte per-file limit`
+      });
+      continue;
+    }
+    if (bytesCaptured + size > NEW_FILE_CONTENT_TOTAL_LIMIT_BYTES) {
+      notCaptured.push({
+        path: file,
+        reason: `the ${NEW_FILE_CONTENT_TOTAL_LIMIT_BYTES} byte total limit for created files was already reached`
+      });
+      continue;
+    }
+
+    // --no-index exits 1 when the two inputs differ, which is the normal result
+    // here and not a failure.
+    const result = await runProcess(
+      "git",
+      ["-c", `safe.directory=${projectPath}`, "diff", "--no-ext-diff", "--no-index", "--", "/dev/null", file],
+      projectPath
+    );
+    if (result.code !== 0 && result.code !== 1) {
+      notCaptured.push({
+        path: file,
+        reason: firstLine(result.stderr) || "git diff --no-index failed"
+      });
+      continue;
+    }
+    parts.push(result.stdout);
+    // git names a binary file and refuses to inline it. The name travels, the
+    // bytes do not, and that difference is the whole subject of this record.
+    if (/^Binary files /m.test(result.stdout)) {
+      notCaptured.push({ path: file, reason: "binary content is named by git but not carried in a patch" });
+      continue;
+    }
+    bytesCaptured += size;
+    captured += 1;
+  }
+
+  // Someone reading only the .patch has to be able to learn that it is partial.
+  if (notCaptured.length > 0) {
+    parts.push(
+      [
+        `# CodeFleet: ${notCaptured.length} created file(s) are named in this Run's changed files,`,
+        "# but their content is not in this patch:",
+        ...notCaptured.map((entry) => `#   ${entry.path} — ${entry.reason}`),
+        ""
+      ].join("\n")
+    );
   }
 
   return {
-    content: [
-      "git diff failed.",
-      "",
-      result.stderr.trim() || "No stderr output was produced.",
-      ""
-    ].join("\n"),
-    unavailableReason: "GIT_DIFF_FAILED"
+    content: parts.join(""),
+    notCaptured,
+    unavailableReason: notCaptured.length > 0 ? "NEW_FILE_CONTENT_NOT_CAPTURED" : "",
+    scanScope: {
+      newFilesFound: newFiles.length,
+      contentCaptured: captured,
+      contentNotCaptured: notCaptured.length,
+      bytesCaptured,
+      perFileLimitBytes: NEW_FILE_CONTENT_LIMIT_BYTES,
+      totalLimitBytes: NEW_FILE_CONTENT_TOTAL_LIMIT_BYTES
+    }
   };
+}
+
+async function captureGitDiff(
+  projectPath: string
+): Promise<{ content: string; unavailableReason?: string; newFileCapture: NewFileCapture }> {
+  const empty: NewFileCapture = {
+    content: "",
+    notCaptured: [],
+    unavailableReason: "",
+    scanScope: {
+      newFilesFound: 0,
+      contentCaptured: 0,
+      contentNotCaptured: 0,
+      bytesCaptured: 0,
+      perFileLimitBytes: NEW_FILE_CONTENT_LIMIT_BYTES,
+      totalLimitBytes: NEW_FILE_CONTENT_TOTAL_LIMIT_BYTES
+    }
+  };
+
+  const result = await runProcess("git", ["-c", `safe.directory=${projectPath}`, "diff", "--no-ext-diff", "--", "."], projectPath);
+  if (result.code !== 0) {
+    return {
+      content: [
+        "git diff failed.",
+        "",
+        result.stderr.trim() || "No stderr output was produced.",
+        ""
+      ].join("\n"),
+      unavailableReason: "GIT_DIFF_FAILED",
+      newFileCapture: empty
+    };
+  }
+
+  const untracked = await captureUntrackedFiles(projectPath);
+  if (untracked === null) {
+    // Tracked changes are still evidence; what is unknown is whether anything
+    // was created. Reporting that as "nothing was created" is the failure this
+    // whole finding is about.
+    return {
+      content: result.stdout,
+      newFileCapture: {
+        ...empty,
+        notCaptured: [{ path: "(unknown)", reason: "created files could not be listed" }],
+        unavailableReason: "NEW_FILE_CONTENT_NOT_CAPTURED"
+      }
+    };
+  }
+
+  const newFileCapture = await captureNewFileContent(projectPath, untracked);
+  return { content: `${result.stdout}${newFileCapture.content}`, newFileCapture };
+}
+
+/** Untracked paths only. Modifications and deletions are already in the diff. */
+async function captureUntrackedFiles(projectPath: string): Promise<string[] | null> {
+  const result = await runProcess(
+    "git",
+    ["-c", `safe.directory=${projectPath}`, "status", "--porcelain=v1", "--untracked-files=all", "--", "."],
+    projectPath
+  );
+  if (result.code !== 0) {
+    return null;
+  }
+
+  const files: string[] = [];
+  for (const line of result.stdout.split(/\r?\n/)) {
+    if (!line.startsWith("?? ")) {
+      continue;
+    }
+    const value = unquoteGitPath(line.slice(3).trim());
+    // CodeFleet's own Run Trace is written during the Run. Embedding it in the
+    // Run's own patch would grow without bound.
+    if (value.length === 0 || isCodefleetMetadataPath(value)) {
+      continue;
+    }
+    files.push(value);
+  }
+  return files.sort();
 }
 
 // `git diff --name-only` reports tracked modifications only, so an agent that

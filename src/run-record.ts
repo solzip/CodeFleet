@@ -63,6 +63,46 @@ export function renderRunRecord(input: RunRecordInput): string {
   lines.push("```");
   lines.push("");
 
+  // Where the Run ran comes before what it changed. Under isolation the two
+  // sections describe a tree that is not the workspace, and a reader who takes
+  // "modified src/app.js" to mean their own file would be wrong about every
+  // line below.
+  const workspace = record(harnessObservation.workspace);
+  const isolation = record(workspace.isolation);
+  const isolationMode = str(isolation.mode, "");
+  // Gated on where the edits actually are, not on the mode that was asked for.
+  // A worktree that could not be created leaves the agent in the workspace, and
+  // this section would then describe a separation that did not happen.
+  if (isolationMode !== "" && isolation.editsInWorkspace === false) {
+    lines.push("## Where this Run ran");
+    lines.push("");
+    lines.push(`This Run was isolated (${isolationMode}). Everything reported below was`);
+    lines.push("observed in the isolated tree, not in the workspace:");
+    lines.push("");
+    lines.push("```text");
+    lines.push(`isolated tree : ${str(isolation.isolatedPath, "not recorded")}`);
+    lines.push("```");
+    lines.push("");
+    // Reintegration is a separate decision nobody has made. Silence would read
+    // as "it was applied", which is the more dangerous of the two readings.
+    lines.push(
+      "The edits made there are **not applied to the workspace**, by this Run or by"
+    );
+    lines.push(
+      "accepting it. Bringing them back is a manual step CodeFleet does not perform."
+    );
+    lines.push("");
+    if (str(isolation.unavailableReason, "").length > 0) {
+      lines.push(
+        `The tree was **not discarded**: ${str(isolation.unavailableReason, "")} — ${str(isolation.detail, "no detail recorded")}.`
+      );
+      lines.push("It is still on disk and still holds this Run's edits.");
+    } else if (isolation.discarded === true) {
+      lines.push("The tree was discarded when the Run finished, so those edits are gone.");
+    }
+    lines.push("");
+  }
+
   lines.push("## What changed");
   lines.push("");
   const changedFiles = list(changes.changedFiles).filter((v): v is string => typeof v === "string");

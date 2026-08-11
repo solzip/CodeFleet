@@ -17,34 +17,83 @@ import path from "node:path";
 
 export type IsolationMode = "NONE" | "GIT_WORKTREE" | "TEMP_WORKSPACE" | "CONTAINER";
 
+/**
+ * What happened to the isolated tree. A discard that failed leaves a tree on
+ * disk and a registration in the repository, so it is reported rather than
+ * swallowed: silence here would read as "cleaned up".
+ */
+export interface DiscardOutcome {
+  discarded: boolean;
+  unavailableReason: string;
+  detail: string;
+}
+
 export interface PreparedIsolation {
   mode: IsolationMode;
-  /** Where the adapter actually runs. Equals projectPath when mode is NONE. */
+  /**
+   * Where the adapter runs and where every piece of evidence is collected.
+   * This is the isolated tree's counterpart of projectPath, not the tree root:
+   * a Task working in a subdirectory must be observed in that subdirectory.
+   * Equals projectPath when mode is NONE.
+   */
   workPath: string;
+  /** The isolated tree itself. Equals projectPath when mode is NONE. */
+  treeRoot: string;
   /** Set when the requested mode could not be provided. */
   unavailableReason: string;
-  /** Removes the isolated tree. A no-op for NONE. */
-  discard: () => Promise<void>;
+  /** Removes the isolated tree. Idempotent, and a no-op for NONE. */
+  discard: () => Promise<DiscardOutcome>;
   /** Kept so the caller can record what was actually done. */
   detail: string;
 }
 
-function run(command: string, args: string[], cwd: string): Promise<{ code: number | null; stderr: string }> {
+function run(
+  command: string,
+  args: string[],
+  cwd: string
+): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     const child = spawn(command, args, { cwd, shell: false, stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
     let stderr = "";
+    child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
     child.stderr.on("data", (chunk: string) => {
       stderr += chunk;
     });
-    child.on("error", (error) => resolve({ code: null, stderr: error.message }));
-    child.on("close", (code) => resolve({ code, stderr }));
+    child.on("error", (error) => resolve({ code: null, stdout, stderr: error.message }));
+    child.on("close", (code) => resolve({ code, stdout, stderr }));
   });
+}
+
+function firstLine(value: string): string {
+  return value.trim().split(/\r?\n/)[0] ?? "";
 }
 
 async function isGitRepository(projectPath: string): Promise<boolean> {
   const result = await run("git", ["-c", `safe.directory=${projectPath}`, "rev-parse", "--git-dir"], projectPath);
   return result.code === 0;
+}
+
+/**
+ * Where projectPath sits inside its repository, as git reports it. Asking git
+ * avoids comparing two paths this process normalised itself — on Windows the
+ * workspace path and git's top level can differ in case and in short-name form,
+ * and a wrong answer here would point evidence collection at the wrong subtree.
+ */
+async function repositoryPrefix(projectPath: string): Promise<string> {
+  const result = await run(
+    "git",
+    ["-c", `safe.directory=${projectPath}`, "rev-parse", "--show-prefix"],
+    projectPath
+  );
+  if (result.code !== 0) {
+    return "";
+  }
+  return result.stdout.trim().replace(/\/+$/, "");
 }
 
 export async function prepareIsolation(input: {
@@ -58,8 +107,9 @@ export async function prepareIsolation(input: {
     return {
       mode: "NONE",
       workPath: projectPath,
+      treeRoot: projectPath,
       unavailableReason: "",
-      discard: async () => {},
+      discard: nothingToDiscard,
       detail: "the agent runs in the workspace itself; nothing is isolated and nothing can be rolled back"
     };
   }
@@ -69,17 +119,19 @@ export async function prepareIsolation(input: {
       return {
         mode: "GIT_WORKTREE",
         workPath: projectPath,
+        treeRoot: projectPath,
         unavailableReason: "GIT_WORKTREE_REQUIRES_A_GIT_REPOSITORY",
-        discard: async () => {},
+        discard: nothingToDiscard,
         detail: "the workspace is not a git repository, so no worktree can be added"
       };
     }
 
+    const prefix = await repositoryPrefix(projectPath);
     const parent = await mkdtemp(path.join(os.tmpdir(), "codefleet-worktree-"));
-    const workPath = path.join(parent, runId.replace(/[^A-Za-z0-9_-]/g, "-"));
+    const treeRoot = path.join(parent, runId.replace(/[^A-Za-z0-9_-]/g, "-"));
     const created = await run(
       "git",
-      ["-c", `safe.directory=${projectPath}`, "worktree", "add", "--detach", workPath, "HEAD"],
+      ["-c", `safe.directory=${projectPath}`, "worktree", "add", "--detach", treeRoot, "HEAD"],
       projectPath
     );
     if (created.code !== 0) {
@@ -87,23 +139,60 @@ export async function prepareIsolation(input: {
       return {
         mode: "GIT_WORKTREE",
         workPath: projectPath,
+        treeRoot: projectPath,
         unavailableReason: "GIT_WORKTREE_ADD_FAILED",
-        discard: async () => {},
-        detail: created.stderr.trim().split("\n")[0] || "git worktree add failed"
+        discard: nothingToDiscard,
+        detail: firstLine(created.stderr) || "git worktree add failed"
       };
     }
 
+    // git worktree add checks out the whole repository, so the Task's working
+    // directory is the same distance below the tree root as it is below the
+    // repository root. Handing back the tree root instead would observe a
+    // different subtree than the one the Task named.
+    const workPath = prefix === "" ? treeRoot : path.join(treeRoot, prefix);
+
+    let outcome: DiscardOutcome | null = null;
     return {
       mode: "GIT_WORKTREE",
       workPath,
+      treeRoot,
       unavailableReason: "",
       // Removing the worktree registration first, so the repository does not
-      // keep a record pointing at a directory that no longer exists.
-      discard: async () => {
-        await run("git", ["-c", `safe.directory=${projectPath}`, "worktree", "remove", "--force", workPath], projectPath);
-        await rm(parent, { recursive: true, force: true });
+      // keep a record pointing at a directory that no longer exists. Called on
+      // every exit path, so it memoises: the second call reports what the first
+      // one did rather than failing on an already-removed tree.
+      discard: async (): Promise<DiscardOutcome> => {
+        if (outcome !== null) {
+          return outcome;
+        }
+        const removed = await run(
+          "git",
+          ["-c", `safe.directory=${projectPath}`, "worktree", "remove", "--force", treeRoot],
+          projectPath
+        );
+        if (removed.code !== 0) {
+          outcome = {
+            discarded: false,
+            unavailableReason: "ISOLATION_DISCARD_FAILED",
+            detail: `${treeRoot}: ${firstLine(removed.stderr) || "git worktree remove failed"}`
+          };
+          return outcome;
+        }
+        try {
+          await rm(parent, { recursive: true, force: true });
+        } catch (error) {
+          outcome = {
+            discarded: false,
+            unavailableReason: "ISOLATION_DISCARD_FAILED",
+            detail: `${parent}: ${error instanceof Error ? error.message : String(error)}`
+          };
+          return outcome;
+        }
+        outcome = { discarded: true, unavailableReason: "", detail: `removed the worktree at ${treeRoot}` };
+        return outcome;
       },
-      detail: `git worktree at ${workPath}`
+      detail: `git worktree at ${treeRoot}`
     };
   }
 
@@ -113,10 +202,18 @@ export async function prepareIsolation(input: {
   return {
     mode: mode as IsolationMode,
     workPath: projectPath,
+    treeRoot: projectPath,
     unavailableReason: `ISOLATION_MODE_NOT_IMPLEMENTED:${mode}`,
-    discard: async () => {},
+    discard: nothingToDiscard,
     detail: `${mode} is a fixed schema value with no implementation in this build`
   };
+}
+
+// Distinct from a discard that ran and succeeded. Nothing was isolated, so
+// nothing was removed, and reporting discarded: true would claim a rollback
+// that never happened.
+async function nothingToDiscard(): Promise<DiscardOutcome> {
+  return { discarded: false, unavailableReason: "", detail: "no isolated tree to discard" };
 }
 
 export interface IsolationRequirement {
