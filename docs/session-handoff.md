@@ -1,6 +1,6 @@
 # CodeFleet Session Handoff
 
-Last updated: 2026-08-10 (through 089d4d1)
+Last updated: 2026-08-11 (through d66e86b)
 
 This is the compact handoff for continuing CodeFleet work in another session or
 on another machine. The canonical design source is always
@@ -72,8 +72,8 @@ execution through logs, diffs, tests, and review evidence.
 
 ```text
 Final model / concept design: complete
-Implementation: 155 of 545 FINAL RULE condition lines are claimed by a passing
-                test (28.4%). 134 tests, 0 failing.
+Implementation: 261 of 545 FINAL RULE condition lines are claimed by a passing
+                test (47.9%). 166 tests, 0 failing.
 ```
 
 There is no separate implementation percentage. "about 25-35%" stood here with
@@ -155,6 +155,18 @@ Current implementation status:
 - review-decision.local.json records the taskRevision it decided on, read from the Run Plan approval the bundle already hash-checks. Migration refuses a local review that does not name one and refuses a decision whose objectiveQueueItemId was never attached, instead of defaulting the revision to 1 and appending an event that reports success and can never derive VERIFIED.
 - A Run holds a per-Task lock for its duration, separate from the mutation lock because that one is fixed as not held across Run execution. A second run of the same Task is refused fail-fast and names the holder; codefleet lock status|break --task reports and clears them, including a lock file that cannot be parsed but still blocks.
 - runId is reserved by creating the Run directory exclusively rather than derived from a directory listing and created afterwards, so two Runs of different Tasks cannot land in one Run Trace.
+- The Project Profile is the shape the design fixed: top-level keys exactly schemaVersion/project/workspace/defaults/policies/references/localPolicy, policies exactly the nine blocks. A missing key fails the same way an unexpected one does, because refusing only the unexpected would let a Profile omit policies entirely and read as one that permits everything.
+- The Profile may not carry runtime evidence, local machine state, or credentials. The loader walks every key and string value at every depth, refuses forbidden key names, credential-shaped values, and absolute paths in path-valued fields, and reports how many it inspected.
+- The adapter command lives in .codefleet/local.json under a RESTRICT_ONLY overlay, not in the Profile, because a command path is one machine's and the Profile is committed. A key the Profile did not declare is recorded as a violation and dropped.
+- src/config.ts derives a runtime read model from the Profile instead of parsing config.json itself; mode comes from defaults.task.harnessMode, where COMMAND_EXEC is the only requested mode that both edits files and runs commands.
+- The adapter and the isolation mode resolve before the Run directory exists. REQUIRE_EXPLICIT is a deferral, so a Run still holding one is refused rather than planned, and RunPlan.adapterResolution records selectionSource, policyAllowed, locallyAvailable, and the reference it read. Policy-forbidden and locally-missing are reported as different failures.
+- An AdapterId must be provider-agnostic: a model name, command path, executable, or CLI option is refused. A credential passes that shape and is caught by the secret scan instead.
+- The AdapterRequest is checked against effectivePolicy before it is written, since afterwards it is the only record of what the adapter was permitted to do. Allowed lists may only shrink, denied lists may only grow.
+- requiredGates are read and merged per dimension across Core, the Profile default, and the Task Revision. required and explicit OR, waiver.allowed ANDs, actor lists intersect across the sources that require the gate, and an empty intersection blocks rather than producing a gate nobody can close. Merge order does not change the result.
+- REQUIRE_EXPLICIT is allowed in a Profile default and refused in a Task Revision, and every deferral is reported rather than only the first.
+- computedRisk that is not LOW forces resultReview. UNKNOWN counts as not-LOW, so every Run takes that branch until the risk engine exists.
+- AgentRole is an upper bound the Run Plan applies: capabilities are the meet of harnessMode, the role's defaultMaxMode, and guardrails.mode. A Profile at COMMAND_EXEC with a DOCS_WRITER Task gets fileEdit and not commandExecution.
+- A Core role owns exactly defaultMaxMode, deniedCommandCategories, and roleGuidance; a custom role names one base role and may only narrow it. roleGuidance never reaches policy evaluation. roleEffectiveRestrictions is computed, diagnosticOnly, deliberately partial, and drift-checked.
 ```
 
 ## Fixed Model
@@ -328,8 +340,8 @@ Design-to-code coverage, added 2026-08-10:
 ```text
 npm test now ends with a coverage number over FINAL RULE condition lines.
 
-  155 of 545 condition lines claimed by a passing test  (28.4%)
-  42 of 83 rules touched, 2 fully covered, 41 with no claim at all
+  261 of 545 condition lines claimed by a passing test  (47.9%)
+  60 of 83 rules touched, 17 fully covered, 23 with no claim at all
 
 A claim is coversRule(ruleId, "condition text") called inside a test body, so
 only a passing test records one. An unknown ruleId, a condition quote that is
@@ -344,53 +356,90 @@ the checker enforces the classification: every rule needs a claim or an entry,
 an entry goes stale the moment a test claims that rule, and an evidence path that
 does not exist fails the run.
 
-  NOT_IMPLEMENTED        32 rules  198 condition lines  no code
-  IMPLEMENTED_UNTESTED    6 rules   31 lines            code exists, no test
+  NOT_IMPLEMENTED        15 rules   88 condition lines  no code
+  IMPLEMENTED_UNTESTED    5 rules   30 lines            code exists, no test
   NOT_CODE_VERIFIABLE     3 rules   17 lines            design/process rules
-  claimed, still open              144 lines            inside the 42 touched rules
+  claimed, still open              149 lines            inside the 60 touched rules
 
-The 16 IMPLEMENTED_UNMAPPED rules (148 lines) were labelled on 2026-08-10 and
-moved coverage from 15.8% to 27.5% without a line of product code.
+88 lines is the remaining build, re-derived on 2026-08-11 after four slices
+rather than carried forward:
 
-198 lines is the real size of the remaining build, re-derived after the command
-policy work rather than carried forward:
-
-  Project Profile schema, overlay, adapters     52  12 rules
-  requiredGates concretion and merge            48   3 rules
   Export / Redaction / S5                       32   7 rules
   system auto-review bound + actor gate         23   2 rules
-  AgentRole / Guardrail                         23   4 rules
   Risk engine                                   16   3 rules
-  ledger corrective event                        4   1 rule
+  policies.autoAdvanceOnDone                     8   1 rule   see 0.13, blocked
+  ledger corrective event + policy rule id       9   2 rules
 
-The 144 open lines inside already-claimed rules are the next largest single
-block and are mostly unimplemented conditions, not unmapped ones — e.g. Task
-YAML has no agentRole, guardrails, or requiredGates field at all.
+policies.autoAdvanceOnDone is deliberately not implemented. Two FINAL rules
+contradict each other over whether the key may exist, so enforcing either breaks
+the other. Recorded in 0.13 NOT_FINAL_YET with the evidence; decide it in the
+review pass rather than picking now.
+
+The 149 open lines inside already-claimed rules are now the largest single
+block, larger than everything unimplemented put together. They are conditions
+inside rules that some test already touches, so they need reading rule by rule
+rather than a new subsystem.
   npm run coverage:uncovered
 ```
 
 Next implementation slice:
 
+The plan is to implement everything, then review, then make the repository
+public. It is temporarily private for that reason; the Publication constraints
+in CLAUDE.md still hold.
+
 ```text
-NOT CHOSEN YET. The previous entry here — connect command policy to the Run —
-was completed in 3fbe0b5 and 181be9e and is described under Current
-implementation status.
+DONE, in order, on 2026-08-11:
+  1  Project Profile schema, overlay, adapters   78967ba
+  2  defaults.run resolution and capabilities    56c7247
+  3  requiredGates concretion and merge          ec190d6
+  4  AgentRole / Guardrail                       d66e86b
 
-Three candidates remain, with their measured sizes:
+NEXT: 5. Risk engine, 16 lines / 3 rules
+  computedRisk is always UNKNOWN today. Slice 3 already branches on it -
+  anything not LOW forces resultReview - so the branch exists and is taken by
+  every Run. Implementing risk is what makes that branch mean something rather
+  than being a constant.
+  matchTarget reuses the fixed matchers (files glob, command argv, redaction
+  regex subset, or a field predicate) and introduces no matching language of its
+  own. Conditions are a flat allOf; OR is separate rules because computedRisk is
+  a max, and NOT is denied so a failed match cannot lower risk.
 
-  Project Profile schema        52 lines / 12 rules
-    Largest block, and the precondition for several others: requiredGates,
-    agentRoles, and adapter resolution all read from the Profile.
-  requiredGates concretion      48 lines /  3 rules
-    Task YAML has no requiredGates field at all, so this is schema plus merge
-    plus gate evaluation, not a wiring job.
-  Export / Redaction / S5       32 lines /  7 rules
-    Self-contained. The only one that can be built without touching the
-    Profile first.
+THEN, in order:
+  6  Export / Redaction / S5     32 lines / 7 rules   self-contained
+  7  auto-review bound + actor   23 lines / 2 rules   needs requiredGates, done
+  8  corrective event + rule id   9 lines / 2 rules
+  9  audit P0 remainder                             see below
+ 10  close-out: baseline, docs, public
 
 Not a candidate: a Harness-visible command channel. It is the current
 bottleneck but not an unclaimed rule — see Current Bottleneck for why it needs
 a proxy or sandbox rather than an implementation slice.
+
+Not scheduled: policies.autoAdvanceOnDone. Two FINAL rules contradict each
+other about it; see 0.13 NOT_FINAL_YET. Decide in the review pass, not now.
+```
+
+How each slice went, so the next one is run the same way:
+
+```text
+1. Read the rule's condition lines from concept-foundation.md before writing
+   code. Quote them exactly in coversRule; the checker rejects a quote that is
+   not in the rule.
+2. Implement. When the design already fixes field names or a value set, match
+   it rather than inventing a variant.
+3. Claim only what a passing test actually verifies. Four conditions across the
+   four slices were deliberately left unclaimed rather than counted.
+4. Run the suite, confirm every breakage has the cause you think it has, and
+   keep the fix falsifiable.
+5. Remove the now-stale entries from docs/rule-implementation-status.json - the
+   checker names them - then npm run coverage:baseline.
+
+Two breakages in slices 2 and 4 were real rather than mechanical: a test was
+left asserting a branch that had become unreachable, and the fixture scanner
+classified a new helper as calling runTask unapproved. Both were fixed by
+changing the test to exercise something still reachable and by naming the
+helper in the scanner, not by loosening either check.
 ```
 
 From the 2026-08-10 audit, P0-5 and P0-3 are closed:
@@ -424,6 +473,15 @@ decision made from evidence the design says is not evidence.
 
 Other machines should continue from committed and pushed files. Local untracked
 files are not a handoff source.
+
+`.codefleet/config.json` and `.codefleet/local.json` are both gitignored. A new
+machine runs `codefleet init` to get them, or writes the Local Overlay by hand:
+the Profile is workspace policy and the Overlay is the adapter command path for
+that one machine.
+
+The commit identity changed on 2026-08-11 and every commit was rewritten to it.
+See Publication constraints in CLAUDE.md before the first commit on a new
+machine; a clone taken before that date carries the old address.
 
 Canonical design file:
 
