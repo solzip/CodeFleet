@@ -18,7 +18,7 @@ before the first commit. See **Publication constraints** for why it matters:
 
 ```bash
 git config user.name "sol"
-git config user.email "cysph413@naver.com"
+git config user.email "solarchive.dev@gmail.com"
 ```
 
 ## Where to resume
@@ -110,10 +110,18 @@ implying one, or call the project open source in the README, `package.json`, or
 the repository description. GitHub does not show a license in its sidebar for
 this file; that is expected, not a defect to fix.
 
-**Commits carry one identity, `sol <cysph413@naver.com>`.** Every commit was
-rewritten to it. One commit from a second identity puts the history back to two
-authors, and the only remedy is another rewrite and a force push. Set it
+**Commits carry one identity, `sol <solarchive.dev@gmail.com>`.** Every commit
+was rewritten to it. One commit from a second identity puts the history back to
+two authors, and the only remedy is another rewrite and a force push. Set it
 repository-locally on each machine rather than relying on a global default.
+
+The address changed once, on 2026-08-11, from `cysph413@naver.com` to
+`solarchive.dev@gmail.com`, to use one address across every project. All 129
+commits were rewritten and force pushed; author and committer dates were
+preserved and no file content changed. Do not reintroduce the old address, and
+do not "restore" it on seeing it in an old clone or a cached fork — a clone
+taken before that date has the old address in every commit and is stale, not
+authoritative.
 
 ### Line endings
 
