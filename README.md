@@ -28,7 +28,7 @@ CodeFleet은 Codex 러너, 프롬프트 생성기, AI CLI 래퍼, 중앙 프로�
 
 ## 현재 구현 범위
 
-구현된 것: Objective ledger와 큐, Task revision/승인 ledger, Run Planning, Codex 어댑터 seam, 워크스페이스 상태와 diff에 대한 Harness 관측, path policy, command policy, Harness가 직접 실행하는 검증, 해시 검사를 포함한 리뷰 증거 번들, 단일 writer 워크스페이스 락.
+구현된 것: Objective ledger와 큐, Task revision/승인 ledger, Run Planning, Codex 어댑터 seam, 워크스페이스 상태와 diff에 대한 Harness 관측, path policy, command policy, Harness가 직접 실행하는 검증, 해시 검사를 포함한 리뷰 증거 번들, 단일 writer 워크스페이스 락, Task 단위 Run 락과 배타적 `runId` 예약.
 
 구현되지 않은 것 — 암시하지 않고 명시한다:
 
@@ -299,11 +299,17 @@ codefleet objective import-review obj-001 2026-05-27_001 --reason "수동 확인
 ```bash
 codefleet runs            # run-id, status, task-id, agent
 codefleet status          # 버전, 모드, 워크스페이스 id, discovery 모드, task/run 개수
-codefleet lock status     # 워크스페이스 mutation 락 보유자
-codefleet lock break      # 남아 있는 락 해제
+codefleet lock status              # mutation 락 보유자, 그리고 Run 락 목록
+codefleet lock break               # 남아 있는 mutation 락 해제
+codefleet lock break --task <id>   # 해당 Task의 남아 있는 Run 락 해제
 ```
 
-ledger를 변경하는 작업 — 승인, Objective/큐 변경, 리뷰 import — 은 `.codefleet/locks/workspace.lock`에서 단일 writer 락을 잡는다. `lock break`는 락을 쥔 채 프로세스가 죽은 경우를 위한 것이다.
+락은 두 종류이며 서로 다른 것을 지킨다:
+
+- **mutation 락** `.codefleet/locks/workspace.lock` — ledger를 변경하는 작업(승인, Objective/큐 변경, 리뷰 import)이 잡는 단일 writer 락. **Run 실행 동안에는 잡히지 않는다.**
+- **Run 락** `.codefleet/locks/run-<task-id>.lock` — Run 하나가 그 Task에 대해 실행 내내 잡는다. 같은 Task의 두 번째 Run은 즉시 거부되며 보유자를 이름으로 알린다.
+
+둘 다 오래됐다고 자동으로 깨지지 않는다. `lock status`는 읽을 수 없는 Run 락도 세어서 보고한다 — 실행을 막는 근거는 파일의 존재이지 내용이 아니므로, 파싱 실패한 락을 빼고 세면 막혀 있는 워크스페이스가 아무것도 잡히지 않은 것처럼 보인다. `lock break`는 락을 쥔 채 프로세스가 죽은 경우를 위한 것이다.
 
 모든 명령은 `--workspace <path>`를 받는다. 현재 디렉터리에서 `.codefleet/config.json`을 탐색하는 대신 워크스페이스를 명시적으로 지정할 때 쓴다.
 
@@ -334,14 +340,14 @@ CodeFleet에는 command 프록시도, 샌드박스 로그도, 컨테이너 exec 
 
 ### 실행 전에 알아야 할 것
 
-execute 모드는 에이전트를 **당신의 실제 작업 디렉터리에서** 실행한다. 아래 넷은 아직 구현되어 있지 않고, 그 결과가 실 저장소에 그대로 남는다.
+execute 모드는 에이전트를 **당신의 실제 작업 디렉터리에서** 실행한다. 아래 한계는 그 결과가 실 저장소에 그대로 남는다는 뜻이다.
 
 - **격리도 롤백도 없다.** `isolation.mode`는 항상 `NONE`이다. 에이전트는 브랜치도 worktree도 컨테이너도 아닌 작업 디렉터리 자체를 고친다. Run이 실패하든 리뷰에서 반려되든 CodeFleet은 아무것도 되돌리지 않는다. 워크스페이스 스냅샷은 내용이 아니라 해시만 담으므로 복원에 쓸 수 없다. 복구는 전적으로 당신의 git 사용에 달려 있다. **커밋되지 않은 변경이 없는 상태에서 실행할 것.**
 - **타임아웃도 출력 상한도 없다.** 어댑터 프로세스에 시간 제한이 걸리지 않는다. 에이전트가 끝나지 않으면 `codefleet run`은 무한히 기다리고, stdout은 상한 없이 메모리에 쌓인다. 중단 수단은 Ctrl-C뿐이며 그 경우 Run 디렉터리는 불완전한 상태로 남는다.
-- **동시 실행을 막지 않는다.** Run은 락을 잡지 않고 `runId`는 날짜와 순번으로만 만들어진다. 두 Run을 동시에 돌리면 같은 `runId`를 계산해 서로의 아티팩트를 덮어쓰고 같은 작업 디렉터리를 함께 고친다. **한 번에 하나씩 실행할 것.**
+- **동시 실행은 절반만 막힌다.** 같은 Task를 동시에 두 번 실행하면 두 번째는 `.codefleet/locks/run-<task-id>.lock`에서 거부되며 보유자를 이름으로 알린다. `runId`는 Run 디렉터리를 배타적으로 생성해 예약하므로, 서로 다른 Task의 Run이 같은 `runId`를 받거나 서로의 아티팩트를 덮어쓰는 일은 없다. 그러나 **격리가 없으므로 서로 다른 Task의 동시 Run은 같은 작업 디렉터리를 함께 고친다.** 한 Run의 변경이 다른 Run의 diff와 스냅샷 delta에 섞여 들어간다. 위 첫 항목이 해결되기 전까지는 **한 번에 하나씩 실행할 것.**
 - **범위 위반은 사전에 막히지 않는다.** `scope`는 프롬프트로 전달될 뿐 어댑터가 강제하지 않는다. 범위 밖 파일 수정은 Run이 끝난 뒤 diff에서 발견되고 리뷰에서 ACCEPTED를 막을 뿐, 그 시점에 변경은 이미 디스크에 있다.
 
-각 항목의 파일:라인 근거는 `docs/audits/`의 점검 기록에 있다.
+각 항목의 파일:라인 근거는 `docs/audits/`의 점검 기록에 있다. 그 기록은 점검 시점의 스냅샷이며 이후 고쳐진 항목이 있다. 지금 무엇이 남아 있는지는 이 절과 위의 "현재 구현 범위"가 기준이다.
 
 ### Command policy
 
@@ -379,7 +385,7 @@ codefleet [--workspace <path>] objective block|unblock|skip|unskip|cancel-item <
 codefleet [--workspace <path>] objective import-review <id> <run-id> --reason <text>
 codefleet [--workspace <path>] objective reorder <id> --order <id,id> --reason <text>
 codefleet [--workspace <path>] objective status|rebuild <id>
-codefleet [--workspace <path>] lock status|break
+codefleet [--workspace <path>] lock status|break [--task <task-id>]
 codefleet [--workspace <path>] review <run-id> --decision <ACCEPTED|REJECTED|NEEDS_CHANGES> --reason <text>
 ```
 
@@ -396,6 +402,7 @@ codefleet [--workspace <path>] review <run-id> --decision <ACCEPTED|REJECTED|NEE
   reviews/<review-id>/               증거 번들
   prompts/<task-id>.md               `prompt`가 생성
   locks/workspace.lock               단일 writer mutation 락
+  locks/run-<task-id>.lock           실행 중인 Run이 Task 단위로 잡는 락
 ```
 
 ## 로드맵
@@ -415,7 +422,9 @@ codefleet [--workspace <path>] review <run-id> --decision <ACCEPTED|REJECTED|NEE
 
 ## 라이선스
 
-이 저장소는 오픈소스가 아니다. 읽고 평가하는 용도로만 공개되며, 사용 권한은 부여되지 않는다. 전문은 [LICENSE](LICENSE)를 볼 것.
+이 저장소는 오픈소스가 아니다. 읽고 평가하는 용도로만 공개되며, 사용·실행·복제·수정·배포·학습에 대한 권한은 부여되지 않는다. 전문은 [LICENSE](LICENSE)를 볼 것.
+
+GitHub 사이드바에는 라이선스가 표시되지 않는다. GitHub은 표준 오픈소스 라이선스만 인식하기 때문이며, 라이선스가 없다는 뜻이 아니다.
 
 ## 문서
 

@@ -28,7 +28,7 @@ A Run refuses to start without step 3. A review cannot be ACCEPTED while evidenc
 
 ## Current Implementation Scope
 
-Implemented today: the Objective ledger and queue, Task revision and approval ledgers, Run planning, the Codex adapter seam, Harness observation of workspace state and diffs, path policy, command policy, Harness-executed verification, the review evidence bundle with hash checking, and a single-writer workspace lock.
+Implemented today: the Objective ledger and queue, Task revision and approval ledgers, Run planning, the Codex adapter seam, Harness observation of workspace state and diffs, path policy, command policy, Harness-executed verification, the review evidence bundle with hash checking, a single-writer workspace lock, and a per-Task run lock with exclusive `runId` reservation.
 
 Not implemented, and named here rather than implied:
 
@@ -299,11 +299,17 @@ codefleet objective import-review obj-001 2026-05-27_001 --reason "accepted afte
 ```bash
 codefleet runs            # run-id, status, task-id, agent
 codefleet status          # version, mode, workspace id, discovery mode, task and run counts
-codefleet lock status     # who holds the workspace mutation lock
-codefleet lock break      # release a stale lock
+codefleet lock status              # who holds the mutation lock, plus every run lock
+codefleet lock break               # release a stale mutation lock
+codefleet lock break --task <id>   # release a stale run lock for that Task
 ```
 
-Ledger mutations — approvals, Objective and queue changes, review imports — take a single-writer lock at `.codefleet/locks/workspace.lock`. `lock break` exists for the case where a process died holding it.
+There are two locks, and they guard different things:
+
+- **The mutation lock**, `.codefleet/locks/workspace.lock` — a single-writer lock taken by ledger mutations: approvals, Objective and queue changes, review imports. **It is never held across Run execution.**
+- **A run lock**, `.codefleet/locks/run-<task-id>.lock` — held by one Run for that Task, for the duration of the Run. A second Run of the same Task is refused immediately and told who holds it.
+
+Neither is broken automatically when stale. `lock status` counts a run lock whose file cannot be parsed rather than skipping it: what blocks a Run is the file existing, not its contents, so dropping the unreadable ones would report a blocked workspace as one with nothing held. `lock break` exists for the case where a process died holding it.
 
 All commands accept `--workspace <path>` to select the workspace explicitly instead of discovering `.codefleet/config.json` from the current directory.
 
@@ -334,16 +340,15 @@ The generated prompt is passed to the configured command on stdin. Treat execute
 
 ### Before You Enable It
 
-Execute mode runs the agent **in your real working directory**. The four
-things below are not implemented yet, and their consequences land in that
-repository.
+Execute mode runs the agent **in your real working directory**. The limits
+below mean their consequences land in that repository.
 
 - **No isolation and no rollback.** `isolation.mode` is always `NONE`. The agent edits the working directory itself — not a branch, a worktree, or a container. Whether the Run fails or the review rejects it, CodeFleet reverts nothing. The workspace snapshot stores hashes, not content, so it cannot restore anything. Recovery is entirely up to your own use of git. **Run with a clean working tree.**
 - **No timeout and no output cap.** The adapter process has no time limit. If the agent never exits, `codefleet run` waits forever and stdout accumulates in memory without a bound. Ctrl-C is the only way out, and it leaves an incomplete Run directory behind.
-- **Nothing prevents concurrent runs.** A Run takes no lock, and `runId` is derived from the date and a directory counter. Two Runs started together compute the same `runId`, overwrite each other's artifacts, and edit the same working directory. **Run one at a time.**
+- **Concurrent runs are only half prevented.** A second run of the same Task is refused at `.codefleet/locks/run-<task-id>.lock`, which names its holder. `runId` is reserved by creating the Run directory exclusively, so Runs of different Tasks cannot take the same `runId` or overwrite each other's artifacts. But **with no isolation, concurrent Runs of different Tasks still edit the same working directory**, and one Run's changes land in the other's diff and snapshot delta. Until the first item above is solved, **run one at a time.**
 - **Scope violations are not blocked in advance.** `scope` is passed in the prompt; the adapter does not enforce it. An edit outside scope is found in the diff after the Run and blocks ACCEPTED at review — by which point the change is already on disk.
 
-Each item is recorded with file:line evidence in the audit under `docs/audits/`.
+Each item is recorded with file:line evidence in the audit under `docs/audits/`. That audit is a snapshot of its own date and some of its findings have since been fixed; this section and "What Is Implemented" above are what currently holds.
 
 ### Command policy
 
@@ -381,7 +386,7 @@ codefleet [--workspace <path>] objective block|unblock|skip|unskip|cancel-item <
 codefleet [--workspace <path>] objective import-review <id> <run-id> --reason <text>
 codefleet [--workspace <path>] objective reorder <id> --order <id,id> --reason <text>
 codefleet [--workspace <path>] objective status|rebuild <id>
-codefleet [--workspace <path>] lock status|break
+codefleet [--workspace <path>] lock status|break [--task <task-id>]
 codefleet [--workspace <path>] review <run-id> --decision <ACCEPTED|REJECTED|NEEDS_CHANGES> --reason <text>
 ```
 
@@ -398,6 +403,7 @@ codefleet [--workspace <path>] review <run-id> --decision <ACCEPTED|REJECTED|NEE
   reviews/<review-id>/               evidence bundles
   prompts/<task-id>.md               written by `prompt`
   locks/workspace.lock               single-writer mutation lock
+  locks/run-<task-id>.lock           held by a running Run, one per Task
 ```
 
 ## Roadmap
@@ -417,7 +423,9 @@ Export to external tools is limited to the sanitized Run Summary export seam. A 
 
 ## License
 
-This repository is not open source. It is published for reading and evaluation only, and no license to use the software is granted. See [LICENSE](LICENSE) for the full terms.
+This repository is not open source. It is published for reading and evaluation only, and no license to use, run, copy, modify, distribute, or train on the software is granted. See [LICENSE](LICENSE) for the full terms.
+
+GitHub shows no license in its sidebar for this repository. GitHub only recognises standard open source licenses; it does not mean there is no license.
 
 ## Documentation
 
