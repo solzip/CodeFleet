@@ -170,6 +170,7 @@ P1-37의 수치를 갱신한다: Run Trace의 JSON은 7개가 아니라 **9개**
 | **P1-44** | 설계의 Revision State 3개 중 어디에도 속하지 않는 상태가 이벤트로 만들어진다 | 설계 §0.6은 `APPROVED` / `SUPERSEDED` / `CANCELED`를 규정한다. `TASK_APPROVAL_INVALIDATED` 이후 더 새로운 revision이 없는 revision은 이 셋 중 무엇도 아니다. 설계 자신의 예시(seq 10 approve r1 / 14 invalidate r1 / 20 approve r2)도 r1을 SUPERSEDED가 아니라 "무효화됨 / 현재 실행 불가"로 replay한다. `INVALIDATED`라는 이름으로 보고하고 셋 중 하나로 접지 않았다 — `CANCELED`로 접으면 아무도 내리지 않은 폐기 결정을 주장하게 된다 |
 | **P1-45** | Draft State `REJECTED`를 만드는 이벤트가 없다 | 설계 §0.6이 `EDITING` / `READY_FOR_APPROVAL` / `REJECTED`를 규정하지만 draft 폐기는 파일 삭제로만 가능하다. `deriveDraftState`는 도달 가능한 2개만 반환한다. P1-42(`TASK_REVISION_SUPERSEDED` 생산자 부재)와 같은 종류의 결함 |
 | **P1-46** | `OBJECTIVE_CLOSED`를 append하는 코드가 0곳이다 | S3 구현 중 확인. `ledger.ts:20`에 선언되고 `:237`에서 replay가 처리하지만 생산자가 없다. P1-42(`TASK_REVISION_SUPERSEDED`)와 같은 형태이며, S3에서 P1-42는 닫혔고 이것은 남았다. 프롬프트의 accepted-context 필터를 게이트와 독립적으로 검증할 유일한 경로가 이것이라 테스트를 만들지 못했다 |
+| **P1-47** | `deriveLocalReviewStatus`가 번들이 degraded가 아니면 **비수용 결정도 `MIGRATION_READY`로 반환**한다 | `review.ts:604-632`. 오늘은 모든 Run이 갭을 가져 도달 불가능하지만, harness-visible command channel이 생기면 REJECTED 리뷰가 Objective 원장에 들어간다. 그 시점에 apply의 ACCEPTED 검사가 거부된 Run의 워크스페이스 반영을 막는 **유일한 방어**가 된다 — 14번 문서에서 방어 테스트를 추가했다 |
 
 ## 2026-08-11 P1 목록의 연속성
 

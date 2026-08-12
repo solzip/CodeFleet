@@ -178,11 +178,16 @@ test("a Run nobody accepted is not applied", async () => {
   );
   assert.equal(normalize(await readFile(appPath, "utf8")), "export const ok = true;\n", "a refusal changes nothing");
 
-  // Reviewing it as REJECTED does not change that. A rejected review produces a
-  // DEGRADED_RECORDED local decision, which import refuses outright — the
-  // Objective ledger only ever holds decisions that were effective. So the
-  // "reviewed but not accepted" case never reaches apply as a non-ACCEPTED
-  // ledger entry; it reaches it as no entry at all.
+  // Reviewing it as REJECTED does not change that, but not for the reason an
+  // earlier version of this comment gave.
+  //
+  // deriveLocalReviewStatus sends a non-ACCEPTED decision to DEGRADED_RECORDED
+  // only when the evidence bundle is DEGRADED; otherwise it returns
+  // MIGRATION_READY and import accepts it. What makes every rejection
+  // unimportable today is that this build has no harness-visible command
+  // channel, so every Run carries at least one capability gap and every bundle
+  // is degraded. That is a property of the build, not of the review model — see
+  // the test below, which covers the branch this makes unreachable.
   await reviewRun(root, execution.result.runId, {
     decision: "REJECTED" as const,
     reason: "not what was asked for",
@@ -288,4 +293,56 @@ test("a second Run starts from the applied result of the first", async () => {
   await accept(root, second.result.runId);
   const reviewed = await planApply(root, second.result.runId);
   assert.match(reviewed.blockedReason, /changed nothing/, "a Run with no change has nothing to apply");
+});
+
+// The guard that stops a rejected Run from being applied, covered directly.
+//
+// Nothing reached it: every Run in this build carries a capability gap, so every
+// evidence bundle is degraded, so every non-ACCEPTED review becomes
+// DEGRADED_RECORDED and import refuses it. The Objective ledger therefore only
+// ever holds ACCEPTED decisions today, and the check reads as dead code.
+//
+// It stops being dead the moment a harness-visible command channel exists. A
+// non-degraded bundle makes deriveLocalReviewStatus return MIGRATION_READY for a
+// REJECTED decision, import accepts it, and this branch becomes the only thing
+// between a rejected Run and the workspace. Found by disabling each new gate in
+// turn and counting which tests noticed: this one had none.
+test("a rejected decision in the ledger does not authorise an apply", async () => {
+  const root = await approvedWorkspace("apply-rejected-ledger");
+  const execution = await runTask(root, "sample");
+  await accept(root, execution.result.runId);
+
+  // Applicable, so the only thing changed below is the decision itself.
+  assert.equal((await planApply(root, execution.result.runId)).blockedReason, "");
+
+  // The decision is rewritten in the ledger to REJECTED, standing in for the
+  // import path that a harness-visible command channel would open. Editing the
+  // ledger directly is what makes the branch reachable at all.
+  const ledger = path.join(root, ".codefleet", "objectives", "fixture-objective", "ledger.jsonl");
+  const rewritten = (await readFile(ledger, "utf8"))
+    .split("\n")
+    .map((line) => {
+      if (line.trim().length === 0) {
+        return line;
+      }
+      const event = JSON.parse(line) as Record<string, any>;
+      if (event.type === "RUN_REVIEW_DECIDED" && event.payload?.runId === execution.result.runId) {
+        event.payload.decision = "REJECTED";
+        return JSON.stringify(event);
+      }
+      return line;
+    })
+    .join("\n");
+  await writeFile(ledger, rewritten, "utf8");
+
+  const plan = await planApply(root, execution.result.runId);
+  assert.match(plan.blockedReason, /reviewed as REJECTED, not ACCEPTED/);
+
+  const appPath = path.join(root, "src", "app.js");
+  const before = await readFile(appPath, "utf8");
+  await assert.rejects(
+    () => applyRunResult(root, { runId: execution.result.runId, actorId: "t", reason: "apply a rejection" }),
+    /not ACCEPTED/
+  );
+  assert.equal(await readFile(appPath, "utf8"), before, "the workspace is untouched");
 });

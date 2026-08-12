@@ -355,6 +355,32 @@ test("an isolated Run observes the tree the agent actually ran in", async () => 
 
   assert.equal(plan.isolation.mode, "GIT_WORKTREE", "the fixture must actually be running isolated");
 
+  // 0. Both snapshots describe the same directory, and it is the isolated tree.
+  //
+  // Pinned directly rather than through the delta. Pointing the post-run
+  // snapshot back at the workspace was not caught by anything below: the delta
+  // still came out non-empty, so "modified includes src/app.js" passed while
+  // the two snapshots described two different directories. A downstream symptom
+  // that can be satisfied by an artifact is not a defence of the invariant.
+  const preRun = JSON.parse(await readFile(path.join(runDir, "workspace-pre-run.json"), "utf8")) as Record<
+    string,
+    any
+  >;
+  const postRun = JSON.parse(await readFile(path.join(runDir, "workspace-post-run.json"), "utf8")) as Record<
+    string,
+    any
+  >;
+  assert.equal(
+    preRun.workingDirectoryRealPath,
+    postRun.workingDirectoryRealPath,
+    "a delta between two different directories is not a delta"
+  );
+  assert.notEqual(
+    postRun.workingDirectoryRealPath,
+    plan.workspaceDiscovery.selectedWorkspaceRootRealPath,
+    "the observed directory is the isolated tree, not the workspace"
+  );
+
   // 1. The agent's edit is observed. Before the fix this list was empty, and a
   //    Run that rewrote a file reported that nothing changed.
   assert.ok(
