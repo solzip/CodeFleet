@@ -7,7 +7,10 @@
              (A) 강제 코드 (B) 테스트 (C) 반증 3단계.
              반증은 전부 임시 워크스페이스에서 실행해 확인했다.
 범위        : 읽기 전용. 수정은 하지 않았고 위반 등재까지만 한다.
-결과        : 불변식 12개 중 준수 4 / **위반 5** / [정의 확정 필요] 3
+결과        : 불변식 12개 중 준수 5 / **위반 7**
+             ※ 초판은 3건을 [정의 확정 필요]로 분류했다. 그 분류는 틀렸다 —
+               docs/concept-foundation.md §0.6과 승인 조건 절이 이미 답을 갖고
+               있었고, 확인 후 위반 2건 · 준수 1건으로 재판정했다. 아래 §재판정.
 ```
 
 ## 확정된 모델 (기준)
@@ -41,7 +44,7 @@
 | I-8 | 하나의 Run Trace는 정확히 하나의 Revision에 속한다 | 증거가 두 계약에 걸쳐 "어느 쪽 것인지 모르는" 상태가 된다 | "Run Trace = 특정 Revision의 실행 증거" |
 | I-9 | Approval은 Task Revision에만 묶인다 (Task 전체·파일·경로에 묶이지 않는다) | 승인의 대상이 계약이 아니라 이름이 된다 | "Approval은 Task Revision에만 묶인다" |
 | I-10 | Draft → Revision 승격은 승인과 구분되는 단계로 존재한다 | "승인 전 계약 후보"라는 상태가 실재하지 않게 된다 | "Task Draft = 승인 전 수정 가능한 계약 후보" |
-| I-11 | Task의 상태(READY/DONE 등)가 계약의 일부라면 실행 판정에 쓰인다 | 계약에 적힌 값이 아무 효력 없는 장식이 된다 | "Revision = 실행 가능한 계약" |
+| I-11 | 실행 결과 상태(READY/DONE 등)는 계약에 들어가지 않는다 | 실행 결과가 계약을 바꾸고, 결과가 바뀔 때마다 재승인이 필요해진다 | 설계 §0.6 "Revision State에 실행 결과를 넣지 않는다" |
 | I-12 | Objective relation에 accepted/approved 상태가 실재한다 | I-4를 판정할 대상 자체가 없다 | "accepted/approved Objective relation" |
 
 ---
@@ -59,9 +62,9 @@
 | I-7 | **위반** | 없음 | 없음 | **재현됨** |
 | I-8 | 준수 | 있음 | 간접 | 재현 실패 |
 | I-9 | 준수 | 있음 | 있음 | 재현 실패 |
-| I-10 | [정의 확정 필요] | 해당 없음 | — | — |
-| I-11 | [정의 확정 필요] | 없음 | — | — |
-| I-12 | [정의 확정 필요] | 없음 | — | — |
+| I-10 | **위반** | 없음 | 없음 | **재현됨** |
+| I-11 | **위반** | 없음 | 없음 | **재현됨** |
+| I-12 | 준수 | 있음 | 있음 | 재현 실패 |
 
 ---
 
@@ -124,7 +127,13 @@ resume.sourceHashPolicy    : "TASK_AND_PROFILE_MUST_MATCH"  (선언돼 있고 �
 
 `run.ts:703`이 `sourceHashPolicy: "TASK_AND_PROFILE_MUST_MATCH"`를 산출물에 적는다. **정의가 요구하는 바를 코드가 스스로 선언해 놓고 강제하지 않는다.**
 
-**재판정**: 2026-08-10은 이것을 P1-4("승인 해시가 프로파일 미포함")로 등재했다. 확정된 정의에서 가드레일이 계약의 일부인 이상 이것은 우선순위 문제가 아니라 **계약 모델 위반**이다. → **P0-12**로 승격 등재.
+**설계도 같은 것을 요구한다.** `docs/concept-foundation.md`의 "Draft를 approve해서 Revision을 만들기 위한 조건" 10개 중 하나가 이것이다:
+
+> - **Project Profile보다 권한 완화 없음**
+
+승인 시점에 프로파일과 대조하라는 지시가 설계에 이미 있다. 코드는 대조하지 않는다.
+
+**재판정**: 2026-08-10은 이것을 P1-4("승인 해시가 프로파일 미포함")로 등재했다. 정의·설계·산출물(`run.ts:703`의 `TASK_AND_PROFILE_MUST_MATCH`) 셋이 같은 말을 하고 코드만 하지 않는 상태이므로, 우선순위 문제가 아니라 **계약 모델 위반**이다. → **P0-12**로 승격 등재.
 
 ---
 
@@ -187,6 +196,23 @@ run outcome : FAILED | Adapter refused to launch: AdapterRequest capabilities do
 
 **(B)** 없음.
 
+**설계는 승인 조건을 10개로 명시한다**(`concept-foundation.md`, "Draft를 approve해서 Revision을 만들기 위한 조건"):
+
+```text
+- Draft schema valid
+- intent 있음
+- objectiveContext가 review에서 concrete objective target과 relation intent로 resolved 됨
+- scope 있음
+- guardrails 있음
+- verification 있음
+- doneCriteria 있음
+- blocking needsReview 없음
+- Project Profile보다 권한 완화 없음
+- draft content hash 계산됨
+```
+
+코드가 승인 경로에서 보는 것은 `validateTask`의 필드 스키마와 해시뿐이다. objectiveContext resolution, blocking needsReview, 프로파일 대조는 검사되지 않는다.
+
 2026-08-12 실사용에서 발견한 P1-32(기본 역할로 어댑터가 뜨지 않음)가 정확히 이 불변식의 위반 사례다. 기본 프로파일이 만드는 계약은 **승인은 되지만 실행될 수 없다.** → **P1-36**
 
 방향은 fail-closed(실행이 실패할 뿐 잘못된 수락으로 이어지지 않음)이므로 P0로 올리지 않았다. 다만 정의가 "승인 가능한 계약은 실행 가능해야"라고 말하는 이상 위반이다.
@@ -208,6 +234,16 @@ ledger stores contract body: false
 계약 본문의 사본이 남는 유일한 자리는 Run Trace의 `task.yaml`(`run.ts`의 `copyFile`)인데, 이것은 **Run이 일어났을 때만** 생긴다. 승인만 하고 실행하지 않은 Revision, 또는 실행 전에 파일을 고친 Revision의 내용은 어디에도 없다.
 
 **(C)** 재현됨(위 필드 목록이 곧 근거).
+
+**설계는 Revision이 본문을 담는다고 말한다:**
+
+> 생성되는 Revision은 다음을 포함한다.
+> - **immutable Task contract**
+> - contentHash
+> - approval target hash / approval decision reference
+> - objective relation snapshot / reference
+
+그리고 그 목적을 명시한다 — "Revision 파일은 **어떤 계약 내용이 승인 대상이었는지 고정하기 위한 source**". 코드에는 그런 파일이 없다(아래 §뿌리 원인).
 
 **영향**: "불변 계약"은 사후 검증이 가능해야 의미가 있는데, 지금은 "현재 파일이 그때 그 해시와 같은가"만 답할 수 있고 "그때 그 계약이 무엇이었나"에는 답할 수 없다. → **P1-38**
 
@@ -250,55 +286,104 @@ ledger stores contract body: false
 | **P1-36** | 승인이 계약의 실행 가능성을 검사하지 않아, 역할 상한이 자기 검증 조건을 금지하는 계약도 승인된다 | `approveTask`에 정합성 검사 없음. 실측: `BACKEND_IMPLEMENTER` + 검증 커맨드 → 승인 통과, 실행 시 `LAUNCH_FAILED`. P1-32가 이 위반의 실사용 사례 | I-6 |
 | **P1-37** | Run 산출물 7개 중 `taskRevision`을 담은 것이 1개뿐이고 4개는 `taskId`도 없다 | 실측 전수 표(위 I-5). 계약으로 가는 링크가 `run-plan.json` 하나에 집중 | I-5 |
 | **P1-38** | Task 원장이 계약 본문을 보관하지 않아 승인된 Revision의 내용을 복원할 수 없다 | 원장 이벤트 필드에 본문 없음(해시만). 본문 사본은 Run이 일어난 경우의 Run Trace `task.yaml`뿐 | I-7 |
+| **P1-39** | Draft / Revision 상태 기계가 코드에 없다 — `READY_FOR_APPROVAL`이 존재할 수 있는 시점이 없다 | 설계 §0.6이 Draft State(EDITING/READY_FOR_APPROVAL/REJECTED)와 Revision State(APPROVED/SUPERSEDED/CANCELED)를 명시. `approveTask`가 revision 생성과 승인을 같은 뮤테이션에서 처리(`task-ledger.ts:193-208`) | I-10 |
+| **P1-40** | 실행 결과 상태(`status`)가 계약 문서 안에 있어 승인 해시에 포함된다 | 설계 §0.6 "Revision State에 실행 결과를 넣지 않는다". `status`는 Run-derived state인데 `task.yaml`에 있고 해시가 파일 전체를 덮는다. 그러면서 실행 판정에는 쓰이지 않는다 | I-11 |
+| **P1-41** | Revision 산출물이 존재하지 않는다 — 계약 본문을 고정하는 파일이 없다 | 설계는 Revision이 immutable Task contract·contentHash·approval reference·relation snapshot을 담는다고 규정. 코드는 원장 이벤트 2개만 만든다. **P1-37·P1-38·P1-39의 공통 원인** | I-7·I-10 |
 
 ---
 
-## [정의 확정 필요]
+## 재판정 — [정의 확정 필요]는 잘못된 분류였다
 
-코드와 정의가 다른데, **어느 쪽을 고칠지가 사람의 판단**인 항목이다. 위반으로 등재하지 않았다.
+초판은 세 항목을 "코드와 정의가 다른데 어느 쪽을 고칠지 사람이 정해야 한다"로 분류했다. **그 분류가 틀렸다.** `docs/concept-foundation.md`가 세 항목 모두에 이미 답을 갖고 있었고, 확인하지 않은 채 열린 질문으로 넘긴 것이다.
 
-### D-1. `accepted/approved Objective relation`의 상태가 코드에 없다
+정의와 설계는 충돌하지 않는다. 따라서 모든 항목은 **설계 ↔ 코드** 문제로 환원되고, 판단 기준은 하나다 — *설계가 이미 말한 것인가, 아직 아무도 말하지 않은 것인가.* 셋 다 전자였다.
 
-정의는 relation이 "accepted/approved"일 것을 요구한다. 코드의 큐 항목 상태는 `WAITING | BLOCKED | SKIPPED | CANCELED`(`ledger.ts:31`)뿐이고 **accepted도 approved도 없다.**
+### D-1 → **해소.** attach가 accept다
 
-두 해석이 가능하다:
+설계는 relation의 수용을 이렇게 규정한다:
 
-- **(a) attach 자체가 수용이다** — `attachTask`는 사유를 요구하고 뮤테이션 락 아래 append-only로 기록되는 사람의 행위다. 그렇다면 `WAITING`이 곧 accepted이고, P0-13만 고치면(미attach 차단) 정의를 만족한다.
-- **(b) 별도의 수용 상태가 필요하다** — attach는 "큐에 넣었다"이고 수용은 별개 결정이다. 그렇다면 상태 기계에 `ACCEPTED`를 추가하고 전이 규칙(`ledger.ts:47-53`)을 확장해야 한다.
+> `TASK_RELATION_PROPOSED`는 ledger에 남기지 않는다. Proposed relation은 Draft Task 안의 제안일 뿐이며, 실행에는 사용할 수 없다. **정책상 허용된 actor가 review 단계에서 accept / approve / reject한 순간부터 ledger에 기록한다.**
 
-**(a)면 작은 수정이고 (b)면 원장 스키마 변경이다.** 정의가 어느 쪽인지 정해야 P0-13의 수정 범위가 정해진다.
+코드의 `attachTask`는 사유를 요구하고 뮤테이션 락 아래 append-only로 원장에 기록되는 actor 행위다. 설계가 말하는 accept의 정의를 그대로 만족한다. 따라서 **`WAITING`이 accepted 상태이고, I-12는 준수다.**
 
-### D-2. Task Draft가 실체로 존재하지 않는다
+빠진 `PROPOSED`는 Draft 안에 사는 상태이므로 코드에 없는 것이 맞다 — Draft 자체가 없기 때문이다(D-2).
 
-정의는 Draft를 "승인 전 수정 가능한 계약 후보"라는 **상태**로 둔다. 코드에는 Draft가 없다 — `src/` 전체에서 `Draft`는 규칙 id 문자열 `TASK_WORKFLOW_IS_DRAFT_TEMPLATE_NOT_EXECUTION_POLICY` 안에만 등장한다.
+**P0-13에 미치는 영향**: 원장 스키마 변경이 아니라 **게이트 한 줄**이다. "relation이 하나도 없으면 거부"만 추가하면 된다.
 
-실제 구조는 이렇다: Task YAML 파일이 곧 draft이고, **Revision은 승인 시점에 비로소 생긴다.** `approveTask`가 `TASK_REVISION_CREATED`와 `TASK_APPROVED`를 **같은 뮤테이션에서 연달아 append**한다(`task-ledger.ts:193-208`). 승인하지 않은 Revision은 존재할 수 없다.
+### D-2 → **위반.** 설계에 Draft 상태 기계가 이미 있다
 
-정의가 요구하는 것이:
+§0.6 "Task Draft / Revision State 규칙"이 상태 모델을 셋으로 분리하고 전이까지 명시한다:
 
-- **(a) 개념적 구분뿐**이라면 현재 코드로 충분하다 — 파일=Draft, 원장의 해시=Revision.
-- **(b) Draft가 조회 가능한 상태**라면 `codefleet task status`가 "draft / revision N / approved" 같은 상태를 답해야 하고, Draft→Revision 승격이 승인과 분리돼야 한다.
+```text
+Draft State:  EDITING -> READY_FOR_APPROVAL -> (approved: Revision 생성) / REJECTED
+Revision State: APPROVED -> SUPERSEDED / CANCELED
+```
 
-I-10은 이 판단이 나오기 전에는 판정할 수 없다.
+> `approved`는 Draft State가 아니다. `approved`는 Draft를 immutable Revision으로 만드는 이벤트다.
 
-### D-3. Task `status` 필드가 계약의 일부인지
+코드에는 이 상태가 **하나도 없다.** `approveTask`가 `TASK_REVISION_CREATED`와 `TASK_APPROVED`를 같은 뮤테이션에서 연달아 append하므로(`task-ledger.ts:193-208`), **`READY_FOR_APPROVAL`이 존재할 수 있는 시점이 없다.**
 
-`status: READY|RUNNING|DONE|FAILED|BLOCKED`는 Task 파일에 있으므로 **승인 해시에 포함된다** — 즉 계약의 일부로 취급되고 있다. 그런데 실행 판정에는 쓰이지 않는다: `DONE`이어도 경고만 남기고 실행되며(`task.ts:79-81`), `loadTask`는 그 경고를 버린다.
+결과: 정의가 "Task Revision = **승인 가능한**/승인된 불변 실행 계약"이라고 말하는 그 "승인 가능한" 상태가 실재하지 않는다. 승인자는 불변 계약을 검토하고 승인하는 것이 아니라, **가변 파일을 승인하고 그 순간 동결이 일어난다.** → **P1-39**
 
-- **(a) 계약의 일부라면** I-11 위반이다 — 계약에 적힌 값이 효력이 없다. `DONE` 재실행 차단(기존 P1-16)이 그 수정이 된다.
-- **(b) 메타데이터라면** 해시에서 빠져야 한다 — status만 고쳐도 승인이 무효화되는 현재 동작이 과하다.
+### D-3 → **위반.** 방향은 초판이 적은 것의 반대다
 
-지금은 **양쪽의 나쁜 면만 있다**: 해시에는 들어가서 재승인을 강제하고, 판정에는 안 쓰여서 효력이 없다.
+§0.6은 상태 모델을 셋으로 나누고 마지막에 못 박는다:
+
+```text
+Run-derived State = 실제 실행 결과를 관리
+```
+> **Revision State에 실행 결과를 넣지 않는다.**
+
+`status: READY | RUNNING | DONE | FAILED | BLOCKED`는 Run-derived state다. 그런데 계약 문서(`task.yaml`) 안에 있고, 승인 해시가 파일 전체를 덮으므로 **실행 결과가 계약 안으로 들어간다.**
+
+초판은 이것을 "계약의 일부라면 실행 판정에 써야 한다"로 적었다. 설계 기준으로는 반대다 — **계약에서 빠져야 한다.** 지금 상태의 문제는 두 가지다:
+
+- 실행 결과를 기록하면 계약이 바뀌고 재승인이 필요해진다(과도한 제약)
+- 그러면서 실행 판정에는 쓰이지 않는다(효력 없음)
+
+**P1-16(`DONE` 재실행이 경고뿐)의 성격도 바뀐다.** 계약 위반이 아니라 Run-derived state를 관리할 자리가 없다는 문제다. → **P1-40**
+
+---
+
+## 뿌리 원인 — Revision 산출물이 존재하지 않는다
+
+D-2와 P1-38은 증상이 다르지만 원인이 같다. 설계는 Revision을 **파일로** 규정한다:
+
+> 생성되는 Revision은 다음을 포함한다.
+> - **immutable Task contract**
+> - contentHash
+> - approval target hash / approval decision reference
+> - objective relation snapshot / reference
+
+그리고 그 존재 이유를 적는다 — "Revision 파일은 **어떤 계약 내용이 승인 대상이었는지 고정하기 위한 source**". (권위 상태는 원장 replay가 갖고, Revision 파일은 내용을 고정하는 역할만 한다는 분업도 명시돼 있다.)
+
+**코드에는 그 파일이 없다.** `approveTask`가 만드는 것은 원장 이벤트 두 개뿐이고, 계약 본문은 여전히 가변 `task.yaml`에만 있다. 여기서 다음이 따라 나온다:
+
+| 결과 | 등재 |
+|---|---|
+| 승인된 계약의 본문을 복원할 수 없다 | P1-38 |
+| Draft와 Revision이 별개 산출물로 분리되지 않는다 | P1-39 |
+| Revision State(APPROVED/SUPERSEDED/CANCELED)를 담을 자리가 없다 | P1-39 |
+| Run 산출물이 지목할 Revision 실체가 없어 `taskRevision` 숫자만 남는다 | P1-37 |
+
+**P1-37·P1-38·P1-39는 각각 고칠 것이 아니라 Revision 산출물을 만들면 함께 닫힌다.** 우선순위를 정할 때 이 셋을 하나로 묶는 것이 맞다. → **P1-41**로 뿌리 원인을 별도 등재한다(증상 셋과 교차 참조).
 
 ---
 
 ## 요약
 
-정의가 요구하는 12개 불변식 중 **4개가 강제되고, 5개가 깨져 있으며, 3개는 정의가 더 정해져야 판정할 수 있다.**
+정의가 요구하는 12개 불변식 중 **5개가 강제되고 7개가 깨져 있다.** 초판의 [정의 확정 필요] 3건은 설계 문서를 확인한 뒤 위반 2 · 준수 1로 정리됐다.
 
-깨진 5개의 성격은 둘로 갈린다.
+깨진 7개는 세 갈래다.
 
-- **승인의 범위가 좁다** (I-3, I-7): 승인은 Task 파일 하나의 해시에만 묶여 있고, 그 파일 밖의 가드레일과 계약 본문 자체는 승인 밖에 있다.
-- **게이트와 산출물이 계약을 끝까지 따라가지 않는다** (I-4, I-5, I-6): 관계 없이도 실행되고, 증거는 revision을 지목하지 않으며, 승인은 실행 가능성을 보지 않는다.
+- **승인의 범위가 좁다** (I-3, I-6): 승인은 Task 파일 하나의 해시에만 묶여 있고, 설계가 명시한 승인 조건 10개 중 대부분을 검사하지 않는다.
+- **Revision이 실체로 없다** (I-7, I-10, I-11): 계약 본문을 고정하는 산출물이 없어 Draft/Revision 분리도, 상태 기계도, 본문 복원도 성립하지 않는다.
+- **게이트와 증거가 계약을 끝까지 따라가지 않는다** (I-4, I-5): 관계 없이도 실행되고, 증거는 revision을 지목하지 않는다.
 
-가장 무거운 것은 **P0-12**다. 정의가 말하는 "불변 계약"의 핵심이 승인 시점에 고정된다는 것인데, 실행의 성격을 가장 크게 바꾸는 가드레일(격리 여부)이 그 고정 밖에 있다. 그리고 코드가 `TASK_AND_PROFILE_MUST_MATCH`라고 스스로 적어 두었다 — 필요한 규칙을 알고 있으면서 강제하지 않는 상태다.
+가장 무거운 것은 여전히 **P0-12**다. 실행의 성격을 가장 크게 바꾸는 가드레일(격리 여부)이 승인 고정 밖에 있고, **정의·설계·산출물이 모두 그것을 고정하라고 말하는데 코드만 하지 않는다** — `run.ts:703`은 `TASK_AND_PROFILE_MUST_MATCH`를 매 Run Plan에 적고, 설계의 승인 조건은 "Project Profile보다 권한 완화 없음"을 요구한다.
+
+그다음은 **P1-41(Revision 산출물)**이다. 단독으로는 P1이지만 P1-37·P1-38·P1-39를 한꺼번에 닫으므로 실질 비중이 가장 크다.
+
+### 이 감사가 스스로 저지른 것
+
+초판은 설계 문서를 열어보지 않고 세 항목을 "사람이 정해야 한다"로 넘겼다. 그 셋 모두 설계에 답이 있었다. **감사가 정의와 코드만 대조하고 설계를 건너뛰면, 이미 결정된 것을 미결로 보고하게 된다.** 다음 감사에서는 대조 대상에 `docs/concept-foundation.md`를 명시적으로 포함해야 한다 — `09-registration-check.md`가 제안한 등재 대조와 같은 성격의 절차 문제다.
