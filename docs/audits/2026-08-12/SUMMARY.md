@@ -93,7 +93,7 @@ envSeenByVerificationChild : "absent"
 
 부모에 `CODEFLEET_VERIFY_SECRET`을 export한 뒤 Run을 돌렸다. 2026-08-11에는 검증 커맨드 자식이 그 값을 그대로 읽었다. 지금은 읽지 못한다.
 
-## 새로 등재 — P1-20 ~ P1-31
+## 새로 등재 — P1-20 ~ P1-35
 
 번호는 2026-08-11의 P1-19에 이어 붙였다. 전부 이번 감사에서 실행 또는 코드로 확인했고, **고치지 않았다.** 등재 대조 절차와 근거는 `09-registration-check.md`.
 
@@ -111,6 +111,10 @@ envSeenByVerificationChild : "absent"
 | P1-29 | 모든 자식 프로세스의 타임아웃 메시지가 `"Adapter exceeded the ... ms limit"`라고 말한다 | `runCommand`가 어댑터 전용이던 시절의 문구. git 호출·검증 커맨드에도 "Adapter"라고 적힌다. 사실을 왜곡하지는 않으나 오독을 부른다 | 03 §I-1 |
 | P1-30 | `git diff --no-index -- /dev/null <file>`가 git 구현의 `/dev/null` 특별 취급에 의존한다 | OS가 아니라 git 버전에 의존하는 지점. 근거는 이 호스트의 git 하나뿐 | 04 §4 |
 | P1-31 | 격리 트리 경로 접두가 Windows 260자 한계의 여유를 줄인다 | 실측: `os.tmpdir()` 30자 → 접두 71자 → 저장소 상대 경로에 남는 여유 **189자**. 149자짜리 현실적 Java 경로는 총 221자로 통과. 사용자명이 길거나 저장소 경로가 189자를 넘으면 격리 Run에서만 실패한다 | 09 §1-c (이 감사의 측정) |
+| P1-32 | Core 역할 7개 중 5개로는 어댑터가 실행되지 않는다. `init` 기본값(`BACKEND_IMPLEMENTER`)이 그중 하나다 | 어댑터는 `commandExecution !== true`면 거부하는데 5개 역할의 `defaultMaxMode`가 `WORKSPACE_EDIT` 이하. 실사용에서 기본 설정이 `LAUNCH_FAILED` | 10 §차단 3 |
+| P1-33 | 어댑터 거부 메시지가 어느 소스가 모드를 낮췄는지·무엇을 바꿔야 하는지 말하지 않는다 | 차단 1·2는 키와 값을 지목한다. 차단 3은 `run-plan.json`을 열어야 원인을 안다 | 10 §차단 3 |
+| P1-34 | win32에서 Gradle/Maven wrapper를 검증 커맨드로 쓸 수 없다 | `.bat`은 `cmd.exe`가 필요하고 `cmd`는 `SHELL_INTERPRETER_DENIED`, `spawn`은 `shell:false`. POSIX는 shebang으로 직접 실행되어 해당 없음 | 10 §차단 4 |
+| P1-35 | `run-record.md`가 실행된 검증 커맨드를 이름으로 적지 않는다 | 문서 내 `gradle`·`--version` 등장 0회. `SATISFIED`만 보고 "테스트 통과"로 읽게 된다 | 10 §run-record |
 
 ## 2026-08-11 P1 목록의 연속성
 
