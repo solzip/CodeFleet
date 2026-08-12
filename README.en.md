@@ -214,6 +214,7 @@ Two schema rules worth knowing before your first validation error:
 - Scope patterns are whole-path with no implicit subtree. `src` matches only a file literally named `src`; write `src/**`.
 - `verification.commands[].command` is an argv array, never a shell string. Shell interpreters are denied, so that command matching stays meaningful.
 - `command[0]` is normalized to its basename for both matching and execution, so a relative script path such as `./gradlew` will not resolve. Use a command available on `PATH`.
+- Windows batch files are the exception. `gradlew.bat` and `mvnw.cmd` cannot be launched by CreateProcess, so the Harness supplies `cmd.exe` for them, and cmd.exe resolves them from the working directory — which is what makes a wrapper in the project root reachable. A contract **naming** an interpreter is still refused: `["cmd","/c",...]` is `SHELL_INTERPRETER_DENIED`. An argv containing characters cmd.exe reads as syntax (`& | < > ^ " % !`) is refused rather than quoted around.
 
 A Task file has no `status` field. An execution outcome is not part of the contract, so it does not live in the contract document — a Task that declares `status` is refused at validation. Read execution state from `codefleet status` (the latest Run per Task) and `codefleet runs` (every Run and its outcome).
 

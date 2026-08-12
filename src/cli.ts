@@ -450,6 +450,76 @@ async function handleObjective(cwd: string, options: CliOptions, args: string[])
     return;
   }
 
+  // NEXT is already derived by replay; these two only surface it and act on it
+  // once. The design is explicit that DONE does not advance a queue by itself —
+  // "stop and wait for review" — so there is deliberately no loop here. A
+  // command that kept going would be the auto-advance the design refuses.
+  if (subcommand === "next" || subcommand === "run-next") {
+    const id = requireArg(objectiveId, "objective-id");
+    const { snapshot } = await replayObjective(rootDir, id);
+    if (snapshot.replay.replayStatus !== "COMPLETE") {
+      throw new Error(
+        `Objective ${id} replayed as ${snapshot.replay.replayStatus}, so its queue cannot be read.\n` +
+          `Run 'codefleet objective status ${id}' for the findings.`
+      );
+    }
+
+    const next = snapshot.queue.find((item) => item.derivedState === "NEXT");
+    if (next === undefined) {
+      // Why there is no NEXT matters more than the fact of it: a queue waiting
+      // on a review and a queue that is finished look the same otherwise.
+      const waitingOnReview = snapshot.queue.filter(
+        (item) => item.derivedState === "DONE" || item.derivedState === "FAILED"
+      );
+      console.log(`objective: ${id}`);
+      console.log("next: (none)");
+      if (waitingOnReview.length > 0) {
+        console.log(
+          `${waitingOnReview.length} item(s) are awaiting review. A Run that succeeded does not advance the`
+        );
+        console.log("queue on its own — review it, and the next item becomes NEXT:");
+        for (const item of waitingOnReview) {
+          console.log(`  codefleet review <run-id> --decision ACCEPTED --reason "..."   # ${item.objectiveQueueItemId}`);
+        }
+      }
+      return;
+    }
+
+    console.log(`objective: ${id}`);
+    console.log(`next: ${next.objectiveQueueItemId}`);
+    console.log(`taskId: ${next.taskId}`);
+    console.log(`taskRevision: ${next.taskRevision}`);
+
+    // A Run leaves no mark on the queue until a review is imported, so an item
+    // that has already run looks exactly like one that never started. Without
+    // this, run-next repeated would keep re-running the same item and nothing
+    // would say so.
+    const priorRuns = (await listRuns(rootDir)).filter((run) => run.taskId === next.taskId);
+    if (priorRuns.length > 0) {
+      console.log(`priorRuns: ${priorRuns.length}`);
+      for (const run of priorRuns.slice(-3)) {
+        console.log(`  ${run.runId}  ${run.status}`);
+      }
+      console.log("The queue does not move until one of these is reviewed. Running again starts a new Run.");
+    }
+
+    if (subcommand === "next") {
+      return;
+    }
+
+    const flags = parseReviewFlags(args.slice(2));
+    const discovery = await workspaceDiscovery(cwd, options);
+    const execution = await runTask(discovery.selectedWorkspaceRootRealPath, next.taskId, discovery, {
+      agentAdapter: flags.adapter
+    });
+    console.log(`runId: ${execution.result.runId}`);
+    console.log(`status: ${execution.result.status}`);
+    console.log(`runDir: ${path.relative(rootDir, execution.runDir)}`);
+    console.log("");
+    console.log("This ran one item and stopped. Review it before the queue moves on.");
+    return;
+  }
+
   if (subcommand === "rebuild") {
     const id = requireArg(objectiveId, "objective-id");
     const snapshot = await rebuildSnapshot(rootDir, id);
@@ -458,7 +528,7 @@ async function handleObjective(cwd: string, options: CliOptions, args: string[])
   }
 
   throw new Error(
-    "Usage: codefleet objective create|attach|block|unblock|skip|unskip|cancel-item|reorder|status|rebuild <objective-id>"
+    "Usage: codefleet objective create|attach|block|unblock|skip|unskip|cancel-item|reorder|status|next|run-next|rebuild <objective-id>"
   );
 }
 
@@ -659,6 +729,8 @@ Usage:
   codefleet [--workspace <path>] runs
   codefleet [--workspace <path>] objective create <id> --title <text> [--kind ONE_OFF|SEQUENCE|WORKSTREAM]
   codefleet [--workspace <path>] objective attach <id> <task-id> [--revision N]
+  codefleet [--workspace <path>] objective next <id>
+  codefleet [--workspace <path>] objective run-next <id> [--adapter <adapter-id>]
   codefleet [--workspace <path>] objective block|unblock|skip|unskip|cancel-item <id> <queue-item-id> --reason <text>
   codefleet [--workspace <path>] objective import-review <id> <run-id> --reason <text>
   codefleet [--workspace <path>] objective reorder <id> --order <id,id> --reason <text>

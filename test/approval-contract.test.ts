@@ -253,3 +253,37 @@ test("a contract with no verification commands is approvable under any role", as
   });
   assert.equal(outcome.failedPhase, null, outcome.failureMessage);
 });
+
+// Every Run Plan declares resume.sourceHashPolicy = TASK_AND_PROFILE_MUST_MATCH,
+// and nothing read it: production 1, consumption 0. Resume does not exist yet,
+// so the field cannot be consumed by the feature it describes — but a
+// declaration nobody checks is prose in a JSON file, and this Run Plan is
+// evidence. This ties the words to the two refusals that make them true. P1-43.
+test("the Run Plan's declared source-hash policy is the one actually enforced", async () => {
+  const root = await workspace("resume-policy");
+  const taskPath = await findTaskPath(root, "sample");
+  await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "approved" });
+  await permitRun(root, "sample");
+
+  const execution = await runTask(root, "sample");
+  const plan = JSON.parse(await readFile(path.join(execution.runDir, "run-plan.json"), "utf8")) as Record<
+    string,
+    any
+  >;
+  assert.equal(plan.resume.sourceHashPolicy, "TASK_AND_PROFILE_MUST_MATCH");
+  assert.equal(plan.resume.allowMutation, false);
+
+  // "TASK ... MUST MATCH" — the Task half.
+  const approvedSource = await readFile(taskPath, "utf8");
+  await writeFile(taskPath, approvedSource.replace("goal: edit app.js", "goal: moved"), "utf8");
+  await assert.rejects(() => runTask(root, "sample"), /TASK_CONTENT_CHANGED_AFTER_APPROVAL/);
+  await writeFile(taskPath, approvedSource, "utf8");
+
+  // "... AND PROFILE MUST MATCH" — the guardrail half. Both are required for
+  // the declaration to be true, and only checking one would leave it half prose.
+  await editProfile(root, (doc) => {
+    doc.defaults.run.isolationMode = "NONE";
+    doc.policies.harness.requireIsolationForMutation = false;
+  });
+  await assert.rejects(() => runTask(root, "sample"), /PROFILE_GUARDRAILS_CHANGED_AFTER_APPROVAL/);
+});

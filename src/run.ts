@@ -838,6 +838,12 @@ async function executeRun(
     },
     verificationPlan,
     artifactPlan,
+    // The design fixes this block's shape, so it is written even though resume
+    // itself does not exist yet. sourceHashPolicy is not decorative: the
+    // approval target is sha256(revisionHash, guardrailHash), so a Run whose
+    // Task or whose guardrails have moved is already refused, and
+    // test/approval-contract.test.ts ties the declaration to that refusal
+    // rather than letting it stand as prose. P1-43.
     resume: {
       boundary: "PLANNED_BEFORE_ADAPTER_REQUEST",
       sourceHashPolicy: "TASK_AND_PROFILE_MUST_MATCH",
@@ -1305,6 +1311,7 @@ async function executeRun(
       task,
       runSummary: runSummary as unknown as Record<string, unknown>,
       harnessObservation,
+      verificationEvidence: verificationEvidence as unknown as Record<string, unknown> | null,
       localReview: null
     }),
     "utf8"

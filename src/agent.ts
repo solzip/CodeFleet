@@ -238,6 +238,40 @@ export interface RunCommandOptions {
   env?: Record<string, string>;
 }
 
+/** Characters cmd.exe reads as syntax rather than as part of an argument. */
+const CMD_METACHARACTERS = /[&|<>^"%!\r\n]/;
+
+export function isWindowsBatchFile(command: string): boolean {
+  return /\.(bat|cmd)$/i.test(command);
+}
+
+export type WindowsShellDecision = "NOT_A_BATCH_FILE" | "SHELL_REQUIRED" | "REFUSED_METACHARACTERS";
+
+/**
+ * Whether this launch needs cmd.exe, and whether it is safe to give it.
+ *
+ * Separated from the platform check so the screening itself is testable
+ * everywhere: the rule is what matters, and it should not be verifiable on one
+ * operating system only.
+ *
+ * REFUSED_METACHARACTERS is not a fallback to a non-shell launch that would
+ * work anyway — spawn then fails with EINVAL and the failure is recorded. That
+ * is the correct outcome for an argv cmd.exe would reinterpret, because passing
+ * one through a shell is how a policy-checked command list turns back into a
+ * shell string.
+ */
+export function windowsShellDecision(command: string, args: string[]): WindowsShellDecision {
+  if (!isWindowsBatchFile(command)) {
+    return "NOT_A_BATCH_FILE";
+  }
+  const offending = [command, ...args].some((part) => CMD_METACHARACTERS.test(part));
+  return offending ? "REFUSED_METACHARACTERS" : "SHELL_REQUIRED";
+}
+
+export function needsWindowsShell(command: string, args: string[]): boolean {
+  return process.platform === "win32" && windowsShellDecision(command, args) === "SHELL_REQUIRED";
+}
+
 export function runCommand(
   command: string,
   args: string[],
@@ -251,7 +285,17 @@ export function runCommand(
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd,
-      shell: false,
+      // A Windows batch file is not an executable image: CreateProcess cannot
+      // launch gradlew.bat or mvnw.cmd, so every Gradle and Maven wrapper — the
+      // standard entry point on those projects — was unreachable as a
+      // verification command. Writing ["cmd","/c","gradlew.bat"] is correctly
+      // refused as a shell interpreter, which left no way in at all. P1-34.
+      //
+      // The interpreter is supplied by the Harness for this one case rather
+      // than accepted from the Task, and only after the argv has been screened
+      // for characters cmd.exe would treat as syntax. What stays impossible is
+      // a Task naming a shell and passing it a string to interpret.
+      shell: needsWindowsShell(command, args),
       stdio: ["pipe", "pipe", "pipe"],
       // An explicit environment rather than process.env. PATH is kept because
       // resolving the adapter binary needs it; nothing else is passed unless

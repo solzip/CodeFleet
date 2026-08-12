@@ -22,8 +22,7 @@ import {
   ISOLATION_COMMAND_TIMEOUT_MS,
   NEW_FILE_CAPTURE_BUDGET_MS,
   VERIFICATION_COMMAND_OUTPUT_CAP_BYTES,
-  VERIFICATION_COMMAND_TIMEOUT_MS
-} from "../src/agent.ts";
+  VERIFICATION_COMMAND_TIMEOUT_MS, runCommand, windowsShellDecision } from "../src/agent.ts";
 import { classifyGap, reviewRun } from "../src/review.ts";
 import { runProcess, runTask } from "../src/run.ts";
 import { approveTask } from "../src/task-ledger.ts";
@@ -500,3 +499,55 @@ test("a git child sees a named environment, not everything the operator exported
     delete process.env.CODEFLEET_GIT_SECRET;
   }
 });
+
+// Windows batch files as verification commands.
+//
+// CreateProcess cannot launch gradlew.bat or mvnw.cmd, and writing
+// ["cmd","/c","gradlew.bat"] is correctly refused as a shell interpreter. The
+// result was that Gradle and Maven wrappers — the standard entry point for
+// those projects — could not be verification commands on Windows at all. The
+// first real run against a Spring Boot project hit exactly this. P1-34.
+//
+// The screening is tested on every platform because the rule is what matters;
+// only the end-to-end launch is win32-only.
+test("cmd.exe is supplied for a batch file and refused for an argv it would reinterpret", () => {
+  assert.equal(windowsShellDecision("gradlew.bat", ["test"]), "SHELL_REQUIRED");
+  assert.equal(windowsShellDecision("mvnw.cmd", ["-q", "verify"]), "SHELL_REQUIRED");
+  assert.equal(windowsShellDecision("GRADLEW.BAT", ["test"]), "SHELL_REQUIRED", "the extension is not case sensitive");
+
+  // Not a batch file: nothing changes, and the shell is not involved.
+  assert.equal(windowsShellDecision("gradle", ["test"]), "NOT_A_BATCH_FILE");
+  assert.equal(windowsShellDecision("node", ["--version"]), "NOT_A_BATCH_FILE");
+
+  // The interpreter is supplied by the Harness for one narrow case. An argv
+  // carrying cmd.exe syntax would turn a policy-checked command list back into
+  // a shell string, so it is refused rather than quoted around.
+  for (const argument of ["a&b", "a|b", "a>b", "a<b", "a^b", 'a"b', "a%PATH%b", "a!b!", "a\nb"]) {
+    assert.equal(
+      windowsShellDecision("gradlew.bat", ["test", argument]),
+      "REFUSED_METACHARACTERS",
+      `${JSON.stringify(argument)} must not reach cmd.exe`
+    );
+  }
+  // And in argv[0] too, not only in the arguments.
+  assert.equal(windowsShellDecision("grad&lew.bat", []), "REFUSED_METACHARACTERS");
+});
+
+test(
+  "a batch file runs as a verification command on Windows",
+  { skip: process.platform !== "win32" ? "win32 only: POSIX has no batch files" : false },
+  async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-batch-"));
+    const batch = path.join(root, "check.bat");
+    await writeFile(batch, "@echo off\r\necho from the wrapper\r\nexit /b 0\r\n", "utf8");
+
+    // Called by basename, the way a Task declares it and the way command
+    // matching normalizes it. cmd.exe resolves it from the working directory,
+    // which is what makes ./gradlew.bat reachable at all.
+    const result = await runCommand("check.bat", [], "", root, {
+      limits: { timeoutMs: 30_000, outputCapBytes: 1024 * 1024 }
+    });
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.match(result.stdout, /from the wrapper/);
+  }
+);

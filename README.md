@@ -208,6 +208,7 @@ workflow:
 - scope 패턴은 whole-path 매칭이며 하위 트리를 암묵적으로 포함하지 않는다. `src`는 이름이 정확히 `src`인 파일만 매칭한다. `src/**`로 써야 한다.
 - `verification.commands[].command`는 argv 배열이며 셸 문자열이 아니다. 셸 인터프리터는 거부된다. command 매칭이 의미를 유지해야 하기 때문이다.
 - `command[0]`은 매칭과 실행 모두에서 basename으로 정규화된다. 따라서 `./gradlew` 같은 상대 스크립트 경로는 해석되지 않는다. `PATH`에 있는 명령을 사용할 것.
+- 예외는 Windows 배치 파일이다. `gradlew.bat`·`mvnw.cmd`는 CreateProcess로 실행할 수 없어 Harness가 `cmd.exe`를 공급하고, cmd.exe가 작업 디렉터리에서 해석하므로 프로젝트 루트의 wrapper가 잡힌다. 인터프리터를 **계약이 지목하는 것**은 여전히 거부된다 — `["cmd","/c",...]`는 `SHELL_INTERPRETER_DENIED`다. cmd.exe가 문법으로 읽는 문자(`& | < > ^ " % !`)가 argv에 있으면 실행 자체가 거부된다.
 
 Task 파일에는 `status` 필드가 없다. 실행 결과는 계약이 아니므로 계약 문서에 넣지 않는다 — `status`를 선언한 Task는 validation에서 거부된다. 실행 상태는 `codefleet status`(Task별 최신 Run)와 `codefleet runs`(모든 Run과 그 결과)에서 본다.
 

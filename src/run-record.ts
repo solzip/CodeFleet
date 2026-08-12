@@ -15,6 +15,8 @@ export interface RunRecordInput {
   task: Task;
   runSummary: Record<string, unknown>;
   harnessObservation: Record<string, unknown>;
+  /** Null when the Run planned no verification, or produced no evidence. */
+  verificationEvidence?: Record<string, unknown> | null;
   localReview?: Record<string, unknown> | null;
 }
 
@@ -261,6 +263,38 @@ export function renderRunRecord(input: RunRecordInput): string {
     `attempts               : ${num(verifyScope.attemptsExecuted)} executed of ${num(verifyScope.attemptsRecorded)} recorded, ${num(verifyScope.attemptsBlocked)} blocked`
   );
   lines.push("```");
+  lines.push("");
+
+  // A gate result without the commands behind it reads as "tests passed". The
+  // first real run against a Spring Boot project produced SATISFIED from a
+  // single `gradle --version`, and this document — the only one a person
+  // reads — never said so. P1-35.
+  const attempts = list(record(input.verificationEvidence ?? {}).attempts).filter(
+    (entry): entry is Record<string, unknown> => typeof entry === "object" && entry !== null
+  );
+  if (attempts.length === 0) {
+    lines.push(
+      input.verificationEvidence === undefined || input.verificationEvidence === null
+        ? "No verification evidence was produced, so nothing here says what was checked."
+        : "This Run planned no verification commands. The gate result above rests on no executed command."
+    );
+  } else {
+    lines.push("What the gate result above actually rests on:");
+    lines.push("");
+    lines.push("```text");
+    for (const attempt of attempts) {
+      const commandParts = list(attempt.command).filter((part): part is string => typeof part === "string");
+      const outcome =
+        attempt.decision === "ALLOWED"
+          ? `${str(attempt.result, "UNKNOWN")} (exit ${attempt.exitCode === null ? "none" : num(attempt.exitCode)})`
+          : `${str(attempt.decision, "?")}: ${str(attempt.blockedReason, "no reason recorded")}`;
+      lines.push(`${str(attempt.commandId, "?")}  ${outcome}`);
+      // The argv verbatim. A summary of what a command "was for" is the thing
+      // that lets a version check pass for a test suite.
+      lines.push(`  ${commandParts.length === 0 ? "(no command recorded)" : commandParts.join(" ")}`);
+    }
+    lines.push("```");
+  }
   lines.push("");
 
   // A readable summary is the easiest place to paper over gaps with prose, so
