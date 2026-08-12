@@ -13,29 +13,74 @@ export interface AgentAdapter {
 }
 
 /** AdapterIds this build can actually run. Resolution checks it before planning. */
-export const LOCAL_ADAPTER_REGISTRY = ["codex"];
+export const LOCAL_ADAPTER_REGISTRY = ["codex", "claude"];
 
 export function isAdapterLocallyAvailable(name: string): boolean {
   return LOCAL_ADAPTER_REGISTRY.includes(name);
 }
 
 export function createAgentAdapter(name: string): AgentAdapter {
-  if (name === "codex") {
-    return new CodexAdapter();
+  const spec = ADAPTER_SPECS[name];
+  if (spec === undefined) {
+    throw new Error(`Unsupported agent: ${name}`);
   }
-
-  throw new Error(`Unsupported agent: ${name}`);
+  return new SpawnedCliAdapter(spec);
 }
 
-class CodexAdapter implements AgentAdapter {
-  readonly name = "codex";
+/**
+ * What actually differs between two CLI adapters.
+ *
+ * Everything else — the dry-run short circuit, the capability refusal, reading
+ * the prompt, the bounded launch — is the same for both, and having only one
+ * adapter meant that was an assumption rather than a fact. A second one is the
+ * only way to find out which parts were provider-specific.
+ */
+interface AdapterSpec {
+  name: string;
+  /** Used unless the Local Overlay names a command for this workspace. */
+  defaultCommand: string;
+  defaultArgs: string[];
+  /**
+   * Provider-agnostic reading of the provider's own transcript. Kept in the
+   * adapter layer on purpose: no transcript format becomes part of the domain,
+   * and a format this build does not recognise degrades authority rather than
+   * producing a fabricated command record.
+   */
+  readTranscript: (stdout: string) => ProviderTranscriptReading;
+}
+
+const ADAPTER_SPECS: Record<string, AdapterSpec> = {
+  codex: {
+    name: "codex",
+    defaultCommand: "codex",
+    defaultArgs: ["exec", "-"],
+    readTranscript: readProviderTranscript
+  },
+  claude: {
+    name: "claude",
+    defaultCommand: "claude",
+    // -p reads the prompt from stdin and runs without a terminal;
+    // stream-json is what makes the transcript machine-readable at all.
+    defaultArgs: ["-p", "--output-format", "stream-json", "--verbose"],
+    readTranscript: readClaudeTranscript
+  }
+};
+
+class SpawnedCliAdapter implements AgentAdapter {
+  readonly name: string;
+  readonly #spec: AdapterSpec;
+
+  constructor(spec: AdapterSpec) {
+    this.name = spec.name;
+    this.#spec = spec;
+  }
 
   async run(input: AgentRunInput): Promise<AgentRunResult> {
     if (input.config.mode === "dry-run") {
       return {
         status: "DRY_RUN",
         exitCode: null,
-        stdout: "Dry run: Codex was not executed.\n",
+        stdout: `Dry run: ${this.#spec.name} was not executed.\n`,
         stderr: ""
       };
     }
@@ -53,12 +98,16 @@ class CodexAdapter implements AgentAdapter {
     }
 
     const prompt = await readFile(input.promptPath, "utf8");
+    // The Local Overlay holds one adapterCommand for the workspace, so naming
+    // one while switching adapters per Run would point both at the same binary.
+    // That is a real limit of the overlay shape, not something to paper over
+    // here — the default is per-adapter and the override is workspace-wide.
     const commandConfig = input.config.adapterCommand;
-    const command = commandConfig.command ?? "codex";
-    const args = commandConfig.args ?? ["exec", "-"];
+    const command = commandConfig.command ?? this.#spec.defaultCommand;
+    const args = commandConfig.args ?? this.#spec.defaultArgs;
 
     const result = await runCommand(command, args, prompt, input.projectPath, { limits: input.limits });
-    return { ...result, providerTranscript: readProviderTranscript(result.stdout) };
+    return { ...result, providerTranscript: this.#spec.readTranscript(result.stdout) };
   }
 }
 
@@ -140,6 +189,93 @@ export function readProviderTranscript(transcript: string): ProviderTranscriptRe
 // Three outcomes that must not look alike: nothing structured to read, a
 // structured transcript in a shape this parser does not know, and a transcript
 // that genuinely reported no command.
+/**
+ * Claude Code's stream-json transcript.
+ *
+ * A different shape from Codex's flat events: shell calls arrive as `tool_use`
+ * blocks nested inside an assistant message, and the command is a shell string
+ * in the tool input rather than an argv.
+ *
+ * The same rule applies as everywhere else here — a shell string is not an
+ * argv, and splitting one would invent word boundaries. The raw text is kept
+ * and argv stays empty, which is why a provider claim can never satisfy command
+ * policy no matter which adapter produced it.
+ *
+ * Only the documented shape is recognised. Anything else counts as
+ * unrecognised, degrading authority rather than producing a command record
+ * nobody can stand behind.
+ */
+export function readClaudeTranscript(transcript: string): ProviderTranscriptReading {
+  const lines = transcript.split(/\r?\n/);
+  const commands: ProviderReportedCommand[] = [];
+  let jsonLinesParsed = 0;
+  let unrecognizedJsonLines = 0;
+
+  for (const [index, line] of lines.entries()) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("{")) {
+      continue;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      continue;
+    }
+    jsonLinesParsed += 1;
+
+    const event = parsed as Record<string, unknown>;
+    const message = event.message as Record<string, unknown> | undefined;
+    const content = message?.content;
+    if (event.type !== "assistant" || !Array.isArray(content)) {
+      unrecognizedJsonLines += 1;
+      continue;
+    }
+
+    let found = 0;
+    for (const block of content) {
+      if (block === null || typeof block !== "object" || Array.isArray(block)) {
+        continue;
+      }
+      const entry = block as Record<string, unknown>;
+      if (entry.type !== "tool_use") {
+        continue;
+      }
+      // Only the shell tool. A file-edit tool call is not a command, and
+      // recording it as one would overstate what the provider claimed.
+      const toolName = typeof entry.name === "string" ? entry.name : "";
+      if (toolName.toLowerCase() !== "bash") {
+        continue;
+      }
+      const toolInput = entry.input as Record<string, unknown> | undefined;
+      const raw = typeof toolInput?.command === "string" ? toolInput.command : "";
+      if (raw.length === 0) {
+        continue;
+      }
+      commands.push({
+        eventType: `tool_use.${toolName}`,
+        argv: [],
+        raw,
+        exitCode: null,
+        lineNumber: index + 1
+      });
+      found += 1;
+    }
+    if (found === 0) {
+      unrecognizedJsonLines += 1;
+    }
+  }
+
+  return {
+    commands,
+    unavailableReason: transcriptUnavailableReason(jsonLinesParsed, commands.length),
+    scanScope: { linesRead: lines.length, jsonLinesParsed, unrecognizedJsonLines }
+  };
+}
+
 function transcriptUnavailableReason(jsonLinesParsed: number, commandsFound: number): string {
   if (jsonLinesParsed === 0) {
     return "PROVIDER_TRANSCRIPT_NOT_STRUCTURED";

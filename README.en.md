@@ -294,7 +294,12 @@ The Run is planned before the adapter is given control: the approval is checked 
 
 ```bash
 codefleet run task-001 --adapter codex
+codefleet run task-001 --adapter claude
 ```
+
+This build can run `codex` and `claude`. The default `policies.agentAdapters.allowedAdapters` is `["codex"]` alone, so using the second one requires permitting it in the Profile — an allowlist is a decision, not a convenience.
+
+Different adapters emit different provider transcripts, and reading them stays in the adapter layer: core receives only the provider-agnostic reading, so no transcript format enters the domain. A format this build does not recognise is degraded rather than guessed at. Either way **a shell string is never split into an argv** — a command the provider claims cannot satisfy command policy.
 
 What the contract fixes is the **role** (`agentRole`); which CLI carries that role out is a property of this run, not of the contract. That is why the adapter is a Run Option rather than a Task field.
 

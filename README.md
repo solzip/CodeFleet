@@ -288,7 +288,12 @@ Run은 어댑터에 제어를 넘기기 전에 계획된다. 승인을 먼저 �
 
 ```bash
 codefleet run task-001 --adapter codex
+codefleet run task-001 --adapter claude
 ```
+
+이 빌드가 실행할 수 있는 어댑터는 `codex`와 `claude`다. `policies.agentAdapters.allowedAdapters` 기본값은 `["codex"]`뿐이므로, 두 번째 어댑터를 쓰려면 프로파일에서 명시적으로 허용해야 한다 — allowlist는 결정이지 편의가 아니다.
+
+어댑터가 다르면 provider transcript 형식도 다르고, 그 해석은 어댑터 계층에만 있다. 코어는 provider 무관한 읽기 결과만 받으므로 어떤 transcript 형식도 도메인에 들어오지 않는다. 인식하지 못하는 형식은 추측하지 않고 격하된다. 어느 쪽이든 **셸 문자열은 argv로 쪼개지 않는다** — provider가 주장한 커맨드는 command policy를 만족시킬 수 없다.
 
 계약이 고정하는 것은 **역할**(`agentRole`)이고, 그 역할을 어떤 CLI가 수행하는지는 계약이 아니라 이번 실행의 속성이다. 그래서 어댑터는 Task 필드가 아니라 Run Option이다.
 

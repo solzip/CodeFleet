@@ -943,7 +943,11 @@ async function executeRun(
   await writeJson(preRunSnapshotPath, preRunSnapshot);
   const preRunSnapshotRef = await fileRef(rootDir, preRunSnapshotPath);
 
-  const agentName = config.agentAdapter;
+  // The resolved adapter, not the Profile default. Reading config here meant a
+  // Run Option was recorded in the Run Plan and then ignored at launch — the
+  // Run Trace said one adapter and another one ran. Only a second adapter could
+  // surface it: with one, both values were always the same string.
+  const agentName = adapterResolution.selectedAgentAdapter;
   const agentResult = await runAgentSafely(agentName, {
     task,
     runDir,
