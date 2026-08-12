@@ -217,17 +217,46 @@ codefleet prompt task-001     # .codefleet/prompts/task-001.md 생성, 실행은
 ```bash
 codefleet task approve task-001 --reason "범위와 검증 조건 확인함"
 codefleet task status task-001
+codefleet task revision task-001 1        # 승인된 계약 본문
+codefleet task revision task-001 1 --json # 계약 + 해시 + 결정 참조
 ```
 
-`approve`는 validation을 통과하지 못한 Task를 거부한다. 유효하지 않은 Task는 실행 계약이 될 수 없기 때문이다. 승인은 revision과 approval을 함께 만들어 `.codefleet/tasks/task-001/task-ledger.jsonl`에 append한다.
+`approve`는 validation을 통과하지 못한 Task를 거부한다. 유효하지 않은 Task는 실행 계약이 될 수 없기 때문이다. 승인은 revision과 approval을 함께 만들어 `.codefleet/tasks/task-001/task-ledger.jsonl`에 append하고, 승인된 계약 본문을 `.codefleet/tasks/task-001/revisions/0001.json`에 고정한다.
 
-`task status`는 최신 revision, 승인된 revision, 승인자, 실행 가능 여부를 출력한다. 실행 불가일 때 사유는 다음 중 하나다:
+`approve`는 **실행할 수 없는 계약도 거부한다.** verification 커맨드를 선언했는데 `agentRole`과 프로파일이 함께 만드는 상한이 `COMMAND_EXEC`에 못 미치면 승인 자체가 막힌다. 승인이 "실행해도 된다"가 아니라 "실행을 시도해도 된다"가 되는 것을 막기 위해서다.
+
+**Revision 산출물.** 원장은 승인된 해시를 기록하지만, 해시는 파일이 그대로 남아 있을 때만 대조할 수 있다. Task를 수정하면 승인된 본문 자체가 사라진다. `revisions/<n>.json`이 그 본문을 고정한다:
+
+- immutable Task contract (승인된 바이트 그대로)
+- contentHash
+- approval target hash / approval decision reference
+- objective relation snapshot
+
+이 파일은 **source이지 권위가 아니다.** 현재 승인 상태와 Objective relation은 원장 replay로 계산한다. 승인이 나중에 무효화돼도 이 파일은 고쳐 쓰지 않는다 — 무효화된 승인에도 계약은 있었고, 그 사본은 이것뿐이다. 읽을 때마다 본문을 다시 해시해서 대조하므로, 변조된 계약은 반환되지 않고 거부된다.
+
+`task status`는 Draft 상태와 Revision 상태를 나눠서 출력한다. 설계가 둘을 별개 상태 기계로 규정하기 때문이다.
+
+| Draft 상태 | 의미 |
+| --- | --- |
+| `READY_FOR_APPROVAL` | validate와 실행 가능성 검사를 모두 통과 — 승인 가능 |
+| `EDITING` | 그 외. 막는 이유를 함께 출력한다 |
+
+| Revision 상태 | 의미 |
+| --- | --- |
+| `APPROVED` | 유효한 승인이 있는 불변 계약 |
+| `INVALIDATED` | 승인이 철회됨 |
+| `SUPERSEDED` | `TASK_REVISION_SUPERSEDED`가 대체를 기록함 |
+
+설계의 `REJECTED`(Draft)와 `CANCELED`(Revision)는 아직 어떤 이벤트도 만들지 않으므로 출력되지 않는다. 도달할 수 없는 상태를 목록에 넣지 않는 쪽을 택했다.
+
+실행 불가일 때 사유는 다음 중 하나다:
 
 | `blockedReason` | 의미 |
 | --- | --- |
 | `NO_REVISION_CREATED` | 승인된 적 없음 |
 | `NO_VALID_APPROVAL` | 승인이 무효화됨 |
 | `TASK_CONTENT_CHANGED_AFTER_APPROVAL` | 승인 이후 파일이 수정됨 |
+| `PROFILE_GUARDRAILS_CHANGED_AFTER_APPROVAL` | 파일은 그대로지만 승인 당시의 가드레일이 바뀜 |
 
 승인된 Task를 수정해도 승인이 조용히 따라오지 않는다. 수정된 내용을 다시 승인하려면:
 

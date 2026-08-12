@@ -163,6 +163,13 @@ P0-13을 고쳐 relation을 필수 게이트로 만들면, 그 게이트가 읽�
 
 P1-37의 수치를 갱신한다: Run Trace의 JSON은 7개가 아니라 **9개**(workspace 스냅샷 2개 포함)이고, `taskRevision` 보유 1개 · `taskId` 보유 3개 · 둘 다 없는 것 5개다.
 
+### S2 구현 중 등재된 P1 (2026-08-12)
+
+| ID | 신규 P1 | 근거 |
+|---|---|---|
+| **P1-44** | 설계의 Revision State 3개 중 어디에도 속하지 않는 상태가 이벤트로 만들어진다 | 설계 §0.6은 `APPROVED` / `SUPERSEDED` / `CANCELED`를 규정한다. `TASK_APPROVAL_INVALIDATED` 이후 더 새로운 revision이 없는 revision은 이 셋 중 무엇도 아니다. 설계 자신의 예시(seq 10 approve r1 / 14 invalidate r1 / 20 approve r2)도 r1을 SUPERSEDED가 아니라 "무효화됨 / 현재 실행 불가"로 replay한다. `INVALIDATED`라는 이름으로 보고하고 셋 중 하나로 접지 않았다 — `CANCELED`로 접으면 아무도 내리지 않은 폐기 결정을 주장하게 된다 |
+| **P1-45** | Draft State `REJECTED`를 만드는 이벤트가 없다 | 설계 §0.6이 `EDITING` / `READY_FOR_APPROVAL` / `REJECTED`를 규정하지만 draft 폐기는 파일 삭제로만 가능하다. `deriveDraftState`는 도달 가능한 2개만 반환한다. P1-42(`TASK_REVISION_SUPERSEDED` 생산자 부재)와 같은 종류의 결함 |
+
 ## 2026-08-11 P1 목록의 연속성
 
 이번 감사가 새 번호를 붙이기 전에 기존 번호가 끊기거나 겹치지 않는지 대조했다. 2026-08-11 SUMMARY의 P1-12 ~ P1-19는 전부 살아 있고, 이번 감사에서 상태만 갱신됐다.

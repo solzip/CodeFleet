@@ -19,7 +19,16 @@ import { renderPrompt } from "./prompt.ts";
 import { reviewRun, type ReviewDecision } from "./review.ts";
 import { breakRunLock, listRunLocks, runTask, listRuns } from "./run.ts";
 import { formatValidationErrors, loadTask, loadTaskForValidation } from "./task.ts";
-import { approveTask, contentHashOf, invalidateApproval, replayApproval } from "./task-ledger.ts";
+import {
+  approveTask,
+  contentHashOf,
+  deriveDraftState,
+  deriveRevisionStates,
+  invalidateApproval,
+  readTaskEvents,
+  replayApproval
+} from "./task-ledger.ts";
+import { listTaskRevisions, readTaskRevision } from "./task-revision.ts";
 import { discoverWorkspace, type WorkspaceDiscovery } from "./workspace.ts";
 
 interface CliOptions {
@@ -150,6 +159,34 @@ async function handleTask(cwd: string, options: CliOptions, args: string[]): Pro
     const { taskPath } = await loadTaskForValidation(rootDir, id);
     const state = await replayApproval(rootDir, id, await contentHashOf(taskPath));
     console.log(`task: ${id}`);
+
+    // Draft state and Revision state are separate models in the design, and
+    // collapsing them is what made "why can I not approve this" unanswerable.
+    const draft = await deriveDraftState(rootDir, id);
+    console.log(`draftState: ${draft.state}`);
+    for (const reason of draft.reasons) {
+      for (const line of reason.split("\n")) {
+        console.log(`  ${line}`);
+      }
+    }
+
+    const revisions = deriveRevisionStates(await readTaskEvents(rootDir, id));
+    const stored = new Set(await listTaskRevisions(rootDir, id));
+    if (revisions.length === 0) {
+      console.log("revisions: (none)");
+    } else {
+      console.log("revisions:");
+      for (const revision of revisions) {
+        // A revision with no stored contract is called out rather than listed
+        // as if it could be recovered.
+        const artifact = stored.has(revision.taskRevision) ? "contract stored" : "contract not stored";
+        console.log(
+          `  ${revision.taskRevision}  ${revision.state.padEnd(12)} ${revision.revisionHash.slice(0, 12)}  ` +
+            `${revision.approvedBy || "(none)"}  ${artifact}`
+        );
+      }
+    }
+
     console.log(`latestRevision: ${state.latestRevision}`);
     console.log(`approvedRevision: ${state.approvedRevision ?? "(none)"}`);
     console.log(`approvedBy: ${state.approvedBy || "(none)"}`);
@@ -157,7 +194,34 @@ async function handleTask(cwd: string, options: CliOptions, args: string[]): Pro
     return;
   }
 
-  throw new Error("Usage: codefleet task validate|approve|invalidate|status <task-id>");
+  // The approved contract, recovered from the artifact rather than from the
+  // working file. Without this an edited Task left no way to read what was
+  // approved, only a hash to compare it against. P1-38.
+  if (subcommand === "revision") {
+    const revisions = await listTaskRevisions(rootDir, id);
+    const requested = args[2];
+    if (requested === undefined) {
+      if (revisions.length === 0) {
+        console.log(`no stored revisions for ${id}`);
+        return;
+      }
+      console.log(revisions.join("\n"));
+      return;
+    }
+    const number = Number.parseInt(requested, 10);
+    if (!Number.isInteger(number)) {
+      throw new Error(`revision must be a number; got ${requested}`);
+    }
+    const document = await readTaskRevision(rootDir, id, number);
+    if (args.includes("--json")) {
+      console.log(JSON.stringify(document, null, 2));
+      return;
+    }
+    process.stdout.write(document.contract.source);
+    return;
+  }
+
+  throw new Error("Usage: codefleet task validate|approve|invalidate|status|revision <task-id> [revision] [--json]");
 }
 
 async function handleStatus(cwd: string, options: CliOptions): Promise<void> {

@@ -14,8 +14,10 @@ import path from "node:path";
 import { meetMode, modeRank, resolveAgentRole, type CustomRole } from "./agent-role.ts";
 import { loadConfig } from "./config.ts";
 import { runMutation, type MutationOutcome } from "./mutation.ts";
-import { loadTask } from "./task.ts";
+import { findTaskPath, loadTask, validateTask } from "./task.ts";
+import { readTaskRevision, writeTaskRevision } from "./task-revision.ts";
 import type { CodeFleetConfig } from "./types.ts";
+import { parseYaml } from "./yaml.ts";
 
 export type TaskLedgerEventType =
   | "TASK_REVISION_CREATED"
@@ -109,11 +111,6 @@ export async function guardrailHashOf(rootDir: string): Promise<string> {
 }
 
 /**
- * What the approval names: the contract body and the guardrails it may run
- * under. Kept as one value so a stored approval cannot match a Run whose
- * guardrails have since moved.
- */
-/**
  * Whether this contract could execute at all. The design makes it a condition of
  * turning a Draft into a Revision, and without it an approval means "you may try
  * to run this" rather than "you may run this": the default profile approves a
@@ -170,6 +167,11 @@ export async function contractFeasibility(
   };
 }
 
+/**
+ * What the approval names: the contract body and the guardrails it may run
+ * under. Kept as one value so a stored approval cannot match a Run whose
+ * guardrails have since moved.
+ */
 export function approvalTargetOf(revisionHash: string, guardrailHash: string): string {
   return createHash("sha256").update(`${revisionHash}\n${guardrailHash}`).digest("hex");
 }
@@ -257,6 +259,115 @@ export async function replayApproval(
   };
 }
 
+/**
+ * Design §0.6 names three Revision states — APPROVED, SUPERSEDED, CANCELED —
+ * and one more that the events produce but the vocabulary does not name.
+ *
+ * INVALIDATED is a revision whose TASK_APPROVAL_INVALIDATED arrived with no
+ * newer revision behind it. It is not APPROVED, nothing superseded it, and
+ * calling it CANCELED would claim a decision nobody made: cancelling discards a
+ * revision, while invalidating withdraws its approval. It is reported under its
+ * own name rather than folded into one of the three. Registered as P1-44.
+ *
+ * CANCELED is absent here because no event produces it — the same gap as P1-42
+ * for SUPERSEDED, which S3 closes.
+ */
+export type RevisionState = "APPROVED" | "SUPERSEDED" | "INVALIDATED";
+
+export interface RevisionStateEntry {
+  taskRevision: number;
+  revisionHash: string;
+  state: RevisionState;
+  approvedBy: string;
+  at: string;
+}
+
+export function deriveRevisionStates(events: TaskLedgerEvent[]): RevisionStateEntry[] {
+  const byRevision = new Map<number, RevisionStateEntry>();
+
+  for (const event of events) {
+    if (event.type === "TASK_REVISION_CREATED") {
+      byRevision.set(event.taskRevision, {
+        taskRevision: event.taskRevision,
+        revisionHash: event.revisionHash,
+        state: "INVALIDATED",
+        approvedBy: "",
+        at: event.at
+      });
+      continue;
+    }
+    const entry = byRevision.get(event.taskRevision);
+    if (entry === undefined) {
+      continue;
+    }
+    if (event.type === "TASK_APPROVED") {
+      entry.state = "APPROVED";
+      entry.approvedBy = event.actorId;
+      entry.at = event.at;
+      // A newer approval does not supersede an older revision here. The design
+      // replays its own example — approve r1, invalidate r1, approve r2 — as
+      // "revision 1: 승인된 적 있음 / 무효화됨 / 현재 실행 불가", not as
+      // SUPERSEDED, and TASK_REVISION_SUPERSEDED carries fields
+      // (supersededByTaskRevision, supersededByRevisionHash) that only an
+      // explicit event can supply. Deriving it from revision numbering would be
+      // the hidden rollback the design forbids.
+    } else if (event.type === "TASK_APPROVAL_INVALIDATED") {
+      entry.state = "INVALIDATED";
+      entry.at = event.at;
+    } else if (event.type === "TASK_REVISION_SUPERSEDED") {
+      entry.state = "SUPERSEDED";
+      entry.at = event.at;
+    }
+  }
+
+  return [...byRevision.values()].sort((a, b) => a.taskRevision - b.taskRevision);
+}
+
+/**
+ * Draft state, derived rather than declared. The field that used to sit in the
+ * Task file held execution outcomes and was removed (P1-40); what the design
+ * actually wants there is review readiness.
+ *
+ * REJECTED is missing because no event produces it — a draft is currently
+ * discarded by deleting the file. Registered as P1-45; reporting two states
+ * where the design names three is better than labelling something REJECTED on
+ * a guess.
+ */
+export type DraftState = "EDITING" | "READY_FOR_APPROVAL";
+
+export async function deriveDraftState(
+  rootDir: string,
+  taskId: string
+): Promise<{ state: DraftState; reasons: string[] }> {
+  const taskPath = await findTaskPath(rootDir, taskId);
+  const parsed = parseYaml(await readFile(taskPath, "utf8"));
+  const validation = validateTask(parsed);
+
+  const reasons = [...validation.errors];
+  const feasibility = await contractFeasibility(rootDir, taskId).catch((error: unknown) => ({
+    feasible: false,
+    reason: String((error as Error).message ?? error)
+  }));
+  if (!feasibility.feasible) {
+    reasons.push(feasibility.reason);
+  }
+
+  // A prior approval standing over different content also blocks approve. The
+  // state means "approve 가능", so reporting READY_FOR_APPROVAL while approve
+  // refuses would make the field answer a different question than it asks.
+  const approval = await replayApproval(rootDir, taskId, await contentHashOf(taskPath));
+  if (approval.approvedRevision !== null && approval.approvedRevisionHash !== (await contentHashOf(taskPath))) {
+    reasons.push(
+      `revision ${approval.approvedRevision} is approved for different content; ` +
+        `invalidate it before approving this draft`
+    );
+  }
+
+  // "validate 통과 전 approve 불가" is the design's own condition, so a draft
+  // that cannot be approved is still EDITING no matter how finished it looks.
+  return { state: reasons.length === 0 ? "READY_FOR_APPROVAL" : "EDITING", reasons };
+}
+
 async function appendTaskEvent(
   rootDir: string,
   taskId: string,
@@ -341,11 +452,27 @@ export async function approveTask(
       append: async (mutationId): Promise<TaskLedgerEvent> => {
         const state = await replayApproval(rootDir, taskId, currentHash);
         const revision = state.latestRevision + 1;
-        await appendTaskEvent(rootDir, taskId, mutationId, "TASK_REVISION_CREATED", {
+        const created = await appendTaskEvent(rootDir, taskId, mutationId, "TASK_REVISION_CREATED", {
           taskRevision: revision,
           revisionHash: currentHash,
           approvalTargetHash: "",
           actorId,
+          reason
+        });
+        // The contract is fixed before the approval names it. Written here and
+        // never rewritten: an approval that is later invalidated still had a
+        // contract, and this is the only copy of it once the file is edited.
+        await writeTaskRevision(rootDir, {
+          taskId,
+          taskRevision: revision,
+          taskPath,
+          contentHash: currentHash,
+          approvalTargetHash: targetHash,
+          guardrailHash,
+          mutationId,
+          eventId: created.eventId,
+          actorId,
+          at: created.at,
           reason
         });
         return appendTaskEvent(rootDir, taskId, mutationId, "TASK_APPROVED", {
@@ -364,6 +491,15 @@ export async function approveTask(
         const state = await replayApproval(rootDir, taskId, currentHash);
         if (state.blockedReason.length > 0) {
           throw new Error(`approval did not take effect: ${state.blockedReason}`);
+        }
+        // The artifact is checked by reading it back, which re-verifies its
+        // hash. A write that reported success and produced a file nobody can
+        // use would leave the approval standing with no recoverable contract.
+        const stored = await readTaskRevision(rootDir, taskId, state.approvedRevision ?? 0);
+        if (stored.contract.contentHash !== currentHash) {
+          throw new Error(
+            `the stored revision names ${stored.contract.contentHash} but the approval named ${currentHash}`
+          );
         }
       }
     }

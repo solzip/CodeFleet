@@ -200,6 +200,8 @@ export interface AgentRunResult {
 export interface RunResultFile {
   runId: string;
   taskId: string;
+  /** Which approved contract this Run executed. Null predates the field. */
+  taskRevision?: number | null;
   agent: string;
   status: RunStatus;
   startedAt: string;

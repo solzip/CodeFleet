@@ -223,17 +223,46 @@ A Run refuses to start on an unapproved Task. Approval binds to the file's conte
 ```bash
 codefleet task approve task-001 --reason "scope and verification reviewed"
 codefleet task status task-001
+codefleet task revision task-001 1        # the approved contract body
+codefleet task revision task-001 1 --json # contract, hashes, decision reference
 ```
 
-`approve` refuses a Task that fails validation: an invalid Task cannot become an executable contract. Approving creates a revision and the approval together, appended to `.codefleet/tasks/task-001/task-ledger.jsonl`.
+`approve` refuses a Task that fails validation: an invalid Task cannot become an executable contract. Approving creates a revision and the approval together, appended to `.codefleet/tasks/task-001/task-ledger.jsonl`, and fixes the approved contract at `.codefleet/tasks/task-001/revisions/0001.json`.
 
-`task status` prints the latest revision, the approved revision, who approved it, and whether it is executable. When it is not, the reason is one of:
+`approve` also **refuses a contract that could not execute.** If it declares verification commands while the ceiling formed by its `agentRole` and the profile falls below `COMMAND_EXEC`, the approval itself is blocked — otherwise an approval means "you may try to run this" rather than "you may run this".
+
+**The Revision artifact.** The ledger records the approved hash, but a hash can only be compared against a file that still exists; edit the Task and the approved body itself is gone. `revisions/<n>.json` fixes that body:
+
+- the immutable Task contract (the approved bytes, verbatim)
+- contentHash
+- approval target hash and approval decision reference
+- objective relation snapshot
+
+This file is a **source, not authority.** The current approval state and the current Objective relation are computed by replaying their ledgers. It is never rewritten when an approval is later invalidated — an invalidated approval still had a contract, and this is the only copy of it. Reading re-hashes the stored body and compares, so an altered contract is refused rather than returned.
+
+`task status` prints Draft state and Revision state separately, because the design models them as separate state machines.
+
+| Draft state | Meaning |
+| --- | --- |
+| `READY_FOR_APPROVAL` | passes validation and the feasibility check — approvable |
+| `EDITING` | anything else; the blocking reasons are printed with it |
+
+| Revision state | Meaning |
+| --- | --- |
+| `APPROVED` | an immutable contract with a valid approval |
+| `INVALIDATED` | the approval was withdrawn |
+| `SUPERSEDED` | a `TASK_REVISION_SUPERSEDED` event recorded the replacement |
+
+The design's `REJECTED` (Draft) and `CANCELED` (Revision) are not printed, because no event produces them yet. Listing a state nothing can reach would be worse than omitting it.
+
+When a Task is not executable, the reason is one of:
 
 | `blockedReason` | Meaning |
 | --- | --- |
 | `NO_REVISION_CREATED` | never approved |
 | `NO_VALID_APPROVAL` | the approval was invalidated |
 | `TASK_CONTENT_CHANGED_AFTER_APPROVAL` | the file was edited after approval |
+| `PROFILE_GUARDRAILS_CHANGED_AFTER_APPROVAL` | the file is unchanged but the guardrails it was approved under are not in force |
 
 Editing an approved Task does not silently carry the approval forward. To re-approve edited content:
 

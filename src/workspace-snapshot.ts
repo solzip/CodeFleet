@@ -33,6 +33,9 @@ export interface HarnessWorkspaceSnapshot {
   documentKind: "HARNESS_WORKSPACE_SNAPSHOT";
   phase: SnapshotPhase;
   runId: string;
+  /** Which contract this evidence belongs to, so it reads without run-plan.json. */
+  taskId: string;
+  taskRevision: number | null;
   capturedAt: string;
   workspaceRootRef: string;
   selectedWorkspaceRootRealPath: string;
@@ -74,6 +77,8 @@ type RunProcess = (
 export async function captureWorkspaceSnapshot(input: {
   projectPath: string;
   runId: string;
+  taskId: string;
+  taskRevision: number | null;
   phase: SnapshotPhase;
   scopePatterns: string[];
   capturedAt: string;
@@ -128,6 +133,8 @@ export async function captureWorkspaceSnapshot(input: {
     documentKind: "HARNESS_WORKSPACE_SNAPSHOT",
     phase,
     runId,
+    taskId: input.taskId,
+    taskRevision: input.taskRevision,
     capturedAt,
     workspaceRootRef: input.workspaceRootRef ?? ".",
     selectedWorkspaceRootRealPath: input.selectedWorkspaceRootRealPath ?? "",

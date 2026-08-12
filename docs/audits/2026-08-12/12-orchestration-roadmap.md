@@ -63,13 +63,27 @@
 
 ### S2 — Revision 산출물 (P1-41, 세 건을 함께 닫음)
 
-- [ ] **S2-1 · P1-41** — 승인 시 Revision 파일을 만든다
-  - 설계가 담을 내용을 규정: immutable Task contract / contentHash / approval target hash·decision reference / objective relation snapshot
-  - 설계 근거: "Revision 파일은 어떤 계약 내용이 승인 대상이었는지 고정하기 위한 source"
-- [ ] **S2-2 · P1-38** — 승인된 Revision의 본문을 복원할 수 있다 (S2-1의 결과)
-- [ ] **S2-3 · P1-39** — Draft / Revision 상태를 조회할 수 있다 (`EDITING` / `READY_FOR_APPROVAL` / `REJECTED`, `APPROVED` / `SUPERSEDED` / `CANCELED`)
-- [ ] **S2-4 · P1-37** — Run 산출물이 `taskId` + `taskRevision`을 지목한다
-- [ ] **S2-5** — 회귀 테스트
+- [x] **S2-1 · P1-41** — 승인 시 Revision 파일을 만든다
+  - `src/task-revision.ts` 신규. `.codefleet/tasks/<id>/revisions/<nnnn>.json`에 설계가 규정한 4개를 담는다: immutable Task contract(승인된 바이트 그대로) / contentHash / approval target hash·decision reference / objective relation snapshot
+  - `wx` 배타 생성. revision 번호는 한 번만 점유된다 — 덮어쓰기가 가능하면 승인된 계약이 자기 해시 아래에서 바뀔 수 있다
+  - **읽을 때 검증한다.** 저장된 본문을 다시 해시해 대조하고, 어긋나면 반환하지 않고 거부한다. 변조된 계약을 돌려주는 것은 없는 것보다 나쁘다
+  - 승인 postcheck가 산출물을 **되읽어서** 확인한다. 쓰기가 성공을 보고하고 쓸 수 없는 파일을 남기면 승인만 서 있고 복원 가능한 계약이 없다
+  - 무효화돼도 이 파일은 고쳐 쓰지 않는다 — 무효화된 승인에도 계약은 있었다
+- [x] **S2-2 · P1-38** — 승인된 Revision의 본문을 복원할 수 있다
+  - `codefleet task revision <id> [n] [--json]`
+  - 회귀: 승인 후 파일을 수정해도 승인된 본문이 그대로 복원된다
+- [x] **S2-3 · P1-39** — Draft / Revision 상태를 조회할 수 있다
+  - `deriveDraftState` / `deriveRevisionStates`, `task status`가 둘을 나눠 출력
+  - Draft: validate + 실행 가능성 + "다른 내용으로 선 승인이 서 있는가"를 모두 통과하면 `READY_FOR_APPROVAL`, 아니면 `EDITING` + 막는 이유
+  - **설계와 어긋난 지점 2건을 등재했다** (수정이 아니라 등재): 도달할 수 없는 상태를 목록에 넣지 않았다
+    - **P1-44** — invalidate 이후 더 새로운 revision이 없는 revision은 설계의 3개 상태 중 무엇도 아니다. `INVALIDATED`로 보고한다. 설계 자신의 replay 예시가 이를 SUPERSEDED로 부르지 않는다
+    - **P1-45** — Draft `REJECTED`를 만드는 이벤트가 없다
+  - 초안에서 revision 번호만 보고 SUPERSEDED를 파생시켰다가 되돌렸다. 설계가 금지하는 hidden rollback이고, `TASK_REVISION_SUPERSEDED`는 이벤트만 공급할 수 있는 필드를 갖는다
+- [x] **S2-4 · P1-37** — Run 산출물이 `taskId` + `taskRevision`을 지목한다
+  - 대상은 7개가 아니라 **재검수가 정정한 9개**(workspace 스냅샷 2개 포함). 1/9 → **9/9**
+  - 회귀 테스트는 바꾼 파일이 아니라 **9개 집합 전체를 다시 측정**한다. 읽은 개수를 함께 단언해서 0개 검사가 0개 누락으로 읽히지 않게 했다
+- [x] **S2-5** — 회귀 테스트
+  - `test/task-revision.test.ts` 7건. 스위트 224 → 231, 실패 0
 
 ### S3 — 실행 허가의 두 축을 정합하게 (P0-13 + P0-14 + P0-15, 한 슬라이스)
 
@@ -144,7 +158,7 @@ S5-0은 결정이 필요하므로, 결정이 나올 때까지 S1~S4를 먼저 �
 | 슬라이스 | 상태 | 커밋 |
 |---|---|---|
 | S1 | **완료** (S1-1~S1-4) | — |
-| S2 | 대기 | — |
+| S2 | **완료** (S2-1~S2-5) | — |
 | S3 | 대기 | — |
 | S4 | 대기 | — |
 | S5 | 결정 대기 | — |

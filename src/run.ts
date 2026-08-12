@@ -90,6 +90,8 @@ interface VerificationAttempt {
 interface VerificationEvidence {
   schemaVersion: "0.2";
   documentKind: "VERIFICATION_EVIDENCE";
+  taskId: string;
+  taskRevision: number | null;
   verificationAttemptId: string;
   runId: string;
   runPlanId: string;
@@ -124,6 +126,8 @@ interface RunSummary {
   runId: string;
   runPlanId: string;
   taskId: string;
+  /** Null only for a Run planned before the approval recorded a revision. */
+  taskRevision: number | null;
   createdAt: string;
   normalization: {
     status: "COMPLETE" | "PARTIAL" | "BLOCKED";
@@ -629,6 +633,12 @@ async function executeRun(
   // once evidence collection is done, and discard is idempotent.
   isolationHandle.prepared = prepared;
 
+  // Every artifact names the contract it belongs to. Before this only
+  // run-plan.json did, so losing or failing to verify that one file left the
+  // other six unable to say which Revision they were evidence for — the link to
+  // the contract ran through a single point. P1-37.
+  const contractRef = { taskId: task.id, taskRevision: approval.approvedRevision };
+
   const runPlan = {
     schemaVersion: "0.2",
     documentKind: "RUN_PLAN",
@@ -716,6 +726,7 @@ async function executeRun(
     documentKind: "ADAPTER_REQUEST",
     runId,
     runPlanId,
+    ...contractRef,
     createdAt: formatDateTimeWithOffset(new Date()),
     runPlanRef,
     taskRevisionRef: sourceTaskRef,
@@ -767,6 +778,7 @@ async function executeRun(
   const preRunSnapshot = await captureWorkspaceSnapshot({
     projectPath: observedPath,
     runId,
+    ...contractRef,
     phase: "PRE_RUN",
     scopePatterns: effectivePolicy.capabilities.allowedPaths,
     capturedAt: formatDateTimeWithOffset(new Date()),
@@ -806,6 +818,7 @@ async function executeRun(
   const postRunSnapshot = await captureWorkspaceSnapshot({
     projectPath: observedPath,
     runId,
+    ...contractRef,
     phase: "POST_RUN",
     scopePatterns: effectivePolicy.capabilities.allowedPaths,
     capturedAt: formatDateTimeWithOffset(new Date()),
@@ -832,6 +845,7 @@ async function executeRun(
     await writeJson(providerCommandsPath, {
       schemaVersion: "0.2",
       documentKind: "PROVIDER_REPORTED_COMMANDS",
+      ...contractRef,
       runId,
       authority: "PROVIDER_REPORTED_ONLY",
       notCommandTruth: true,
@@ -912,6 +926,7 @@ async function executeRun(
     documentKind: "HARNESS_OBSERVATION",
     runId,
     runPlanId,
+    ...contractRef,
     createdAt: formatDateTimeWithOffset(new Date()),
     runPlanRef,
     adapterRequestRef,
@@ -1071,6 +1086,7 @@ async function executeRun(
     documentKind: "ADAPTER_RESULT",
     runId,
     runPlanId,
+    ...contractRef,
     createdAt: formatDateTimeWithOffset(new Date()),
     runPlanRef,
     adapterRequestRef,
@@ -1100,6 +1116,7 @@ async function executeRun(
     verificationAttemptId,
     runId,
     runPlanId,
+    ...contractRef,
     createdAt: formatDateTimeWithOffset(new Date()),
     runPlan,
     runPlanRef,
@@ -1115,7 +1132,7 @@ async function executeRun(
   const runSummary = buildRunSummary({
     runId,
     runPlanId,
-    taskId: task.id,
+    ...contractRef,
     createdAt: formatDateTimeWithOffset(finishedAt),
     runPlanRef,
     adapterRequestRef,
@@ -1148,7 +1165,7 @@ async function executeRun(
 
   const result: RunResultFile = {
     runId,
-    taskId: task.id,
+    ...contractRef,
     agent: agentName,
     status: agentResult.status,
     startedAt: formatDateTimeWithOffset(startedAtDate),
@@ -1201,6 +1218,7 @@ function buildRunSummary(input: {
   runId: string;
   runPlanId: string;
   taskId: string;
+  taskRevision: number | null;
   createdAt: string;
   runPlanRef: FileRef;
   adapterRequestRef: FileRef;
@@ -1232,6 +1250,7 @@ function buildRunSummary(input: {
     runId: input.runId,
     runPlanId: input.runPlanId,
     taskId: input.taskId,
+    taskRevision: input.taskRevision,
     createdAt: input.createdAt,
     normalization: {
       status: unavailableReasons.length > 0 ? "PARTIAL" : "COMPLETE",
@@ -1569,6 +1588,8 @@ function buildVerificationEvidence(input: {
   verificationAttemptId: string;
   runId: string;
   runPlanId: string;
+  taskId: string;
+  taskRevision: number | null;
   createdAt: string;
   runPlan: Record<string, unknown>;
   runPlanRef: FileRef;
@@ -1596,6 +1617,8 @@ function buildVerificationEvidence(input: {
     verificationAttemptId: input.verificationAttemptId,
     runId: input.runId,
     runPlanId: input.runPlanId,
+    taskId: input.taskId,
+    taskRevision: input.taskRevision,
     taskRevisionRef: input.sourceTaskRef,
     runPlanRef: input.runPlanRef,
     harnessObservationRef: input.harnessObservationRef,
