@@ -10,3 +10,4 @@ node_modules/
 .rule-coverage/
 .codefleet/config.json
 .codefleet/local.json
+.agent-diary/
