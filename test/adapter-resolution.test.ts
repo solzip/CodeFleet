@@ -17,6 +17,7 @@ import { approveTask } from "../src/task-ledger.ts";
 import { findTaskPath } from "../src/task.ts";
 import { profileJson, type ProfileOverrides } from "./profile-fixture.ts";
 import { coversRule } from "./rule-coverage.ts";
+import { permitRun } from "./task-ledger-fixture.ts";
 
 const ADAPTERS_BLOCK = "PROFILE_POLICY_AGENT_ADAPTERS_BLOCK";
 const ADAPTER_SCHEMA = "PROFILE_DEFAULTS_RUN_AGENT_ADAPTER_SCHEMA";
@@ -71,6 +72,7 @@ async function seedApprovedTask(root: string): Promise<void> {
     actorId: "tester",
     reason: "approved for test"
   });
+  await permitRun(root, "sample");
 }
 
 test("allowedAdapters must be a non-empty list of provider-agnostic AdapterIds", async () => {

@@ -29,6 +29,7 @@ import { runProcess, runTask } from "../src/run.ts";
 import { approveTask } from "../src/task-ledger.ts";
 import { findTaskPath } from "../src/task.ts";
 import { profileJson, writeLocalOverlay } from "./profile-fixture.ts";
+import { permitRun } from "./task-ledger-fixture.ts";
 
 /**
  * A workspace whose Task runs one verification command, written by the caller.
@@ -120,6 +121,7 @@ test("a verification command that fails is recorded with its reason and does not
     actorId: "tester",
     reason: "approved for test"
   });
+  await permitRun(root, "sample");
 
   const execution = await runTask(root, "sample");
   const summary = await readRunJson(execution.runDir, "run-summary.json");
@@ -156,6 +158,7 @@ test("a verification command cannot read the parent's environment", async () => 
     actorId: "tester",
     reason: "approved for test"
   });
+  await permitRun(root, "sample");
 
   process.env.CODEFLEET_VERIFY_SECRET = "verification-child-should-not-see-this";
   try {
@@ -185,6 +188,7 @@ test("a verification command's runaway output is capped and the dropped bytes ar
     actorId: "tester",
     reason: "approved for test"
   });
+  await permitRun(root, "sample");
 
   const execution = await runTask(root, "sample");
   const summary = await readRunJson(execution.runDir, "run-summary.json");
@@ -319,6 +323,7 @@ test("a Run whose diff was cut off cannot be accepted, even with the reason waiv
     actorId: "tester",
     reason: "approved for test"
   });
+  await permitRun(root, "sample");
 
   const execution = await runTask(root, "sample");
   const observation = await readRunJson(execution.runDir, "harness-observation.json");
@@ -376,6 +381,7 @@ test("every process the Run started reports its ceiling, its usage, and what was
     actorId: "tester",
     reason: "approved for test"
   });
+  await permitRun(root, "sample");
 
   const execution = await runTask(root, "sample");
   const observation = await readRunJson(execution.runDir, "harness-observation.json");
@@ -462,6 +468,7 @@ test("a limit nobody measured is not reported as a limit nothing hit", async () 
     actorId: "tester",
     reason: "approved for test"
   });
+  await permitRun(root, "sample");
 
   const execution = await runTask(root, "sample");
   const observation = await readRunJson(execution.runDir, "harness-observation.json");

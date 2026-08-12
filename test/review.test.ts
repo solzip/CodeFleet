@@ -9,6 +9,7 @@ import { approveTask } from "../src/task-ledger.ts";
 import { findTaskPath } from "../src/task.ts";
 import { coversRule } from "./rule-coverage.ts";
 import { profileJson, writeLocalOverlay } from "./profile-fixture.ts";
+import { permitRun } from "./task-ledger-fixture.ts";
 
 const BUNDLE = "REVIEW_DECISION_REQUIRES_FROZEN_EVIDENCE_BUNDLE";
 const HASH = "REVIEW_EVIDENCE_ABSENCE_AND_HASH_MISMATCH_HAVE_DIFFERENT_EFFECTS";
@@ -17,8 +18,9 @@ const MIG = "LOCAL_REVIEW_MIGRATION_STATUS_IS_DERIVED";
 const V02 = "REVIEW_MODEL_V02_IS_LOCAL_MIGRATION_PATH";
 const SUMMARY_LAYOUT = "RUN_SUMMARY_VERIFICATION_AND_LOCAL_REVIEW_LAYOUT_FIXED";
 
-// Running now requires an approval bound to the exact task content, so every
-// fixture approves before it runs.
+// A Run needs both halves of execution permission: an approval bound to the
+// exact task content, and an accepted Objective relation at that revision. Every
+// fixture supplies both, because a Run refuses without either.
 async function approveForTest(root: string, taskId: string): Promise<void> {
   await approveTask(root, {
     taskId,
@@ -26,6 +28,7 @@ async function approveForTest(root: string, taskId: string): Promise<void> {
     actorId: "tester",
     reason: "approved for test"
   });
+  await permitRun(root, taskId);
 }
 
 async function seedWorkspace(): Promise<{ root: string; runId: string }> {

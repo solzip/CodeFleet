@@ -34,6 +34,7 @@ import { breakRunLock, listRunLocks, runLockPathFor, runTask } from "../src/run.
 import { approveTask, contentHashOf, invalidateApproval, replayApproval } from "../src/task-ledger.ts";
 import { findTaskPath } from "../src/task.ts";
 import { profileJson, writeLocalOverlay } from "./profile-fixture.ts";
+import { permitRun } from "./task-ledger-fixture.ts";
 
 async function readJson(filePath: string): Promise<Record<string, unknown>> {
   return JSON.parse(await readFile(filePath, "utf8")) as Record<string, unknown>;
@@ -102,9 +103,11 @@ test("a review of revision 2 imports onto the revision 2 queue item", async () =
 
   // Revision 1: approve, then edit, invalidate, and re-approve to reach 2.
   await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "first approval" });
+  await permitRun(root, "sample");
   await writeFile(taskPath, taskYaml("Reach DONE at revision 2"), "utf8");
   await invalidateApproval(root, { taskId: "sample", taskPath, actorId: "tester", reason: "edited the task" });
   await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "second approval" });
+  await permitRun(root, "sample");
 
   const approval = await replayApproval(root, "sample", await contentHashOf(taskPath));
   assert.equal(approval.approvedRevision, 2, "the fixture must actually be at revision 2");
@@ -120,7 +123,9 @@ test("a review of revision 2 imports onto the revision 2 queue item", async () =
     objectiveId: "auth",
     taskId: "sample",
     taskRevision: 2,
-    taskRevisionHash: approval.approvedHash,
+    // approvedHash is the combined approval target. The relation names the
+    // contract, so it is the revision half that has to match the Task ledger.
+    taskRevisionHash: approval.approvedRevisionHash,
     actorId: "tester",
     reason: "attached at the approved revision"
   });
@@ -250,6 +255,7 @@ test("concurrent runs of one task do not share a runId", async () => {
       actorId: "tester",
       reason: "approved for test"
     });
+    await permitRun(root, "sample");
 
     const settled = await Promise.allSettled(
       Array.from({ length: RACE_WIDTH }, () => runTask(root, "sample"))
@@ -324,6 +330,7 @@ test("a stale run lock blocks, names its holder, and is never broken automatical
     actorId: "tester",
     reason: "approved for test"
   });
+  await permitRun(root, "sample");
 
   const lockPath = runLockPathFor(root, "sample");
   await mkdir(path.dirname(lockPath), { recursive: true });
@@ -418,6 +425,7 @@ test("concurrent runs of different tasks do not share a runId", async () => {
         actorId: "tester",
         reason: "approved for test"
       });
+      await permitRun(root, id);
     }
 
     const settled = await Promise.allSettled(taskIds.map((id) => runTask(root, id)));

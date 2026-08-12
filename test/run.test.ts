@@ -9,6 +9,7 @@ import { approveTask } from "../src/task-ledger.ts";
 import { findTaskPath } from "../src/task.ts";
 import { coversRule } from "./rule-coverage.ts";
 import { profileJson, writeLocalOverlay } from "./profile-fixture.ts";
+import { permitRun } from "./task-ledger-fixture.ts";
 
 const SNAPSHOT = "HARNESS_WORKSPACE_SNAPSHOT_IS_STATE_EVIDENCE";
 const COMMAND_TRUTH = "COMMAND_TRUTH_REQUIRES_HARNESS_VISIBLE_CHANNEL";
@@ -28,8 +29,9 @@ const PLAN_IMMUTABLE = "RUN_PLAN_IS_IMMUTABLE_RESUME_BOUNDARY";
 const TASK_SOURCE = "TASK_REVISION_MINIMUM_CONTRACT_IS_SOURCE_ONLY";
 const CMD_AUTHORITY = "COMMAND_EXECUTION_REQUIRES_OBSERVABLE_AUTHORITY_OR_DEGRADED_POLICY";
 
-// Running now requires an approval bound to the exact task content, so every
-// fixture approves before it runs.
+// A Run needs both halves of execution permission: an approval bound to the
+// exact task content, and an accepted Objective relation at that revision. Every
+// fixture supplies both, because a Run refuses without either.
 async function approveForTest(root: string, taskId: string): Promise<void> {
   await approveTask(root, {
     taskId,
@@ -37,6 +39,7 @@ async function approveForTest(root: string, taskId: string): Promise<void> {
     actorId: "tester",
     reason: "approved for test"
   });
+  await permitRun(root, taskId);
 }
 
 test("runTask writes run-plan and S2 artifacts before legacy result", async () => {
@@ -1473,6 +1476,12 @@ test("editing a Task after approval revokes its executability", async () => {
 
   await invalidateApproval(root, { taskId: "sample", taskPath, actorId: "tester", reason: "task edited" });
   await approve(root, { taskId: "sample", taskPath, actorId: "tester", reason: "re-approved after edit" });
+
+  // The relation still names revision 1, and a relation names a contract. The
+  // Run is refused until it is moved forward — before P0-14 was closed this was
+  // the normal path: the queue accepted revision 1 while revision 2 executed.
+  await assert.rejects(() => runTask(root, "sample"), /not at revision 2/);
+  await permitRun(root, "sample");
 
   const execution = await runTask(root, "sample");
   const runPlan = await readJson(path.join(execution.runDir, "run-plan.json"));

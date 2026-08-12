@@ -18,6 +18,7 @@ import { runTask } from "../src/run.ts";
 import { approveTask, contentHashOf, guardrailHashOf, replayApproval } from "../src/task-ledger.ts";
 import { findTaskPath } from "../src/task.ts";
 import { profileJson, writeLocalOverlay } from "./profile-fixture.ts";
+import { permitRun } from "./task-ledger-fixture.ts";
 
 async function workspace(name: string, isolation = "GIT_WORKTREE"): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), `codefleet-${name}-`));
@@ -82,6 +83,7 @@ test("changing the guardrail the Task was approved under revokes the approval", 
   const root = await workspace("guardrail-bound");
   const taskPath = await findTaskPath(root, "sample");
   await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "approved under GIT_WORKTREE" });
+  await permitRun(root, "sample");
 
   assert.equal((await replayApproval(root, "sample", await contentHashOf(taskPath))).blockedReason, "");
 
@@ -106,6 +108,7 @@ test("an edit that cannot change execution does not revoke the approval", async 
   const root = await workspace("guardrail-irrelevant");
   const taskPath = await findTaskPath(root, "sample");
   await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "approved" });
+  await permitRun(root, "sample");
 
   // Project name is not a guardrail. Binding the whole Profile would make every
   // approval in the workspace collapse on an unrelated edit.
@@ -124,6 +127,7 @@ test("the two halves of the approval target are told apart", async () => {
   const root = await workspace("guardrail-halves");
   const taskPath = await findTaskPath(root, "sample");
   await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "approved" });
+  await permitRun(root, "sample");
 
   // Editing the Task still reports the Task, not the guardrail.
   const original = await readFile(taskPath, "utf8");
@@ -149,6 +153,7 @@ test("a Run under an unchanged guardrail still runs", async () => {
   const root = await workspace("guardrail-unchanged");
   const taskPath = await findTaskPath(root, "sample");
   await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "approved" });
+  await permitRun(root, "sample");
   const execution = await runTask(root, "sample");
   assert.equal(execution.result.status, "SUCCEEDED");
 
@@ -202,6 +207,7 @@ test("lowering the Profile below what the contract needs revokes the approval", 
   const root = await workspace("feasibility-drift");
   const taskPath = await findTaskPath(root, "sample");
   await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "feasible at approval time" });
+  await permitRun(root, "sample");
   assert.equal((await replayApproval(root, "sample", await contentHashOf(taskPath))).blockedReason, "");
 
   // The contract still declares verification commands. The ceiling that let it

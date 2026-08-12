@@ -19,6 +19,7 @@ import { CORE_POLICY_RULE_IDS, originOf, validatePolicyRuleIds } from "../src/po
 import { loadProfile } from "../src/profile.ts";
 import { profileJson } from "./profile-fixture.ts";
 import { coversRule } from "./rule-coverage.ts";
+import { seedApprovedRevision } from "./task-ledger-fixture.ts";
 
 const IDS = "POLICY_RULE_ID_IS_UNIQUE_WITH_REF_RECORDED_ORIGIN";
 const CORRECTIVE = "CORRECTIVE_EVENT_REQUIRES_VALID_LEDGER_AND_WRONG_DECISION";
@@ -166,6 +167,9 @@ test("a corrective event is refused by class, and refused when it supersedes not
     actorId: "tester",
     reason: "created"
   });
+  // A relation names a revision the Task ledger holds; this test is about
+  // review policy, not approval, so the ledger is seeded directly.
+  await seedApprovedRevision(root, "login", 1, "hash-login-1");
   await attachTask(root, {
     objectiveId: "auth",
     taskId: "login",

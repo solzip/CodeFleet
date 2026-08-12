@@ -89,20 +89,31 @@
 
 `12-model-conformance-recheck.md`가 HEAD 재검수에서 P0-14·P0-15를 추가로 찾았고, **셋을 함께 닫아야 한다**고 판정했다. 이유가 정확하다 — relation을 필수 게이트로 만드는 것만으로는 **검증되지 않은 값을 게이트로 승격**시키는 결과가 된다. 이 로드맵의 원래 S3-1을 그 판정에 맞춰 확대한다.
 
-- [ ] **S3-1 · P0-13** — Objective relation 없이는 Run을 거부한다
-  - 게이트 한 줄. `test/isolation.test.ts:878`의 assert가 함께 뒤집힌다
-- [ ] **S3-1b · P0-14** — relation이 **실행되는 revision**을 가리키게 한다
-  - 현재 `blockedQueueReason`이 `taskId`로만 필터하므로 rev2를 실행하면서 rev1 relation을 통과한다
-  - 새 revision으로 relation을 옮길 경로가 없다 → **P1-42**(`TASK_REVISION_SUPERSEDED` 생산자 부재)가 여기서 필요해진다
-- [ ] **S3-1c · P0-15** — `attachTask`가 revision·hash를 Task 원장과 대조한다
-  - 지금은 둘을 입력으로 받고 원장을 읽지 않아 `rev=7` + 0으로 채운 hash도 수락된다
-- [ ] **S3-1d · P1-42** — `TASK_REVISION_SUPERSEDED`를 append하는 경로를 만든다 (S3-1b의 전제)
-- [ ] **S3-2 · 신규** — 프롬프트가 계약 전체를 전달한다
-  - 지금 프롬프트에 없는 것: **역할·역할 가이드·가드레일·검증 조건**
-  - 계약을 "역할·범위·가드레일·검증 조건"으로 정의해 놓고 위임받는 쪽에는 범위만 준다
-- [ ] **S3-3 · 신규** — accepted Objective context를 프롬프트에 포함한다
-  - 설계 근거: "accepted 또는 approved Objective context만 Harness prompt에 포함". 현재 프롬프트에 Objective가 **아예 없다**
-- [ ] **S3-4** — 회귀 테스트
+- [x] **S3-1 · P0-13** — Objective relation 없이는 Run을 거부한다
+  - relation이 없으면 거부하고, 없는 objectives 디렉터리도 **허가가 아니라 거부**로 읽는다. relation이 살 자리조차 없는 것은 relation이 없는 것의 가장 강한 형태다
+  - 거부문이 다음 행동(`codefleet objective attach`)을 적는다. 안 된다고만 하는 게이트는 우회로를 찾게 만든다
+  - `test/isolation.test.ts`의 "absent one does not"가 뒤집혔고, 그 테스트를 P0-13의 반증 테스트로 다시 썼다
+- [x] **S3-1b · P0-14** — relation이 **실행되는 revision**을 가리키게 한다
+  - `blockedQueueReason(rootDir, taskId, taskRevision)`. 다른 revision의 relation은 통과시키지 않고, **어느 revision에 붙어 있는지**를 적는다
+  - relation을 앞으로 옮기는 경로: `attachTask`가 **기록된 승계**를 따를 때만 다른 revision 부착을 허용한다. revision 번호로 추론하지 않는다
+  - 기존 큐 항목은 다시 쓰지 않는다 — 옛 relation은 보존되고 새 항목이 추가된다
+- [x] **S3-1c · P0-15** — `attachTask`가 revision·hash를 Task 원장과 대조한다
+  - 세 가지를 각각 거부한다: 원장 없음 / 없는 revision(존재하는 목록을 함께 출력) / 해시 불일치(주어진 값과 기록된 값을 나란히)
+  - **이 검사가 기존 픽스처 19건을 실패시켰다.** 그중 2건은 픽스처가 실제로 틀린 값을 넣고 있던 것이다 — `isolation.test.ts`의 `"h"`, `defect-repro.test.ts`의 `approval.approvedHash`(승인 대상 해시이지 revision 해시가 아니다)
+  - 픽스처를 고친 것이 규칙을 끈 것과 구별되도록 `test/ledger.test.ts`에 전용 거부 테스트를 뒀다
+- [x] **S3-1d · P1-42** — `TASK_REVISION_SUPERSEDED`를 append하는 경로를 만든다
+  - revision N+1 승인 시 N에 대해 `supersededByTaskRevision`/`supersededByRevisionHash`와 함께 append. 설계의 전이표 "APPROVED -> SUPERSEDED when newer revision approved"가 가리키는 그 순간이다
+  - S2에서 등재한 **P1-44의 판정이 여기서 바뀐다**: 승계 이벤트가 생겼으므로 `SUPERSEDED`가 도달 가능해졌고, 승계는 무효화보다 강하다(대체자가 이름으로 있고 종결이다). `CANCELED`는 여전히 생산자 없음
+- [x] **S3-2 · 신규** — 프롬프트가 계약 전체를 전달한다
+  - 추가: 역할·역할 가이드·유효 모드·상한이 강제된다는 사실·검증 커맨드 목록·"통과했다고 보고해도 통과가 되지 않는다"
+  - **해석된 값**을 넣는다. Task 파일의 필드가 아니라 `meet(profile, role, guardrails)`의 결과 — 그렇지 않으면 실제로 적용되는 것과 다른 것을 보여주게 된다
+- [x] **S3-3 · 신규** — accepted Objective context를 프롬프트에 포함한다
+  - open Objective의 WAITING 항목이면서 **실행되는 revision**과 일치하는 것만. 읽기 전용이고 게이트가 아니다
+  - **P1-46 등재**: `OBJECTIVE_CLOSED` 생산자가 없어서 이 필터를 게이트와 독립적으로 검증할 수 없다. 나머지 미수용 조건(BLOCKED/SKIPPED/CANCELED/다른 revision/replay 실패)은 전부 Run 자체를 먼저 거부하므로 필터는 다중 방어다. 못 만든 테스트를 만든 척하지 않았다
+- [x] **S3-4** — 회귀 테스트
+  - `test/ledger.test.ts` 2건(P0-15 거부 4종 + P0-14 승계), `test/task-revision.test.ts` 2건(프롬프트 계약 8항목 전수 + 정지된 Task)
+  - 픽스처: `test/task-ledger-fixture.ts`의 `permitRun`이 Run 픽스처 37곳에 실행 허가의 나머지 절반을 공급한다. 승인된 revision이 없으면 **조용히 넘어가지 않고 던진다**
+  - 스위트 231 → 236(도우미 파일 3개 포함), 실패 0
 
 ### S4 — Run Options (여러 에이전트에게 할당)
 
@@ -159,7 +170,7 @@ S5-0은 결정이 필요하므로, 결정이 나올 때까지 S1~S4를 먼저 �
 |---|---|---|
 | S1 | **완료** (S1-1~S1-4) | — |
 | S2 | **완료** (S2-1~S2-5) | — |
-| S3 | 대기 | — |
+| S3 | **완료** (S3-1~S3-4) | — |
 | S4 | 대기 | — |
 | S5 | 결정 대기 | — |
 | S6 | 대기 | — |

@@ -21,6 +21,7 @@ import { approveTask } from "../src/task-ledger.ts";
 import { findTaskPath } from "../src/task.ts";
 import { profileJson } from "./profile-fixture.ts";
 import { coversRule } from "./rule-coverage.ts";
+import { permitRun } from "./task-ledger-fixture.ts";
 
 const PROFILE_SCHEMA = "PROFILE_DEFAULTS_REQUIRED_GATES_SCHEMA";
 const CONCRETE = "TASK_REVISION_REQUIRED_GATES_ARE_CONCRETE";
@@ -369,6 +370,7 @@ test("the Run Plan records merged gates, and a deferred Task Revision refuses to
     actorId: "tester",
     reason: "approved for test"
   });
+  await permitRun(root, "sample");
 
   const execution = await runTask(root, "sample");
   const plan = JSON.parse(await readFile(path.join(execution.runDir, "run-plan.json"), "utf8")) as Record<string, unknown>;

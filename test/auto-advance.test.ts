@@ -17,6 +17,7 @@ import { approveTask } from "../src/task-ledger.ts";
 import { findTaskPath } from "../src/task.ts";
 import { profileJson } from "./profile-fixture.ts";
 import { coversRule } from "./rule-coverage.ts";
+import { permitRun } from "./task-ledger-fixture.ts";
 
 const AUTO = "PROFILE_POLICY_AUTO_ADVANCE_ON_DONE_IS_BOOLEAN";
 const BLOCK_KEYS = "PROFILE_POLICY_BLOCK_KEYS_FIXED";
@@ -123,6 +124,7 @@ test("the Run Plan records the merged value, and a Task guardrail can only lower
     actorId: "tester",
     reason: "approved for test"
   });
+  await permitRun(root, "sample");
 
   const execution = await runTask(root, "sample");
   const plan = JSON.parse(await readFile(path.join(execution.runDir, "run-plan.json"), "utf8")) as Record<string, unknown>;

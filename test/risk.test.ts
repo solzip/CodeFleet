@@ -24,6 +24,7 @@ import { approveTask } from "../src/task-ledger.ts";
 import { findTaskPath } from "../src/task.ts";
 import { profileJson } from "./profile-fixture.ts";
 import { coversRule } from "./rule-coverage.ts";
+import { permitRun } from "./task-ledger-fixture.ts";
 
 const MATCHERS = "RISK_RULE_REUSES_FIXED_MATCHERS";
 const FLAT = "RISK_RULE_CONJUNCTION_IS_FLAT_AND_NEGATION_IS_DENIED";
@@ -235,6 +236,7 @@ test("the Profile refuses a malformed risk rule, and the Run Plan records what w
     actorId: "tester",
     reason: "approved for test"
   });
+  await permitRun(root, "sample");
 
   const execution = await runTask(root, "sample");
   const plan = JSON.parse(await readFile(path.join(execution.runDir, "run-plan.json"), "utf8")) as Record<string, unknown>;

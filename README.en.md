@@ -151,7 +151,13 @@ codefleet objective attach obj-001 task-001
 codefleet objective status obj-001
 ```
 
-`--kind` is `ONE_OFF` (default), `SEQUENCE`, or `WORKSTREAM`. `attach` records the Task's content hash at attach time, so a later edit to the Task is visible as drift rather than absorbed silently.
+`--kind` is `ONE_OFF` (default), `SEQUENCE`, or `WORKSTREAM`.
+
+**The relation is not optional.** Execution permission is the conjunction of two axes — an approved Task Revision and an accepted Objective relation — so a Task attached to no Objective **is refused**. Work nobody put in a queue is work nobody decided to do.
+
+`attach` reads the revision and its hash **from the Task ledger** rather than taking them as arguments: a relation naming a revision that does not exist, or a hash the ledger never recorded, is refused. Omitting `--revision` attaches the approved one.
+
+A relation **names the revision it was attached at.** One attached at revision 1 does not permit a Run of revision 2, because that is a different contract. Moving it forward requires approving the newer revision, which is what records the succession — and a relation moves only along recorded succession. The old queue item is preserved rather than rewritten.
 
 Queue items move by explicit decision, each requiring a reason:
 

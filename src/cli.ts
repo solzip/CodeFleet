@@ -328,15 +328,30 @@ async function handleObjective(cwd: string, options: CliOptions, args: string[])
     const taskId = requireArg(args[2], "task-id");
     const flags = parseReviewFlags(args.slice(3));
     const { taskPath } = await loadTaskForValidation(rootDir, taskId);
-    const { createHash } = await import("node:crypto");
-    const { readFile } = await import("node:fs/promises");
-    const hash = createHash("sha256").update(await readFile(taskPath)).digest("hex");
+
+    // The revision and its hash come from the Task ledger, not from the working
+    // file. Defaulting to revision 1 and hashing whatever is on disk produced a
+    // pair that agreed with each other and with nothing else; attachTask now
+    // checks them against the ledger, so guessing them here only moves the
+    // refusal later.
+    const state = await replayApproval(rootDir, taskId, await contentHashOf(taskPath));
+    const requested = flags.revision === undefined ? state.approvedRevision : Number(flags.revision);
+    if (requested === null || !Number.isInteger(requested)) {
+      throw new Error(
+        `Cannot attach ${taskId}: it has no approved revision to attach.\n` +
+          `Approve it first — 'codefleet task approve ${taskId} --reason ...' — or name one with --revision.`
+      );
+    }
+    const events = await readTaskEvents(rootDir, taskId);
+    const created = events.find(
+      (event) => event.type === "TASK_REVISION_CREATED" && event.taskRevision === requested
+    );
 
     const outcome = await attachTask(rootDir, {
       objectiveId: id,
       taskId,
-      taskRevision: Number(flags.revision ?? "1"),
-      taskRevisionHash: hash,
+      taskRevision: requested,
+      taskRevisionHash: created?.revisionHash ?? "",
       actorId: flags.actor ?? "local-user",
       reason: flags.reason ?? "task attached"
     });

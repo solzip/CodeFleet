@@ -178,29 +178,53 @@ interface RunSummary {
 }
 
 /**
- * Whether an Objective queue decision forbids running this Task. A Task attached
- * to no Objective is not blocked: the queue has expressed no opinion about it.
+ * Whether the Objective queue permits running this revision of this Task.
+ *
+ * Two things are decided here, and they used to be one. The queue can forbid a
+ * Task outright — BLOCKED, CANCELED, SKIPPED — and that has always been checked.
+ * What was not checked is whether any relation exists at all, or whether the one
+ * that exists names the revision about to run.
+ *
+ * The model makes execution permission the conjunction of an approved Revision
+ * and an accepted Objective relation. Treating "attached to nothing" as
+ * permission made the second half optional (P0-13), and filtering relations by
+ * taskId alone let a relation pinned to revision 1 vouch for a Run of revision 2
+ * (P0-14). A relation names a contract; a different revision is a different
+ * contract.
+ *
+ * `taskRevision` is null only when there is no approval to name one, in which
+ * case approval has already refused and this is not reached.
  */
-export async function blockedQueueReason(rootDir: string, taskId: string): Promise<string | null> {
+export async function blockedQueueReason(
+  rootDir: string,
+  taskId: string,
+  taskRevision: number | null = null
+): Promise<string | null> {
   const objectivesDir = path.join(rootDir, ".codefleet", "objectives");
   let objectiveIds: string[];
   try {
     objectiveIds = await readdir(objectivesDir);
   } catch (error) {
-    // No objectives directory means no Objective has ever been created, and a
-    // queue that does not exist holds no decision. Every other error means the
-    // queue could not be read, and unread is not the same as empty — swallowing
-    // them let a Task somebody cancelled run because a directory was in the way.
+    // No objectives directory means no Objective has ever been created, which
+    // is now a refusal rather than a pass: a relation is required, so having
+    // nowhere for one to live is the strongest form of not having one. Every
+    // other error means the queue could not be read, and unread is not the same
+    // as empty — swallowing them let a Task somebody cancelled run because a
+    // directory was in the way.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return null;
+      objectiveIds = [];
+    } else {
+      throw new Error(
+        `Run is blocked: the Objective queue at .codefleet/objectives could not be read ` +
+          `(${(error as NodeJS.ErrnoException).code ?? "unknown error"}), so CodeFleet cannot tell ` +
+          "whether a decision forbids this Task.\n" +
+          "Repair or restore that directory before running."
+      );
     }
-    throw new Error(
-      `Run is blocked: the Objective queue at .codefleet/objectives could not be read ` +
-        `(${(error as NodeJS.ErrnoException).code ?? "unknown error"}), so CodeFleet cannot tell ` +
-        "whether a decision forbids this Task.\n" +
-        "Repair or restore that directory before running."
-    );
   }
+
+  const accepted: string[] = [];
+  const otherRevisions: string[] = [];
 
   for (const objectiveId of objectiveIds) {
     const { snapshot } = await replayObjective(rootDir, objectiveId);
@@ -237,9 +261,91 @@ export async function blockedQueueReason(rootDir: string, taskId: string): Promi
         );
       }
     }
+    // A forbidding decision anywhere wins over a permitting one, so acceptance
+    // is only counted after every Objective has been read for a refusal.
+    for (const item of items) {
+      if (taskRevision === null || item.taskRevision === taskRevision) {
+        accepted.push(`${objectiveId}:${item.objectiveQueueItemId}`);
+      } else {
+        otherRevisions.push(`${item.objectiveQueueItemId} (revision ${item.taskRevision}) in ${objectiveId}`);
+      }
+    }
   }
 
-  return null;
+  if (accepted.length > 0) {
+    return null;
+  }
+
+  if (otherRevisions.length > 0) {
+    return [
+      `Run is blocked: ${taskId} is attached to an Objective, but not at revision ${taskRevision}.`,
+      ...otherRevisions.map((entry) => `  - ${entry}`),
+      "",
+      "A relation names a contract, and a different revision is a different contract.",
+      "Attach the revision about to run:",
+      `  codefleet objective attach <objective-id> ${taskId} --revision ${taskRevision} --reason "..."`
+    ].join("\n");
+  }
+
+  return [
+    `Run is blocked: ${taskId} is not attached to any Objective.`,
+    "",
+    "Execution permission has two halves — an approved Task Revision and an accepted",
+    "Objective relation — and this Task has only the first. A Task nobody placed in a",
+    "queue is work nobody decided to do.",
+    "",
+    "Attach it, then run:",
+    `  codefleet objective attach <objective-id> ${taskId} --revision ${taskRevision} --reason "..."`
+  ].join("\n");
+}
+
+/**
+ * The Objectives this revision is accepted into, for the prompt.
+ *
+ * The design restricts what may be shown: "accepted 또는 approved Objective
+ * context만 Harness prompt에 포함". A queue item the Task is attached to at this
+ * revision and that no decision forbids is the accepted case; a BLOCKED,
+ * SKIPPED, or CANCELED one is not, and an Objective whose ledger will not
+ * replay contributes nothing rather than a guess.
+ *
+ * Read-only and never a gate. blockedQueueReason decides whether the Run may
+ * proceed; this only decides what the agent is told.
+ */
+async function acceptedObjectiveContext(
+  rootDir: string,
+  taskId: string,
+  taskRevision: number | null
+): Promise<{ objectiveId: string; title: string; kind: string; position: string }[]> {
+  let objectiveIds: string[];
+  try {
+    objectiveIds = await readdir(path.join(rootDir, ".codefleet", "objectives"));
+  } catch {
+    return [];
+  }
+
+  const context: { objectiveId: string; title: string; kind: string; position: string }[] = [];
+  for (const objectiveId of objectiveIds) {
+    const { snapshot } = await replayObjective(rootDir, objectiveId);
+    if (snapshot.replay.replayStatus !== "COMPLETE" || snapshot.status !== "OPEN") {
+      continue;
+    }
+    const index = snapshot.queue.findIndex(
+      (item) =>
+        item.taskId === taskId &&
+        (taskRevision === null || item.taskRevision === taskRevision) &&
+        item.storedState === "WAITING"
+    );
+    if (index === -1) {
+      continue;
+    }
+    context.push({
+      objectiveId,
+      title: snapshot.title,
+      kind: snapshot.kind,
+      position: `item ${index + 1} of ${snapshot.queue.length}`
+    });
+  }
+  return context;
 }
 
 export class RunLockHeldError extends Error {
@@ -410,7 +516,9 @@ async function executeRun(
   // The Task ledger owns approval; the Objective ledger owns whether the queue
   // still wants this Task run. Checking only the first let a Task that someone
   // blocked or cancelled with a written reason run anyway.
-  const queueBlock = await blockedQueueReason(rootDir, taskId);
+  // The revision that is about to run, not the Task. A relation pinned to an
+  // earlier revision does not carry forward to this one.
+  const queueBlock = await blockedQueueReason(rootDir, taskId, approval.approvedRevision);
   if (queueBlock !== null) {
     throw new Error(queueBlock);
   }
@@ -718,7 +826,24 @@ async function executeRun(
   await writeJson(runPlanPath, runPlan);
   const runPlanRef = await fileRef(rootDir, runPlanPath);
 
-  await writeFile(promptPath, renderPrompt(task), "utf8");
+  // The contract as resolved, not as written. The role may have come from the
+  // Profile default and the mode is the meet of three sources, so rendering the
+  // Task file's own fields would show the agent something other than what it is
+  // actually operating under.
+  await writeFile(
+    promptPath,
+    renderPrompt(task, {
+      roleId: roleResolution.roleId,
+      roleGuidance: roleResolution.role.roleGuidance,
+      effectiveMode,
+      verificationCommands: verificationPlanSeed.commands.map((entry) => ({
+        commandId: entry.commandId,
+        command: entry.command
+      })),
+      objectives: await acceptedObjectiveContext(rootDir, task.id, approval.approvedRevision)
+    }),
+    "utf8"
+  );
   const promptRef = await fileRef(rootDir, promptPath);
 
   const adapterRequest = {

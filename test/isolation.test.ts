@@ -19,9 +19,10 @@ import {
   NEW_FILE_CONTENT_LIMIT_BYTES,
   runTask
 } from "../src/run.ts";
-import { approveTask } from "../src/task-ledger.ts";
+import { approveTask, contentHashOf } from "../src/task-ledger.ts";
 import { findTaskPath } from "../src/task.ts";
 import { profileJson, writeLocalOverlay } from "./profile-fixture.ts";
+import { permitRun } from "./task-ledger-fixture.ts";
 
 // Tests that make a discard fail on purpose own the tree afterwards. Windows
 // releases a file handle a moment after the process holding it dies, so removal
@@ -240,6 +241,7 @@ test("an editing Run with the flag on and no isolation is refused before it star
     actorId: "tester",
     reason: "approved for test"
   });
+  await permitRun(root, "sample");
 
   await assert.rejects(() => runTask(root, "sample"), /requireIsolationForMutation is true/);
 });
@@ -343,6 +345,7 @@ test("an isolated Run observes the tree the agent actually ran in", async () => 
     actorId: "tester",
     reason: "approved for test"
   });
+  await permitRun(root, "sample");
   const execution = await runTask(root, "sample");
   const runDir = execution.runDir;
 
@@ -486,6 +489,7 @@ test("the diff artifact carries a created file's content, not only its name", as
     actorId: "tester",
     reason: "approved for test"
   });
+  await permitRun(root, "sample");
 
   const execution = await runTask(root, "sample");
   const patch = await readFile(path.join(execution.runDir, "git-diff.patch"), "utf8");
@@ -686,6 +690,7 @@ test("a failed discard reaches the review bundle and blocks an unwaived accept",
     actorId: "tester",
     reason: "approved for test"
   });
+  await permitRun(root, "sample");
 
   let treeRoot = "";
   let holderAlive = false;
@@ -808,6 +813,7 @@ test("a ledger that cannot be replayed blocks the Run instead of reading as perm
     actorId: "tester",
     reason: "approved for test"
   });
+  await permitRun(root, "sample");
   await createObjective(root, {
     objectiveId: "auth",
     title: "Auth",
@@ -819,7 +825,9 @@ test("a ledger that cannot be replayed blocks the Run instead of reading as perm
     objectiveId: "auth",
     taskId: "sample",
     taskRevision: 1,
-    taskRevisionHash: "h",
+    // The Task ledger records this hash; a relation naming any other value is
+    // refused, so the fixture reads it rather than inventing one.
+    taskRevisionHash: await contentHashOf(await findTaskPath(root, "sample")),
     actorId: "tester",
     reason: "attached"
   });
@@ -843,7 +851,12 @@ test("a ledger that cannot be replayed blocks the Run instead of reading as perm
   await assert.rejects(() => runTask(root, "sample"), /auth/);
 });
 
-test("an objectives directory that cannot be listed blocks the Run; an absent one does not", async () => {
+// An absent objectives directory used to mean "no opinion, so run". Execution
+// permission has two halves in the model — an approved Revision and an accepted
+// Objective relation — and treating absence as permission made the second half
+// optional. P0-13. The unreadable case is separate and was already correct:
+// unread is not the same as empty.
+test("no Objective relation blocks the Run, and an unreadable queue blocks it differently", async () => {
   const root = await queueGateWorkspace("queue-unreadable");
   await approveTask(root, {
     taskId: "sample",
@@ -852,22 +865,31 @@ test("an objectives directory that cannot be listed blocks the Run; an absent on
     reason: "approved for test"
   });
 
-  // Nothing has been attached anywhere, so there is no objectives directory at
-  // all. That is an absence of opinion, not an unreadable one.
-  assert.equal(await blockedQueueReason(root, "sample"), null);
+  // Approved, and nothing else. There is no objectives directory at all.
+  const unattached = await blockedQueueReason(root, "sample", 1);
+  assert.match(String(unattached), /not attached to any Objective/);
+  // The refusal has to say what to do; a gate that only says no teaches people
+  // to look for a way around it.
+  assert.match(String(unattached), /codefleet objective attach/);
+  await assert.rejects(() => runTask(root, "sample"), /not attached to any Objective/);
+
+  // With the other half supplied, the same Run proceeds.
+  await permitRun(root, "sample");
+  assert.equal(await blockedQueueReason(root, "sample", 1), null);
   const ran = await runTask(root, "sample");
   assert.ok(ran.result.runId.length > 0);
 
   // A file where the directory should be fails readdir with ENOTDIR. Any error
-  // other than "it is not there" means the queue could not be read, and unread
-  // is not the same as empty.
+  // other than "it is not there" means the queue could not be read, and that is
+  // reported as unreadable rather than as an absent relation.
+  await rm(path.join(root, ".codefleet", "objectives"), { recursive: true, force: true });
   await writeFile(path.join(root, ".codefleet", "objectives"), "not a directory\n", "utf8");
   await assert.rejects(
-    () => blockedQueueReason(root, "sample"),
-    /objectives/i,
+    () => blockedQueueReason(root, "sample", 1),
+    /could not be read/i,
     "an unreadable objectives directory must not resolve to no opinion"
   );
-  await assert.rejects(() => runTask(root, "sample"), /objectives/i);
+  await assert.rejects(() => runTask(root, "sample"), /could not be read/i);
 });
 
 test("a queue decision blocks the Run, and an unattached Task is not blocked", async () => {
@@ -902,6 +924,7 @@ test("a queue decision blocks the Run, and an unattached Task is not blocked", a
     actorId: "tester",
     reason: "approved for test"
   });
+  await permitRun(root, "sample");
 
   // Attached to nothing: the queue has expressed no opinion, so it does not block.
   assert.equal(await blockedQueueReason(root, "sample"), null);
@@ -919,7 +942,9 @@ test("a queue decision blocks the Run, and an unattached Task is not blocked", a
     objectiveId: "auth",
     taskId: "sample",
     taskRevision: 1,
-    taskRevisionHash: "h",
+    // The Task ledger records this hash; a relation naming any other value is
+    // refused, so the fixture reads it rather than inventing one.
+    taskRevisionHash: await contentHashOf(await findTaskPath(root, "sample")),
     actorId: "tester",
     reason: "attached"
   });

@@ -24,6 +24,7 @@ import { approveTask } from "../src/task-ledger.ts";
 import { findTaskPath } from "../src/task.ts";
 import { profileJson } from "./profile-fixture.ts";
 import { coversRule } from "./rule-coverage.ts";
+import { permitRun } from "./task-ledger-fixture.ts";
 
 const CLASSIFICATION = "AGENT_ROLE_IS_CLASSIFICATION_NOT_PERMISSION_GRANT";
 const NARROWS_ONLY = "AGENT_ROLE_DECLARES_ONLY_WHAT_IT_NARROWS";
@@ -252,6 +253,7 @@ test("the role contributes an upper bound to the Run Plan, never a grant", async
     actorId: "tester",
     reason: "approved for test"
   });
+  await permitRun(root, "sample");
 
   const execution = await runTask(root, "sample");
   const plan = JSON.parse(await readFile(path.join(execution.runDir, "run-plan.json"), "utf8")) as Record<string, unknown>;

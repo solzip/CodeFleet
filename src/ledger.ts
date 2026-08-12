@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { runMutation, writeJsonFile, type MutationOutcome } from "./mutation.ts";
+import { readTaskEvents, supersededChain } from "./task-events.ts";
 import { actorSatisfiesResultReviewGate, type ActorKind, type DecisionGateSnapshot } from "./auto-review.ts";
 
 export type ObjectiveStatus = "OPEN" | "CLOSED" | "CANCELED";
@@ -663,6 +664,53 @@ function objectiveSteps(
   };
 }
 
+/**
+ * Whether the Task ledger actually holds the revision a relation names.
+ *
+ * Returns the refusal text rather than throwing, so the caller decides where in
+ * the mutation it applies — an already-attached item must stay idempotent even
+ * if the Task ledger later changed.
+ */
+async function verifyRevisionReference(
+  rootDir: string,
+  taskId: string,
+  taskRevision: number,
+  taskRevisionHash: string
+): Promise<string> {
+  const events = await readTaskEvents(rootDir, taskId);
+  if (events.length === 0) {
+    return (
+      `Cannot attach ${taskId}: it has no Task ledger, so revision ${taskRevision} does not exist.\n` +
+      `Approve the Task first — 'codefleet task approve ${taskId} --reason ...'.`
+    );
+  }
+
+  const created = events.find(
+    (event) => event.type === "TASK_REVISION_CREATED" && event.taskRevision === taskRevision
+  );
+  if (created === undefined) {
+    const known = events
+      .filter((event) => event.type === "TASK_REVISION_CREATED")
+      .map((event) => event.taskRevision);
+    return (
+      `Cannot attach ${taskId} at revision ${taskRevision}: no such revision.\n` +
+      `Revisions in the Task ledger: ${known.length === 0 ? "(none)" : known.join(", ")}`
+    );
+  }
+
+  if (created.revisionHash !== taskRevisionHash) {
+    return [
+      `Cannot attach ${taskId} at revision ${taskRevision}: the hash does not match the Task ledger.`,
+      `  given    ${taskRevisionHash || "(empty)"}`,
+      `  recorded ${created.revisionHash}`,
+      "A relation names a specific contract. One naming a hash the ledger never recorded",
+      "would let the queue vouch for content nobody approved."
+    ].join("\n");
+  }
+
+  return "";
+}
+
 export async function attachTask(
   rootDir: string,
   input: {
@@ -676,6 +724,14 @@ export async function attachTask(
 ): Promise<MutationOutcome<LedgerEvent>> {
   const { objectiveId, taskId, taskRevision, taskRevisionHash, actorId, reason } = input;
   const queueItemId = `${objectiveId}:${taskId}:${taskRevision}`;
+  // Both halves of the execution permission are ledger decisions, and this one
+  // took its subject on trust: the revision and hash arrived as arguments and
+  // nothing compared them against the Task ledger, so a relation could name a
+  // revision that was never created and a hash of the caller's choosing. Once a
+  // missing relation blocks a Run (P0-13), an unverified relation is what the
+  // gate consults — which is why P0-15 is closed in the same slice.
+  const revisionRefusal = await verifyRevisionReference(rootDir, taskId, taskRevision, taskRevisionHash);
+  const taskEvents = await readTaskEvents(rootDir, taskId);
 
   return runMutation(
     rootDir,
@@ -694,8 +750,17 @@ export async function attachTask(
         if (attached) {
           return;
         }
-        // A task revision belongs to exactly one queue item, so attaching a
-        // different revision of the same task needs the old one resolved first.
+        if (revisionRefusal !== "") {
+          throw new Error(revisionRefusal);
+        }
+        // A task revision belongs to exactly one queue item. Attaching a
+        // different revision used to be refused outright, which left a relation
+        // stranded on the revision it was first attached at — the only way
+        // forward was cancelling the item, and a cancelled item blocks the Task
+        // entirely (P0-14). It is allowed now when the Task ledger records the
+        // attached revision as superseded by this one, directly or through a
+        // chain. That is a decision somebody appended, not an inference from
+        // revision numbering.
         const otherRevision = events.find(
           (event) =>
             event.type === "TASK_ATTACHED" &&
@@ -703,9 +768,18 @@ export async function attachTask(
             event.payload.taskRevision !== taskRevision
         );
         if (otherRevision !== undefined) {
-          throw new Error(
-            `${taskId} is already attached at revision ${String(otherRevision.payload.taskRevision)}`
-          );
+          const from = Number(otherRevision.payload.taskRevision);
+          const successors = supersededChain(taskEvents, from);
+          if (!successors.includes(taskRevision)) {
+            throw new Error(
+              [
+                `${taskId} is already attached at revision ${from}, and revision ${taskRevision} does not succeed it.`,
+                `  succession recorded from revision ${from}: ${successors.length === 0 ? "(none)" : successors.join(" -> ")}`,
+                "A relation moves forward only along recorded succession. Approve the newer",
+                "revision first, which is what records it."
+              ].join("\n")
+            );
+          }
         }
       }),
       isAlreadyApplied: async (): Promise<boolean> => {

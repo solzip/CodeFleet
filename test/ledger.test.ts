@@ -18,6 +18,8 @@ import {
 import { computeMutationId, lockPathFor, readHolder } from "../src/mutation.ts";
 import { coversRule } from "./rule-coverage.ts";
 import { profileJson, writeLocalOverlay } from "./profile-fixture.ts";
+import { taskLedgerPath } from "../src/task-events.ts";
+import { seedApprovedRevision } from "./task-ledger-fixture.ts";
 
 const MUT_ID = "MUTATION_ID_IS_INTENT_DERIVED_AND_IDEMPOTENT";
 const LOCK = "MUTATION_LOCK_IS_FAIL_FAST_AND_EXCLUDES_RUN_EXECUTION";
@@ -198,6 +200,9 @@ test("an unparseable ledger line is a structural failure, not a skipped line", a
 });
 
 async function attach(root: string, objectiveId: string, taskId: string, revision = 1) {
+  // A relation names a revision the Task ledger holds, so the ledger has to
+  // hold it. The refusal when it does not is asserted on its own below.
+  await seedApprovedRevision(root, taskId, revision, `hash-${taskId}-${revision}`);
   return attachTask(root, {
     objectiveId,
     taskId,
@@ -673,3 +678,130 @@ async function importLocalReviewFor(
   });
   assert.equal(outcome.failedPhase, null, outcome.failureMessage);
 }
+
+// A relation names a specific contract, and until now it took that name on
+// trust: attachTask received a revision number and a hash as arguments and
+// never opened the Task ledger. A relation for revision 7 of a Task with one
+// revision, carrying a hash of the caller's choosing, was accepted and stored.
+//
+// This matters more once a missing relation blocks a Run (P0-13), because an
+// unverified relation becomes the thing the gate consults. P0-15.
+//
+// It also keeps `attach` in this file honest. That helper seeds a Task ledger
+// before attaching, and without the assertions below, seeding would be
+// indistinguishable from having turned the check off.
+test("a relation naming a revision the Task ledger does not hold is refused", async () => {
+  const root = await seed();
+  await create(root, "auth", "Auth");
+
+  const noLedger = await attachTask(root, {
+    objectiveId: "auth",
+    taskId: "ghost",
+    taskRevision: 1,
+    taskRevisionHash: "hash-ghost-1",
+    actorId: "tester",
+    reason: "attaching a Task that was never approved"
+  });
+  assert.equal(noLedger.failedPhase, "M2_PRECHECK");
+  assert.match(noLedger.failureMessage, /has no Task ledger/);
+
+  await seedApprovedRevision(root, "login", 1, "hash-login-1");
+
+  const wrongRevision = await attachTask(root, {
+    objectiveId: "auth",
+    taskId: "login",
+    taskRevision: 7,
+    taskRevisionHash: "hash-login-1",
+    actorId: "tester",
+    reason: "attaching a revision nobody created"
+  });
+  assert.equal(wrongRevision.failedPhase, "M2_PRECHECK");
+  assert.match(wrongRevision.failureMessage, /no such revision/);
+  // The refusal names what does exist, so the next attempt is informed.
+  assert.match(wrongRevision.failureMessage, /Revisions in the Task ledger: 1/);
+
+  const wrongHash = await attachTask(root, {
+    objectiveId: "auth",
+    taskId: "login",
+    taskRevision: 1,
+    taskRevisionHash: "0".repeat(64),
+    actorId: "tester",
+    reason: "attaching a hash the ledger never recorded"
+  });
+  assert.equal(wrongHash.failedPhase, "M2_PRECHECK");
+  assert.match(wrongHash.failureMessage, /hash does not match the Task ledger/);
+
+  // The matching triple is accepted, so the refusals above are the check
+  // working rather than the operation being broken.
+  const good = await attachTask(root, {
+    objectiveId: "auth",
+    taskId: "login",
+    taskRevision: 1,
+    taskRevisionHash: "hash-login-1",
+    actorId: "tester",
+    reason: "attached"
+  });
+  assert.equal(good.failedPhase, null, good.failureMessage);
+});
+
+// A relation attached at revision 1 had no way forward: attaching a different
+// revision was refused outright, and the only escape was cancelling the queue
+// item, which blocks the Task entirely. The relation and the execution then
+// disagreed about which contract was in force, and that was the normal path.
+// P0-14, and the reason P1-42 (no producer for TASK_REVISION_SUPERSEDED)
+// mattered.
+test("a relation moves to a newer revision only along recorded succession", async () => {
+  const root = await seed();
+  await create(root, "auth", "Auth");
+  await attach(root, "auth", "login", 1);
+
+  // Revision 2 exists but nothing records that it succeeds revision 1.
+  await seedApprovedRevision(root, "login", 2, "hash-login-2");
+  const unrelated = await attachTask(root, {
+    objectiveId: "auth",
+    taskId: "login",
+    taskRevision: 2,
+    taskRevisionHash: "hash-login-2",
+    actorId: "tester",
+    reason: "moving the relation without a recorded succession"
+  });
+  assert.equal(unrelated.failedPhase, "M2_PRECHECK");
+  assert.match(unrelated.failureMessage, /does not succeed it/);
+  assert.match(unrelated.failureMessage, /succession recorded from revision 1: \(none\)/);
+
+  // Record it, the way approving revision 2 does.
+  await appendFile(
+    taskLedgerPath(root, "login"),
+    `${JSON.stringify({
+      mutationId: "mut_fixture_supersede",
+      eventId: "evt_fixture_supersede",
+      seq: 5,
+      type: "TASK_REVISION_SUPERSEDED",
+      taskId: "login",
+      taskRevision: 1,
+      revisionHash: "hash-login-1",
+      approvalTargetHash: "",
+      supersededByTaskRevision: 2,
+      supersededByRevisionHash: "hash-login-2",
+      actorKind: "HUMAN",
+      actorId: "fixture",
+      reason: "revision 2 approved",
+      at: new Date().toISOString()
+    })}\n`,
+    "utf8"
+  );
+
+  const moved = await attachTask(root, {
+    objectiveId: "auth",
+    taskId: "login",
+    taskRevision: 2,
+    taskRevisionHash: "hash-login-2",
+    actorId: "tester",
+    reason: "moving the relation along recorded succession"
+  });
+  assert.equal(moved.failedPhase, null, moved.failureMessage);
+
+  const { snapshot } = await replayObjective(root, "auth");
+  const revisions = snapshot.queue.filter((item) => item.taskId === "login").map((item) => item.taskRevision);
+  assert.deepEqual(revisions.sort(), [1, 2], "the old relation is preserved, not rewritten");
+});

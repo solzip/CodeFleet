@@ -13,6 +13,7 @@ import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { transitionQueueItem } from "../src/ledger.ts";
 import { runTask } from "../src/run.ts";
 import {
   approveTask,
@@ -30,6 +31,7 @@ import {
 } from "../src/task-revision.ts";
 import { findTaskPath } from "../src/task.ts";
 import { profileJson, writeLocalOverlay } from "./profile-fixture.ts";
+import { permitRun } from "./task-ledger-fixture.ts";
 
 async function workspace(name: string): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), `codefleet-${name}-`));
@@ -95,6 +97,7 @@ test("approval fixes the contract in a Revision artifact", async () => {
   const taskPath = await findTaskPath(root, "sample");
   const approvedSource = await readFile(taskPath, "utf8");
   await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "approve r1" });
+  await permitRun(root, "sample");
 
   assert.deepEqual(await listTaskRevisions(root, "sample"), [1]);
   const document = await readTaskRevision(root, "sample", 1);
@@ -122,6 +125,7 @@ test("the approved contract survives an edit to the working file", async () => {
   const taskPath = await findTaskPath(root, "sample");
   const approvedSource = await readFile(taskPath, "utf8");
   await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "approve r1" });
+  await permitRun(root, "sample");
 
   // This is the case the ledger could not answer: the file no longer holds what
   // was approved, and the hash can only say so, not say what it was.
@@ -136,6 +140,7 @@ test("a Revision whose stored contract was altered is refused, not returned", as
   const root = await workspace("revision-tamper");
   const taskPath = await findTaskPath(root, "sample");
   await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "approve r1" });
+  await permitRun(root, "sample");
 
   // Reading is what verifies. Returning an altered contract would answer "what
   // was approved" with something nobody approved — worse than answering nothing.
@@ -158,11 +163,13 @@ test("a revision file is claimed once and never overwritten", async () => {
   const root = await workspace("revision-exclusive");
   const taskPath = await findTaskPath(root, "sample");
   await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "approve r1" });
+  await permitRun(root, "sample");
 
   // Re-approving identical content is idempotent and must not rewrite the
   // artifact; approving new content claims the next number instead.
   const before = await readFile(taskRevisionPath(root, "sample", 1), "utf8");
   await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "approve r1 again" });
+  await permitRun(root, "sample");
   assert.equal(await readFile(taskRevisionPath(root, "sample", 1), "utf8"), before);
   assert.deepEqual(await listTaskRevisions(root, "sample"), [1]);
 });
@@ -180,15 +187,13 @@ test("Draft state and Revision state are derived separately", async () => {
   assert.deepEqual(deriveRevisionStates(await readTaskEvents(root, "sample")), []);
 
   await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "approve r1" });
+  await permitRun(root, "sample");
   const afterFirst = deriveRevisionStates(await readTaskEvents(root, "sample"));
   assert.equal(afterFirst.length, 1);
   assert.equal(afterFirst[0].state, "APPROVED");
 
-  // The design's own worked example: approve r1, invalidate r1, approve r2. It
-  // replays revision 1 as "승인된 적 있음 / 무효화됨 / 현재 실행 불가" — not as
-  // SUPERSEDED. Deriving SUPERSEDED from a newer revision existing would invent
-  // a corrective decision nobody appended, and TASK_REVISION_SUPERSEDED carries
-  // fields only that event can supply.
+  // Invalidation alone does not supersede: nothing has replaced revision 1 yet,
+  // and it could still be re-approved as revision 1.
   await invalidateApproval(root, { taskId: "sample", taskPath, actorId: "tester", reason: "reopening" });
   const afterInvalidate = deriveRevisionStates(await readTaskEvents(root, "sample"));
   assert.equal(afterInvalidate[0].state, "INVALIDATED");
@@ -196,15 +201,19 @@ test("Draft state and Revision state are derived separately", async () => {
   const original = await readFile(taskPath, "utf8");
   await writeFile(taskPath, original.replace("goal: edit app.js", "goal: edit app.js twice"), "utf8");
   await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "approve r2" });
+  await permitRun(root, "sample");
 
+  // Approving revision 2 appends the succession event, which is what makes
+  // SUPERSEDED reachable at all — it was declared and replayed but never
+  // written (P1-42). Succession outranks invalidation because it is terminal
+  // and names a replacement.
   const afterSecond = deriveRevisionStates(await readTaskEvents(root, "sample"));
   assert.deepEqual(
-    afterSecond.map((entry) => [entry.taskRevision, entry.state]),
+    afterSecond.map((entry) => [entry.taskRevision, entry.state, entry.supersededBy]),
     [
-      [1, "INVALIDATED"],
-      [2, "APPROVED"]
-    ],
-    "SUPERSEDED stays unreachable until something appends the event. P1-42, closed by S3-1d"
+      [1, "SUPERSEDED", 2],
+      [2, "APPROVED", null]
+    ]
   );
   // Both contracts are recoverable, including the one that was replaced.
   assert.deepEqual(await listTaskRevisions(root, "sample"), [1, 2]);
@@ -234,6 +243,7 @@ test("a draft that cannot be approved reports why instead of looking ready", asy
   // would answer a different question than the field asks.
   await writeFile(taskPath, original, "utf8");
   await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "approve r1" });
+  await permitRun(root, "sample");
   await writeFile(taskPath, original.replace("goal: edit app.js", "goal: edited after approval"), "utf8");
   const conflicted = await deriveDraftState(root, "sample");
   assert.equal(conflicted.state, "EDITING");
@@ -249,6 +259,7 @@ test("every Run artifact names the contract it is evidence for", async () => {
   const root = await workspace("revision-run-artifacts");
   const taskPath = await findTaskPath(root, "sample");
   await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "approve r1" });
+  await permitRun(root, "sample");
 
   const execution = await runTask(root, "sample");
   assert.equal(execution.result.status, "SUCCEEDED");
@@ -293,4 +304,67 @@ test("every Run artifact names the contract it is evidence for", async () => {
   for (const relative of expected.filter((name) => !name.includes(path.sep))) {
     assert.ok(present.has(relative), `${relative} exists in the Run Trace`);
   }
+});
+
+// A Task is defined as a contract of role, scope, guardrails, and verification
+// conditions, and a Run is the delegation of an approved one. The prompt carried
+// the scope and nothing else — the agent was told where it could write, but not
+// what role it was acting in, what ceiling applied, or what would be executed
+// against its work. S3-2 and S3-3.
+test("the prompt carries the contract the agent is being held to", async () => {
+  const root = await workspace("prompt-contract");
+  const taskPath = await findTaskPath(root, "sample");
+  await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "approve r1" });
+  await permitRun(root, "sample");
+
+  const execution = await runTask(root, "sample");
+  const prompt = await readFile(path.join(execution.runDir, "prompt.md"), "utf8");
+
+  // Each half of the contract, measured rather than sampled: a prompt missing
+  // one of these delegates a contract the agent cannot honour.
+  const required: [string, RegExp][] = [
+    ["role", /Acting as: INFRA_OPERATOR/],
+    ["effective mode", /Effective mode: COMMAND_EXEC/],
+    ["ceiling is enforced", /enforced by the Harness/],
+    ["scope", /## Allowed Scope/],
+    ["verification command", /check\.mjs/],
+    ["verification is executed, not claimed", /Reporting that they pass does not make them pass/],
+    ["objective context", /## Objective Context/],
+    ["objective identity", /fixture-objective \(SEQUENCE\)/]
+  ];
+  const missing = required.filter(([, pattern]) => !pattern.test(prompt)).map(([name]) => name);
+  assert.equal(required.length, 8, "the measured set is the whole contract, not a sample of it");
+  assert.deepEqual(missing, [], "every part of the contract reaches the agent");
+});
+
+// The prompt admits only accepted Objective context, and every condition that
+// makes context unaccepted — BLOCKED, SKIPPED, CANCELED, a queue item at another
+// revision, an unreplayable ledger — also refuses the Run before a prompt is
+// written. So the filter is defence in depth rather than the only guard, and
+// this asserts the refusal that actually fires.
+//
+// The one branch that would isolate the filter, a closed Objective, is not
+// reachable: OBJECTIVE_CLOSED is declared and replayed but nothing appends it,
+// the same defect as P1-42. Registered as P1-46 rather than covered by a test
+// that cannot run.
+test("a Task the queue has stopped never reaches an agent at all", async () => {
+  const root = await workspace("prompt-objective-blocked");
+  const taskPath = await findTaskPath(root, "sample");
+  await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "approve r1" });
+  await permitRun(root, "sample");
+
+  await transitionQueueItem(root, {
+    objectiveId: "fixture-objective",
+    objectiveQueueItemId: "fixture-objective:sample:1",
+    type: "QUEUE_ITEM_BLOCKED",
+    actorId: "tester",
+    reason: "stopped in writing"
+  });
+
+  await assert.rejects(() => runTask(root, "sample"), /BLOCKED/);
+
+  // Refused before any Run Trace exists, so there is no prompt for the stopped
+  // context to have leaked into.
+  const runs = await readdir(path.join(root, ".codefleet", "runs")).catch(() => []);
+  assert.deepEqual(runs, [], "a refused Run leaves nothing behind");
 });

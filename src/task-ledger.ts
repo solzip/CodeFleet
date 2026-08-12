@@ -14,33 +14,22 @@ import path from "node:path";
 import { meetMode, modeRank, resolveAgentRole, type CustomRole } from "./agent-role.ts";
 import { loadConfig } from "./config.ts";
 import { runMutation, type MutationOutcome } from "./mutation.ts";
+import {
+  readTaskEvents,
+  supersededChain,
+  taskLedgerPath,
+  type TaskLedgerEvent,
+  type TaskLedgerEventType
+} from "./task-events.ts";
 import { findTaskPath, loadTask, validateTask } from "./task.ts";
 import { readTaskRevision, writeTaskRevision } from "./task-revision.ts";
 import type { CodeFleetConfig } from "./types.ts";
 import { parseYaml } from "./yaml.ts";
 
-export type TaskLedgerEventType =
-  | "TASK_REVISION_CREATED"
-  | "TASK_APPROVED"
-  | "TASK_APPROVAL_INVALIDATED"
-  | "TASK_REVISION_SUPERSEDED";
-
-export interface TaskLedgerEvent {
-  mutationId: string;
-  eventId: string;
-  seq: number;
-  type: TaskLedgerEventType;
-  taskId: string;
-  taskRevision: number;
-  revisionHash: string;
-  approvalTargetHash: string;
-  /** Empty on events written before guardrails joined the approval target. */
-  guardrailHash?: string;
-  actorKind: "HUMAN" | "SYSTEM_POLICY";
-  actorId: string;
-  reason: string;
-  at: string;
-}
+// Re-exported so callers keep importing the ledger from one place; the split is
+// an import-graph concern, not a change to what this module offers.
+export { readTaskEvents, supersededChain, taskLedgerPath };
+export type { TaskLedgerEvent, TaskLedgerEventType };
 
 export interface ApprovalState {
   taskId: string;
@@ -57,10 +46,6 @@ export interface ApprovalState {
   approvedAt: string;
   /** Why the current content is not executable, empty when it is. */
   blockedReason: string;
-}
-
-export function taskLedgerPath(rootDir: string, taskId: string): string {
-  return path.join(rootDir, ".codefleet", "tasks", taskId, "task-ledger.jsonl");
 }
 
 export async function contentHashOf(filePath: string): Promise<string> {
@@ -176,18 +161,6 @@ export function approvalTargetOf(revisionHash: string, guardrailHash: string): s
   return createHash("sha256").update(`${revisionHash}\n${guardrailHash}`).digest("hex");
 }
 
-export async function readTaskEvents(rootDir: string, taskId: string): Promise<TaskLedgerEvent[]> {
-  try {
-    const raw = await readFile(taskLedgerPath(rootDir, taskId), "utf8");
-    return raw
-      .split(/\r?\n/)
-      .filter((line) => line.trim().length > 0)
-      .map((line) => JSON.parse(line) as TaskLedgerEvent);
-  } catch {
-    return [];
-  }
-}
-
 // Approval state is replayed from the ledger, never read from a mutable field on
 // the task file, so an edit cannot quietly leave a stale "approved" flag behind.
 export async function replayApproval(
@@ -269,8 +242,9 @@ export async function replayApproval(
  * revision, while invalidating withdraws its approval. It is reported under its
  * own name rather than folded into one of the three. Registered as P1-44.
  *
- * CANCELED is absent here because no event produces it — the same gap as P1-42
- * for SUPERSEDED, which S3 closes.
+ * CANCELED is still absent because no event produces it. SUPERSEDED had the same
+ * gap (P1-42) until approving a newer revision started appending the succession
+ * event, which is what lets an Objective relation move forward (P0-14).
  */
 export type RevisionState = "APPROVED" | "SUPERSEDED" | "INVALIDATED";
 
@@ -280,7 +254,10 @@ export interface RevisionStateEntry {
   state: RevisionState;
   approvedBy: string;
   at: string;
+  /** Set when TASK_REVISION_SUPERSEDED named a successor. */
+  supersededBy: number | null;
 }
+
 
 export function deriveRevisionStates(events: TaskLedgerEvent[]): RevisionStateEntry[] {
   const byRevision = new Map<number, RevisionStateEntry>();
@@ -292,7 +269,8 @@ export function deriveRevisionStates(events: TaskLedgerEvent[]): RevisionStateEn
         revisionHash: event.revisionHash,
         state: "INVALIDATED",
         approvedBy: "",
-        at: event.at
+        at: event.at,
+        supersededBy: null
       });
       continue;
     }
@@ -304,19 +282,18 @@ export function deriveRevisionStates(events: TaskLedgerEvent[]): RevisionStateEn
       entry.state = "APPROVED";
       entry.approvedBy = event.actorId;
       entry.at = event.at;
-      // A newer approval does not supersede an older revision here. The design
-      // replays its own example — approve r1, invalidate r1, approve r2 — as
-      // "revision 1: 승인된 적 있음 / 무효화됨 / 현재 실행 불가", not as
-      // SUPERSEDED, and TASK_REVISION_SUPERSEDED carries fields
-      // (supersededByTaskRevision, supersededByRevisionHash) that only an
-      // explicit event can supply. Deriving it from revision numbering would be
-      // the hidden rollback the design forbids.
     } else if (event.type === "TASK_APPROVAL_INVALIDATED") {
-      entry.state = "INVALIDATED";
-      entry.at = event.at;
+      // Only if nothing has succeeded it. Succession is the stronger statement:
+      // an invalidated revision may still be re-approved as the same number,
+      // while a superseded one has a named replacement and is terminal.
+      if (entry.state !== "SUPERSEDED") {
+        entry.state = "INVALIDATED";
+        entry.at = event.at;
+      }
     } else if (event.type === "TASK_REVISION_SUPERSEDED") {
       entry.state = "SUPERSEDED";
       entry.at = event.at;
+      entry.supersededBy = event.supersededByTaskRevision ?? null;
     }
   }
 
@@ -378,6 +355,8 @@ async function appendTaskEvent(
     revisionHash: string;
     approvalTargetHash: string;
     guardrailHash?: string;
+    supersededByTaskRevision?: number;
+    supersededByRevisionHash?: string;
     actorId: string;
     reason: string;
   }
@@ -394,6 +373,12 @@ async function appendTaskEvent(
     revisionHash: fields.revisionHash,
     approvalTargetHash: fields.approvalTargetHash,
     guardrailHash: fields.guardrailHash ?? "",
+    ...(fields.supersededByTaskRevision === undefined
+      ? {}
+      : {
+          supersededByTaskRevision: fields.supersededByTaskRevision,
+          supersededByRevisionHash: fields.supersededByRevisionHash ?? ""
+        }),
     actorKind: "HUMAN",
     actorId: fields.actorId,
     reason: fields.reason,
@@ -475,7 +460,7 @@ export async function approveTask(
           at: created.at,
           reason
         });
-        return appendTaskEvent(rootDir, taskId, mutationId, "TASK_APPROVED", {
+        const approved = await appendTaskEvent(rootDir, taskId, mutationId, "TASK_APPROVED", {
           taskRevision: revision,
           revisionHash: currentHash,
           approvalTargetHash: targetHash,
@@ -483,6 +468,25 @@ export async function approveTask(
           actorId,
           reason
         });
+
+        // Succession, recorded rather than inferred. The event was declared and
+        // replayed but nothing ever appended it (P1-42), so a revision had no
+        // successor to name and an Objective relation attached at the old one
+        // had nowhere to move (P0-14). The design's transition table is
+        // "APPROVED -> SUPERSEDED when newer revision approved"; this is that
+        // moment, written as the corrective decision event it requires.
+        if (revision > 1) {
+          await appendTaskEvent(rootDir, taskId, mutationId, "TASK_REVISION_SUPERSEDED", {
+            taskRevision: revision - 1,
+            revisionHash: state.latestRevisionHash,
+            approvalTargetHash: "",
+            supersededByTaskRevision: revision,
+            supersededByRevisionHash: currentHash,
+            actorId,
+            reason
+          });
+        }
+        return approved;
       },
       rebuild: async (): Promise<void> => {
         // Approval state is computed on read; there is no snapshot to rebuild.

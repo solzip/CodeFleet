@@ -145,7 +145,13 @@ codefleet objective attach obj-001 task-001
 codefleet objective status obj-001
 ```
 
-`--kind`는 `ONE_OFF`(기본값), `SEQUENCE`, `WORKSTREAM` 중 하나다. `attach`는 attach 시점 Task의 content hash를 기록하므로, 이후 Task를 수정하면 조용히 흡수되지 않고 drift로 드러난다.
+`--kind`는 `ONE_OFF`(기본값), `SEQUENCE`, `WORKSTREAM` 중 하나다.
+
+**relation은 선택이 아니다.** Run의 실행 허가는 두 축의 곱이다 — 승인된 Task Revision과 수용된 Objective relation. 어느 Objective에도 붙어 있지 않은 Task는 **실행이 거부된다.** 큐에 아무도 넣지 않은 일은 아무도 하기로 결정하지 않은 일이다.
+
+`attach`는 revision과 그 해시를 **Task 원장에서 읽는다.** 인자로 받지 않는다 — 존재하지 않는 revision이나 원장이 기록한 적 없는 해시로 relation을 만들면 거부된다. `--revision`을 생략하면 승인된 revision에 붙는다.
+
+relation은 **자기가 붙은 revision을 가리킨다.** rev1에 붙은 relation은 rev2 실행을 허가하지 않는다. 계약이 다르기 때문이다. 새 revision으로 옮기려면 그 revision을 승인해야 하고, 승인이 승계를 기록한다 — 승계가 기록된 방향으로만 relation이 이동한다. 옛 큐 항목은 다시 쓰지 않고 보존된다.
 
 큐 아이템은 명시적 결정으로만 움직이며, 각 결정에는 reason이 필요하다:
 
