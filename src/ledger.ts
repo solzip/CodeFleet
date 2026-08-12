@@ -27,7 +27,12 @@ export type LedgerEventType =
   | "QUEUE_ITEM_UNSKIPPED"
   | "QUEUE_ITEM_CANCELED"
   | "QUEUE_REORDERED"
-  | "RUN_REVIEW_DECIDED";
+  | "RUN_REVIEW_DECIDED"
+  // Reintegration: an accepted Run whose changes were moved from the isolated
+  // tree into the workspace. The design does not regulate this path, and the
+  // choice recorded here is that it is an explicit human act with a ledger
+  // entry rather than a side effect of the review. See src/apply.ts.
+  | "RUN_RESULT_APPLIED";
 
 export type QueueStoredState = "WAITING" | "BLOCKED" | "SKIPPED" | "CANCELED";
 export type QueueDerivedState = "NEXT" | "ACTIVE" | "DONE" | "FAILED" | "VERIFIED" | "NONE";
@@ -601,7 +606,7 @@ function toPosix(value: string): string {
   return value.split(path.sep).join("/");
 }
 
-async function appendEvent(
+export async function appendEvent(
   rootDir: string,
   objectiveId: string,
   mutationId: string,

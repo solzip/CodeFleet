@@ -316,6 +316,28 @@ In `dry-run`, command execution is disabled, so every verification attempt is bl
 
 A Task with no `verification` block gets `NO_VERIFICATION_COMMANDS_CONFIGURED` and the same unsatisfied gate. Verification is required by the effective policy; declining to configure it does not make it pass.
 
+## 6.5 Reintegration — moving an accepted result into the workspace
+
+Isolation exists so an agent's work does not reach the workspace on its own. Reintegration is therefore not automatic either.
+
+```bash
+codefleet apply 2026-05-27_001 --reason "accepted; carrying it into the workspace"
+codefleet apply 2026-05-27_001 --check   # decides applicability without touching anything
+```
+
+What is applied is **the diff the Harness observed**. The isolated tree is discarded when the Run ends, so this applies evidence rather than a directory that may have drifted since — which makes every reason the patch might not be trustworthy a refusal rather than a partial write:
+
+| Refusal | Why |
+| --- | --- |
+| no accepted review | the command acts on a decision; without one there is nothing to act on |
+| truncated diff | applying part of a change is worse than applying none. Never waivable |
+| the Run edited the workspace | the change is already there; there is nothing to move |
+| the workspace moved | the patch describes content that is no longer there, and choosing a winner is not this tool's job |
+
+Conflicts are decided by `git apply --check`, and the refusal carries **git's own output** rather than a summary of it. A refusal leaves the workspace untouched. On success `RUN_RESULT_APPLIED` is appended to the Objective ledger, and applying the same Run again is a no-op rather than a second application.
+
+**The design does not regulate this path.** An explicit command was chosen because an ACCEPTED review that applied automatically would collapse the review decision and the workspace change into one act, removing the decision isolation exists to preserve.
+
 ## 6. Review the Run
 
 ```bash

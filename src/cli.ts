@@ -14,6 +14,7 @@ import {
   type ObjectiveKind,
   type QueueTransitionEvent
 } from "./ledger.ts";
+import { applyRunResult, planApply } from "./apply.ts";
 import { breakLock, lockPathFor, readHolder } from "./mutation.ts";
 import { renderPrompt } from "./prompt.ts";
 import { reviewRun, type ReviewDecision } from "./review.ts";
@@ -59,6 +60,9 @@ async function main(argv: string[]): Promise<number> {
         return 0;
       case "runs":
         await handleRuns(cwd, parsed.options);
+        return 0;
+      case "apply":
+        await handleApply(cwd, parsed.options, args);
         return 0;
       case "review":
         await handleReview(cwd, parsed.options, args);
@@ -112,6 +116,40 @@ async function handleRun(cwd: string, options: CliOptions, taskId: string, argv:
   console.log(`harnessObservation: ${execution.result.harnessObservationPath}`);
   console.log(`adapterResult: ${execution.result.adapterResultPath}`);
   console.log(`result: ${execution.result.resultPath}`);
+}
+
+// Reintegration is an explicit act with a ledger entry, not a side effect of an
+// ACCEPTED review. Isolation exists so an agent's work does not reach the
+// workspace without somebody deciding it should, and folding the two together
+// would remove the decision this command exists to record.
+async function handleApply(cwd: string, options: CliOptions, args: string[]): Promise<void> {
+  const rootDir = await workspaceRoot(cwd, options);
+  const runId = requireArg(args[0], "run-id");
+  const flags = parseReviewFlags(args.slice(1));
+
+  // --check answers "would this apply" without touching anything, through the
+  // same planner the mutation uses. A preview computed a second way is a
+  // preview of something else.
+  if (args.includes("--check")) {
+    const plan = await planApply(rootDir, runId);
+    console.log(`run: ${runId}`);
+    console.log(`objective: ${plan.objectiveId || "(none)"}`);
+    console.log(`task: ${plan.taskId || "(none)"} revision ${plan.taskRevision}`);
+    console.log(`alreadyApplied: ${plan.alreadyApplied ? "yes" : "no"}`);
+    console.log(`applicable: ${plan.blockedReason.length === 0 ? "yes" : "no"}`);
+    if (plan.blockedReason.length > 0) {
+      console.log("");
+      console.log(plan.blockedReason);
+    }
+    return;
+  }
+
+  const outcome = await applyRunResult(rootDir, {
+    runId,
+    actorId: flags.actor ?? "local-user",
+    reason: requireArg(flags.reason, "--reason")
+  });
+  reportOutcome(outcome, `applied ${runId} to the workspace`);
 }
 
 async function handlePrompt(cwd: string, options: CliOptions, taskId: string): Promise<void> {
@@ -729,6 +767,7 @@ Usage:
   codefleet [--workspace <path>] runs
   codefleet [--workspace <path>] objective create <id> --title <text> [--kind ONE_OFF|SEQUENCE|WORKSTREAM]
   codefleet [--workspace <path>] objective attach <id> <task-id> [--revision N]
+  codefleet [--workspace <path>] apply <run-id> --reason "..." [--check]
   codefleet [--workspace <path>] objective next <id>
   codefleet [--workspace <path>] objective run-next <id> [--adapter <adapter-id>]
   codefleet [--workspace <path>] objective block|unblock|skip|unskip|cancel-item <id> <queue-item-id> --reason <text>

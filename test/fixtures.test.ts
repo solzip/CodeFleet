@@ -38,7 +38,9 @@ async function scanRunTaskCallSites(): Promise<CallSite[]> {
       // Helpers that approve are enumerated by name rather than matched loosely.
       // A pattern like /approve/i would let any identifier containing the word
       // satisfy the check without approving anything.
-      const approves = /approveForTest|approveTask|approve\(root|seedApprovedTask/.test(body);
+      // Each name here supplies what a Run actually needs: an approval bound to
+      // the content, and since P0-13 an Objective relation at that revision too.
+      const approves = /approveForTest|approveTask|approve\(root|seedApprovedTask|approvedWorkspace/.test(body);
 
       sites.push({
         file,
