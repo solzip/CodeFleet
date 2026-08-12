@@ -62,7 +62,12 @@ export interface TaskRevisionDocument {
     authoritative: false;
     capturedAt: string;
     /** What was read, so "no relations" and "nothing scanned" cannot be confused. */
-    scanScope: { objectivesRead: number; queueItemsScanned: number };
+    scanScope: {
+      objectivesRead: number;
+      queueItemsScanned: number;
+      /** Objectives whose ledger would not replay; their relations are unknown. */
+      objectivesUnreadable: string[];
+    };
     relations: TaskRevisionRelation[];
   };
 }
@@ -103,9 +108,23 @@ async function captureRelations(
   }
 
   const relations: TaskRevisionRelation[] = [];
+  const unreadable: string[] = [];
   let queueItemsScanned = 0;
   for (const objectiveId of objectiveIds) {
     const { snapshot } = await replayObjective(rootDir, objectiveId);
+    // A ledger that will not replay produces an empty queue, so counting it as
+    // read and moving on would record "this Objective held no relation" about
+    // an Objective nobody could read. That is the reading this snapshot exists
+    // to make impossible, and the rule this function's own comment states.
+    //
+    // Not thrown: approval does not depend on the relation snapshot, and
+    // refusing to approve because an unrelated Objective is corrupt would be a
+    // blast radius nobody asked for. It is recorded instead, so a later reader
+    // sees which Objectives were not examined.
+    if (snapshot.replay.replayStatus !== "COMPLETE") {
+      unreadable.push(objectiveId);
+      continue;
+    }
     queueItemsScanned += snapshot.queue.length;
     for (const item of snapshot.queue) {
       if (item.taskId !== taskId) {
@@ -124,7 +143,13 @@ async function captureRelations(
   return {
     authoritative: false,
     capturedAt: new Date().toISOString(),
-    scanScope: { objectivesRead: objectiveIds.length, queueItemsScanned },
+    scanScope: {
+      objectivesRead: objectiveIds.length,
+      queueItemsScanned,
+      // Named, not counted: a reader deciding whether to trust this snapshot
+      // needs to know which Objective was skipped, not how many were.
+      objectivesUnreadable: unreadable
+    },
     relations
   };
 }

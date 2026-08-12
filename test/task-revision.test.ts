@@ -21,8 +21,10 @@ import {
   deriveDraftState,
   deriveRevisionStates,
   invalidateApproval,
-  readTaskEvents
+  readTaskEvents,
+  replayApproval
 } from "../src/task-ledger.ts";
+import { taskLedgerPath, TaskLedgerUnreadableError } from "../src/task-events.ts";
 import {
   listTaskRevisions,
   readTaskRevision,
@@ -382,4 +384,65 @@ test("a Task the queue has stopped never reaches an agent at all", async () => {
   // context to have leaked into.
   const runs = await readdir(path.join(root, ".codefleet", "runs")).catch(() => []);
   assert.deepEqual(runs, [], "a refused Run leaves nothing behind");
+});
+
+// A Task ledger that exists but cannot be read is not an empty one.
+//
+// The reader caught every error and returned [], so three situations were
+// identical: no ledger, a malformed line, and a ledger that would not open. All
+// read as "never approved" — and because approval derives the next revision
+// number from these events, a ledger holding revision 1 that read as empty made
+// approveTask append a second revision 1 into the same file. Only the exclusive
+// create on the revision artifact stopped the rest of the mutation.
+//
+// ledger.ts already refuses to mutate an Objective whose ledger will not parse.
+// This is the same rule for the other ledger. P0-16.
+test("a Task ledger that cannot be read blocks decisions instead of reading as empty", async () => {
+  const root = await workspace("corrupt-task-ledger");
+  const taskPath = await findTaskPath(root, "sample");
+  await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "approve r1" });
+
+  const ledger = taskLedgerPath(root, "sample");
+  const healthy = await readFile(ledger, "utf8");
+  const healthyLines = healthy.trim().split("\n").length;
+  assert.equal((await readTaskEvents(root, "sample")).length, 2, "the fixture starts from a readable ledger");
+
+  // One malformed line, the way a partial write or a hand edit leaves it.
+  await writeFile(ledger, `${healthy}{not json\n`, "utf8");
+
+  await assert.rejects(
+    () => readTaskEvents(root, "sample"),
+    (error: Error) => {
+      assert.ok(error instanceof TaskLedgerUnreadableError);
+      // Naming the line is the difference between a repairable file and a lost one.
+      assert.match(error.message, new RegExp(`line ${healthyLines + 1} of`));
+      return true;
+    }
+  );
+
+  // Every decision that reads the ledger refuses, rather than deciding on an
+  // empty reading. The approval one is the dangerous case: it would have
+  // reused revision 1.
+  const currentHash = await contentHashOf(taskPath);
+  await assert.rejects(() => replayApproval(root, "sample", currentHash), /cannot be read/);
+  // Refused in the precheck, so nothing is appended. Before this the reader
+  // returned [], approval computed "next revision = 1", and a second revision 1
+  // went into the file — the assertion on the bytes below is the one that
+  // matters.
+  const outcome = await approveTask(root, {
+    taskId: "sample",
+    taskPath,
+    actorId: "tester",
+    reason: "approve over corruption"
+  });
+  assert.equal(outcome.failedPhase, "M2_PRECHECK");
+  assert.equal(outcome.applied, false);
+  assert.match(outcome.failureMessage, /cannot be read/);
+
+  // And the file is left exactly as it was: a refusal does not append.
+  assert.equal(await readFile(ledger, "utf8"), `${healthy}{not json\n`);
+
+  // An absent ledger is still an absence, not a failure.
+  const fresh = await workspace("no-task-ledger");
+  assert.deepEqual(await readTaskEvents(fresh, "sample"), []);
 });

@@ -200,15 +200,22 @@ export async function planApply(rootDir: string, runId: string): Promise<ApplyPl
     return blocked(`Run ${runId} changed nothing. There is no patch to apply.`, context);
   }
 
-  // The workspace must be what the patch was written against. The pre-run
-  // snapshot recorded a stateHash over the same scope; if the workspace has
-  // moved since, the patch describes content that is no longer there.
+  // Whether the Run observed a starting state at all.
+  //
+  // This is not the drift check, and an earlier comment here said it was. The
+  // recorded hash covers the isolated tree, not the workspace, so comparing the
+  // two would compare different directories — the very confusion P0-7 was
+  // about. Drift is decided by `git apply --check` against the workspace as it
+  // is now, which is the only thing that can answer it.
+  //
+  // What this does answer: a Run that captured no pre-run state produced no
+  // baseline, so there is no evidence of what its patch was written against.
   const preRun = await readJson(path.join(runDir, "workspace-pre-run.json"));
   const recordedHash = ((preRun?.stateHash ?? {}) as Record<string, unknown>).value;
   if (typeof recordedHash !== "string" || recordedHash.length === 0) {
     return blocked(
-      `Run ${runId} recorded no pre-run state hash, so CodeFleet cannot tell whether the workspace has moved since.\n` +
-        "Unknown is not the same as unchanged.",
+      `Run ${runId} recorded no pre-run state, so there is no evidence of what its patch was written against.\n` +
+        "A patch without a recorded baseline is a change of unknown provenance.",
       context
     );
   }

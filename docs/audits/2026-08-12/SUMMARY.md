@@ -171,6 +171,9 @@ P1-37의 수치를 갱신한다: Run Trace의 JSON은 7개가 아니라 **9개**
 | **P1-45** | Draft State `REJECTED`를 만드는 이벤트가 없다 | 설계 §0.6이 `EDITING` / `READY_FOR_APPROVAL` / `REJECTED`를 규정하지만 draft 폐기는 파일 삭제로만 가능하다. `deriveDraftState`는 도달 가능한 2개만 반환한다. P1-42(`TASK_REVISION_SUPERSEDED` 생산자 부재)와 같은 종류의 결함 |
 | **P1-46** | `OBJECTIVE_CLOSED`를 append하는 코드가 0곳이다 | S3 구현 중 확인. `ledger.ts:20`에 선언되고 `:237`에서 replay가 처리하지만 생산자가 없다. P1-42(`TASK_REVISION_SUPERSEDED`)와 같은 형태이며, S3에서 P1-42는 닫혔고 이것은 남았다. 프롬프트의 accepted-context 필터를 게이트와 독립적으로 검증할 유일한 경로가 이것이라 테스트를 만들지 못했다 |
 | **P1-47** | `deriveLocalReviewStatus`가 번들이 degraded가 아니면 **비수용 결정도 `MIGRATION_READY`로 반환**한다 | `review.ts:604-632`. 오늘은 모든 Run이 갭을 가져 도달 불가능하지만, harness-visible command channel이 생기면 REJECTED 리뷰가 Objective 원장에 들어간다. 그 시점에 apply의 ACCEPTED 검사가 거부된 Run의 워크스페이스 반영을 막는 **유일한 방어**가 된다 — 14번 문서에서 방어 테스트를 추가했다 |
+| **P0-16** | 읽을 수 없는 Task 원장이 **빈 원장으로 읽혀**, 승인이 그 위에 중복 revision을 append한다 | `task-events.ts` `readTaskEvents`가 모든 오류를 삼키고 `[]` 반환. 잘못된 줄 1개로 재현: `readTaskEvents` 0건(파일 3줄) → `latestRevision` 0 → 이미 revision 1이 있는 파일에 두 번째 `TASK_REVISION_CREATED` rev=1 append. 산출물의 `wx`가 뒤늦게 막았다. Objective 원장은 P0-9에서 같은 규칙을 이미 강제한다 | 15 §결함1 |
+| **P1-48** | replay 실패한 Objective가 Revision 스냅샷에 "relation 없음"으로 기록된다 | `task-revision.ts` `captureRelations`가 `replayStatus`를 보지 않는다. 손상 원장은 빈 큐로 replay되어 건강한 빈 Objective와 구별 불가. 함수 자신의 주석이 금지하는 상황 | 15 §결함2 |
+| **P1-49** | `apply.ts`의 주석·거부문이 코드가 하지 않는 drift 검사를 주장한다 | 해시 존재 여부만 보고 비교하지 않는다. 비교할 수도 없다 — 그 해시는 격리 트리의 것이다(P0-7). 실제 drift 방어는 `git apply --check` | 15 §결함3 |
 
 ## 2026-08-11 P1 목록의 연속성
 
