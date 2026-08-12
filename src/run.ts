@@ -400,11 +400,7 @@ async function executeRun(
   // wrong way, and no artifact is written either way.
   const approval = await replayApproval(rootDir, taskId, await contentHashOf(taskPath));
   if (approval.blockedReason.length > 0) {
-    throw new Error(
-      `Task is not approved for execution: ${taskId} (${approval.blockedReason}).
-` +
-        "Run 'codefleet task approve " + taskId + " --reason <text>' first."
-    );
+    throw new Error(approvalRefusal(taskId, approval.blockedReason));
   }
 
   // The Task ledger owns approval; the Objective ledger owns whether the queue
@@ -643,6 +639,10 @@ async function executeRun(
     approval: {
       taskRevision: approval.approvedRevision,
       approvalTargetHash: approval.approvedHash,
+      // The two halves of the target, so the approval and the execution can be
+      // compared after the fact rather than taken on trust.
+      revisionHash: approval.approvedRevisionHash,
+      guardrailHash: approval.approvedGuardrailHash,
       approvedBy: approval.approvedBy,
       approvedAt: approval.approvedAt
     },
@@ -1364,6 +1364,40 @@ export function blockedCommandChannelReason(input: {
     "Every Run under that setting keeps COMMAND_CHANNEL_NOT_HARNESS_VISIBLE and",
     "requires a human review."
   ].join("\n");
+}
+
+/**
+ * Why this Task may not run, and what to do about it. The guardrail case is
+ * separated because the operator did not touch the Task and would otherwise be
+ * told to re-approve an edit they never made.
+ */
+function approvalRefusal(taskId: string, blockedReason: string): string {
+  const head = `Task is not approved for execution: ${taskId} (${blockedReason}).`;
+  if (blockedReason === "PROFILE_GUARDRAILS_CHANGED_AFTER_APPROVAL") {
+    return [
+      head,
+      "",
+      "The Task is unchanged. What moved is the Project Profile: the guardrails this",
+      "contract was approved under are not the ones now in force, and an approval",
+      "covers the guardrails it was given under.",
+      "",
+      "Restore the guardrails, or approve the contract again under the new ones:",
+      `  codefleet task invalidate ${taskId} --reason <text>`,
+      `  codefleet task approve ${taskId} --reason <text>`
+    ].join("\n");
+  }
+  if (blockedReason === "TASK_CONTENT_CHANGED_AFTER_APPROVAL") {
+    return [
+      head,
+      "",
+      "The Task file changed after it was approved, so the approval no longer names",
+      "what is on disk.",
+      "",
+      `  codefleet task invalidate ${taskId} --reason <text>`,
+      `  codefleet task approve ${taskId} --reason <text>`
+    ].join("\n");
+  }
+  return `${head}\nRun 'codefleet task approve ${taskId} --reason <text>' first.`;
 }
 
 function addUnavailableReason(reasons: Set<string>, value: unknown): void {

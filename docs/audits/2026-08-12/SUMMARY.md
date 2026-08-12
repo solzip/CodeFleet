@@ -143,6 +143,26 @@ envSeenByVerificationChild : "absent"
 | D-2 | **위반 → P1-39** | 설계 §0.6이 Draft/Revision 상태 기계를 명시. 코드에 없다 |
 | D-3 | **위반 → P1-40** (방향은 초판의 반대) | 설계 §0.6 "Revision State에 실행 결과를 넣지 않는다". `status`는 계약에서 빠져야 한다 |
 
+## 재검수 (HEAD `5d989f1`) — P0-14 · P0-15 신규
+
+`11-model-conformance.md`는 `b750e9e` 기준이다. 확정 모델로 HEAD를 다시 대조했다. 전문은 `12-model-conformance-recheck.md`.
+불변식을 13개로 다시 나눴다 — relation을 "있다/없다"(M-8)와 "무엇을 가리키는가"(M-9·M-10)로 분리했고, 그 축에서 신규 위반 2건이 나왔다.
+결과: 준수 5 / 부분 2 / **위반 6**. 기존 P0-12·P0-13은 HEAD에서 그대로 재현된다.
+
+| ID | 위반 | 근거 (전부 임시 워크스페이스 실행) |
+|---|---|---|
+| **P0-14** | Objective relation이 실행되는 revision을 가리키지 않고, 새 revision으로 옮길 방법이 없다 | rev1 승인·attach → 편집 → invalidate → rev2 승인 후 실행: `run-plan approval.taskRevision=2` / `queue relation revision=1`로 **RAN**. rev2 attach는 `sample is already attached at revision 1`로 거부(`ledger.ts:697-709`). `blockedQueueReason`은 `taskId`로만 필터(`run.ts:224`) |
+| **P0-15** | relation의 revision·hash가 Task 원장과 대조되지 않는다 | `attachTask`가 둘을 입력으로 받고 원장을 읽지 않는다(`ledger.ts:666-727`). 실측: 원장 최대 revision 1인 상태에서 `rev=7` + 0으로 채운 hash가 수락되고 실행됨. CLI는 `--revision` 미지정 시 `1`을 넣고 hash는 **현재 파일**에서 계산(`cli.ts:271-278`) |
+
+P0-13을 고쳐 relation을 필수 게이트로 만들면, 그 게이트가 읽을 relation이 검증되지 않은 값이므로 **P0-13·P0-14·P0-15는 한 슬라이스에서 함께 닫아야 한다.**
+
+| ID | 신규 P1 | 근거 |
+|---|---|---|
+| **P1-42** | `TASK_REVISION_SUPERSEDED`가 선언되고 replay가 처리하지만, append하는 코드 경로가 0곳이다 | `task-ledger.ts:20`·`:94`. revision 승계를 표현할 이벤트가 정의만 되고 생산자가 없다 — P0-14가 필요로 하는 바로 그 이벤트 |
+| **P1-43** | `resume.sourceHashPolicy: "TASK_AND_PROFILE_MUST_MATCH"`를 읽는 코드·테스트가 0곳이다 | `run.ts:703`이 매 Run Plan에 적는다. grep 결과 생산 1곳, 소비 0곳. P0-12 서술 안에 있던 지적을 독립 항목으로 분리 |
+
+P1-37의 수치를 갱신한다: Run Trace의 JSON은 7개가 아니라 **9개**(workspace 스냅샷 2개 포함)이고, `taskRevision` 보유 1개 · `taskId` 보유 3개 · 둘 다 없는 것 5개다.
+
 ## 2026-08-11 P1 목록의 연속성
 
 이번 감사가 새 번호를 붙이기 전에 기존 번호가 끊기거나 겹치지 않는지 대조했다. 2026-08-11 SUMMARY의 P1-12 ~ P1-19는 전부 살아 있고, 이번 감사에서 상태만 갱신됐다.
@@ -219,6 +239,7 @@ core.longpaths       : (unset)
 
 ## 남은 것과 우선순위
 
+0. **P0-13 + P0-14 + P0-15를 한 슬라이스로** — 실행 허가의 두 축(approved revision / accepted relation)이 지금은 서로 다른 revision을 가리켜도 실행된다. relation을 필수로 만드는 것만으로는 검증되지 않은 값을 게이트로 승격시키는 결과가 된다.
 1. **P1-13 + P1-19를 함께** — 실사용 검증의 전제. 지금 상태로 `mvn`/`gradle`을 검증 커맨드로 쓰면 게이트가 통과할 수 없다.
 2. **P1-21** — POSIX CI를 켜는 순간 red가 된다. 켜기 전에 고쳐야 한다.
 3. **P1-20** — 게이트가 크래시와 시간 초과를 구분하지 못한다. 2단계가 검증 커맨드에 한 것을 어댑터에 하면 된다.

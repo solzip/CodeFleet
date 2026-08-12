@@ -11,7 +11,9 @@
 import { createHash } from "node:crypto";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { loadConfig } from "./config.ts";
 import { runMutation, type MutationOutcome } from "./mutation.ts";
+import type { CodeFleetConfig } from "./types.ts";
 
 export type TaskLedgerEventType =
   | "TASK_REVISION_CREATED"
@@ -28,6 +30,8 @@ export interface TaskLedgerEvent {
   taskRevision: number;
   revisionHash: string;
   approvalTargetHash: string;
+  /** Empty on events written before guardrails joined the approval target. */
+  guardrailHash?: string;
   actorKind: "HUMAN" | "SYSTEM_POLICY";
   actorId: string;
   reason: string;
@@ -39,7 +43,12 @@ export interface ApprovalState {
   latestRevision: number;
   latestRevisionHash: string;
   approvedRevision: number | null;
+  /** The combined target: what the approval actually named. */
   approvedHash: string;
+  /** The Task half of that target, kept apart so a refusal can say which moved. */
+  approvedRevisionHash: string;
+  /** The guardrail projection in force when the approval was given. */
+  approvedGuardrailHash: string;
   approvedBy: string;
   approvedAt: string;
   /** Why the current content is not executable, empty when it is. */
@@ -52,6 +61,58 @@ export function taskLedgerPath(rootDir: string, taskId: string): string {
 
 export async function contentHashOf(filePath: string): Promise<string> {
   return createHash("sha256").update(await readFile(filePath)).digest("hex");
+}
+
+/**
+ * The part of the Project Profile that decides how an approved contract may
+ * execute. The model puts guardrails inside the contract, so this travels with
+ * the approval; everything else in the Profile does not.
+ *
+ * A projection rather than the whole file on purpose. Hashing config.json would
+ * make renaming the project revoke every approval in the workspace, which
+ * teaches people to re-approve without reading — the opposite of the point.
+ */
+export function guardrailProjection(config: CodeFleetConfig): Record<string, unknown> {
+  return {
+    harnessMode: config.harnessMode,
+    mode: config.mode,
+    isolationMode: config.isolationMode,
+    allowedAdapters: [...config.allowedAdapters].sort(),
+    defaultAgentRole: config.defaultAgentRole ?? "",
+    agentRoles: config.agentRoles,
+    profileRequiredGates: config.profileRequiredGates ?? {},
+    autoAdvanceOnDone: config.autoAdvanceOnDone,
+    commands: config.policies.commands,
+    harness: config.policies.harness
+  };
+}
+
+/** Stable across reads: key order must not change the hash. */
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (value !== null && typeof value === "object") {
+    const entries = Object.keys(value as Record<string, unknown>)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`);
+    return `{${entries.join(",")}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
+export async function guardrailHashOf(rootDir: string): Promise<string> {
+  const config = await loadConfig(rootDir);
+  return createHash("sha256").update(canonicalJson(guardrailProjection(config))).digest("hex");
+}
+
+/**
+ * What the approval names: the contract body and the guardrails it may run
+ * under. Kept as one value so a stored approval cannot match a Run whose
+ * guardrails have since moved.
+ */
+export function approvalTargetOf(revisionHash: string, guardrailHash: string): string {
+  return createHash("sha256").update(`${revisionHash}\n${guardrailHash}`).digest("hex");
 }
 
 export async function readTaskEvents(rootDir: string, taskId: string): Promise<TaskLedgerEvent[]> {
@@ -75,10 +136,14 @@ export async function replayApproval(
 ): Promise<ApprovalState> {
   const events = [...(await readTaskEvents(rootDir, taskId))].sort((a, b) => a.seq - b.seq);
 
+  const currentGuardrailHash = await guardrailHashOf(rootDir);
+
   let latestRevision = 0;
   let latestRevisionHash = "";
   let approvedRevision: number | null = null;
   let approvedHash = "";
+  let approvedRevisionHash = "";
+  let approvedGuardrailHash = "";
   let approvedBy = "";
   let approvedAt = "";
 
@@ -89,12 +154,16 @@ export async function replayApproval(
     } else if (event.type === "TASK_APPROVED") {
       approvedRevision = event.taskRevision;
       approvedHash = event.approvalTargetHash;
+      approvedRevisionHash = event.revisionHash;
+      approvedGuardrailHash = event.guardrailHash ?? "";
       approvedBy = event.actorId;
       approvedAt = event.at;
     } else if (event.type === "TASK_APPROVAL_INVALIDATED" || event.type === "TASK_REVISION_SUPERSEDED") {
       if (approvedRevision === event.taskRevision) {
         approvedRevision = null;
         approvedHash = "";
+        approvedRevisionHash = "";
+        approvedGuardrailHash = "";
         approvedBy = "";
         approvedAt = "";
       }
@@ -104,10 +173,15 @@ export async function replayApproval(
   let blockedReason = "";
   if (approvedRevision === null) {
     blockedReason = latestRevision === 0 ? "NO_REVISION_CREATED" : "NO_VALID_APPROVAL";
-  } else if (approvedHash !== currentHash) {
+  } else if (approvedRevisionHash !== currentHash) {
     // The file changed after approval. The approval named the old content and
     // does not extend to what is on disk now.
     blockedReason = "TASK_CONTENT_CHANGED_AFTER_APPROVAL";
+  } else if (approvedHash !== approvalTargetOf(currentHash, currentGuardrailHash)) {
+    // The contract body is untouched but the guardrails it was approved under
+    // are not the ones in force. Naming this separately matters: the operator
+    // did not edit the Task and would otherwise be told that they had.
+    blockedReason = "PROFILE_GUARDRAILS_CHANGED_AFTER_APPROVAL";
   }
 
   return {
@@ -116,6 +190,8 @@ export async function replayApproval(
     latestRevisionHash,
     approvedRevision,
     approvedHash,
+    approvedRevisionHash,
+    approvedGuardrailHash,
     approvedBy,
     approvedAt,
     blockedReason
@@ -127,7 +203,14 @@ async function appendTaskEvent(
   taskId: string,
   mutationId: string,
   type: TaskLedgerEventType,
-  fields: { taskRevision: number; revisionHash: string; approvalTargetHash: string; actorId: string; reason: string }
+  fields: {
+    taskRevision: number;
+    revisionHash: string;
+    approvalTargetHash: string;
+    guardrailHash?: string;
+    actorId: string;
+    reason: string;
+  }
 ): Promise<TaskLedgerEvent> {
   const events = await readTaskEvents(rootDir, taskId);
   const seq = events.length + 1;
@@ -140,6 +223,7 @@ async function appendTaskEvent(
     taskRevision: fields.taskRevision,
     revisionHash: fields.revisionHash,
     approvalTargetHash: fields.approvalTargetHash,
+    guardrailHash: fields.guardrailHash ?? "",
     actorKind: "HUMAN",
     actorId: fields.actorId,
     reason: fields.reason,
@@ -162,22 +246,24 @@ export async function approveTask(
     throw new Error("TASK_APPROVED requires a reason");
   }
   const currentHash = await contentHashOf(taskPath);
+  const guardrailHash = await guardrailHashOf(rootDir);
+  const targetHash = approvalTargetOf(currentHash, guardrailHash);
 
   return runMutation(
     rootDir,
     {
       mutationKind: "TASK_APPROVE",
       targetId: taskId,
-      targetHash: currentHash,
+      targetHash,
       semanticPayload: {}
     },
     {
       precheck: async (): Promise<void> => {
         const state = await replayApproval(rootDir, taskId, currentHash);
-        if (state.approvedHash === currentHash) {
+        if (state.approvedHash === targetHash) {
           return;
         }
-        if (state.approvedRevision !== null && state.approvedHash !== currentHash) {
+        if (state.approvedRevision !== null && state.approvedHash !== targetHash) {
           // The prior approval is not silently carried forward; it has to be
           // invalidated explicitly before this content can be approved.
           throw new Error(
@@ -187,7 +273,7 @@ export async function approveTask(
       },
       isAlreadyApplied: async (): Promise<boolean> => {
         const state = await replayApproval(rootDir, taskId, currentHash);
-        return state.approvedHash === currentHash;
+        return state.approvedHash === targetHash;
       },
       append: async (mutationId): Promise<TaskLedgerEvent> => {
         const state = await replayApproval(rootDir, taskId, currentHash);
@@ -202,7 +288,8 @@ export async function approveTask(
         return appendTaskEvent(rootDir, taskId, mutationId, "TASK_APPROVED", {
           taskRevision: revision,
           revisionHash: currentHash,
-          approvalTargetHash: currentHash,
+          approvalTargetHash: targetHash,
+          guardrailHash,
           actorId,
           reason
         });
