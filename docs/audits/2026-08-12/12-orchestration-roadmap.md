@@ -117,10 +117,17 @@
 
 ### S4 — Run Options (여러 에이전트에게 할당)
 
-- [ ] **S4-1 · 신규** — Run Options 개념을 만든다 (Profile에 저장하지 않는 Run 단위 입력)
-- [ ] **S4-2 · 신규** — `--adapter` override를 받는다. `policies.agentAdapters.allowedAdapters` 대조는 기존 경로 재사용
-- [ ] **S4-3** — Run Plan이 선택 출처(profile default / run option)를 기록한다
-- [ ] **S4-4** — 회귀 테스트
+- [x] **S4-1 · 신규** — Run Options 개념을 만든다
+  - `RunOptions` 인터페이스, `runTask(root, taskId, discovery, runOptions)`. 읽기만 하고 어디에도 쓰지 않는다 — 설계의 "Run Options는 Project Profile에 저장하지 않는다"
+- [x] **S4-2 · 신규** — `--adapter` override를 받는다
+  - 프로파일 기본값과 **같은** 검사를 통과해야 한다(allowlist + 로컬 레지스트리). override가 정책 밖에 닿을 수 있으면 그것은 Run 단위로 정책을 넓히는 수단이 되고, 그것만은 아니어야 한다
+  - 거부문이 "chosen with --adapter"를 적어서 프로파일을 고칠지 플래그를 고칠지 알려준다
+- [x] **S4-3** — Run Plan이 선택 출처를 기록한다
+  - `selectedAgentAdapter.selectionSource` = `PROFILE_DEFAULT` | `RUN_OPTION` | `REQUIRE_EXPLICIT_UNRESOLVED`, `runOptions.agentAdapter` = 요청된 값 그대로
+- [x] **S4-4** — 회귀 테스트
+  - 핵심 테스트: 프로파일이 `REQUIRE_EXPLICIT`(유예)일 때 Run은 거부되고, `--adapter codex`를 준 Run만 진행된다 → 진행한 이유가 Run Option 말고 없다
+  - 되쓰기 없음도 함께 확인한다: 같은 워크스페이스에서 옵션 없이 다시 실행하면 다시 거부된다
+  - 스위트 236 → 238, 실패 0
 
 ### S5 — 반영 경로 [결정 필요]
 
@@ -171,7 +178,7 @@ S5-0은 결정이 필요하므로, 결정이 나올 때까지 S1~S4를 먼저 �
 | S1 | **완료** (S1-1~S1-4) | — |
 | S2 | **완료** (S2-1~S2-5) | — |
 | S3 | **완료** (S3-1~S3-4) | — |
-| S4 | 대기 | — |
+| S4 | **완료** (S4-1~S4-4) | — |
 | S5 | 결정 대기 | — |
 | S6 | 대기 | — |
 | S7 | 대기 | — |

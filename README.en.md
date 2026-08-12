@@ -289,6 +289,16 @@ The Run is planned before the adapter is given control: the approval is checked 
 
 `dry-run` is the default mode and does not launch the agent process. It still produces the full artifact set, which is what makes it useful for checking a Task before spending an agent run on it.
 
+**Run Options** are explicit execution input for a single Run. They are stored in neither the Project Profile nor the Task contract.
+
+```bash
+codefleet run task-001 --adapter codex
+```
+
+What the contract fixes is the **role** (`agentRole`); which CLI carries that role out is a property of this run, not of the contract. That is why the adapter is a Run Option rather than a Task field.
+
+A Run Option never widens anything: an override passes the same `policies.agentAdapters.allowedAdapters` check and the same local-registry check as a Profile default. The Run Plan records `selectedAgentAdapter.selectionSource` as `PROFILE_DEFAULT` or `RUN_OPTION`, so after the fact you read which adapter was chosen and by whom rather than inferring it.
+
 ## 5. Verification
 
 Verification commands from the Task are run **by the Harness**, not by the agent, and their preflight is checked against command policy. Each attempt records its own stdout, stderr, exit code, and authority:
@@ -448,7 +458,7 @@ Commands the agent runs on its own are **not** judged against this policy. The H
 
 ```text
 codefleet [--workspace <path>] init
-codefleet [--workspace <path>] run <task-id>
+codefleet [--workspace <path>] run <task-id> [--adapter <adapter-id>]
 codefleet [--workspace <path>] prompt <task-id>
 codefleet [--workspace <path>] task validate|status <task-id>
 codefleet [--workspace <path>] task approve|invalidate <task-id> --reason <text>

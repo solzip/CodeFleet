@@ -283,6 +283,16 @@ Run은 어댑터에 제어를 넘기기 전에 계획된다. 승인을 먼저 �
 
 기본 모드인 `dry-run`은 에이전트 프로세스를 실행하지 않는다. 그럼에도 아티팩트 세트는 전부 생성되므로, 에이전트 실행을 소모하기 전에 Task를 점검하는 용도로 유용하다.
 
+**Run Options.** 이번 Run 하나에만 적용되는 명시적 실행 입력이다. Project Profile에도, Task 계약에도 저장되지 않는다.
+
+```bash
+codefleet run task-001 --adapter codex
+```
+
+계약이 고정하는 것은 **역할**(`agentRole`)이고, 그 역할을 어떤 CLI가 수행하는지는 계약이 아니라 이번 실행의 속성이다. 그래서 어댑터는 Task 필드가 아니라 Run Option이다.
+
+Run Option은 **넓히지 않는다.** override도 프로파일 기본값과 똑같이 `policies.agentAdapters.allowedAdapters`와 로컬 레지스트리를 통과해야 한다. Run Plan은 `selectedAgentAdapter.selectionSource`에 `PROFILE_DEFAULT`인지 `RUN_OPTION`인지를 남기므로, 사후에 "이 실행은 누가 고른 어댑터로 돌았나"를 추론하지 않고 읽을 수 있다.
+
 ## 5. 검증
 
 Task의 검증 명령은 에이전트가 아니라 **Harness가 직접** 실행하며, preflight에서 command policy로 검사된다. 각 시도는 자신의 stdout, stderr, exit code, authority를 기록한다:
@@ -441,7 +451,7 @@ matcher는 argv 토큰 리스트이며 쓰인 그대로 비교된다. glob도 re
 
 ```text
 codefleet [--workspace <path>] init
-codefleet [--workspace <path>] run <task-id>
+codefleet [--workspace <path>] run <task-id> [--adapter <adapter-id>]
 codefleet [--workspace <path>] prompt <task-id>
 codefleet [--workspace <path>] task validate|status <task-id>
 codefleet [--workspace <path>] task approve|invalidate <task-id> --reason <text>

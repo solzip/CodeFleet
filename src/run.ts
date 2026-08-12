@@ -432,10 +432,27 @@ export function runLockPathFor(rootDir: string, taskId: string): string {
 // over each other inside one Run Trace while both reported success. The lock
 // answers "may this Task run now"; reserveRunDir below answers "which id is
 // mine", and both are needed because two different Tasks race on the id too.
+/**
+ * Explicit execution input for one Run request.
+ *
+ * The design keeps these apart from the Project Profile and from the Task
+ * contract: "Run Options는 Project Profile에 저장하지 않는다". An adapter choice
+ * is a property of this run, not of the workspace and not of the contract — the
+ * role is what the contract fixes, and which CLI carries it out is not.
+ *
+ * Nothing here widens anything. An override still has to pass the same policy
+ * and availability checks the Profile default passes.
+ */
+export interface RunOptions {
+  /** Overrides defaults.run.agentAdapter for this Run only. */
+  agentAdapter?: string;
+}
+
 export async function runTask(
   rootDir: string,
   taskId: string,
-  workspaceDiscovery?: WorkspaceDiscovery
+  workspaceDiscovery?: WorkspaceDiscovery,
+  runOptions: RunOptions = {}
 ): Promise<RunExecution> {
   const lockPath = runLockPathFor(rootDir, taskId);
   await acquireRunLock(lockPath, taskId);
@@ -445,7 +462,7 @@ export async function runTask(
   // throwing paths too — the same reason the lock is released in a finally.
   const isolationHandle: IsolationHandle = { prepared: null };
   try {
-    return await executeRun(rootDir, taskId, isolationHandle, workspaceDiscovery);
+    return await executeRun(rootDir, taskId, isolationHandle, workspaceDiscovery, runOptions);
   } finally {
     if (isolationHandle.prepared !== null) {
       await isolationHandle.prepared.discard();
@@ -499,7 +516,8 @@ async function executeRun(
   rootDir: string,
   taskId: string,
   isolationHandle: IsolationHandle,
-  workspaceDiscovery?: WorkspaceDiscovery
+  workspaceDiscovery?: WorkspaceDiscovery,
+  runOptions: RunOptions = {}
 ): Promise<RunExecution> {
   const discovery = workspaceDiscovery ?? await discoverWorkspace({ cwd: rootDir, workspace: rootDir });
   const config = await loadConfig(rootDir);
@@ -579,7 +597,7 @@ async function executeRun(
   }
   const effectiveMode = guardrailResolution.mode;
 
-  const adapterResolution = resolveAgentAdapter(config);
+  const adapterResolution = resolveAgentAdapter(config, runOptions);
   if (adapterResolution.blockedReason !== "") {
     throw new Error(adapterResolution.blockedReason);
   }
@@ -772,10 +790,14 @@ async function executeRun(
     },
     workspaceDiscovery: toPortableWorkspaceDiscovery(discovery),
     runOptions: {
-      mode: config.mode
+      mode: config.mode,
+      // What this Run request supplied, so the Run Plan answers "was this the
+      // workspace default or a choice somebody made here" without inference.
+      agentAdapter: runOptions.agentAdapter ?? null
     },
     selectedAgentAdapter: {
-      adapterId: adapterResolution.selectedAgentAdapter
+      adapterId: adapterResolution.selectedAgentAdapter,
+      selectionSource: adapterResolution.selectionSource
     },
     selectedAgentRole: {
       roleId: roleResolution.roleId,
@@ -2050,7 +2072,7 @@ function changedFilesAuthority(harnessObservation: Record<string, unknown>): str
 
 export interface AdapterResolution {
   selectedAgentAdapter: string;
-  selectionSource: "PROFILE_DEFAULT" | "REQUIRE_EXPLICIT_UNRESOLVED";
+  selectionSource: "PROFILE_DEFAULT" | "RUN_OPTION" | "REQUIRE_EXPLICIT_UNRESOLVED";
   policyAllowed: boolean;
   locallyAvailable: boolean;
   allowedAdapters: string[];
@@ -2061,10 +2083,15 @@ export interface AdapterResolution {
 // Selection reads the Profile and writes nothing back to it. Run Planning may
 // not edit the Project Profile, the Local Overlay, or the Task Revision while
 // choosing, so this takes the resolved config and returns a record.
-export function resolveAgentAdapter(config: CodeFleetConfig): AdapterResolution {
-  const selected = config.agentAdapter;
+export function resolveAgentAdapter(config: CodeFleetConfig, runOptions: RunOptions = {}): AdapterResolution {
+  // A Run Option is an input to this Run, so it is read here and written
+  // nowhere. It replaces the Profile default rather than being merged with it:
+  // there is nothing to merge, and the Run Plan records which one was used.
+  const override = runOptions.agentAdapter;
+  const selected = override ?? config.agentAdapter;
   const allowedAdapters = config.allowedAdapters;
   const localRegistry = [...LOCAL_ADAPTER_REGISTRY];
+  const selectionSource = override === undefined ? "PROFILE_DEFAULT" : "RUN_OPTION";
 
   if (selected === "REQUIRE_EXPLICIT") {
     return {
@@ -2085,8 +2112,12 @@ export function resolveAgentAdapter(config: CodeFleetConfig): AdapterResolution 
 
   let blockedReason = "";
   if (!policyAllowed) {
+    // An override is checked against the same allowlist as a default. A Run
+    // Option that could reach outside it would be a way to widen policy per
+    // run, which is the one thing it must not be.
     blockedReason =
-      `Run Planning is blocked: adapter ${selected} is not in policies.agentAdapters.allowedAdapters ` +
+      `Run Planning is blocked: adapter ${selected} ${override === undefined ? "" : "(chosen with --adapter) "}` +
+      `is not in policies.agentAdapters.allowedAdapters ` +
       `(${allowedAdapters.join(", ") || "empty"}).`;
   } else if (!locallyAvailable) {
     // Policy-allowed and locally-missing are different failures. Reporting them
@@ -2098,7 +2129,7 @@ export function resolveAgentAdapter(config: CodeFleetConfig): AdapterResolution 
 
   return {
     selectedAgentAdapter: selected,
-    selectionSource: "PROFILE_DEFAULT",
+    selectionSource,
     policyAllowed,
     locallyAvailable,
     allowedAdapters,

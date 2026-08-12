@@ -309,3 +309,68 @@ test("an AdapterRequest may narrow the effective policy and never widen it", () 
     "AdapterRequest deniedCommands are equal to or broader than effectivePolicy denied commands"
   );
 });
+
+// Run Options: explicit execution input for one Run request.
+//
+// The design separates them from both the Project Profile and the Task
+// contract — "Run Options는 Project Profile에 저장하지 않는다" — and names an
+// agentAdapter override as the example. The contract fixes the role; which CLI
+// carries it out is a property of this run. Before this the adapter could only
+// come from the Profile, so running the same contract through a different
+// adapter meant editing the workspace's default. S4.
+test("a Run Option chooses the adapter for one Run and is recorded as its source", async () => {
+  const root = await seedWith(
+    profileJson({
+      workspaceId: "run-options",
+      // REQUIRE_EXPLICIT is a deferral. Nothing in the Profile answers it, so a
+      // Run that proceeds here proceeded because the Run Option answered it.
+      agentAdapter: "REQUIRE_EXPLICIT",
+      allowedAdapters: ["codex"]
+    })
+  );
+  await seedApprovedTask(root);
+
+  await assert.rejects(() => runTask(root, "sample"), /REQUIRE_EXPLICIT/);
+
+  const execution = await runTask(root, "sample", undefined, { agentAdapter: "codex" });
+  const plan = JSON.parse(await readFile(path.join(execution.runDir, "run-plan.json"), "utf8")) as Record<
+    string,
+    any
+  >;
+  assert.equal(plan.selectedAgentAdapter.adapterId, "codex");
+  assert.equal(
+    plan.selectedAgentAdapter.selectionSource,
+    "RUN_OPTION",
+    "the Run Plan says the choice was made here, not inherited from the workspace"
+  );
+  assert.equal(plan.runOptions.agentAdapter, "codex", "the request is recorded as given");
+
+  // And it is not written back. The next Run without the option is deferred
+  // again, which is what "not stored in the Project Profile" has to mean.
+  const config = await loadConfig(root);
+  assert.equal(config.agentAdapter, "REQUIRE_EXPLICIT");
+  await assert.rejects(() => runTask(root, "sample"), /REQUIRE_EXPLICIT/);
+});
+
+test("a Run Option cannot reach outside the adapter allowlist", async () => {
+  const config = await loadConfig(
+    await seedWith(profileJson({ workspaceId: "run-options-policy", allowedAdapters: ["codex"] }))
+  );
+
+  // An override that could bypass policy would be a way to widen it per run,
+  // which is the one thing a Run Option must not be.
+  const denied = resolveAgentAdapter(config, { agentAdapter: "something-else" });
+  assert.notEqual(denied.blockedReason, "");
+  assert.match(denied.blockedReason, /allowedAdapters/);
+  // The refusal says the choice was made with the flag, so the reader edits the
+  // right thing.
+  assert.match(denied.blockedReason, /chosen with --adapter/);
+
+  // No option at all still resolves from the Profile, so the refusal above is
+  // the allowlist working rather than overrides being broken.
+  const fromProfile = resolveAgentAdapter(config);
+  assert.equal(fromProfile.blockedReason, "");
+  assert.equal(fromProfile.selectionSource, "PROFILE_DEFAULT");
+
+  coversRule(RESOLUTION, "selectionSource", "test/adapter-resolution.test.ts");
+});

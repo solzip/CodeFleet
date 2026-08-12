@@ -46,7 +46,7 @@ async function main(argv: string[]): Promise<number> {
         await handleInit(cwd, parsed.options);
         return 0;
       case "run":
-        await handleRun(cwd, parsed.options, requireArg(args[0], "task-id"));
+        await handleRun(cwd, parsed.options, requireArg(args[0], "task-id"), args.slice(1));
         return 0;
       case "prompt":
         await handlePrompt(cwd, parsed.options, requireArg(args[0], "task-id"));
@@ -92,10 +92,15 @@ async function handleInit(cwd: string, options: CliOptions): Promise<void> {
   console.log(`config: ${result.createdConfig ? "created" : "already exists"}`);
 }
 
-async function handleRun(cwd: string, options: CliOptions, taskId: string): Promise<void> {
+async function handleRun(cwd: string, options: CliOptions, taskId: string, argv: string[] = []): Promise<void> {
   const discovery = await workspaceDiscovery(cwd, options);
   const rootDir = discovery.selectedWorkspaceRootRealPath;
-  const execution = await runTask(rootDir, taskId, discovery);
+  // Run Options are inputs to this request and are not written back anywhere,
+  // so they are read from argv rather than from the Profile.
+  const flags = parseReviewFlags(argv);
+  const execution = await runTask(rootDir, taskId, discovery, {
+    agentAdapter: flags.adapter
+  });
   console.log("CodeFleet run complete.");
   console.log(`runId: ${execution.result.runId}`);
   console.log(`taskId: ${execution.result.taskId}`);
@@ -533,6 +538,7 @@ interface ReviewFlags {
   revision?: string;
   order?: string;
   task?: string;
+  adapter?: string;
 }
 
 function parseReviewFlags(argv: string[]): ReviewFlags {
@@ -550,7 +556,8 @@ function parseReviewFlags(argv: string[]): ReviewFlags {
     "--kind": "kind",
     "--revision": "revision",
     "--order": "order",
-    "--task": "task"
+    "--task": "task",
+    "--adapter": "adapter"
   };
 
   for (let index = 0; index < argv.length; index += 1) {
