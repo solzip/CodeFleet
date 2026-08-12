@@ -230,7 +230,6 @@ test("an editing Run with the flag on and no isolation is refused before it star
       "constraints: []",
       "doneCriteria: [done]",
       "workflow: [PLAN]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -327,7 +326,6 @@ async function isolatedRunWorkspace(): Promise<string> {
       "constraints: []",
       "doneCriteria: [The agent's edit is visible to verification]",
       "workflow: [IMPLEMENT]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -478,7 +476,6 @@ test("the diff artifact carries a created file's content, not only its name", as
       "constraints: []",
       "doneCriteria: [The patch describes every change]",
       "workflow: [IMPLEMENT]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -679,7 +676,6 @@ test("a failed discard reaches the review bundle and blocks an unwaived accept",
       "constraints: []",
       "doneCriteria: [done]",
       "workflow: [IMPLEMENT]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -797,7 +793,6 @@ async function queueGateWorkspace(name: string): Promise<string> {
       "constraints: []",
       "doneCriteria: [done]",
       "workflow: [PLAN]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -897,7 +892,6 @@ test("a queue decision blocks the Run, and an unattached Task is not blocked", a
       "constraints: []",
       "doneCriteria: [done]",
       "workflow: [PLAN]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"

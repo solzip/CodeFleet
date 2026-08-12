@@ -186,7 +186,6 @@ workflow:
   - PLAN
   - IMPLEMENT
   - REVIEW
-status: READY
 ```
 
 동일한 샘플이 `examples/tasks/task-001.yaml`에 있다.
@@ -204,7 +203,7 @@ status: READY
 - `verification.commands[].command`는 argv 배열이며 셸 문자열이 아니다. 셸 인터프리터는 거부된다. command 매칭이 의미를 유지해야 하기 때문이다.
 - `command[0]`은 매칭과 실행 모두에서 basename으로 정규화된다. 따라서 `./gradlew` 같은 상대 스크립트 경로는 해석되지 않는다. `PATH`에 있는 명령을 사용할 것.
 
-`status`는 `READY`, `RUNNING`, `DONE`, `FAILED`, `BLOCKED` 중 하나여야 한다.
+Task 파일에는 `status` 필드가 없다. 실행 결과는 계약이 아니므로 계약 문서에 넣지 않는다 — `status`를 선언한 Task는 validation에서 거부된다. 실행 상태는 `codefleet status`(Task별 최신 Run)와 `codefleet runs`(모든 Run과 그 결과)에서 본다.
 
 ```bash
 codefleet task validate task-001

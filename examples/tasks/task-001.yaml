@@ -23,4 +23,3 @@ workflow:
   - PLAN
   - IMPLEMENT
   - REVIEW
-status: READY

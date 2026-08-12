@@ -77,7 +77,6 @@ async function workspaceWithVerification(input: {
       "constraints: []",
       "doneCriteria: [done]",
       "workflow: [IMPLEMENT]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -310,7 +309,6 @@ test("a Run whose diff was cut off cannot be accepted, even with the reason waiv
       "constraints: []",
       "doneCriteria: [done]",
       "workflow: [IMPLEMENT]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -454,7 +452,6 @@ test("a limit nobody measured is not reported as a limit nothing hit", async () 
       "constraints: []",
       "doneCriteria: [done]",
       "workflow: [PLAN]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"

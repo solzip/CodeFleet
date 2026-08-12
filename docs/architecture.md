@@ -195,7 +195,6 @@ workflow:
   - PLAN
   - IMPLEMENT
   - REVIEW
-status: READY
 ```
 
 ## 7. Run 실행 흐름

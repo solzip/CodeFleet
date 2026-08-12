@@ -61,7 +61,6 @@ async function seedApprovedTask(root: string): Promise<void> {
       "constraints: []",
       "doneCriteria: [done]",
       "workflow: [PLAN]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"

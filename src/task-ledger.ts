@@ -11,8 +11,10 @@
 import { createHash } from "node:crypto";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { meetMode, modeRank, resolveAgentRole, type CustomRole } from "./agent-role.ts";
 import { loadConfig } from "./config.ts";
 import { runMutation, type MutationOutcome } from "./mutation.ts";
+import { loadTask } from "./task.ts";
 import type { CodeFleetConfig } from "./types.ts";
 
 export type TaskLedgerEventType =
@@ -111,6 +113,63 @@ export async function guardrailHashOf(rootDir: string): Promise<string> {
  * under. Kept as one value so a stored approval cannot match a Run whose
  * guardrails have since moved.
  */
+/**
+ * Whether this contract could execute at all. The design makes it a condition of
+ * turning a Draft into a Revision, and without it an approval means "you may try
+ * to run this" rather than "you may run this": the default profile approves a
+ * BACKEND_IMPLEMENTER contract carrying verification commands, and the adapter
+ * then refuses to launch because the role caps below COMMAND_EXEC.
+ *
+ * Only what can be decided at approval time is checked here. Whether a command
+ * passes command policy, or whether the tool exists on the machine, belongs to
+ * the Run.
+ */
+export async function contractFeasibility(
+  rootDir: string,
+  taskId: string
+): Promise<{ feasible: boolean; reason: string }> {
+  const config = await loadConfig(rootDir);
+  const { task } = await loadTask(rootDir, taskId);
+
+  const roleBlock = config.agentRoles as { allowedAgentRoles?: unknown; customRoles?: unknown };
+  const resolution = resolveAgentRole({
+    taskRole: task.agentRole ?? config.defaultAgentRole,
+    allowedAgentRoles: Array.isArray(roleBlock.allowedAgentRoles) ? (roleBlock.allowedAgentRoles as string[]) : [],
+    customRoles: (roleBlock.customRoles ?? {}) as Record<string, CustomRole>
+  });
+  if (resolution.blockedReason !== "" || resolution.role === null) {
+    return {
+      feasible: false,
+      reason: resolution.blockedReason || `agentRole ${resolution.roleId} does not resolve`
+    };
+  }
+
+  const commands = task.verification?.commands ?? [];
+  if (commands.length === 0) {
+    return { feasible: true, reason: "" };
+  }
+
+  // meet(profile, role) is the ceiling this contract can ever reach. Task
+  // guardrails may lower it further but never raise it, so a ceiling below
+  // COMMAND_EXEC here can never run the commands the contract declares.
+  const ceiling = meetMode(config.harnessMode, resolution.role.defaultMaxMode);
+  if (modeRank(ceiling) >= modeRank("COMMAND_EXEC")) {
+    return { feasible: true, reason: "" };
+  }
+  return {
+    feasible: false,
+    reason: [
+      `this contract declares ${commands.length} verification command(s) but cannot run them.`,
+      `  agentRole ${resolution.roleId} caps at ${resolution.role.defaultMaxMode}`,
+      `  defaults.task.harnessMode is ${config.harnessMode}`,
+      `  together they allow at most ${ceiling}, and running commands needs COMMAND_EXEC`,
+      "",
+      "Either choose a role whose ceiling reaches COMMAND_EXEC, or remove the",
+      "verification commands this contract cannot execute."
+    ].join("\n")
+  };
+}
+
 export function approvalTargetOf(revisionHash: string, guardrailHash: string): string {
   return createHash("sha256").update(`${revisionHash}\n${guardrailHash}`).digest("hex");
 }
@@ -259,6 +318,10 @@ export async function approveTask(
     },
     {
       precheck: async (): Promise<void> => {
+        const feasibility = await contractFeasibility(rootDir, taskId);
+        if (!feasibility.feasible) {
+          throw new Error(`Contract cannot be approved: ${feasibility.reason}`);
+        }
         const state = await replayApproval(rootDir, taskId, currentHash);
         if (state.approvedHash === targetHash) {
           return;

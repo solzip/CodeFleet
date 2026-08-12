@@ -133,7 +133,6 @@ export interface Task {
   constraints: string[];
   doneCriteria: string[];
   workflow: string[];
-  status: string;
 }
 
 export interface LoadedTask {

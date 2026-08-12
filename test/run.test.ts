@@ -61,7 +61,6 @@ test("runTask writes run-plan and S2 artifacts before legacy result", async () =
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [Run dry-run adapter]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -277,7 +276,6 @@ test("the workspace snapshot sees a change git is configured to ignore", async (
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [Edit files]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -383,7 +381,6 @@ test("a provider-reported command is recorded but never becomes command truth", 
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [Edit files]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -481,7 +478,6 @@ async function seedCommandPolicyRun(
       "constraints: []",
       "doneCriteria: [done]",
       "workflow: [edit]",
-      "status: READY",
       "verification:",
       "  commands:",
       "    - commandId: v1",
@@ -520,7 +516,6 @@ test("a Run that may execute unobservable commands is blocked before any artifac
       "constraints: []",
       "doneCriteria: [done]",
       "workflow: [edit]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -677,7 +672,6 @@ test("runTask rejects projectPath outside the workspace before S2 artifacts", as
       "constraints: []",
       "doneCriteria: [No run artifacts]",
       "workflow: [Plan]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -714,7 +708,6 @@ test("runTask rejects file projectPath before S2 artifacts", async () => {
       "constraints: []",
       "doneCriteria: [No run artifacts]",
       "workflow: [Plan]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -756,7 +749,6 @@ test("runTask preserves S2 artifacts when adapter creation fails", async () => {
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [Run missing adapter]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -884,7 +876,6 @@ test("changed-files evidence includes untracked files created during the Run", a
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [Edit files]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -952,7 +943,6 @@ test("an out-of-scope untracked file is recorded as a path violation", async () 
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [Edit files]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -1032,7 +1022,6 @@ test("a nested repository degrades the path policy evaluation instead of claimin
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [Edit files]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -1089,7 +1078,6 @@ test("verification commands are executed by the Harness and open the gate", asyn
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [IMPLEMENT]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -1179,7 +1167,6 @@ test("a provider claim alone never satisfies the verification gate", async () =>
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [IMPLEMENT]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -1233,7 +1220,6 @@ test("run-plan.json is written once and is not rewritten later in the Run", asyn
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [Run dry-run adapter]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -1308,7 +1294,6 @@ test("a delete and a rename are both reported, naming each side", async () => {
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [Edit files]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -1382,7 +1367,6 @@ test("a symlink whose target leaves the workspace is recorded as a violation", a
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [Edit files]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -1427,7 +1411,6 @@ test("an unapproved Task cannot run and leaves no Run Trace", async () => {
     "constraints: []",
     "doneCriteria: [Artifacts exist]",
     "workflow: [IMPLEMENT]",
-    "status: READY",
     ""
   ].join("\n");
   await writeFile(path.join(root, ".codefleet", "tasks", "sample.yaml"), taskYaml, "utf8");
@@ -1467,7 +1450,6 @@ test("editing a Task after approval revokes its executability", async () => {
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [IMPLEMENT]",
-      "status: READY",
       ""
     ].join("\n");
 
@@ -1520,7 +1502,6 @@ test("approval is refused before a bad projectPath is reported", async () => {
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [IMPLEMENT]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -1581,7 +1562,6 @@ test("artifacts report what was scanned, so nothing examined differs from nothin
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [IMPLEMENT]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"

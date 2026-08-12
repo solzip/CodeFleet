@@ -5,7 +5,6 @@ export function renderPrompt(task: Task): string {
 
 ## Task
 - ID: ${task.id}
-- Status: ${task.status}
 - Target project path: ${task.projectPath}
 
 ## Goal

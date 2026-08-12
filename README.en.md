@@ -192,7 +192,6 @@ workflow:
   - PLAN
   - IMPLEMENT
   - REVIEW
-status: READY
 ```
 
 A copy of this sample is at `examples/tasks/task-001.yaml`.
@@ -210,7 +209,7 @@ Two schema rules worth knowing before your first validation error:
 - `verification.commands[].command` is an argv array, never a shell string. Shell interpreters are denied, so that command matching stays meaningful.
 - `command[0]` is normalized to its basename for both matching and execution, so a relative script path such as `./gradlew` will not resolve. Use a command available on `PATH`.
 
-`status` must be `READY`, `RUNNING`, `DONE`, `FAILED`, or `BLOCKED`.
+A Task file has no `status` field. An execution outcome is not part of the contract, so it does not live in the contract document — a Task that declares `status` is refused at validation. Read execution state from `codefleet status` (the latest Run per Task) and `codefleet runs` (every Run and its outcome).
 
 ```bash
 codefleet task validate task-001

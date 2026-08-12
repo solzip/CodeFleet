@@ -225,7 +225,6 @@ test("the Profile refuses a malformed risk rule, and the Run Plan records what w
       "constraints: []",
       "doneCriteria: [done]",
       "workflow: [PLAN]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"

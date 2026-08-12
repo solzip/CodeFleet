@@ -358,7 +358,6 @@ test("the Run Plan records merged gates, and a deferred Task Revision refuses to
       "constraints: []",
       "doneCriteria: [done]",
       "workflow: [PLAN]",
-      "status: READY",
       extra,
       ""
     ].join("\n");

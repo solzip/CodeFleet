@@ -55,7 +55,6 @@ function taskYaml(goal: string): string {
     "constraints: []",
     "doneCriteria: [Artifacts exist]",
     "workflow: [IMPLEMENT]",
-    "status: READY",
     ""
   ].join("\n");
 }
@@ -240,7 +239,6 @@ test("concurrent runs of one task do not share a runId", async () => {
         "constraints: []",
         "doneCriteria: [Artifacts exist]",
         "workflow: [Run dry-run adapter]",
-        "status: READY",
         ""
       ].join("\n"),
       "utf8"
@@ -316,7 +314,6 @@ test("a stale run lock blocks, names its holder, and is never broken automatical
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [Run dry-run adapter]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -411,7 +408,6 @@ test("concurrent runs of different tasks do not share a runId", async () => {
           "constraints: []",
           "doneCriteria: [Artifacts exist]",
           "workflow: [Run dry-run adapter]",
-          "status: READY",
           ""
         ].join("\n"),
         "utf8"

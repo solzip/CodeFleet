@@ -4,7 +4,13 @@ import { validatePattern } from "./path-policy.ts";
 import type { LoadedTask, Task, ValidationResult } from "./types.ts";
 import { parseYaml } from "./yaml.ts";
 
-const TASK_STATUSES = new Set(["READY", "RUNNING", "DONE", "FAILED", "BLOCKED"]);
+// Kept only to recognise the field and refuse it. Design §0.6: "Revision State에
+// 실행 결과를 넣지 않는다" — RUNNING / DONE / FAILED / BLOCKED are Run-derived
+// state, and a Task file is an immutable contract. Leaving the field in place
+// meant a contract could carry a stale DONE that nothing computed and nothing
+// read, while the approval hash covered it and forced a re-approval on every
+// edit of it. P1-40.
+const RETIRED_TASK_STATUSES = ["READY", "RUNNING", "DONE", "FAILED", "BLOCKED"];
 
 export async function loadTask(rootDir: string, taskId: string): Promise<LoadedTask> {
   const taskPath = await findTaskPath(rootDir, taskId);
@@ -71,13 +77,17 @@ export function validateTask(value: unknown): ValidationResult {
   requireString(value, "title", errors);
   requireString(value, "projectPath", errors);
   requireString(value, "goal", errors);
-  requireString(value, "status", errors);
-
-  if (typeof value.status === "string" && !TASK_STATUSES.has(value.status)) {
-    errors.push(`status must be one of: ${Array.from(TASK_STATUSES).join(", ")}.`);
-  }
-  if (value.status !== "READY") {
-    warnings.push("Task status is not READY. The run command will still execute it.");
+  if (value.status !== undefined) {
+    errors.push(
+      [
+        "status does not belong in a Task contract. Remove the field.",
+        `  it was one of ${RETIRED_TASK_STATUSES.join(" / ")}, which are execution outcomes,`,
+        "  and a Task file is the contract that gets approved, not a record of what happened.",
+        "  Where the execution state lives now:",
+        "    codefleet status        the latest Run per Task",
+        "    codefleet run list      every Run and its outcome"
+      ].join("\n")
+    );
   }
 
   if (!isRecord(value.scope)) {

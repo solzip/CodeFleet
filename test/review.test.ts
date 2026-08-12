@@ -50,7 +50,6 @@ async function seedWorkspace(): Promise<{ root: string; runId: string }> {
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [Run dry-run adapter]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -321,7 +320,6 @@ async function seedVerifiedWorkspace(): Promise<{ root: string; runId: string }>
       "constraints: []",
       "doneCriteria: [Artifacts exist]",
       "workflow: [IMPLEMENT]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"

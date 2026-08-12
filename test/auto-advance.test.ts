@@ -112,7 +112,6 @@ test("the Run Plan records the merged value, and a Task guardrail can only lower
       "constraints: []",
       "doneCriteria: [done]",
       "workflow: [PLAN]",
-      "status: READY",
       guardrails,
       ""
     ].join("\n");

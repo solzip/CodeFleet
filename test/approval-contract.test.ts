@@ -64,7 +64,6 @@ async function workspace(name: string, isolation = "GIT_WORKTREE"): Promise<stri
       "constraints: []",
       "doneCriteria: [done]",
       "workflow: [IMPLEMENT]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
@@ -159,4 +158,92 @@ test("a Run under an unchanged guardrail still runs", async () => {
   assert.equal(typeof plan.approval.guardrailHash, "string");
   assert.ok(plan.approval.guardrailHash.length > 0);
   assert.equal(plan.approval.guardrailHash, await guardrailHashOf(root));
+});
+
+// A contract that cannot execute must not be approvable. The design lists ten
+// conditions for turning a Draft into a Revision; the code checked roughly the
+// schema, so a Task whose role forbids running commands could be approved with
+// verification commands attached and then fail at the adapter. That is the
+// default profile's behaviour: init writes BACKEND_IMPLEMENTER, whose ceiling is
+// WORKSPACE_EDIT, and the adapter refuses to launch without command execution.
+// P1-36, and the root of P1-32.
+test("a contract whose role forbids its own verification cannot be approved", async () => {
+  const root = await workspace("infeasible");
+  const taskPath = await findTaskPath(root, "sample");
+  const original = await readFile(taskPath, "utf8");
+  await writeFile(taskPath, original.replace("agentRole: INFRA_OPERATOR", "agentRole: BACKEND_IMPLEMENTER"), "utf8");
+
+  const outcome = await approveTask(root, {
+    taskId: "sample",
+    taskPath,
+    actorId: "tester",
+    reason: "role cannot run the commands this contract declares"
+  });
+
+  assert.notEqual(outcome.failedPhase, null, "approval must refuse a contract that cannot run");
+  assert.match(
+    String(outcome.failureMessage),
+    /BACKEND_IMPLEMENTER/,
+    "the refusal has to name the role that caused it"
+  );
+  assert.match(String(outcome.failureMessage), /verification/i);
+
+  // And it stays unapproved rather than half-approved.
+  const state = await replayApproval(root, "sample", await contentHashOf(taskPath));
+  assert.equal(state.approvedRevision, null);
+});
+
+// S1-1 and S1-3 read the same two inputs and could disagree. Feasibility is
+// decided once, at approval; if the Profile could later drop below the ceiling
+// the contract needs, an approval given over a feasible contract would carry an
+// infeasible one. The guardrail half of the approval target is what stops it,
+// so this is the seam between the two fixes rather than either one alone.
+test("lowering the Profile below what the contract needs revokes the approval", async () => {
+  const root = await workspace("feasibility-drift");
+  const taskPath = await findTaskPath(root, "sample");
+  await approveTask(root, { taskId: "sample", taskPath, actorId: "tester", reason: "feasible at approval time" });
+  assert.equal((await replayApproval(root, "sample", await contentHashOf(taskPath))).blockedReason, "");
+
+  // The contract still declares verification commands. The ceiling that let it
+  // run them is what moves.
+  await editProfile(root, (doc) => {
+    doc.defaults.task.harnessMode = "WORKSPACE_EDIT";
+  });
+
+  assert.equal(
+    (await replayApproval(root, "sample", await contentHashOf(taskPath))).blockedReason,
+    "PROFILE_GUARDRAILS_CHANGED_AFTER_APPROVAL",
+    "an approval must not survive into a Profile that cannot execute what it approved"
+  );
+
+  // And re-approving under the lowered Profile is refused rather than granted:
+  // otherwise the operator's way out of the block is to create the exact
+  // unexecutable approval S1-3 exists to prevent.
+  const outcome = await approveTask(root, {
+    taskId: "sample",
+    taskPath,
+    actorId: "tester",
+    reason: "re-approve under the lowered profile"
+  });
+  assert.notEqual(outcome.failedPhase, null, "re-approval must not launder an infeasible contract");
+  assert.match(String(outcome.failureMessage), /WORKSPACE_EDIT/);
+});
+
+test("a contract with no verification commands is approvable under any role", async () => {
+  const root = await workspace("no-verification");
+  const taskPath = await findTaskPath(root, "sample");
+  const original = await readFile(taskPath, "utf8");
+  // Drop the verification block and lower the role: nothing needs commands.
+  const noVerify = original
+    .replace("agentRole: INFRA_OPERATOR", "agentRole: DOCS_WRITER")
+    .replace(/verification:\n(  .*\n)+/, "");
+  await writeFile(taskPath, noVerify, "utf8");
+
+  const outcome = await approveTask(root, {
+    taskId: "sample",
+    taskPath,
+    actorId: "tester",
+    reason: "no commands to run"
+  });
+  assert.equal(outcome.failedPhase, null, outcome.failureMessage);
 });

@@ -242,7 +242,6 @@ test("the role contributes an upper bound to the Run Plan, never a grant", async
       "constraints: []",
       "doneCriteria: [done]",
       "workflow: [PLAN]",
-      "status: READY",
       ""
     ].join("\n"),
     "utf8"
