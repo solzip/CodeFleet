@@ -93,7 +93,7 @@ envSeenByVerificationChild : "absent"
 
 부모에 `CODEFLEET_VERIFY_SECRET`을 export한 뒤 Run을 돌렸다. 2026-08-11에는 검증 커맨드 자식이 그 값을 그대로 읽었다. 지금은 읽지 못한다.
 
-## 새로 등재 — P1-20 ~ P1-35
+## 새로 등재 — P1-20 ~ P1-38
 
 번호는 2026-08-11의 P1-19에 이어 붙였다. 전부 이번 감사에서 실행 또는 코드로 확인했고, **고치지 않았다.** 등재 대조 절차와 근거는 `09-registration-check.md`.
 
@@ -115,6 +115,28 @@ envSeenByVerificationChild : "absent"
 | P1-33 | 어댑터 거부 메시지가 어느 소스가 모드를 낮췄는지·무엇을 바꿔야 하는지 말하지 않는다 | 차단 1·2는 키와 값을 지목한다. 차단 3은 `run-plan.json`을 열어야 원인을 안다 | 10 §차단 3 |
 | P1-34 | win32에서 Gradle/Maven wrapper를 검증 커맨드로 쓸 수 없다 | `.bat`은 `cmd.exe`가 필요하고 `cmd`는 `SHELL_INTERPRETER_DENIED`, `spawn`은 `shell:false`. POSIX는 shebang으로 직접 실행되어 해당 없음 | 10 §차단 4 |
 | P1-35 | `run-record.md`가 실행된 검증 커맨드를 이름으로 적지 않는다 | 문서 내 `gradle`·`--version` 등장 0회. `SATISFIED`만 보고 "테스트 통과"로 읽게 된다 | 10 §run-record |
+| P1-36 | 승인이 계약의 실행 가능성을 검사하지 않아, 역할 상한이 자기 검증 조건을 금지하는 계약도 승인된다 | `approveTask`에 정합성 검사 없음. 실측: `BACKEND_IMPLEMENTER` + 검증 커맨드 → 승인 통과, 실행 시 `LAUNCH_FAILED`. P1-32가 실사용 사례 | 11 §I-6 |
+| P1-37 | Run 산출물 7개 중 `taskRevision`을 담은 것이 1개뿐이고 4개는 `taskId`도 없다 | 실측 전수: run-plan만 둘 다 보유. 계약으로 가는 링크가 `run-plan.json` 하나에 집중 | 11 §I-5 |
+| P1-38 | Task 원장이 계약 본문을 보관하지 않아 승인된 Revision의 내용을 복원할 수 없다 | 원장 이벤트 필드에 본문 없음(해시만). 본문 사본은 Run이 일어난 경우의 Run Trace `task.yaml`뿐 | 11 §I-7 |
+
+## 제품 정의 대비 위반 — P0-12 · P0-13
+
+확정된 내부 모델을 기준으로 코드를 감사한 결과다. 전문은 `11-model-conformance.md`.
+
+| ID | 위반 | 근거 | 불변식 |
+|---|---|---|---|
+| **P0-12** | 프로파일 가드레일이 승인 대상 해시에서 빠져 있어, 승인자가 본 계약과 다른 가드레일로 실행된다 | 승인 해시 = `contentHashOf(taskPath)` 하나(`task-ledger.ts:164`). 실측: `GIT_WORKTREE`+`requireIsolationForMutation:true`로 승인 후 프로파일만 뒤집자 재승인 없이 `NONE`으로 실행되고 편집이 실 워크스페이스에 반영됨. `run.ts:703`이 `TASK_AND_PROFILE_MUST_MATCH`를 선언하고 소비하지 않음 | I-3 |
+| **P0-13** | Objective relation 없이 Run이 실행된다 | `blockedQueueReason`이 부정 결정만 막고 미attach는 통과(`run.ts:413`). 실측: Objective 없이 `runTask` 성공. `test/isolation.test.ts:878`이 이 동작을 회귀 테스트로 고정 중 | I-4 |
+
+**P0-12는 2026-08-10 P1-4의 승격**이고, **P0-13은 2026-08-11 P0-2 §C-1의 재판정**이다. 후자는 그때 코드 주석을 근거로 통과시켰으나, 확정된 정의를 기준으로 다시 보면 위반이다.
+
+### [정의 확정 필요] — 사람이 정할 것
+
+| ID | 쟁점 | 어느 쪽이냐에 따라 달라지는 것 |
+|---|---|---|
+| D-1 | 큐 상태에 `accepted`/`approved`가 없다(`WAITING|BLOCKED|SKIPPED|CANCELED`뿐) | attach를 수용으로 보면 P0-13은 게이트 한 줄, 별도 상태가 필요하면 원장 스키마 변경 |
+| D-2 | Draft가 코드에 실체로 없다 — 파일이 draft이고 Revision은 승인 시점에 생긴다 | 개념 구분만이면 현 코드로 충분, 조회 가능한 상태가 필요하면 승격 단계를 분리해야 한다 |
+| D-3 | `status`가 승인 해시에는 들어가면서 실행 판정에는 쓰이지 않는다 | 계약이면 `DONE` 재실행을 막아야 하고(P1-16), 메타데이터면 해시에서 빼야 한다 |
 
 ## 2026-08-11 P1 목록의 연속성
 
