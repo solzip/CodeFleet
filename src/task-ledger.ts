@@ -329,14 +329,19 @@ export async function deriveDraftState(
     reasons.push(feasibility.reason);
   }
 
-  // A prior approval standing over different content also blocks approve. The
+  // A prior approval that no longer covers this draft blocks approve too. The
   // state means "approve 가능", so reporting READY_FOR_APPROVAL while approve
   // refuses would make the field answer a different question than it asks.
+  //
+  // Both halves of the approval target count, not only the Task half. Checking
+  // the content hash alone said READY_FOR_APPROVAL after a Profile guardrail
+  // moved, while approve refused — the same defect this check exists to
+  // prevent, in the half that was added later. Found in the S7 walkthrough.
   const approval = await replayApproval(rootDir, taskId, await contentHashOf(taskPath));
-  if (approval.approvedRevision !== null && approval.approvedRevisionHash !== (await contentHashOf(taskPath))) {
+  if (approval.approvedRevision !== null && approval.blockedReason.length > 0) {
     reasons.push(
-      `revision ${approval.approvedRevision} is approved for different content; ` +
-        `invalidate it before approving this draft`
+      `revision ${approval.approvedRevision} is approved but no longer covers this draft ` +
+        `(${approval.blockedReason}); invalidate it before approving`
     );
   }
 

@@ -248,6 +248,21 @@ test("a draft that cannot be approved reports why instead of looking ready", asy
   const conflicted = await deriveDraftState(root, "sample");
   assert.equal(conflicted.state, "EDITING");
   assert.match(conflicted.reasons.join("\n"), /invalidate it before approving/);
+  assert.match(conflicted.reasons.join("\n"), /TASK_CONTENT_CHANGED_AFTER_APPROVAL/);
+
+  // The guardrail half counts the same way. Checking only the content hash
+  // reported READY_FOR_APPROVAL after a Profile guardrail moved while approve
+  // refused — the same defect, in the half that was added later. Found by the
+  // S7 walkthrough rather than by a test, which is why it is pinned here now.
+  await writeFile(taskPath, original, "utf8");
+  const configPath = path.join(root, ".codefleet", "config.json");
+  const config = JSON.parse(await readFile(configPath, "utf8")) as Record<string, any>;
+  config.policies.commands.deniedCommands = [{ argv: ["rm"] }];
+  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+
+  const guardrailMoved = await deriveDraftState(root, "sample");
+  assert.equal(guardrailMoved.state, "EDITING", "approve would refuse, so the draft is not ready");
+  assert.match(guardrailMoved.reasons.join("\n"), /PROFILE_GUARDRAILS_CHANGED_AFTER_APPROVAL/);
 });
 
 // P1-37 measured the artifacts of a real Run. The recheck corrected the set to
