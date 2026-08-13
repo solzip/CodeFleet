@@ -218,7 +218,7 @@ Short version: **less than the list above might suggest.** "Observed" mostly mea
 - **On a real Spring Boot project it did not complete.** Of fifteen steps, four were blocked and one failed. The command that ended up satisfying the verification gate was `gradle --version`. Our implementation could not invoke Gradle or Maven wrappers on Windows: the rule forbidding shell interpreters is correct, and it left no path to a batch file.
 - **77 registered findings** — 25 resolved, 8 partial, 1 not reproduced, 15 open, 1 accepted as a limit, and **27 never checked**. Those 27 close as unchecked. Nobody looked at them after registration, and there is no basis for claiming they still hold — or that they don't.
 - `npm test` exits **0** (257 passing, 0 failing). Condition coverage is 345 of 545 lines (63.3%), which means a passing test quoted that many lines — **not** that those conditions are correctly implemented.
-- A CI workflow file exists and **has never run**. Nothing here was exercised under repetition, concurrency, or on POSIX.
+- A CI workflow was added on the last day and **has now run — failing on both platforms.** Six tests fail on Linux, two on Windows, while the same commit is green locally. One of the Linux failures is a POSIX behaviour this archive had predicted but never measured; the two Windows failures are tests added on the final day. Details: [`docs/runs/2026-08-13/ci-first-run.md`](docs/runs/2026-08-13/ci-first-run.md). Nothing here was exercised under repetition or concurrency.
 
 > Runnability is not warranted. These are observations at the moment of freezing, not a claim that anything works.
 
