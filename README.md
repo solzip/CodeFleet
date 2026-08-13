@@ -50,6 +50,55 @@ The clearest symptom is small and exact. Recording a review re-renders the human
 
 > Runnability is not warranted. These are observations at the moment of freezing, not a claim that anything works.
 
+## What one completed run looked like
+
+The single fixture run is the whole working record, so it is worth stating concretely. A task said: add `subtract(a, b)` to `src/math.js`. The verification command was `node test/check.js`, written so it fails unless that function exists and returns the right values — checked first, because a verification that passes without the change proves nothing.
+
+```
+task approve      → contract frozen as sha256(revisionHash, guardrailHash)
+objective attach  → the approved revision is placed in a queue
+objective run-next→ git worktree created; agent runs there, never in the workspace
+                    Harness runs `node test/check.js` itself → exit 0
+                    worktree discarded
+review            → refused: an unwaived capability gap
+review --waive-gap→ accepted, recorded as DEGRADED / WAIVED_INCOMPLETE
+objective import-review → decision appended to the ledger
+apply             → observed patch applied to the workspace
+```
+
+That left a full run trace. Two of its files carry the same shell command, and the pair is the clearest thing this project produced:
+
+| File | Content | Weight |
+| --- | --- | --- |
+| `provider-commands.json` | `node test/check.js` — the agent's own account | `PROVIDER_REPORTED_ONLY`, `notCommandTruth: true`. Moves nothing |
+| `verification/verify-001.json` | `node test/check.js` — re-run by the Harness | `HARNESS_EXECUTED`, `exitCode: 0`. **This is what moved the gate** |
+
+The workspace change was real: `git diff HEAD` came out byte-identical to the patch the Harness had recorded, and the ledger's `patchRef.hash` recomputed to match. The worktree was gone from disk and from `git worktree list` before any of that was applied — the patch survived as evidence, not as a directory.
+
+## What it figured out
+
+Ten conclusions, each with where it lives and how far it was actually checked. **"Validated" mostly means observed once** — one run, on a fixture, propped up by four workarounds. Nothing here was exercised under repetition, concurrency, or on POSIX.
+
+| | Conclusion | Status |
+| --- | --- | --- |
+| 1 | **Type the source, don't flag it.** An authority ladder (`NONE` → `PROVIDER_REPORTED_ONLY` → `HARNESS_OBSERVED` → `HARNESS_EXECUTED`) makes a claim and an observation different values, so a gate literally cannot read one as the other. A `boolean` plus a `source` field can drift apart; one graded value cannot | observed |
+| 2 | **One window for state change, with a named commit point.** Eight fixed phases; nothing before M4 is durable, and a failure after M4 keeps the event instead of rolling back, because silent rollback erases what happened | observed |
+| 3 | **Idempotency keys derived from meaning.** The key hashes what changes the resulting state — no reason text, no timestamps — so repeating a request is idempotent without the caller cooperating | observed |
+| 4 | **Decisions append-only; state replayed.** No mutable `approved` flag exists to go stale. The snapshot file is a read model with no authority: if it disagrees with replay, the ledger wins and the snapshot is rebuilt | observed |
+| 5 | **Approval covers the contract *and* the conditions it was approved under.** `sha256(revisionHash, guardrailHash)`. Hashing only the task lets someone change the policy afterwards and still look approved — which is exactly what happened before this was fixed | observed |
+| 6 | **Split what you couldn't check into two kinds.** A capability gap is something the tool cannot see yet and a person may sign for, by name, with a reason. An evidence defect is missing or hash-mismatched evidence and is never waivable. The distinction lives in data, not in judgement | observed |
+| 7 | **Every check reports what it scanned, not just its verdict.** `violations: []` otherwise means both "all clear" and "nothing was examined". Zero examined is treated as failure. This caught two silent-green bugs here | observed |
+| 8 | **Keep the decision and its side effect apart.** An accepted review does not touch the workspace; `apply` is a separate human act with its own ledger entry, applying the *observed patch* rather than a directory that may have drifted | observed |
+| 9 | **Child processes get an allowlisted environment and per-kind limits.** A secret exported in the parent was measurably absent in the child. An agent session, a test suite, and a git read do not share one timeout | observed |
+| 10 | **Treat the human-readable record as an artifact.** It is the only thing anyone reads. This one is here because it failed twice — first by staying silent about which command satisfied a gate, then, after that fix, by asserting that evidence it linked to did not exist | failed |
+| — | **Policy composes by `meet` only; roles contribute a ceiling, never a grant.** Narrowing was observed; a widening attempt is refused in tests but was never seen in real use | code only |
+
+Two of these turned out to be one idea stated twice. The authority ladder and the gap/defect split are both answers to **how do you represent not knowing, as data** — and three of the seven defect types in `LESSONS.md` share that same root, failing to distinguish *absent* from *a value*. The problem this project actually spent itself on was not verifying AI; it was representing absence.
+
+The clearest thing to drop is the role table. Narrowing-only was right, but file-edit permission and command-execution permission were hung on one axis, so no built-in role can both write application code and run a test — which is why the one completed run needed a role substitution to finish.
+
+→ Each conclusion with its problem, implementation, evidence, and what to carry forward: [`docs/archive/2026-08-13/DESIGN-NOTES.md`](docs/archive/2026-08-13/DESIGN-NOTES.md)
+
 ## What's worth reading
 
 | | |
