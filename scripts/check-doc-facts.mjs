@@ -1,0 +1,258 @@
+// Answers one question with a number: how many figures quoted in the prose
+// still match what the repository actually contains?
+//
+// It exists because two full reviews found the same class of defect and neither
+// found it with a tool. The registers summed, the coverage matched, the index
+// listed exactly what was on disk -- and the sentences summarising those numbers
+// were wrong anyway. "43 audit records" long after there were 48. "the 27
+// unchecked findings, which nobody looked at" after CI had confirmed one of
+// them. Nothing checked prose, so prose was where the false statements lived.
+//
+// The mechanism is the one this repository already uses for design coverage: a
+// claim has to be written down explicitly, and then it is checked. A test says
+// coversRule(id, "quoted condition"); a document says
+//
+//   <!-- fact: registered-findings = 77 -->
+//
+// next to the sentence that states it. HTML comments render as nothing, so the
+// page is unchanged and the claim is machine-checkable. An undeclared number is
+// not checked -- this cannot find a figure nobody marked, and it says so rather
+// than implying full coverage.
+//
+// Four ways to fail:
+//   1. a declared value that does not match the measured one
+//   2. a fact name nothing measures, which is a typo pretending to be a check
+//   3. a measurable fact that no document declares anywhere
+//   4. zero declarations found -- a scan that examined nothing is not a pass
+//
+// Output is ASCII only; the console this runs on is CP949.
+
+import { readFile, readdir } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { BASELINE_PATH, COVERAGE_DIR, loadRuleIndex } from "./design-doc.mjs";
+import { evaluateCoverage } from "./check-rule-coverage.mjs";
+import { stripCode } from "./check-links.mjs";
+
+export const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+// ---------------------------------------------------------------------------
+// Declarations
+// ---------------------------------------------------------------------------
+
+const DECLARATION = /<!--\s*fact:\s*([a-z0-9-]+)\s*=\s*([^\s>]+)\s*-->/g;
+
+// A declaration quoted in a fence or a code span is an illustration of the
+// syntax, not a claim. The link checker had to learn this the same way -- its
+// first run reported a break that was a diff block explaining a fix -- and this
+// checker repeated it within the hour, reading its own documentation's example
+// as a declaration. stripCode preserves line numbering, so a reported line
+// still points at the source.
+export function collectDeclarations(text, file = "") {
+  const found = [];
+  const lines = stripCode(text).split("\n");
+  for (let i = 0; i < lines.length; i += 1) {
+    for (const m of lines[i].matchAll(DECLARATION)) {
+      found.push({ file, line: i + 1, name: m[1], value: m[2] });
+    }
+  }
+  return found;
+}
+
+// ---------------------------------------------------------------------------
+// Measurement. Each function takes already-read inputs so the whole comparison
+// can be exercised without a filesystem.
+// ---------------------------------------------------------------------------
+
+// Longest first: "부분해소" contains "해소", and "미해소(수용)" contains
+// "미해소". Matching the short one first would silently move findings between
+// buckets -- the counts would still sum to 77 and still be wrong.
+const STATUS_ORDER = [
+  ["미해소(수용)", "findings-accepted-limit"],
+  ["부분해소", "findings-partial"],
+  ["재현안됨", "findings-not-reproduced"],
+  ["미확인", "findings-unchecked"],
+  ["미해소", "findings-open"],
+  ["해소", "findings-resolved"],
+];
+
+export function parseRegister(text) {
+  const counts = new Map(STATUS_ORDER.map(([, key]) => [key, 0]));
+  const seen = new Set();
+  let unused = 0;
+
+  for (const line of text.split("\n")) {
+    if (!line.startsWith("|")) continue;
+    const cells = line.replace(/^\|/, "").replace(/\|\s*$/, "").split("|").map((c) => c.trim());
+    if (cells.length !== 6) continue;
+    const id = /^\**\s*(P[01]-\d+)\s*\**$/.exec(cells[0])?.[1];
+    if (id === undefined || seen.has(id)) continue;
+
+    const status = cells[3].replace(/[*★\s]/g, "");
+    if (status.includes("미사용") || cells[1].includes("**미사용**")) {
+      seen.add(id);
+      unused += 1;
+      continue;
+    }
+    const match = STATUS_ORDER.find(([label]) => status.startsWith(label));
+    if (match === undefined) continue;
+    seen.add(id);
+    counts.set(match[1], counts.get(match[1]) + 1);
+  }
+
+  const total = [...counts.values()].reduce((a, b) => a + b, 0);
+  return { counts, total, unused };
+}
+
+export function countIndexRows(text) {
+  return new Set([...text.matchAll(/\|\s*`((?:audits|runs|archive)\/[^`]+\.md)`/g)].map((m) => m[1])).size;
+}
+
+// ---------------------------------------------------------------------------
+// Comparison
+// ---------------------------------------------------------------------------
+
+export function compareFacts(declarations, measured) {
+  const errors = [];
+  const declaredNames = new Set();
+
+  for (const d of declarations) {
+    declaredNames.add(d.name);
+    if (!Object.hasOwn(measured, d.name)) {
+      errors.push(`${d.file}:${d.line}: nothing measures a fact named "${d.name}"`);
+      continue;
+    }
+    const actual = String(measured[d.name]);
+    if (d.value !== actual) {
+      errors.push(`${d.file}:${d.line}: ${d.name} declared ${d.value}, measured ${actual}`);
+    }
+  }
+
+  // A fact nothing declares is a number this check cannot defend. Naming them
+  // is the difference between "everything matches" and "everything I was
+  // pointed at matches".
+  const undeclared = Object.keys(measured).filter((name) => !declaredNames.has(name)).sort();
+
+  if (declarations.length === 0) {
+    errors.push("no fact declarations were found; the scan examined nothing");
+  }
+
+  return { errors, undeclared, checked: declarations.length };
+}
+
+// ---------------------------------------------------------------------------
+// Real repository
+// ---------------------------------------------------------------------------
+
+export function repositoryMarkdown(root) {
+  // --others --exclude-standard also lists files that are not committed yet but
+  // are not ignored either. A document is worth checking before it is published,
+  // not only after: checking tracked files alone left every brand new record
+  // invisible to both checkers until the very commit that published it.
+  const git = spawnSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "*.md"], { cwd: root, encoding: "utf8" });
+  if (git.error !== undefined || git.status !== 0) {
+    throw new Error(`could not list tracked files: ${git.error?.message ?? `git exited ${git.status}`}`);
+  }
+  return git.stdout.split("\n").map((l) => l.trim()).filter((l) => l.endsWith(".md")).sort();
+}
+
+async function readClaims() {
+  let files;
+  try {
+    files = await readdir(COVERAGE_DIR);
+  } catch {
+    return null;
+  }
+  const claims = [];
+  for (const file of files.filter((name) => name.endsWith(".jsonl"))) {
+    const text = await readFile(path.join(COVERAGE_DIR, file), "utf8");
+    for (const line of text.split("\n")) {
+      if (line.trim().length > 0) claims.push(JSON.parse(line));
+    }
+  }
+  return claims;
+}
+
+async function measureAll(root, files) {
+  const register = parseRegister(await readFile(path.join(root, "docs", "REGISTER.md"), "utf8"));
+  const indexRows = countIndexRows(await readFile(path.join(root, "docs", "INDEX.md"), "utf8"));
+
+  const docs = files.filter((f) => /^docs\/(audits|runs|archive)\//.test(f));
+  const auditRun = docs.filter((f) => /^docs\/(audits|runs)\//.test(f)).length;
+
+  const measured = {
+    "registered-findings": register.total,
+    ...Object.fromEntries(register.counts),
+    "docs-indexed": indexRows,
+    "docs-on-disk": docs.length,
+    "audit-run-records": auditRun,
+  };
+
+  const claims = await readClaims();
+  if (claims === null || claims.length === 0) {
+    // Reporting 0 here would be worse than reporting nothing: every coverage
+    // fact would "mismatch" and the real message -- that the sink is empty
+    // because the suite has not run -- would be buried.
+    return { measured, coverageAvailable: false };
+  }
+
+  const { rules } = await loadRuleIndex();
+  let baseline = null;
+  try {
+    baseline = JSON.parse(await readFile(BASELINE_PATH, "utf8"));
+  } catch {
+    baseline = null;
+  }
+  const { stats } = evaluateCoverage(rules, claims, baseline);
+  measured["rules-total"] = stats.rules;
+  measured["condition-lines"] = stats.totalConditions;
+  measured["claims-recorded"] = stats.claimsRecorded;
+  measured["conditions-covered"] = stats.coveredConditions;
+  measured["coverage-percent"] = ((stats.coveredConditions / stats.totalConditions) * 100).toFixed(1);
+  return { measured, coverageAvailable: true };
+}
+
+const BANNER = [
+  "######################################################################",
+  "#  DOC FACT CHECK FAILED",
+  "#  npm test exits non-zero. The report below is context, not a pass.",
+  "######################################################################",
+];
+
+export function report(result, measured, log = console.log) {
+  log("");
+  log("declared-fact check");
+  log(`  declarations checked      ${result.checked}`);
+  log(`  measurable facts          ${Object.keys(measured).length}`);
+  log(`  mismatches                ${result.errors.length}`);
+  for (const err of result.errors) log(`      x  ${err}`);
+  if (result.undeclared.length > 0) {
+    log(`  measured but declared nowhere  ${result.undeclared.length}`);
+    for (const name of result.undeclared) log(`      -  ${name} = ${measured[name]}`);
+  }
+  log("");
+}
+
+if (process.argv[1] !== undefined && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  const files = repositoryMarkdown(REPO_ROOT);
+  const { measured, coverageAvailable } = await measureAll(REPO_ROOT, files);
+
+  const declarations = [];
+  for (const file of files) {
+    declarations.push(...collectDeclarations(await readFile(path.join(REPO_ROOT, file), "utf8"), file));
+  }
+
+  const result = compareFacts(declarations, measured);
+  if (result.errors.length > 0) for (const line of BANNER) console.log(line);
+  report(result, measured);
+  if (!coverageAvailable) {
+    console.log("  coverage facts were not measured: the claim sink is empty. Run `npm test`.");
+    console.log("");
+  }
+
+  if (result.errors.length > 0) {
+    console.error(`declared-fact check failed: ${result.errors.length} error(s). See the banner above the report.`);
+    process.exit(1);
+  }
+}

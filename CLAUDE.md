@@ -8,7 +8,7 @@ No dependencies, no `npm install`. Node 24+ only (native TypeScript stripping).
 
 ```bash
 node -v          # must be >= 24
-npm test         # runs the suite, then the design-coverage and link checkers
+npm test         # suite, then the coverage, link and declared-fact checkers
 ```
 
 `.codefleet/` is not tracked. It holds this repo's own trial runs, not state you need to resume.

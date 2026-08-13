@@ -225,8 +225,12 @@ function realFs(root) {
   };
 }
 
-export function trackedMarkdown(root) {
-  const git = spawnSync("git", ["ls-files", "*.md"], { cwd: root, encoding: "utf8" });
+export function repositoryMarkdown(root) {
+  // --others --exclude-standard also lists files that are not committed yet but
+  // are not ignored either. A document is worth checking before it is published,
+  // not only after: checking tracked files alone left every brand new record
+  // invisible to both checkers until the very commit that published it.
+  const git = spawnSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "*.md"], { cwd: root, encoding: "utf8" });
   if (git.error !== undefined || git.status !== 0) {
     // Falling back to a directory walk here would quietly change what "every
     // file" means. Say the scope could not be established instead.
@@ -276,7 +280,7 @@ export function report(result, log = console.log) {
 }
 
 if (process.argv[1] !== undefined && pathToFileURL(process.argv[1]).href === import.meta.url) {
-  const files = trackedMarkdown(REPO_ROOT);
+  const files = repositoryMarkdown(REPO_ROOT);
   const result = auditLinks(files, realFs(REPO_ROOT));
   const failures = failureCount(result);
 

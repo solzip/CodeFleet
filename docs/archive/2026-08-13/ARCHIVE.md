@@ -52,9 +52,9 @@ $ npm test > /dev/null 2>&1; echo $?
 | 항목 | 값 |
 | --- | --- |
 | 테스트 | **273 통과 / 0 실패** *(동결 시점 257. 링크 체커의 실패 테스트 16건이 뒤에 추가됐다 — `runs/2026-08-13/link-checker-in-repo.md`)* |
-| FINAL RULE | 83개 / 조건 줄 545개 |
+| FINAL RULE | 83개 / 조건 줄 545개 | <!-- fact: rules-total = 83 --> <!-- fact: condition-lines = 545 -->
 | 조건 커버리지 | **345 (63.3%)** |
-| 주장(claims) | 352 |
+| 주장(claims) | 352 | <!-- fact: claims-recorded = 352 -->
 | 전체 조건이 덮인 규칙 | 28 / 83 |
 | 주장이 하나도 없는 규칙 | 8 (IMPLEMENTED_UNTESTED 5, NOT_CODE_VERIFIABLE 3) |
 
@@ -189,7 +189,8 @@ $ npm test > /dev/null 2>&1; echo $?
 | **환경 지식** | `docs/archive/2026-08-13/ENVIRONMENT.md` | Windows·git·spawn에서 실측된 사실. 코드를 버려도 환경은 그대로다 |
 | **작업 기록 규약** | `docs/CONVENTIONS.md` | 규칙 12개, 각각 그것이 필요해진 실제 사건과 함께 |
 | **정의 문서** | `docs/concept-foundation.md` | FINAL RULE 83개. **새 제품에서는 새로 작성되며, 이 파일은 아카이브 시점의 정의다** |
-| **감사·실행 기록** | `docs/audits/`, `docs/runs/` | **48개 문서**(감사 36 · 실행 12). 판정의 근거가 전부 파일:라인으로 남아 있다. *동결 후 실행 기록 5건이 추가돼 43 → 48로 갱신했다 — `ci-first-run.md`, `readme-language-swap.md`, `link-audit-full.md`, `link-checker-in-repo.md`, `full-review-v2.md`* |
+| **감사·실행 기록** | `docs/audits/`, `docs/runs/` | **49개 문서**(감사 36 · 실행 13). 판정의 근거가 전부 파일:라인으로 남아 있다. *동결 후 실행 기록 6건이 추가돼 43 → 49로 갱신했다 — `ci-first-run.md`, `readme-language-swap.md`, `link-audit-full.md`, `link-checker-in-repo.md`, `full-review-v2.md`, `prose-fact-check.md`* |
+| **문서 검사기 2종** | `scripts/check-links.mjs`, `scripts/check-doc-facts.mjs` | *동결 이후 추가.* 링크가 가리키는 곳이 실재하는지, 산문이 인용한 숫자가 아직 맞는지를 `npm test`가 검사한다. 각각 실패 테스트를 갖는다 |
 | 결함 등재부 | `docs/REGISTER.md` | 동결 상태로 |
 | 종료 전 README (한·영) | `docs/archive/2026-08-13/README.original.md`, `README.en.original.md` | 동작하는 제품으로서 이 프로젝트를 어떻게 설명했는지의 기록. 루트 README는 아카이브 표지로 교체됐다 |
 

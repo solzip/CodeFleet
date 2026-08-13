@@ -15,6 +15,7 @@
 import { existsSync } from "node:fs";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { BASELINE_PATH, COVERAGE_DIR, REPO_ROOT, STATUS_PATH, loadRuleIndex } from "./design-doc.mjs";
 
 // Exported so the checker can be checked. A verifier nobody verifies is the
@@ -156,7 +157,11 @@ async function readClaims() {
 
 // Only run the CLI when invoked directly, so importing this from a test does
 // not read the real sink or exit the process.
-if (process.argv[1] !== undefined && import.meta.url === new URL(`file://${process.argv[1].replace(/\\/g, "/")}`).href) {
+// Ask Node to convert the path rather than gluing a URL together by hand. The
+// hand-built form compared two strings that can name the same file in different
+// shapes, and on CI Windows it closed this guard: the checker produced no output
+// at all and exited 0, which failed the two tests that run it as a child.
+if (process.argv[1] !== undefined && pathToFileURL(process.argv[1]).href === import.meta.url) {
   const updateBaseline = process.argv.includes("--update-baseline");
   const { rules } = await loadRuleIndex();
   const claims = await readClaims();

@@ -11,8 +11,9 @@
     "codefleet": "node ./src/cli.ts",
     "pretest": "node ./scripts/reset-rule-coverage.mjs",
     "test": "node --test",
-    "posttest": "node ./scripts/check-rule-coverage.mjs && node ./scripts/check-links.mjs",
+    "posttest": "node ./scripts/check-rule-coverage.mjs && node ./scripts/check-links.mjs && node ./scripts/check-doc-facts.mjs",
     "check:links": "node ./scripts/check-links.mjs",
+    "check:facts": "node ./scripts/check-doc-facts.mjs",
     "coverage:baseline": "node ./scripts/check-rule-coverage.mjs --update-baseline",
     "coverage:uncovered": "node ./scripts/check-rule-coverage.mjs --list-uncovered"
   },
