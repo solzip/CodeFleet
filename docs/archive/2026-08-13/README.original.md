@@ -1,6 +1,8 @@
 # CodeFleet
 
-한국어 | [English](README.en.md)
+한국어 | [English](README.en.original.md)
+
+> 이 파일은 종료 전 루트 README의 보존본이다. 위 링크 대상만 보존본 경로로 고쳤고 본문은 원문 그대로다.
 
 CodeFleet은 AI-native 개발 오케스트레이션 CLI다. 사용자의 개발/운영 Objective를 하나 이상의 Task로 구조화하고, 백엔드/인프라 작업을 범위·가드레일·검증 조건이 포함된 Task로 정의하며, 사람이 승인한 Task만 실행하고, 실행 결과를 로그·diff·Harness가 직접 실행한 검증·해시로 검사된 증거 기반의 리뷰 결정으로 추적한다.
 

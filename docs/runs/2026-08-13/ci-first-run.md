@@ -154,6 +154,10 @@ GitHub Actions 실행 기록은 워크플로 파일을 지워도 남으므로, �
 | `README.ko.md` | "CI 워크플로 파일은 있지만 **한 번도 돌지 않았다**" | 같음 |
 | `ARCHIVE.md` | 「폐기」 표의 `.github/workflows/test.yml` — "한 번도 실행되지 않았다(미푸시). 러너 동작 미검증" | 실행 결과와 이 문서 참조 |
 
+> **각주 (2026-08-13 이후 추가)** — 위 표의 `README.md`는 당시 **영문** 표지, `README.ko.md`는 한국어 표지다.
+> 이후 기본 언어를 한국어로 되돌리면서 `README.md`가 한국어, `README.en.md`가 영문이 됐다
+> (`docs/runs/2026-08-13/readme-language-swap.md`). 위 표는 정정 시점의 파일명을 그대로 둔다.
+
 **`REGISTER.md`는 고치지 않았다.** 동결 상태이고, P1-21의 상태 변경은 이 문서가 보유한다.
 
 ---
