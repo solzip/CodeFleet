@@ -135,3 +135,40 @@ not commit a file whose line endings an editor converted.
 ## Commits
 
 State the measured before/after. Name the defect the change exposed, if any. Do not claim a rule is implemented without a claim proving a passing test checks it.
+
+## 작업 기록 규약 (지시 없이도 항상 적용)
+
+감사·수정·실행 작업을 하면 채팅 응답과 별개로 반드시 파일에 기록한다.
+채팅에만 답하고 끝내는 것은 작업 미완료다.
+
+**위치**
+- 감사(읽기 전용 판정): `docs/audits/YYYY-MM-DD/NN-slug.md`
+- 실행·수정 작업: `docs/runs/YYYY-MM-DD/slug.md`
+- 같은 날 재실행은 덮어쓰지 않고 `-v2`, `-v3`
+
+**상단 메타데이터 (예외 없음)**
+작업 일시 / 대상 커밋 해시 / 작업 유형 [감사·수정·실행·결정] /
+선행 문서 경로 / 번호 실측 최대값
+
+**하단 필수 절**
+- 결론 — 3줄 이내, 판정 결과만
+- 다음 작업 — 없으면 "없음" 명시
+- 미해소로 남긴 것 — 없으면 "없음" 명시
+
+**매 작업 갱신 대상**
+- `docs/INDEX.md` 에 이 문서를 추가
+- 등재·등급·상태 변경 시 `docs/REGISTER.md` 갱신
+
+**번호**
+- 프롬프트에 박힌 번호를 그대로 쓰지 않는다.
+  `grep -rhoE "P[01]-[0-9]+"` 로 실측 최대값을 확인하고 그 다음부터 부여한다
+- 등급이 바뀌어도 ID는 유지한다
+- 등급·상태 변경은 원 문서를 고치지 않고 새 문서에 정정 사실을 기록한다
+
+**판정**
+- 판정 기준은 제품 정의 문서이지 코드 주석이 아니다
+- 근거 없는 판정 금지. 파일:라인 필수
+- 테스트가 없으면 코드가 맞아 보여도 [부분해소]까지만
+- 산출물이 거짓 문장을 만드는 결함은 미구현보다 무겁게 등급한다
+
+전문: `docs/CONVENTIONS.md`
