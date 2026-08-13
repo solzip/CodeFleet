@@ -1,6 +1,6 @@
 # 결함 등재부
 
-작성 기준: 2026-08-13, 커밋 `ce3a4c1` 이후. 번호 실측 최대값 **P0-16 / P1-61**.
+작성 기준: 2026-08-13, 커밋 `097681b` 이후. 번호 실측 최대값 **P0-16 / P1-61**.
 
 ## 읽는 법
 
@@ -16,16 +16,21 @@
 
 | 상태 | 건수 | 내역 |
 | --- | --- | --- |
-| 해소 | 16 | P0 9건 + P1-4·34·37·38·40·53·61 |
+| 해소 | **25** | P0-2·4·5·7·8·9·10·11·12·13·14·15·16 + P1-4·34·37·38·40·42·43·44·48·49·53·61 |
 | 부분해소 | 8 | P0-1·3·6 + P1-3·32·35·41·60 |
 | 재현안됨 | 1 | P1-27 |
-| 미해소 | 13 | P1-2·15·17·28 + P1-50·51·52·54·55·56·57·58·59 |
-| **미확인** | **39** | P0-13~16 (4) + P1-1~19 중 14 + P1-20~49 중 21 |
+| 미해소 | **15** | P1-2·15·17·45·46·47·50·51·52·54·55·56·57·58·59 |
+| 미해소(수용된 한계) | 1 | P1-28 |
+| **미확인** | **27** | P1-1·5·6·7·8·9·10·11·12·13·14·16·18·19·20·21·22·23·24·25·26·29·30·31·33·36·39 |
 | 합계 | 77 | P0 16 + P1 61 |
 
-**77건 중 39건(51%)이 [미확인]이다.** 등재만 되고 이후 아무 문서도 받지 않았다는 뜻이며, `INDEX.md`의 「끊긴 것」 §B가 그 내역이다.
+건수는 표의 행을 파싱해 센 값이다(`P0-17` 미사용 제외). 「수용된 한계」를 미해소와 섞지 않고 분리한 것은 둘이 다른 것이기 때문이다 — 하나는 고칠 대상이고 하나는 고치지 않기로 한 결정이다.
 
-미확인 39건 중 **P1-42~P1-49(8건)와 P0-14~P0-16(3건)은 등재 문서 하나뿐이고 후속이 0건**이다 — 단일 문서(`2026-08-12/12-model-conformance-recheck.md`)에서 나온 11건이 통째로 끊겨 있다.
+**77건 중 27건(35%)이 [미확인]이다.** 앞선 집계는 39건(51%)이었고, `runs/2026-08-13/stranded-findings-triage.md`가 12건을 확정해 줄였다.
+
+그 조사의 결과가 이 등재부의 성격을 보여준다 — **방치된 11건 중 8건은 이미 해소돼 있었다.** 고친 커밋은 `38cf9c9`(S3)와 `5055cf3`(리뷰)이고, 둘 다 등재부를 갱신하지 않아 8건이 [미확인]으로 남아 있었다. 남은 [미확인] 27건도 같은 상태일 수 있으며, **확인하지 않은 것과 유효한 것은 다르다.**
+
+우선순위는 `runs/2026-08-13/stranded-findings-triage.md` §B-3에 4개 군으로 정렬돼 있다.
 
 ---
 
@@ -45,10 +50,10 @@
 | P0-10 | Harness 자식 프로세스에 경계 없음 | P0 | 해소 | `2026-08-11/07-new-defects.md` | `2026-08-12/SUMMARY.md` |
 | P0-11 | 신규 파일 내용 소실 | P0 | 해소 | `2026-08-11/07-new-defects.md` | `2026-08-12/SUMMARY.md` |
 | P0-12 | 프로파일 가드레일이 승인 해시 밖에 있어, 승인자가 본 것과 다른 가드레일로 실행된다 | P0 | 해소 ★ | `2026-08-12/11-model-conformance.md` | `runs/2026-08-13/first-full-loop.md` |
-| P0-13 | Objective relation 없이 Run이 실행된다 | P0 | 미확인 | `2026-08-12/11-model-conformance.md` | `2026-08-12/12-orchestration-roadmap.md` |
-| P0-14 | Objective relation이 실행되는 revision을 가리키지 않는다 | P0 | 미확인 | `2026-08-12/12-model-conformance-recheck.md` | — |
-| P0-15 | relation의 revision·hash가 Task 원장과 대조되지 않는다 | P0 | 미확인 | `2026-08-12/12-model-conformance-recheck.md` | — |
-| P0-16 | 읽을 수 없는 Task 원장이 빈 원장으로 읽혀 승인이 그 위에 쌓인다 | P0 | 미확인 | `2026-08-12/12-model-conformance-recheck.md` | — |
+| P0-13 | Objective relation 없이 Run이 실행된다 | P0 | **해소** ★ | `2026-08-12/11-model-conformance.md` | `runs/2026-08-13/stranded-findings-triage.md` |
+| P0-14 | Objective relation이 실행되는 revision을 가리키지 않는다 | P0 | **해소** ★ | `2026-08-12/12-model-conformance-recheck.md` | `runs/2026-08-13/stranded-findings-triage.md` |
+| P0-15 | relation의 revision·hash가 Task 원장과 대조되지 않는다 | P0 | **해소** ★ | `2026-08-12/12-model-conformance-recheck.md` | `runs/2026-08-13/stranded-findings-triage.md` |
+| P0-16 | 읽을 수 없는 Task 원장이 빈 원장으로 읽혀 승인이 그 위에 쌓인다 | P0 | **해소** ★ | `2026-08-12/15-new-module-review.md` | `runs/2026-08-13/stranded-findings-triage.md` |
 | **P0-17** | **미사용** — P1-50 승급 시 ID를 유지했으므로 비어 있다 | — | — | — | `2026-08-13/13-output-fidelity.md` |
 
 ### ★ 근거
@@ -118,14 +123,14 @@
 | P1-39 | Draft / Revision 상태 기계가 코드에 없다 | P1 | 미확인 | `2026-08-12/11-model-conformance.md` | — |
 | P1-40 | 실행 결과 상태(`status`)가 계약 문서 안에 있어 승인 해시에 포함된다 | P1 | 해소 | `2026-08-12/11-model-conformance.md` | `src/task.ts:6-13` (RETIRED_TASK_STATUSES) |
 | P1-41 | Revision 산출물이 존재하지 않는다 (P1-37·38·39의 공통 원인) | P1 | 부분해소 ★ | `2026-08-12/11-model-conformance.md` | `runs/2026-08-13/first-full-loop.md` |
-| P1-42 | `TASK_REVISION_SUPERSEDED`가 선언·replay되지만 append 코드가 0곳 | P1 | 미확인 | `2026-08-12/12-model-conformance-recheck.md` | — |
-| P1-43 | `resume.sourceHashPolicy`를 읽는 코드·테스트가 없다 | P1 | 미확인 | `2026-08-12/12-model-conformance-recheck.md` | — |
-| P1-44 | invalidate 이후 승계 없는 revision이 3개 상태 중 무엇도 아니다 | P1 | 미확인 | `2026-08-12/12-model-conformance-recheck.md` | — |
-| P1-45 | Draft `REJECTED`를 만드는 이벤트가 없다 | P1 | 미확인 | `2026-08-12/12-model-conformance-recheck.md` | — |
-| P1-46 | `OBJECTIVE_CLOSED`를 append하는 코드가 0곳이다 | P1 | 미확인 | `2026-08-12/12-model-conformance-recheck.md` | — |
-| P1-47 | `deriveLocalReviewStatus`가 비수용 결정을 잘못 분류한다 | P1 | 미확인 | `2026-08-12/12-model-conformance-recheck.md` | — |
-| P1-48 | replay 실패 Objective가 Revision 스냅샷에 "relation 없음"으로 기록된다 | P1 | 미확인 | `2026-08-12/12-model-conformance-recheck.md` | — |
-| P1-49 | `apply.ts`의 주석·거부문이 코드가 하지 않는 drift 검사를 주장한다 | P1 | 미확인 | `2026-08-12/12-model-conformance-recheck.md` | — |
+| P1-42 | `TASK_REVISION_SUPERSEDED`가 선언·replay되지만 append 코드가 0곳 | P1 | **해소** ★ | `2026-08-12/12-model-conformance-recheck.md` | `runs/2026-08-13/stranded-findings-triage.md` |
+| P1-43 | `resume.sourceHashPolicy`를 읽는 코드·테스트가 없다 | P1 | **해소** ★ | `2026-08-12/12-model-conformance-recheck.md` | `runs/2026-08-13/stranded-findings-triage.md` |
+| P1-44 | invalidate 이후 승계 없는 revision이 3개 상태 중 무엇도 아니다 | P1 | **해소** ★ | `2026-08-12/12-model-conformance-recheck.md` | `runs/2026-08-13/stranded-findings-triage.md` |
+| P1-45 | Draft `REJECTED`를 만드는 이벤트가 없다 | P1 | **미해소** ★ | `2026-08-12/12-model-conformance-recheck.md` | `runs/2026-08-13/stranded-findings-triage.md` |
+| P1-46 | `OBJECTIVE_CLOSED`를 append하는 코드가 0곳이다 | P1 | **미해소** ★ | `2026-08-12/12-model-conformance-recheck.md` | `runs/2026-08-13/stranded-findings-triage.md` |
+| P1-47 | `deriveLocalReviewStatus`가 비수용 결정을 잘못 분류한다 | P1 | **미해소** ★ | `2026-08-12/12-model-conformance-recheck.md` | `runs/2026-08-13/stranded-findings-triage.md` |
+| P1-48 | replay 실패 Objective가 Revision 스냅샷에 "relation 없음"으로 기록된다 | P1 | **해소** ★ | `2026-08-12/12-model-conformance-recheck.md` | `runs/2026-08-13/stranded-findings-triage.md` |
+| P1-49 | `apply.ts`의 주석·거부문이 코드가 하지 않는 drift 검사를 주장한다 | P1 | **해소** ★ | `2026-08-12/12-model-conformance-recheck.md` | `runs/2026-08-13/stranded-findings-triage.md` |
 
 ### ★ 근거
 
@@ -137,7 +142,20 @@
 
 ---
 
-## P1 — 2026-08-13 등재 (P1-50 ~ P1-60)
+### ★ 근거 (P1-42 ~ P1-49) — `runs/2026-08-13/stranded-findings-triage.md`
+
+- **P1-42** [해소]: `task-ledger.ts:484`가 `TASK_REVISION_SUPERSEDED`를 append한다. 선언·replay·생산 모두 존재.
+- **P1-43** [해소]: `run.ts:908-915` + `test/approval-contract.test.ts:273`이 `sourceHashPolicy`를 단언. 로드맵 `[x] S6-5`.
+- **P1-44** [해소]: `task-ledger.ts:249`가 `INVALIDATED`를 정의하고 `:285-292`가 승계 없을 때만 매긴다. **단서** — 코드는 `INVALIDATED`, 등재문은 설계의 `CANCELED`를 인용했는데 설계에서 `CANCELED`는 큐 아이템 상태로 나타난다. enum 정합은 **정의 확정 필요**로 남겼다.
+- **P1-45** [미해소]: `task-ledger.ts:308-311` 주석이 "no event produces it"이라 적고 `DraftState`가 2개뿐이다.
+- **P1-46** [미해소]: `OBJECTIVE_CLOSED`가 `ledger.ts:20`(타입)·`:242`(replay)에만 있고 **생산 0곳**.
+- **P1-47** [미해소]: `review.ts:632` — `ACCEPTED`가 아니면서 번들이 `DEGRADED`가 아니면 `MIGRATION_READY`로 떨어진다. 실행 확인 가능(원장 직접 수정 필요).
+- **P1-48** [해소]: `task-revision.ts:64-68,124`가 replay 실패 Objective를 `scanScope`에 분리 기록해 "relation 없음"과 "읽지 못함"을 구분한다. 커밋 `5055cf3`.
+- **P1-49** [해소]: `apply.ts:205-208` 주석이 "This is not the drift check, and an earlier comment here said it was"로 정정됐다.
+
+---
+
+## P1 — 2026-08-13 등재 (P1-50 ~ P1-61)
 
 | ID | 요약 | 현재 등급 | 상태 | 최초 등재 | 최종 갱신 |
 | --- | --- | --- | --- | --- | --- |
