@@ -268,7 +268,7 @@ src/agent.ts:64   defaultArgs: ["-p", "--output-format", "stream-json", "--verbo
 
 ## 결론
 
-1. **인코딩·wrapper·spawn env** 세 가지가 Windows에서 실제로 물었고, 그중 **CP949 자식 출력**과 **`HOME` 부재**는 해결 미확정으로 남는다.
+1. **인코딩·wrapper·spawn env** 세 가지가 Windows에서 실제로 물었다. 아래 표를 세면 **해결 미확정 3 / 미검증 4 / 미실측 1, 합계 8건**이 열린 채 남는다.
 2. **POSIX 실측이 하나도 없다.** 타임아웃 kill(§4-5)과 열린 핸들 삭제(§3-4)는 win32에서만 확인됐고, 분석상 POSIX에서 다르게 동작한다.
 3. **저장소 안에 비ASCII 파일명이 있는 경우는 끝내 시험하지 못했다.** 정책 판정이 상대 경로를 쓰는데 실측 대상의 상대 경로에는 비ASCII가 없었다.
 
