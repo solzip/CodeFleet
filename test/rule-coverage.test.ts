@@ -160,3 +160,122 @@ test("the real design document parses into rules that all carry conditions", asy
   console.log(`design document: ${rules.length} rules, ${total} condition lines`);
   assert.ok(total >= 300, `expected at least 300 condition lines, parsed ${total}`);
 });
+
+// The verdict has to arrive before the report, and a test has to hold it there.
+//
+// The checker reported a broken claim correctly for nine commits and nobody
+// read it, because the failure printed after a success-shaped report. 21f2080
+// moved the banner in front of the table. Nothing asserted the order, so the
+// banner could drift back behind the table and every test would still pass —
+// the defence would be undefended. P1-61.
+//
+// This runs the real script rather than a copy of its logic: the ordering is a
+// property of its output, and a reimplementation here would be a second program
+// that agrees with itself.
+
+// allowedEffect is not decoration. parseConditions matches condition lines that
+// end in a newline, and the block body has its trailing newline stripped with
+// the closing fence, so a rule whose condition list is the last thing in the
+// block parses as zero conditions. Every rule in the real document is followed
+// by another key, which is why this only shows up in a fixture.
+const FIXTURE_RULE_DOC = [
+  "# fixture design document",
+  "",
+  "```yaml",
+  "ruleId: FIXTURE_RULE",
+  "status: FINAL",
+  "scope: RUN",
+  "condition:",
+  "- the only condition",
+  "allowedEffect:",
+  "- nothing",
+  "```",
+  ""
+].join("\n");
+
+const BANNER = "RULE COVERAGE CHECK FAILED";
+const REPORT = "=== FINAL RULE coverage by condition line ===";
+
+/**
+ * The checker, run against a design document and a claim sink this test owns.
+ *
+ * REPO_ROOT is derived from the script's own location, so redirecting it means
+ * placing the script somewhere else. Copying the two modules into a skeleton is
+ * what makes this independent of the live .rule-coverage sink, which the rest of
+ * the suite is writing to while this runs.
+ */
+async function runChecker(claims: { ruleId: string; conditionQuote: string }[]): Promise<{
+  code: number | null;
+  stdout: string;
+}> {
+  const { copyFile, mkdtemp, mkdir, writeFile } = await import("node:fs/promises");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const { spawn } = await import("node:child_process");
+
+  const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-checker-"));
+  await mkdir(path.join(root, "scripts"), { recursive: true });
+  await mkdir(path.join(root, "docs"), { recursive: true });
+  await mkdir(path.join(root, ".rule-coverage"), { recursive: true });
+
+  for (const name of ["design-doc.mjs", "check-rule-coverage.mjs"]) {
+    await copyFile(path.join(process.cwd(), "scripts", name), path.join(root, "scripts", name));
+  }
+  await writeFile(path.join(root, "docs", "concept-foundation.md"), FIXTURE_RULE_DOC, "utf8");
+  await writeFile(
+    path.join(root, ".rule-coverage", "claims.jsonl"),
+    `${claims.map((claim) => JSON.stringify(claim)).join("\n")}\n`,
+    "utf8"
+  );
+
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [path.join(root, "scripts", "check-rule-coverage.mjs")], {
+      cwd: root,
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let stdout = "";
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    // stderr is drained so the child never blocks on a full pipe. The assertions
+    // below are about stdout on purpose: the banner shares a stream with the
+    // report precisely so that 2>&1 cannot reorder them.
+    child.stderr.resume();
+    child.on("close", (code) => {
+      resolve({ code, stdout });
+    });
+  });
+}
+
+test("a failing coverage check announces itself before it prints the report", async () => {
+  const { code, stdout } = await runChecker([
+    { ruleId: "FIXTURE_RULE", conditionQuote: "a condition this rule does not contain" }
+  ]);
+
+  assert.equal(code, 1, `the checker must exit non-zero, got ${code}:\n${stdout}`);
+
+  const bannerAt = stdout.indexOf(BANNER);
+  const reportAt = stdout.indexOf(REPORT);
+  assert.ok(bannerAt >= 0, `the failure banner is missing from stdout:\n${stdout}`);
+  assert.ok(reportAt >= 0, `the coverage report is missing from stdout:\n${stdout}`);
+  assert.ok(
+    bannerAt < reportAt,
+    `the banner must precede the report, got banner at ${bannerAt} and report at ${reportAt}:\n${stdout}`
+  );
+});
+
+test("a passing coverage check prints no failure banner", async () => {
+  const { code, stdout } = await runChecker([
+    { ruleId: "FIXTURE_RULE", conditionQuote: "the only condition" }
+  ]);
+
+  assert.equal(code, 0, `the checker must exit zero when every condition is claimed:\n${stdout}`);
+  assert.ok(stdout.includes(REPORT), `the report is still printed on success:\n${stdout}`);
+  assert.equal(
+    stdout.includes(BANNER),
+    false,
+    `a passing run must not print the failure banner:\n${stdout}`
+  );
+});
