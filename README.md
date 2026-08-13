@@ -20,7 +20,17 @@ The single completed run left a trace containing two files. Both record the same
 | `provider-commands.json` | `node test/check.js` — the agent's own account of what it ran | `PROVIDER_REPORTED_ONLY`, `notCommandTruth: true`. **Moves nothing** |
 | `verification/verify-001.json` | `node test/check.js` — re-executed by the Harness | `HARNESS_EXECUTED`, `exitCode: 0`. **This is what moved the gate** |
 
-The agent's report is not discarded — it is stored, graded, and structurally excluded. Gate computation filters for `HARNESS_EXECUTED` before it reads anything, so a claim cannot be mistaken for an observation even by accident.
+The agent's report is not discarded — it is stored, graded, and structurally excluded. The grade is a type, not a flag:
+
+```ts
+type VerificationAuthority =
+  "NONE" | "PROVIDER_REPORTED_ONLY" | "HARNESS_OBSERVED" | "HARNESS_EXECUTED" | "WAIVED_BY_POLICY";
+
+// Gate computation filters before it reads anything:
+const executed = attempts.filter((a) => a.authority === "HARNESS_EXECUTED");
+```
+
+A `boolean` plus a separate `source` field can drift apart. One graded value cannot — there is no state in which a claim is readable as an observation.
 
 That was the whole thesis, and in the one run that finished, it held. The rest of this page is what it cost.
 
@@ -40,23 +50,54 @@ apply              → the observed patch applied to the workspace
 
 `git diff HEAD` came out byte-identical to the patch the Harness had recorded, and the ledger's `patchRef.hash` recomputed to match. The worktree was already gone from disk and from `git worktree list` — the patch survived as evidence, not as a directory, which is why reintegration was still possible.
 
+## "Isn't this just CI?"
+
+It is the first thing anyone asks, and it is about ninety percent right. Running the tests yourself after the agent finishes gets you most of this for almost none of the cost. If that is all you need, do that.
+
+What it does not get you is the other ten percent, and the four pieces of it are the part worth arguing about:
+
+- **The contract is fixed before execution, not after.** Approval hashes the task *and* the policy it was approved under — `sha256(revisionHash, guardrailHash)`. Change the workspace policy afterwards and the run is refused, because the approval covered conditions that no longer hold. Re-running CI against a moved target tells you nothing about what was agreed.
+- **The agent cannot edit the thing that judges it.** Scope is `include: src/**`, `exclude: test/**`, enforced against the observed changed-file list. The fixture run reports `1 path(s) checked against 1 allowed and 1 denied pattern(s)`. A green CI run says the tests passed; it does not say the agent left the tests alone.
+- **What could not be checked is recorded, not omitted.** A CI run that skips a step is usually just a shorter log. Here an unobservable channel becomes a named `CAPABILITY_GAP` that blocks acceptance until a person signs for it by name — and the signature, with its reason, lands in the ledger.
+- **The decision is append-only.** There is no mutable `approved` field to quietly become true. State is replayed from events; a snapshot that disagrees loses to the ledger.
+
+So: CI answers *did the tests pass*. This was trying to answer *is the record of this work something you can rely on later* — and those turn out to be different questions once the thing doing the work is also the thing reporting on it.
+
 ## What it figured out
 
-Ten conclusions, with where each lives and how far it was actually checked.
+Two of these transfer to any backend, agents or not.
+
+**Idempotency keys derived from meaning, not from the caller.** Most idempotency is a client-supplied request id, which means it works only when the client cooperates. Here the key is a hash of what actually changes the resulting state — and deliberately excludes reason text and timestamps, so the same decision made twice collapses to one:
+
+```ts
+export function computeMutationId(intent: MutationIntent): string {
+  const canonical = JSON.stringify([
+    intent.mutationKind,
+    intent.targetId,
+    intent.targetHash ?? "",
+    canonicalize(intent.semanticPayload)   // only fields that change state
+  ]);
+  return `mut_${createHash("sha256").update(canonical).digest("hex").slice(0, 16)}`;
+}
+```
+
+Running `apply` twice produced the same `mut_fa210cedffe0ce00` and appended no second event.
+
+**Every check reports what it scanned, not just its verdict.** Otherwise `violations: []` means both *all clear* and *nothing was examined*, and those are the same value. Zero examined is treated as a failure, not a pass. This caught two silent-green bugs here: a rule parser that read 0 blocks because of CRLF and reported success, and a coverage run that recorded no claims at all.
+
+The rest, in brief — each expanded with implementation and evidence in [`DESIGN-NOTES.md`](docs/archive/2026-08-13/DESIGN-NOTES.md):
 
 | | Conclusion | Status |
 | --- | --- | --- |
-| 1 | **Type the source; don't flag it.** An authority ladder (`NONE` → `PROVIDER_REPORTED_ONLY` → `HARNESS_OBSERVED` → `HARNESS_EXECUTED`) makes a claim and an observation different values. A `boolean` plus a `source` field can drift apart; one graded value cannot | observed |
-| 2 | **One window for state change, with a named commit point.** Eight fixed phases; nothing before M4 is durable, and a failure after M4 keeps the event rather than rolling back, because silent rollback erases what happened | observed |
-| 3 | **Idempotency keys derived from meaning.** The key hashes only what changes the resulting state — no reason text, no timestamps — so a repeated request is idempotent without the caller cooperating | observed |
-| 4 | **Decisions append-only; state replayed.** No mutable `approved` flag exists to go stale. The snapshot file is a read model with no authority: if it disagrees with replay, the ledger wins and the snapshot is rebuilt | observed |
-| 5 | **Approval covers the contract *and* the conditions it was approved under.** `sha256(revisionHash, guardrailHash)`. Hashing only the task lets someone change the policy afterwards and still look approved — which is exactly what happened before this was fixed | observed |
-| 6 | **Split what you couldn't check into two kinds.** A capability gap is something the tool cannot see yet, and a person may sign for it by name with a reason. An evidence defect is missing or hash-mismatched evidence and is never waivable. The distinction lives in data, not in judgement | observed |
-| 7 | **Every check reports what it scanned, not just its verdict.** Otherwise `violations: []` means both "all clear" and "nothing was examined". Zero examined is treated as failure — this caught two silent-green bugs here | observed |
-| 8 | **Keep a decision apart from its side effect.** An accepted review does not touch the workspace; `apply` is a separate human act with its own ledger entry, and it applies the *observed patch* rather than a directory that may have drifted | observed |
-| 9 | **Child processes get an allowlisted environment and per-kind limits.** A secret exported in the parent was measurably absent in the child. An agent session, a test suite, and a git read do not share one timeout | observed |
-| 10 | **Treat the human-readable record as an artifact.** It is the only thing anyone reads. This one is listed because it **failed twice** — first by staying silent about which command satisfied a gate, then, after that fix, by asserting that evidence it linked to did not exist | failed |
-| — | **Policy composes by `meet` only; roles contribute a ceiling, never a grant.** Narrowing was observed; a widening attempt is refused in tests but never seen in real use | code only |
+| 1 | Type the source, don't flag it — the authority ladder above | observed |
+| 2 | One window for state change, with a named commit point. Nothing before M4 is durable; a failure after M4 keeps the event rather than rolling back, because silent rollback erases what happened | observed |
+| 4 | Decisions append-only, state replayed. The snapshot is a read model with no authority | observed |
+| 5 | Approval covers the contract *and* the conditions it was approved under | observed |
+| 6 | Split what you couldn't check into two kinds — a gap a person may sign for, and an evidence defect nobody can stand in for. The distinction lives in data, not in judgement | observed |
+| 8 | Keep a decision apart from its side effect. `apply` is a separate human act, and it applies the *observed patch*, not a directory that may have drifted | observed |
+| 9 | Child processes get an allowlisted environment and per-kind limits. A secret exported in the parent was measurably absent in the child | observed |
+| 10 | Treat the human-readable record as an artifact — listed because it **failed twice**: first silent about which command satisfied a gate, then asserting that evidence it linked to did not exist | failed |
+| — | Policy composes by `meet` only; roles contribute a ceiling, never a grant. Narrowing was observed; a widening attempt is refused in tests but never seen in real use | code only |
 
 Two of these turned out to be one idea stated twice. The authority ladder and the gap/defect split are both answers to **how you represent not knowing, as data** — and three of the seven defect types in `LESSONS.md` share that same root: failing to distinguish *absent* from *a value*. The problem this project actually spent itself on was not verifying AI. It was representing absence.
 
