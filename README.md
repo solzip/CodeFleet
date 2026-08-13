@@ -1,69 +1,48 @@
-# CodeFleet — 아카이브
+# CodeFleet (Archived)
 
-> **이 저장소는 2026-08-13에 동결됐다.** 유지보수하지 않으며, 이슈와 PR을 받지 않는다.
-> 후속 개발은 다른 저장소에서 이루어진다.
+> **Frozen on 2026-08-13.** This repository is no longer maintained.
+> Issues and pull requests are not accepted.
 
-한국어 | [English](README.en.md)
+English | [한국어](README.ko.md)
 
-## 무엇이었나
+## What it was
 
-AI 에이전트에게 위임한 개발 작업을 **"에이전트가 됐다고 말한 것"이 아니라 Harness가 직접 관측한 증거로 판정**하려던 CLI였다. 작업을 범위·역할·가드레일·검증 조건을 가진 계약으로 정의하고, 사람이 승인한 계약만 실행하며, 실행 결과를 diff·해시·Harness가 직접 실행한 검증 커맨드로 남기는 것이 목표였다.
+CodeFleet was a CLI that tried to judge AI-delegated development work by evidence a harness observed itself, rather than by what the agent reported. Work was expressed as a contract carrying scope, role, guardrails, and verification conditions; only a human-approved contract could execute; and the outcome was recorded as a diff, a hash, and verification commands the harness ran on its own. The claim it was built around was that an agent's account of its own work is not evidence.
 
-핵심 주장은 "AI를 부른다"가 아니라 **"에이전트의 주장은 증거가 아니다"**였다. 그 구분 자체는 끝까지 유효했다 — 실제 실행에서 에이전트가 스스로 돌린 검증 커맨드는 `PROVIDER_REPORTED_ONLY`로 따로 저장돼 게이트에 쓰이지 않았고, 같은 커맨드를 Harness가 다시 실행한 결과만 판정에 들어갔다.
+## Why it was archived
 
-## 왜 종료했나
+Two structural reasons. Neither would have closed with a partial fix, and both are worth more to a reader than the individual defects.
 
-부분 수정으로 닫히지 않는 두 가지 때문이다.
+**The definition was written after the code, so it could not constrain it.** The product definition — 83 FINAL RULEs over 545 condition lines — was settled well after implementation was underway. It became a document to *compare* the code against rather than a place that could stop it, and that comparison had to be carried out by a person, as an audit. The first conformance audit against the definition produced two new P0 findings, one of which had been passed a day earlier on the strength of a code comment. A definition fixed after the fact can judge code; it cannot prevent it.
 
-**제품 정의가 코드보다 나중에 확정되어 강제력이 없었다.** 정의(`docs/concept-foundation.md`, FINAL RULE 83개)는 코드가 상당히 진행된 뒤에 고정됐고, 그래서 코드를 막는 자리가 아니라 코드와 대조되는 별도 문서가 됐다. 대조는 사람이 감사로 수행해야 했다.
+**Judgment was never separated from observation.** One file grew past 3,000 lines covering run planning, adapter launch, evidence collection, policy evaluation, and gate derivation. In that shape "is the observation correct?" and "is the judgment correct?" cannot be tested independently — changing one moves the other. The clearest symptom: recording a review re-rendered the human-readable run record without passing it the verification evidence, so the document stated that no verification evidence had been produced while linking to that evidence two lines further down.
 
-**판정 층과 실행 관측 층이 분리되지 않았다.** `src/run.ts` 한 파일이 3,000줄 넘게 Run 계획·어댑터 기동·증거 수집·정책 평가·게이트 산출을 모두 수행한다. 이 구조에서는 "관측이 옳은가"와 "판정이 옳은가"를 따로 시험할 수 없다.
+→ Full account, with measurements: [`docs/archive/2026-08-13/ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md)
 
-→ 전문: [`docs/archive/2026-08-13/ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md)
+## State at freeze
 
-## 동작 상태
+- **On a controlled fixture the pipeline completed once** — approval, queue attachment, isolated execution, harness-run verification, review, and reintegration. The workspace changed, and the applied patch was byte-identical to the one the harness had observed. Four workarounds were holding it up.
+- **On a real Spring Boot project it did not complete.** Of fifteen steps, four were blocked and one failed; the command that satisfied the verification gate was `gradle --version`. Our implementation could not invoke Gradle or Maven wrappers on Windows — the rule forbidding shell interpreters left no way to reach a batch file.
+- **77 registered findings** — 25 resolved, 8 partially resolved, 1 not reproduced, 15 open, 1 accepted as a limit, and **27 never checked**. The 27 close as unchecked: nobody looked at them after they were registered, and there is no basis for saying whether they still hold.
+- `npm test` exits **0** (257 passing, 0 failing). Condition coverage is 345 of 545 lines (63.3%), which means a passing test quoted that many lines — **not** that those conditions are correctly implemented.
+- A CI workflow file exists and **has never run**.
 
-**통제된 fixture에서는 한 번 완주했다.** ASCII 경로·파일 3개짜리 저장소에서 승인 → 큐 attach → 격리 실행 → Harness 검증 → 리뷰 → 반영까지 통과했고, 워크스페이스가 실제로 바뀌었으며 적용된 패치가 Harness가 관측한 것과 바이트 단위로 일치했다. **다만 우회 4건을 얹어야 했다** — 역할 치환, 관측 저하 허용, 어댑터 인자 추가, 미리보기 커맨드 생략.
+> Runnability is not warranted. These are observations at the moment of freezing.
 
-**실제 프로젝트(Spring Boot)에서는 완주하지 못했다.** 15단계 중 차단 4건과 실패 1건이 있었고, 게이트를 만족시킨 검증 커맨드는 `gradle --version`이었다. 한 바퀴를 다 돌아도 저장소는 변하지 않았다.
+## What's worth reading
 
-| 항목 | 값 |
+| | |
 | --- | --- |
-| 등재된 결함 | **77건** — 해소 25 / 부분해소 8 / 재현안됨 1 / 미해소 15 / 수용된 한계 1 / **미확인 27** |
-| `npm test` | 종료 코드 **0** (257 통과 / 0 실패) |
-| 조건 커버리지 | 545줄 중 345줄 (63.3%) |
-| CI | 워크플로 파일은 있으나 **한 번도 실행되지 않았다** |
+| [`docs/archive/2026-08-13/LESSONS.md`](docs/archive/2026-08-13/LESSONS.md) | The 50 judged findings grouped into **seven recurring types**, each with its structural cause. The largest is schema fields that no code ever consumes; three of the types share one root — not distinguishing absence from a value |
+| [`docs/archive/2026-08-13/ENVIRONMENT.md`](docs/archive/2026-08-13/ENVIRONMENT.md) | Measured behaviour on Windows, for anyone building agent tooling there: a CP949 console against UTF-8 decoding, batch-file wrappers unreachable behind a shell-interpreter rule, worktree paths that must be asked of git rather than normalised, and a spawn environment stripped to `PATH` — which cost the child process its home directory. 3 unresolved, 4 unverified, 1 unmeasured, each labelled |
+| [`docs/archive/2026-08-13/ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md) | State, reasons, and asset list at close. The source of every number above |
 
-**미확인 27건은 미확인으로 종료했다.** 등재된 뒤 아무도 확인하지 않았고, 유효한지 아닌지에 대한 근거가 없다. (동결 직전 조사에서 39건이었던 것이 12건 확정으로 27건이 됐다 — 그 12건은 파일:라인 근거와 함께 판정했다.)
+Every judgment here is cited to a file and line. The audit and run records are indexed in [`docs/INDEX.md`](docs/INDEX.md); the findings register is [`docs/REGISTER.md`](docs/REGISTER.md).
 
-**커버리지 63.3%는 "설계의 63.3%가 구현됐다"는 뜻이 아니다.** 통과한 테스트가 조건 줄을 인용했다는 뜻일 뿐이며, 그 조건이 옳게 구현됐다는 진술이 아니다.
+## Successor
 
-> **실행 가능 여부를 보증하지 않는다.** 위 숫자는 동결 시점의 관측이지 동작 보증이 아니다.
+The product definition has been reworked and restarted under the name **Warrant**. There is no repository URL yet.
 
-## 살아남은 자산
+## License
 
-코드는 폐기되지만 아래는 새 프로젝트의 입력이다.
-
-| 문서 | 왜 살아남았는가 |
-| --- | --- |
-| [`docs/archive/2026-08-13/LESSONS.md`](docs/archive/2026-08-13/LESSONS.md) | 판정된 50건을 **결함 유형 7개**로 묶고 각 유형의 구조적 원인과 재발 방지책을 적었다. 개별 결함보다 오래 쓸모 있는 유일한 산출물이다 |
-| [`docs/archive/2026-08-13/ENVIRONMENT.md`](docs/archive/2026-08-13/ENVIRONMENT.md) | Windows·git·spawn에서 **실측된** 사실. CP949 콘솔, wrapper 차단, worktree 경로 계산, spawn 환경 제약. 코드를 버려도 환경은 그대로 남는다. 해결 미확정 3 / 미검증 4 / 미실측 1 |
-| [`docs/archive/2026-08-13/ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md) | 종료 시점의 상태·사유·자산 목록. 위 숫자의 출처 |
-| [`docs/concept-foundation.md`](docs/concept-foundation.md) | 아카이브 시점의 설계 정본(FINAL RULE 83개). **후속 제품에서는 새로 작성된다** |
-| [`docs/audits/`](docs/audits/) · [`docs/runs/`](docs/runs/) | 감사·실행 기록 43편(감사 36 · 실행 7). 모든 판정의 근거가 파일:라인으로 남아 있다 |
-| [`docs/REGISTER.md`](docs/REGISTER.md) · [`docs/INDEX.md`](docs/INDEX.md) | 동결된 결함 등재부와 문서 색인 |
-| [`docs/archive/2026-08-13/README.original.md`](docs/archive/2026-08-13/README.original.md) · [`README.en.original.md`](docs/archive/2026-08-13/README.en.original.md) | 종료 전 README 한·영. 정의가 확정되기 전에 이 제품을 어떻게 설명했는지의 증거 |
-
-## 후속
-
-제품 정의를 재정립해 **Warrant**라는 이름의 새 저장소에서 진행 중이다. 저장소 URL은 아직 없다.
-
-달라진 점은 이 저장소가 종료된 이유와 정확히 대응한다.
-
-- **판정 계층으로 재정의한다.** 오케스트레이터가 아니라 "이 변경이 승인 조건을 만족하는가"를 답하는 층이다
-- **실행 엔진을 소유하지 않는다.** 에이전트를 띄우고 관리하는 책임을 지지 않는다
-- **판정과 관측을 분리한다.** 관측한 것을 서술하는 층과 그것으로 판정하는 층이 같은 코드에 있지 않다
-
----
-
-참고 목적으로 공개한다. **어떤 용도로도 동작을 보증하지 않는다.**
+Published for reading and evaluation only — see [`LICENSE`](LICENSE). Not open source, and no warranty of operation for any purpose.
