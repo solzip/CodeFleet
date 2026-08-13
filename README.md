@@ -95,6 +95,21 @@ run-record.md            the one file a person reads
 
 Two properties matter more than the list. Every artifact names the contract it belongs to (`taskId` + `taskRevision`), so losing any one of them does not orphan the rest. And each one records `unavailableReason` for anything it could not collect, so a gap in the evidence is a value in the file rather than a shorter file.
 
+The decision itself lives somewhere else — one line appended to a ledger, which is what "append-only" means concretely:
+
+```json
+{ "seq": 4, "eventId": "evt_000004_fa210ced", "type": "RUN_RESULT_APPLIED",
+  "actorId": "sol", "at": "2026-08-13T01:06:55.478Z",
+  "reason": "accepted review 2026-08-13_001-review-002; bring the isolated tree's change into the workspace",
+  "payload": {
+    "runId": "2026-08-13_001", "taskId": "add-subtract", "taskRevision": 1,
+    "reviewDecisionId": "2026-08-13_001-review-002",
+    "patchRef": { "path": ".codefleet/runs/.../git-diff.patch",
+                  "hash": "7ee840706a78708ed4b527dd6d21fb688e9b5c2eee968be5102201c49595d0c8" } } }
+```
+
+`reason` is required and free text; `seq` and `eventId` make gaps detectable; `patchRef.hash` is what lets someone recompute, months later, whether the change in the workspace is the change that was approved. Recomputing it after the fact is how the byte-identity above was confirmed.
+
 ## "Isn't this just CI?"
 
 It is the first thing anyone asks, and it is about ninety percent right. Running the tests yourself after the agent finishes gets you most of this for almost none of the cost. If that is all you need, do that.
@@ -161,9 +176,39 @@ The rest, in brief — each expanded with implementation and evidence in [`DESIG
 
 Two of these turned out to be one idea stated twice. The authority ladder and the gap/defect split are both answers to **how you represent not knowing, as data** — and three of the seven defect types in `LESSONS.md` share that same root: failing to distinguish *absent* from *a value*. The problem this project actually spent itself on was not verifying AI. It was representing absence.
 
-The clearest thing to drop is the role table. Narrowing-only was right, but file-edit permission and command-execution permission were hung on one axis, so no built-in role can both write application code and run a test.
-
 → Each conclusion with its problem, implementation, evidence, and what to carry forward: [`docs/archive/2026-08-13/DESIGN-NOTES.md`](docs/archive/2026-08-13/DESIGN-NOTES.md)
+
+## What not to repeat
+
+Four shapes in this codebase produced defects, and three of them are small enough to recognise on sight.
+
+**An optional argument for something that is never actually optional.** The run record renderer took its evidence like this:
+
+```ts
+export interface RunRecordInput {
+  // ...
+  verificationEvidence?: Record<string, unknown> | null;   // ← the whole defect
+}
+```
+
+Every run produces verification evidence, so this was never genuinely optional — it became optional because one call site did not pass it. `undefined` then selected the branch that prints *"No verification evidence was produced."* A false sentence in the only document a person reads, produced by a question mark.
+
+The fix idiom was already in the same file's neighbour: `verificationEvidenceRef: FileRef | null` forces every call site to state something. **Prefer `| null` over `?:` for anything an artifact will assert.** The type system will not ask you the question; the punctuation decides it silently.
+
+**A renderer that receives evidence as an argument instead of reading it.** The same defect from a different angle. As long as the renderer is *handed* the evidence, a call site that forgets is possible; if it reads from the evidence store itself, that failure mode does not exist. Passing state to a formatter feels cleaner and creates a second place where the truth can be wrong.
+
+**Defaults that fabricate a value for absence.**
+
+```ts
+workspaceRootRef: input.workspaceRootRef ?? ".",
+selectedWorkspaceRootRealPath: input.selectedWorkspaceRootRealPath ?? "",
+```
+
+`?? "."` is not an absence marker — it is an assertion that the working directory *is* the repository root. Every other field in that same artifact expresses absence as `{ value, unavailableReason }`; these three quietly opted out. `??` and `||` are the shortest way to satisfy a type checker, and the type checker never asks what the default means.
+
+**One axis carrying two unrelated permissions.** Roles set a ceiling over both file editing and command execution at once, so of seven built-in roles only two allow running commands, and neither of those is a role that writes application code. The narrowing rule was correct; hanging two independent capabilities on one ordering was not. The completed run needed a role substitution purely because of this.
+
+The first three share the root named above: **absence and value were not kept distinct.** A missing argument, a fabricated default, and a field declared but never produced are the same mistake wearing different clothes — which is why the fix for each is the same instinct, to make the type refuse to compile until someone says what absence means here.
 
 ## How far any of this was checked
 
