@@ -30,6 +30,8 @@
 
 **미확인 27건은 미확인으로 종료한다.** 전부 P1이다:
 
+> **각주 (동결 이후 추가)** — 이 중 **P1-21은 이후 확인됐다.** 푸시 후 CI가 실행돼 POSIX에서 예측대로 재현됐고, **유효한 결함**이다. 등재부는 동결됐으므로 상태를 바꾸지 않았고, 확인 사실은 `runs/2026-08-13/ci-first-run.md`가 보유한다. 아래 목록은 동결 시점 그대로다.
+
 ```
 P1-1  P1-5  P1-6  P1-7  P1-8  P1-9  P1-10 P1-11 P1-12 P1-13 P1-14
 P1-16 P1-18 P1-19 P1-20 P1-21 P1-22 P1-23 P1-24 P1-25 P1-26 P1-29
@@ -187,7 +189,7 @@ $ npm test > /dev/null 2>&1; echo $?
 | **환경 지식** | `docs/archive/2026-08-13/ENVIRONMENT.md` | Windows·git·spawn에서 실측된 사실. 코드를 버려도 환경은 그대로다 |
 | **작업 기록 규약** | `docs/CONVENTIONS.md` | 규칙 12개, 각각 그것이 필요해진 실제 사건과 함께 |
 | **정의 문서** | `docs/concept-foundation.md` | FINAL RULE 83개. **새 제품에서는 새로 작성되며, 이 파일은 아카이브 시점의 정의다** |
-| **감사·실행 기록** | `docs/audits/`, `docs/runs/` | **47개 문서**(감사 36 · 실행 11). 판정의 근거가 전부 파일:라인으로 남아 있다. *동결 후 실행 기록 4건이 추가돼 43 → 47로 갱신했다 — `ci-first-run.md`, `readme-language-swap.md`, `link-audit-full.md`, `link-checker-in-repo.md`* |
+| **감사·실행 기록** | `docs/audits/`, `docs/runs/` | **48개 문서**(감사 36 · 실행 12). 판정의 근거가 전부 파일:라인으로 남아 있다. *동결 후 실행 기록 5건이 추가돼 43 → 48로 갱신했다 — `ci-first-run.md`, `readme-language-swap.md`, `link-audit-full.md`, `link-checker-in-repo.md`, `full-review-v2.md`* |
 | 결함 등재부 | `docs/REGISTER.md` | 동결 상태로 |
 | 종료 전 README (한·영) | `docs/archive/2026-08-13/README.original.md`, `README.en.original.md` | 동작하는 제품으로서 이 프로젝트를 어떻게 설명했는지의 기록. 루트 README는 아카이브 표지로 교체됐다 |
 
