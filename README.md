@@ -34,7 +34,33 @@ A `boolean` plus a separate `source` field can drift apart. One graded value can
 
 That was the whole thesis, and in the one run that finished, it held. The rest of this page is what it cost.
 
-Here is the run that produced those files. The task: add `subtract(a, b)` to `src/math.js`. The verification command was written to fail unless that function exists and returns the right values — and was **confirmed failing before the run started**, because a check that passes without the change proves nothing.
+### The contract those files came from
+
+"Contract" is the load-bearing word, so here is a real one — the task that produced the run above, verbatim:
+
+```yaml
+id: add-subtract
+goal: "Add a subtract(a, b) function to src/math.js that returns a - b, and export it."
+agentRole: INFRA_OPERATOR          # a classification: contributes a ceiling, never a grant
+scope:
+  include: ["src/**"]              # enforced against the observed changed-file list
+  exclude: ["test/**"]             # the agent cannot edit what scores it
+verification:
+  commands:
+    - commandId: fixture-check
+      command: ["node", "test/check.js"]    # argv, never a shell string
+doneCriteria:
+  - "src/math.js defines subtract(a, b) returning a - b."
+  - "node test/check.js exits 0."
+```
+
+Two details carry most of the design. `command` is an **argv array, never a shell string** — a shell string cannot be matched against a command policy, so accepting one would make the policy decorative. And `scope.exclude` is what keeps the agent out of the file that judges it, checked against what the Harness observed changing rather than against what the agent said it touched.
+
+Approving this task freezes it: `sha256(revisionHash, guardrailHash)` covers both the text above and the workspace policy in force at that moment.
+
+### The run
+
+The verification command was written to fail unless `subtract` exists and returns the right values — and was **confirmed failing before the run started**, because a check that passes without the change proves nothing.
 
 ```
 task approve       → contract frozen as sha256(revisionHash, guardrailHash)
@@ -49,6 +75,25 @@ apply              → the observed patch applied to the workspace
 ```
 
 `git diff HEAD` came out byte-identical to the patch the Harness had recorded, and the ledger's `patchRef.hash` recomputed to match. The worktree was already gone from disk and from `git worktree list` — the patch survived as evidence, not as a directory, which is why reintegration was still possible.
+
+### What "evidence" actually means here
+
+The run left a directory. Its contents are the answer to "what would you need in order to disagree with this decision six months from now":
+
+```
+run-plan.json            the contract as resolved: approval hashes, effective policy, gates
+prompt.md                what the agent was actually told
+adapter-request.json     what the adapter was permitted to do
+harness-observation.json changed files, path/command policy checks, workspace snapshots
+provider-commands.json   what the agent said it ran          ← graded, disregarded
+verification/verify-001.json  what the Harness ran itself    ← this moved the gate
+adapter-result.json      exit status, truncation counts
+git-diff.patch           the observed change
+run-summary.json         derived, explicitly not decision truth
+run-record.md            the one file a person reads
+```
+
+Two properties matter more than the list. Every artifact names the contract it belongs to (`taskId` + `taskRevision`), so losing any one of them does not orphan the rest. And each one records `unavailableReason` for anything it could not collect, so a gap in the evidence is a value in the file rather than a shorter file.
 
 ## "Isn't this just CI?"
 
@@ -65,7 +110,7 @@ So: CI answers *did the tests pass*. This was trying to answer *is the record of
 
 ## What it figured out
 
-Two of these transfer to any backend, agents or not.
+Three of these transfer to any backend, agents or not.
 
 **Idempotency keys derived from meaning, not from the caller.** Most idempotency is a client-supplied request id, which means it works only when the client cooperates. Here the key is a hash of what actually changes the resulting state — and deliberately excludes reason text and timestamps, so the same decision made twice collapses to one:
 
@@ -85,12 +130,27 @@ Running `apply` twice produced the same `mut_fa210cedffe0ce00` and appended no s
 
 **Every check reports what it scanned, not just its verdict.** Otherwise `violations: []` means both *all clear* and *nothing was examined*, and those are the same value. Zero examined is treated as a failure, not a pass. This caught two silent-green bugs here: a rule parser that read 0 blocks because of CRLF and reported success, and a coverage run that recorded no claims at all.
 
+**Every state change goes through eight fixed phases, and exactly one of them commits.**
+
+```
+M0_RESOLVE      derive the mutation id from meaning
+M1_ACQUIRE      take the lock, naming the holder
+M2_PRECHECK     refuse here — nothing durable has happened yet
+M3_IDEMPOTENCY  this id already in the ledger? then stop, report, change nothing
+M4_APPEND       ← the commit point
+M5_REBUILD      regenerate the read model
+M6_POSTCHECK    does the rebuilt state validate?
+M7_RELEASE      release the lock
+```
+
+A failure before M4 leaves nothing behind. A failure *after* M4 does **not** roll back — the event stays and the outcome reports which phase died, because silent rollback erases the fact that something happened. That is the opposite of the usual instinct, and it is deliberate: an append-only ledger that quietly un-appends is not append-only.
+
 The rest, in brief — each expanded with implementation and evidence in [`DESIGN-NOTES.md`](docs/archive/2026-08-13/DESIGN-NOTES.md):
 
 | | Conclusion | Status |
 | --- | --- | --- |
 | 1 | Type the source, don't flag it — the authority ladder above | observed |
-| 2 | One window for state change, with a named commit point. Nothing before M4 is durable; a failure after M4 keeps the event rather than rolling back, because silent rollback erases what happened | observed |
+| 2 | One window for state change, with a named commit point — the eight phases above | observed |
 | 4 | Decisions append-only, state replayed. The snapshot is a read model with no authority | observed |
 | 5 | Approval covers the contract *and* the conditions it was approved under | observed |
 | 6 | Split what you couldn't check into two kinds — a gap a person may sign for, and an evidence defect nobody can stand in for. The distinction lives in data, not in judgement | observed |

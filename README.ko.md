@@ -34,7 +34,33 @@ const executed = attempts.filter((a) => a.authority === "HARNESS_EXECUTED");
 
 이 프로젝트가 내세운 건 이것 하나였고, 완주한 그 한 번에서는 지켜졌다. 아래는 그 대가에 관한 이야기다.
 
-저 두 파일을 만든 Run은 이렇게 돌았다. Task는 `src/math.js`에 `subtract(a, b)`를 추가하는 것이었다. 검증 커맨드는 그 함수가 없거나 값이 틀리면 실패하도록 짰고, **시작 전에 실제로 실패하는 것부터 확인했다.** 파일을 안 고쳐도 통과하는 검증은 아무것도 증명하지 못하니까.
+### 그 파일들이 나온 계약
+
+"계약"이 이 문서에서 제일 많이 쓰이는 말이니, 실물을 하나 그대로 보인다. 위 Run을 만든 Task다.
+
+```yaml
+id: add-subtract
+goal: "Add a subtract(a, b) function to src/math.js that returns a - b, and export it."
+agentRole: INFRA_OPERATOR          # 분류일 뿐이다. 상한을 기여하고 권한을 주지 않는다
+scope:
+  include: ["src/**"]              # 관측된 변경 파일 목록에 대해 강제된다
+  exclude: ["test/**"]             # 자기를 채점하는 파일은 못 건드린다
+verification:
+  commands:
+    - commandId: fixture-check
+      command: ["node", "test/check.js"]    # 셸 문자열이 아니라 argv
+doneCriteria:
+  - "src/math.js defines subtract(a, b) returning a - b."
+  - "node test/check.js exits 0."
+```
+
+설계의 절반이 두 줄에 들어 있다. `command`가 **셸 문자열이 아니라 argv 배열**인 건, 셸 문자열은 커맨드 정책과 대조할 수가 없어서다. 그걸 받는 순간 정책은 장식이 된다. 그리고 `scope.exclude`가 에이전트를 자기 채점 파일에서 떼어놓는데, 판정 기준은 에이전트가 건드렸다고 말한 목록이 아니라 **Harness가 관측한 변경 목록**이다.
+
+이 Task를 승인하면 그대로 얼어붙는다. `sha256(revisionHash, guardrailHash)`가 위 본문과 **그 시점의 워크스페이스 정책까지** 함께 덮는다.
+
+### Run
+
+검증 커맨드는 `subtract`가 없거나 값이 틀리면 실패하도록 짰고, **시작 전에 실제로 실패하는 것부터 확인했다.** 파일을 안 고쳐도 통과하는 검증은 아무것도 증명하지 못하니까.
 
 ```
 task approve       → 계약이 sha256(revisionHash, guardrailHash)로 고정된다
@@ -49,6 +75,25 @@ apply              → 관측된 패치를 워크스페이스에 적용
 ```
 
 `git diff HEAD`가 Harness가 기록한 패치와 바이트 단위로 같았고, 원장의 `patchRef.hash`를 다시 계산해 일치를 확인했다. 그 적용 시점에 worktree는 디스크에서도 `git worktree list`에서도 이미 지워진 뒤였다. **패치가 디렉터리가 아니라 증거로 남아 있었기 때문에** 반영이 가능했다.
+
+### 여기서 "증거"가 실제로 뭘 말하나
+
+Run이 디렉터리 하나를 남긴다. 그 안에 든 것이 곧 **"반년 뒤에 이 판정에 반박하려면 무엇이 필요한가"**에 대한 답이다.
+
+```
+run-plan.json            해석된 계약: 승인 해시, effective policy, 게이트
+prompt.md                에이전트에게 실제로 준 내용
+adapter-request.json     어댑터에 허용한 범위
+harness-observation.json 변경 파일, 경로·커맨드 정책 검사, 워크스페이스 스냅샷
+provider-commands.json   에이전트가 돌렸다고 말한 것       ← 등급 매겨 배제
+verification/verify-001.json  Harness가 직접 돌린 것       ← 게이트를 움직인 쪽
+adapter-result.json      종료 상태, 절삭된 바이트 수
+git-diff.patch           관측된 변경
+run-summary.json         파생물. 판정의 진실이 아니라고 스스로 적는다
+run-record.md            사람이 읽는 단 하나의 파일
+```
+
+목록보다 중요한 성질이 둘 있다. **모든 산출물이 자기가 속한 계약을 이름으로 적는다**(`taskId` + `taskRevision`). 그래서 하나를 잃어도 나머지가 미아가 되지 않는다. 그리고 각 파일이 수집하지 못한 것에 대해 `unavailableReason`을 남긴다. **증거의 구멍이 짧아진 파일이 아니라 파일 안의 값으로 존재한다.**
 
 ## "그거 그냥 CI 아니야?"
 
@@ -65,7 +110,7 @@ apply              → 관측된 패치를 워크스페이스에 적용
 
 ## 무엇을 알아냈나
 
-결론은 열 가지인데, 그중 둘은 **에이전트와 아무 상관 없이 어떤 백엔드에나 그대로 쓸 수 있다.** 그 둘부터 적는다.
+결론은 열 가지인데, 그중 셋은 **에이전트와 아무 상관 없이 어떤 백엔드에나 그대로 쓸 수 있다.** 그 셋부터 적는다.
 
 **멱등 키를 호출자가 아니라 의미에서 뽑는다.** 흔히 쓰는 멱등은 클라이언트가 보내주는 request id인데, 그건 **클라이언트가 협조할 때만** 동작한다. 여기서는 결과 상태를 실제로 바꾸는 값만 해시하고 사유 텍스트와 시각은 일부러 뺐다. 그래서 같은 결정을 두 번 보내도 한 번으로 처리된다.
 
@@ -85,12 +130,27 @@ export function computeMutationId(intent: MutationIntent): string {
 
 **모든 검사가 판정만이 아니라 무엇을 봤는지도 함께 보고한다.** 그러지 않으면 `violations: []` 하나가 *다 봤는데 없다*와 *아무것도 안 봤다*를 동시에 뜻하게 된다. 두 사실이 같은 값으로 수렴하는 것이다. 그래서 **0건 검사는 통과가 아니라 실패로 다룬다.** 이 원칙이 여기서 조용한 초록 2건을 실제로 잡아냈다. CRLF 때문에 규칙 블록을 0개 읽고도 성공을 보고한 파서, 그리고 주장을 하나도 기록하지 못한 커버리지 실행이었다.
 
-나머지 여덟은 요약만 적는다. 구현과 근거는 [`DESIGN-NOTES.md`](docs/archive/2026-08-13/DESIGN-NOTES.md)에 있다.
+**모든 상태 변경이 여덟 단계를 지나고, 커밋하는 단계는 딱 하나다.**
+
+```
+M0_RESOLVE      의미에서 mutation id를 뽑는다
+M1_ACQUIRE      락을 잡고 누가 잡았는지 남긴다
+M2_PRECHECK     거부는 여기서. 아직 영구적인 건 아무것도 없다
+M3_IDEMPOTENCY  이 id가 이미 원장에 있나? 있으면 멈추고 보고하고 아무것도 안 바꾼다
+M4_APPEND       ← 커밋 지점
+M5_REBUILD      read model을 다시 만든다
+M6_POSTCHECK    다시 만든 상태가 유효한가
+M7_RELEASE      락을 놓는다
+```
+
+M4 전에 실패하면 남는 게 없다. M4 **뒤에** 실패하면 **롤백하지 않는다.** 이벤트는 남기고, 어느 단계에서 죽었는지를 결과로 보고한다. 조용한 롤백은 무언가 일어났다는 사실 자체를 지우기 때문이다. 흔한 본능과 반대인데 의도한 것이다 — **조용히 append를 되무르는 원장은 append-only가 아니다.**
+
+나머지는 요약만 적는다. 구현과 근거는 [`DESIGN-NOTES.md`](docs/archive/2026-08-13/DESIGN-NOTES.md)에 있다.
 
 | | 결론 | 상태 |
 | --- | --- | --- |
 | 1 | 출처를 플래그가 아니라 타입으로 — 위의 권한 등급 | 관측됨 |
-| 2 | 상태 변경 창구를 하나로 두고 커밋 지점에 이름을 붙인다. M4 전에는 아무것도 영구적이지 않고, M4 뒤의 실패는 롤백하지 않고 이벤트를 남긴다. 조용한 롤백은 일어난 일을 지우는 짓이기 때문이다 | 관측됨 |
+| 2 | 상태 변경 창구를 하나로 두고 커밋 지점에 이름을 붙인다 — 위의 여덟 단계 | 관측됨 |
 | 4 | 결정은 append-only, 상태는 replay. 스냅샷은 권위 없는 read model이다 | 관측됨 |
 | 5 | 승인은 계약과 그 계약이 놓인 조건을 함께 덮는다 | 관측됨 |
 | 6 | 확인 못 한 것을 두 종류로 가른다. 사람이 서명할 수 있는 갭과, 아무도 대신할 수 없는 증거 결함. 이 구분이 판단이 아니라 데이터에 있다 | 관측됨 |
