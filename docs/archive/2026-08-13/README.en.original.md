@@ -1,6 +1,8 @@
 # CodeFleet
 
-[한국어](README.md) | English
+[한국어](README.original.md) | English
+
+> 이 파일은 종료 전 루트 영문 README의 보존본이다. 링크 대상만 보존본·저장소 루트 기준으로 고쳤고 본문은 원문 그대로다.
 
 CodeFleet is an AI-native development orchestration CLI. It structures a development or operations Objective into one or more Tasks, defines backend and infrastructure work as a Task carrying scope, guardrails, and verification conditions, executes only the Tasks a human has approved, and tracks the result through logs, diffs, Harness-executed verification, and a review decision backed by hash-checked evidence.
 
@@ -536,7 +538,7 @@ Export to external tools is limited to the sanitized Run Summary export seam. A 
 
 ## License
 
-This repository is not open source. It is published for reading and evaluation only, and no license to use, run, copy, modify, distribute, or train on the software is granted. See [LICENSE](LICENSE) for the full terms.
+This repository is not open source. It is published for reading and evaluation only, and no license to use, run, copy, modify, distribute, or train on the software is granted. See [LICENSE](../../../LICENSE) for the full terms.
 
 GitHub shows no license in its sidebar for this repository. GitHub only recognises standard open source licenses; it does not mean there is no license.
 
