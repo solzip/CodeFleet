@@ -14,10 +14,10 @@ import {
   VERIFICATION_COMMAND_TIMEOUT_MS
 } from "./agent.ts";
 import { loadConfig } from "./config.ts";
-import { renderPrompt } from "./prompt.ts";
+import { renderPrompt, type PromptContract } from "./prompt.ts";
 import { loadTask } from "./task.ts";
 import { contentHashOf, replayApproval } from "./task-ledger.ts";
-import type { AgentRunInput, AgentRunResult, RunResultFile } from "./types.ts";
+import type { AgentRunInput, AgentRunResult, CodeFleetConfig, RunResultFile, Task } from "./types.ts";
 import { normalizeCommand, preflightCommand, type CommandMatcher, type DestructiveMatcher } from "./command-policy.ts";
 import {
   checkIsolationRequirement,
@@ -34,7 +34,9 @@ import {
   resolveAgentRole,
   resolveGuardrails,
   validateCustomRole,
-  type CustomRole
+  type AgentRole,
+  type CustomRole,
+  type RoleResolution
 } from "./agent-role.ts";
 import {
   CORE_REQUIRED_GATES,
@@ -348,6 +350,103 @@ async function acceptedObjectiveContext(
   return context;
 }
 
+/**
+ * The role and the mode the Run will operate under.
+ *
+ * Extracted so that showing the contract and executing it resolve it the same
+ * way. `codefleet prompt` used to render the Task file's own fields, which are
+ * not what a Run operates under: the role may come from the Profile default and
+ * the mode is the meet of three sources. Two resolutions of one contract is two
+ * contracts. P1-53.
+ */
+export function resolveRoleAndMode(
+  config: CodeFleetConfig,
+  task: Task
+): { roleResolution: RoleResolution & { role: AgentRole }; effectiveMode: string } {
+  const roleBlock = config.agentRoles;
+  const customRoles: Record<string, CustomRole> = {};
+  for (const [id, value] of Object.entries((roleBlock.customRoles ?? {}) as Record<string, unknown>)) {
+    const findings = validateCustomRole(id, value, `/policies/agentRoles/customRoles/${id}`);
+    if (findings.length > 0) {
+      throw new Error(
+        [`Invalid custom AgentRole ${id}:`]
+          .concat(findings.map((f) => `  - ${f.jsonPointer}: ${f.detail}`))
+          .join("\n")
+      );
+    }
+    customRoles[id] = value as CustomRole;
+  }
+
+  const roleResolution = resolveAgentRole({
+    taskRole: task.agentRole ?? config.defaultAgentRole,
+    allowedAgentRoles: Array.isArray(roleBlock.allowedAgentRoles)
+      ? (roleBlock.allowedAgentRoles as string[])
+      : [],
+    customRoles
+  });
+  if (roleResolution.blockedReason !== "" || roleResolution.role === null) {
+    throw new Error(roleResolution.blockedReason);
+  }
+
+  const guardrailResolution = resolveGuardrails({
+    guardrails: task.guardrails,
+    roleMaxMode: roleResolution.role.defaultMaxMode,
+    profileMaxMode: config.harnessMode
+  });
+  if (guardrailResolution.blockedReason !== "") {
+    throw new Error(guardrailResolution.blockedReason);
+  }
+
+  return {
+    roleResolution: roleResolution as RoleResolution & { role: AgentRole },
+    effectiveMode: guardrailResolution.mode
+  };
+}
+
+/**
+ * The contract as the Run would delegate it, for a caller that shows it rather
+ * than executes it.
+ *
+ * Everything a Run resolves before the adapter is launched happens here too:
+ * the approval is checked first, then the role, then the mode, then the
+ * accepted Objective context. Only the execution-side checks — queue
+ * permission, adapter availability, isolation — are left out, because they
+ * decide whether the Run may proceed rather than what the agent is told.
+ *
+ * It throws instead of returning a partial contract. A prompt built from a Task
+ * that no approved Revision stands behind is a delegation of something nobody
+ * approved, and handing that to a person to paste into an agent is worse than
+ * failing here.
+ */
+export async function resolveContractForPrompt(
+  rootDir: string,
+  taskId: string
+): Promise<{ task: Task; contract: PromptContract; taskRevision: number | null }> {
+  const config = await loadConfig(rootDir);
+  const { task, taskPath } = await loadTask(rootDir, taskId);
+  const approval = await replayApproval(rootDir, taskId, await contentHashOf(taskPath));
+  if (approval.blockedReason.length > 0) {
+    throw new Error(approvalRefusal(taskId, approval.blockedReason));
+  }
+
+  const { roleResolution, effectiveMode } = resolveRoleAndMode(config, task);
+
+  return {
+    task,
+    taskRevision: approval.approvedRevision,
+    contract: {
+      roleId: roleResolution.roleId,
+      roleGuidance: roleResolution.role.roleGuidance,
+      effectiveMode,
+      verificationCommands: (task.verification?.commands ?? []).map((entry) => ({
+        commandId: entry.commandId,
+        command: entry.command
+      })),
+      objectives: await acceptedObjectiveContext(rootDir, task.id, approval.approvedRevision)
+    }
+  };
+}
+
 export class RunLockHeldError extends Error {
   readonly holder: RunLockHolder | null;
 
@@ -562,40 +661,7 @@ async function executeRun(
   // rather than after a Run Trace exists to explain.
   // The role is a classification: it contributes an upper bound and nothing
   // else. Guardrails then narrow further, never wider.
-  const roleBlock = config.agentRoles;
-  const customRoles: Record<string, CustomRole> = {};
-  for (const [id, value] of Object.entries((roleBlock.customRoles ?? {}) as Record<string, unknown>)) {
-    const findings = validateCustomRole(id, value, `/policies/agentRoles/customRoles/${id}`);
-    if (findings.length > 0) {
-      throw new Error(
-        [`Invalid custom AgentRole ${id}:`]
-          .concat(findings.map((f) => `  - ${f.jsonPointer}: ${f.detail}`))
-          .join("\n")
-      );
-    }
-    customRoles[id] = value as CustomRole;
-  }
-
-  const roleResolution = resolveAgentRole({
-    taskRole: task.agentRole ?? config.defaultAgentRole,
-    allowedAgentRoles: Array.isArray(roleBlock.allowedAgentRoles)
-      ? (roleBlock.allowedAgentRoles as string[])
-      : [],
-    customRoles
-  });
-  if (roleResolution.blockedReason !== "" || roleResolution.role === null) {
-    throw new Error(roleResolution.blockedReason);
-  }
-
-  const guardrailResolution = resolveGuardrails({
-    guardrails: task.guardrails,
-    roleMaxMode: roleResolution.role.defaultMaxMode,
-    profileMaxMode: config.harnessMode
-  });
-  if (guardrailResolution.blockedReason !== "") {
-    throw new Error(guardrailResolution.blockedReason);
-  }
-  const effectiveMode = guardrailResolution.mode;
+  const { roleResolution, effectiveMode } = resolveRoleAndMode(config, task);
 
   const adapterResolution = resolveAgentAdapter(config, runOptions);
   if (adapterResolution.blockedReason !== "") {

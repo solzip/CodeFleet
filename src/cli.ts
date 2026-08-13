@@ -18,8 +18,8 @@ import { applyRunResult, planApply } from "./apply.ts";
 import { breakLock, lockPathFor, readHolder } from "./mutation.ts";
 import { renderPrompt } from "./prompt.ts";
 import { reviewRun, type ReviewDecision } from "./review.ts";
-import { breakRunLock, listRunLocks, runTask, listRuns } from "./run.ts";
-import { formatValidationErrors, loadTask, loadTaskForValidation } from "./task.ts";
+import { breakRunLock, listRunLocks, resolveContractForPrompt, runTask, listRuns } from "./run.ts";
+import { formatValidationErrors, loadTaskForValidation } from "./task.ts";
 import {
   approveTask,
   contentHashOf,
@@ -152,15 +152,23 @@ async function handleApply(cwd: string, options: CliOptions, args: string[]): Pr
   reportOutcome(outcome, `applied ${runId} to the workspace`);
 }
 
+// The preview and the delegation resolve the same contract through the same
+// code. Rendering the Task file's own fields here showed a document the Run
+// never sends: no role, no ceiling, no Objective context, and no statement of
+// what the Harness will execute — the three things that make a prompt a
+// delegation rather than a description. P1-53.
 async function handlePrompt(cwd: string, options: CliOptions, taskId: string): Promise<void> {
   const rootDir = await workspaceRoot(cwd, options);
-  await loadConfig(rootDir);
-  const { task } = await loadTask(rootDir, taskId);
+  // Throws when the contract cannot be resolved. Nothing is written on that
+  // path: a prompt nobody approved is worse than no prompt.
+  const { task, contract, taskRevision } = await resolveContractForPrompt(rootDir, taskId);
   const promptDir = path.join(rootDir, ".codefleet", "prompts");
   const promptPath = path.join(promptDir, `${taskId}.md`);
   await mkdir(promptDir, { recursive: true });
-  await writeFile(promptPath, renderPrompt(task), "utf8");
+  await writeFile(promptPath, renderPrompt(task, contract), "utf8");
   console.log(`Prompt written: ${path.relative(rootDir, promptPath)}`);
+  console.log(`taskRevision: ${taskRevision ?? "(none)"}`);
+  console.log(`role: ${contract.roleId} (effective mode ${contract.effectiveMode})`);
 }
 
 async function handleTask(cwd: string, options: CliOptions, args: string[]): Promise<void> {

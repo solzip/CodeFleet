@@ -12,6 +12,7 @@
 
 | 날짜 | 문서 | 유형 | 결론(한 줄) | 후속 |
 | --- | --- | --- | --- | --- |
+| 08-13 | `runs/2026-08-13/p1-53-contract-delivery.md` | 수정 | 완주는 `run.ts` 경유였고 에이전트는 계약을 봤다. `codefleet prompt`를 고쳐 두 경로가 바이트 동일. P1-53 [해소]·P1 유지, P1-61 신규 | **끊김** (P1-61 후속 없음) |
 | 08-13 | `runs/2026-08-13/conventions.md` | 결정 | 기록 규약을 확립하고 INDEX·REGISTER를 신설했다 | → `runs/2026-08-13/p1-53-contract-delivery.md` |
 | 08-13 | `audits/2026-08-13/13-output-fidelity.md` | 감사 | P1-50 형태 전수 조사 — [거짓] 1건·[잠복 거짓] 1건, 신규 P1-53~P1-60 등재, P1-50을 P0 등급으로 재판정 | → `runs/2026-08-13/p1-53-contract-delivery.md` (P1-53만) |
 | 08-13 | `audits/2026-08-13/12-waiver-conformance.md` | 감사 | 검증 게이트는 waiver로 통과하지 않았다. 성공 기준 4 [충족] 유지, 기준 3은 [조건부 충족]으로 정정. P1-50~P1-52 등재 | → `13-output-fidelity.md` |

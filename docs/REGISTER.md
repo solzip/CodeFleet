@@ -1,6 +1,6 @@
 # 결함 등재부
 
-작성 기준: 2026-08-13, 커밋 `e5fb188`. 번호 실측 최대값 **P0-16 / P1-60**.
+작성 기준: 2026-08-13, 커밋 `ce3a4c1` 이후. 번호 실측 최대값 **P0-16 / P1-61**.
 
 ## 읽는 법
 
@@ -16,14 +16,14 @@
 
 | 상태 | 건수 | 내역 |
 | --- | --- | --- |
-| 해소 | 14 | P0 9건 + P1-4·34·37·38·40 |
-| 부분해소 | 7 | P0-1·3·6 + P1-3·32·35·41 |
+| 해소 | 15 | P0 9건 + P1-4·34·37·38·40·53 |
+| 부분해소 | 8 | P0-1·3·6 + P1-3·32·35·41·60 |
 | 재현안됨 | 1 | P1-27 |
-| 미해소 | 15 | P1-2·15·17·28 + P1-50~60 (11건) |
+| 미해소 | 14 | P1-2·15·17·28 + P1-50·51·52·54·55·56·57·58·59·61 |
 | **미확인** | **39** | P0-13~16 (4) + P1-1~19 중 14 + P1-20~49 중 21 |
-| 합계 | 76 | P0 16 + P1 60 |
+| 합계 | 77 | P0 16 + P1 61 |
 
-**76건 중 39건(51%)이 [미확인]이다.** 등재만 되고 이후 아무 문서도 받지 않았다는 뜻이며, `INDEX.md`의 「끊긴 것」 §B가 그 내역이다.
+**77건 중 39건(51%)이 [미확인]이다.** 등재만 되고 이후 아무 문서도 받지 않았다는 뜻이며, `INDEX.md`의 「끊긴 것」 §B가 그 내역이다.
 
 미확인 39건 중 **P1-42~P1-49(8건)와 P0-14~P0-16(3건)은 등재 문서 하나뿐이고 후속이 0건**이다 — 단일 문서(`2026-08-12/12-model-conformance-recheck.md`)에서 나온 11건이 통째로 끊겨 있다.
 
@@ -144,14 +144,21 @@
 | **P1-50** | 리뷰가 `run-record.md`를 다시 쓰며 검증 증거를 넘기지 않아 **거짓 문장**이 생긴다 | **P0** | 미해소 ★ | `2026-08-13/12-waiver-conformance.md` | `2026-08-13/13-output-fidelity.md` |
 | P1-51 | waiver 정당화가 강제되지 않는다. 가드가 CLI 경로에서 발동 불가 | P1 | 미해소 ★ | `2026-08-13/12-waiver-conformance.md` | — |
 | P1-52 | 검증 waiver(`WAIVED_ALLOWED`)가 소비만 되고 생산 코드가 0곳 | P1 | 미해소 ★ | `2026-08-13/12-waiver-conformance.md` | `2026-08-13/13-output-fidelity.md` |
-| P1-53 | `codefleet prompt`가 Run이 실제로 보내는 프롬프트와 다른 문서를 쓴다 | P1 | 미해소 ★ | `2026-08-13/13-output-fidelity.md` | — |
+| P1-53 | `codefleet prompt`가 Run이 실제로 보내는 프롬프트와 다른 문서를 쓴다 | P1 (유지) | **해소** ★ | `2026-08-13/13-output-fidelity.md` | `runs/2026-08-13/p1-53-contract-delivery.md` |
 | P1-54 | `captureWorkspaceSnapshot`의 옵셔널 3필드가 부재를 값으로 날조한다 (잠복) | P1 | 미해소 ★ | `2026-08-13/13-output-fidelity.md` | — |
 | P1-55 | `WAIVED_BY_POLICY`·`WAIVER`가 선언만 있고 생산·소비 0곳 | P1 | 미해소 ★ | `2026-08-13/13-output-fidelity.md` | — |
 | P1-56 | `LocalReviewStatus`의 `SUPERSEDED`가 생산되지 않는다 | P1 | 미해소 ★ | `2026-08-13/13-output-fidelity.md` | — |
 | P1-57 | `policies.harness.allowedModes`가 검증까지 받고 어디서도 읽히지 않는다 | P1 | 미해소 ★ | `2026-08-13/13-output-fidelity.md` | — |
 | P1-58 | `allowProviderReportedCommandTruth`·`approvalRequiredForDestructiveCommands` 미소비 | P1 | 미해소 ★ | `2026-08-13/13-output-fidelity.md` | — |
 | P1-59 | export/redaction 서브시스템 전체가 프로덕션 미연결 | P1 | 미해소 ★ | `2026-08-13/13-output-fidelity.md` | — |
-| P1-60 | 검증 절·`renderPrompt` 경로를 단언하는 테스트가 0개 | P1 | 미해소 ★ | `2026-08-13/13-output-fidelity.md` | — |
+| P1-60 | 검증 절·`renderPrompt` 경로를 단언하는 테스트가 0개 | P1 | **부분해소** ★ | `2026-08-13/13-output-fidelity.md` | `runs/2026-08-13/p1-53-contract-delivery.md` |
+| **P1-61** | `npm test`의 posttest(rule coverage 체커)가 실패한다. 테스트 255건은 전부 통과하는데 주장 1건이 규칙 본문과 불일치 | P1 | 미해소 ★ | `runs/2026-08-13/p1-53-contract-delivery.md` | — |
+
+### ★ 근거 (P1-50 ~ P1-61)
+
+- **P1-53** [해소]: `test/prompt.test.ts` 3건이 수정 전 전부 실패하고 수정 후 전부 통과. fixture에서 preview와 Run 프롬프트가 `diff` 결과 바이트 동일.
+- **P1-60** [부분해소]: `renderPrompt` 경로는 테스트가 생겼다(`test/prompt.test.ts`, 이 저장소의 첫 `renderPrompt` 테스트). **`run-record.md`의 검증 절은 여전히 테스트 0건** — `grep -rn "rests on\|What was verified" test/` → 0건.
+- **P1-61**: `git stash push -u -- src test`로 작업 내용을 걷어내고 `ce3a4c1`에서 `npm test`를 돌려 **동일한 실패**를 확인했다. 선행 상태이며 이번 변경과 무관하다. 주장 위치는 `test/adapter-resolution.test.ts:375`.
 
 ---
 
