@@ -166,6 +166,7 @@ $ npm test > /dev/null 2>&1; echo $?
 | **정의 문서** | `docs/concept-foundation.md` | FINAL RULE 83개. **새 제품에서는 새로 작성되며, 이 파일은 아카이브 시점의 정의다** |
 | **감사·실행 기록** | `docs/audits/`, `docs/runs/` | 43개 문서(감사 36 · 실행 7). 판정의 근거가 전부 파일:라인으로 남아 있다 |
 | 결함 등재부 | `docs/REGISTER.md` | 동결 상태로 |
+| 종료 전 README (한·영) | `docs/archive/2026-08-13/README.original.md`, `README.en.original.md` | 정의가 확정되기 전에 이 제품을 어떻게 설명했는지의 증거. 루트 README는 아카이브 표지로 교체됐다 |
 
 ### 폐기
 

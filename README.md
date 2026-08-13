@@ -52,7 +52,7 @@ AI 에이전트에게 위임한 개발 작업을 **"에이전트가 됐다고 �
 | [`docs/concept-foundation.md`](docs/concept-foundation.md) | 아카이브 시점의 설계 정본(FINAL RULE 83개). **후속 제품에서는 새로 작성된다** |
 | [`docs/audits/`](docs/audits/) · [`docs/runs/`](docs/runs/) | 감사·실행 기록 43편(감사 36 · 실행 7). 모든 판정의 근거가 파일:라인으로 남아 있다 |
 | [`docs/REGISTER.md`](docs/REGISTER.md) · [`docs/INDEX.md`](docs/INDEX.md) | 동결된 결함 등재부와 문서 색인 |
-| [`docs/archive/2026-08-13/README.original.md`](docs/archive/2026-08-13/README.original.md) | 종료 전 README. 정의가 확정되기 전에 이 제품을 어떻게 설명했는지의 증거 |
+| [`docs/archive/2026-08-13/README.original.md`](docs/archive/2026-08-13/README.original.md) · [`README.en.original.md`](docs/archive/2026-08-13/README.en.original.md) | 종료 전 README 한·영. 정의가 확정되기 전에 이 제품을 어떻게 설명했는지의 증거 |
 
 ## 후속
 
