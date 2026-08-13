@@ -171,4 +171,11 @@ State the measured before/after. Name the defect the change exposed, if any. Do 
 - 테스트가 없으면 코드가 맞아 보여도 [부분해소]까지만
 - 산출물이 거짓 문장을 만드는 결함은 미구현보다 무겁게 등급한다
 
+**테스트 근거**
+- 통과 건수가 아니라 **커맨드 종료 코드**로 적는다.
+  "255 pass / 0 fail"은 참이면서도 불충분하다 — posttest 실패가 그 뒤에 온다
+- 형식: `npm test > /dev/null 2>&1; echo $?` → `0`
+- 파이프를 거치면 `$?`가 마지막 명령(`tail` 등)의 것이 되므로,
+  **출력을 버리고 재야 한다**
+
 전문: `docs/CONVENTIONS.md`

@@ -180,6 +180,33 @@ if (process.argv[1] !== undefined && import.meta.url === new URL(`file://${proce
   const statusCheck = evaluateStatus(rules, covered, status, (p) => existsSync(path.join(REPO_ROOT, p)));
   errors.push(...statusCheck.errors);
 
+  // The verdict comes before the report, not after it.
+  //
+  // This check reported a broken claim correctly for nine commits and nobody
+  // read it, because the failure arrived after "pass 255 / fail 0" and fifteen
+  // lines of percentages — a shape that reads as success with a footnote. Five
+  // documents and one commit message then cited "tests pass" as evidence while
+  // the command was exiting non-zero. P1-61.
+  //
+  // Two properties this banner has to keep:
+  //   - no colour. CI logs, pipes, and files drop escape codes, and those are
+  //     exactly the places the failure was missed.
+  //   - stdout, not stderr, even though this is an error. The report below is
+  //     on stdout, and two streams merged by 2>&1 have no guaranteed order
+  //     between them, so a banner on stderr could still print after the table
+  //     it is meant to precede. The exit path at the bottom keeps stderr.
+  if (errors.length > 0) {
+    console.log("");
+    console.log("######################################################################");
+    console.log("#  RULE COVERAGE CHECK FAILED");
+    console.log("#  npm test exits non-zero. The report below is context, not a pass.");
+    console.log("######################################################################");
+    console.log("");
+    for (const error of errors) {
+      console.log(`  - ${error}`);
+    }
+  }
+
   console.log("");
   console.log("=== FINAL RULE coverage by condition line ===");
   console.log(`  rules                  ${stats.rules}`);
@@ -235,11 +262,11 @@ if (process.argv[1] !== undefined && import.meta.url === new URL(`file://${proce
     console.log("");
   }
 
+  // Stated once, at the top. Repeating the list here would print the same fact
+  // twice and let a reader who only sees the tail believe it is the whole of
+  // what failed.
   if (errors.length > 0) {
-    console.error("rule coverage check failed:");
-    for (const error of errors) {
-      console.error(`  - ${error}`);
-    }
+    console.error(`rule coverage check failed: ${errors.length} error(s). See the banner above the report.`);
     process.exit(1);
   }
 }

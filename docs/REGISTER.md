@@ -158,7 +158,8 @@
 
 - **P1-53** [해소]: `test/prompt.test.ts` 3건이 수정 전 전부 실패하고 수정 후 전부 통과. fixture에서 preview와 Run 프롬프트가 `diff` 결과 바이트 동일.
 - **P1-60** [부분해소]: `renderPrompt` 경로는 테스트가 생겼다(`test/prompt.test.ts`, 이 저장소의 첫 `renderPrompt` 테스트). **`run-record.md`의 검증 절은 여전히 테스트 0건** — `grep -rn "rests on\|What was verified" test/` → 0건.
-- **P1-61** [해소]: 최초 실패 커밋은 `3db7d64`(S4) — worktree로 부모 `38cf9c9`(초록)와 대조해 실측. 원인은 조건 줄이 아닌 단어 하나를 인용한 주장이었고, 규칙(`788524d` 이후 불변)과 코드(`run.ts:808-820`) 모두 옳았다. 주장 제거 후 `npm test > /dev/null; echo $?` → **0**, 커버리지 345/545(63.3%) 불변.
+- **P1-61** [해소]: 최초 실패 커밋은 `3db7d64`(S4) — worktree로 부모 `38cf9c9`(초록)와 대조해 실측. 원인은 조건 줄이 아닌 단어 하나를 인용한 주장이었고, 규칙(`788524d` 이후 불변)과 코드(`run.ts:808-820`) 모두 옳았다. 주장 제거 후 `npm test > /dev/null 2>&1; echo $?` → **0**, 커버리지 345/545(63.3%) 불변.
+  재발 방지는 `runs/2026-08-13/p1-61-prevention.md`에서 구현했다 — 실패 배너(표 앞·무색·stdout), `.github/workflows/test.yml`(**러너 동작 미검증**), 규약 §11. 오염 구간은 `3db7d64`~`d697aa2` **9개 커밋**으로 한정됐다: 문서가 인용한 대상 커밋 8개(`754acea`·`6a458eb`·`244fac7`·`9bbfcbf`·`b750e9e`·`5d989f1`·`57a80de`·`38cf9c9`)를 실측해 전부 exit=0.
 
 ---
 

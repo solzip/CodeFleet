@@ -1,0 +1,54 @@
+# Something has to read the exit code.
+#
+# `npm test` runs pretest, the suite, and posttest, and posttest is the rule
+# coverage checker. It reported a broken claim correctly for nine commits and
+# nobody read it, because no automated consumer existed and the failure printed
+# after a success-shaped report. The banner fixed the second half; this file is
+# the first half. P1-61.
+#
+# There is no install step on purpose: this project has no dependencies and no
+# lockfile, so `npm ci` would fail on a missing package-lock.json and `npm i`
+# would only write one. `npm test` is the whole build.
+
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      # Both platforms report. A Windows-only failure is a real finding here —
+      # P0-6 and P0-8 are recorded as win32-qualified, and P1-21 is a test that
+      # depends on win32 delete semantics — so one runner going red must not
+      # cancel the other before it says what it saw.
+      fail-fast: false
+      matrix:
+        # windows-latest first because that is where this project is developed
+        # and where the platform-qualified findings were measured. ubuntu-latest
+        # is what tells us which of those are actually platform-specific.
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # package.json engines requires >=24: native TypeScript stripping is
+          # what lets `node --test test/*.test.ts` run without a build step.
+          node-version: '24'
+
+      # Recorded in the log rather than assumed. A runner that silently
+      # resolved a different major would make every result below meaningless.
+      - name: Report the toolchain
+        run: |
+          node -v
+          npm -v
+
+      # No `continue-on-error`, no `|| true`, and the coverage checker is not
+      # invoked separately. A step that cannot fail the job is a step nobody
+      # reads, which is the failure this whole file exists to end.
+      - name: npm test
+        run: npm test
