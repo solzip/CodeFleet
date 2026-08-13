@@ -217,7 +217,7 @@ Short version: **less than the list above might suggest.** "Observed" mostly mea
 - **The pipeline completed exactly once**, on a controlled fixture, and **four workarounds were holding it up.** One was a role substitution — of seven built-in roles, only two permit command execution, and neither of those two is a role that writes application code.
 - **On a real Spring Boot project it did not complete.** Of fifteen steps, four were blocked and one failed. The command that ended up satisfying the verification gate was `gradle --version`. Our implementation could not invoke Gradle or Maven wrappers on Windows: the rule forbidding shell interpreters is correct, and it left no path to a batch file.
 - **77 registered findings** — 25 resolved, 8 partial, 1 not reproduced, 15 open, 1 accepted as a limit, and **27 never checked**. Those 27 close as unchecked. Nobody looked at them after registration, and there is no basis for claiming they still hold — or that they don't.
-- `npm test` exits **0 on Windows**, where this was developed (257 passing, 0 failing). **On Linux it does not** — six tests fail, one of them a POSIX behaviour this archive predicted and never measured ([record](docs/runs/2026-08-13/ci-first-run.md)). Condition coverage is 345 of 545 lines (63.3%), which means a passing test quoted that many lines — **not** that those conditions are correctly implemented.
+- `npm test` exits **0 on Windows**, where this was developed (273 passing, 0 failing). **On Linux it does not** — six tests fail, one of them a POSIX behaviour this archive predicted and never measured ([record](docs/runs/2026-08-13/ci-first-run.md)). Condition coverage is 345 of 545 lines (63.3%), which means a passing test quoted that many lines — **not** that those conditions are correctly implemented.
 - **Nothing here was exercised under repetition, concurrency, or multiple users.**
 
 > Runnability is not warranted. These are observations at the moment of freezing, not a claim that anything works.
@@ -241,7 +241,7 @@ Two structural reasons, neither of which a partial fix would have closed.
 | [`ENVIRONMENT.md`](docs/archive/2026-08-13/ENVIRONMENT.md) | Measured behaviour for anyone building agent tooling on Windows: a CP949 console against UTF-8 decoding of child output, batch wrappers unreachable behind a shell-interpreter rule, worktree paths that must be asked of git, `SIGTERM` that only reliably kills because Windows maps it to `TerminateProcess`, and a spawn environment narrowed to `PATH` — which left the child without a home directory. Each with its reproduction condition; 3 unresolved, 4 unverified, 1 unmeasured |
 | [`ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md) | State, reasons, and asset list at close. The source of every number on this page |
 
-Every judgment in this repository is cited to a file and line. The 43 audit and run records are indexed in [`docs/INDEX.md`](docs/INDEX.md); the frozen findings register is [`docs/REGISTER.md`](docs/REGISTER.md); the working conventions, each with the incident that made it necessary, are in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).
+Every judgment in this repository is cited to a file and line. The 47 audit and run records are indexed in [`docs/INDEX.md`](docs/INDEX.md); the frozen findings register is [`docs/REGISTER.md`](docs/REGISTER.md); the working conventions, each with the incident that made it necessary, are in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).
 
 ## Successor
 
