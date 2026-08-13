@@ -16,10 +16,10 @@
 
 | 상태 | 건수 | 내역 |
 | --- | --- | --- |
-| 해소 | 15 | P0 9건 + P1-4·34·37·38·40·53 |
+| 해소 | 16 | P0 9건 + P1-4·34·37·38·40·53·61 |
 | 부분해소 | 8 | P0-1·3·6 + P1-3·32·35·41·60 |
 | 재현안됨 | 1 | P1-27 |
-| 미해소 | 14 | P1-2·15·17·28 + P1-50·51·52·54·55·56·57·58·59·61 |
+| 미해소 | 13 | P1-2·15·17·28 + P1-50·51·52·54·55·56·57·58·59 |
 | **미확인** | **39** | P0-13~16 (4) + P1-1~19 중 14 + P1-20~49 중 21 |
 | 합계 | 77 | P0 16 + P1 61 |
 
@@ -152,13 +152,13 @@
 | P1-58 | `allowProviderReportedCommandTruth`·`approvalRequiredForDestructiveCommands` 미소비 | P1 | 미해소 ★ | `2026-08-13/13-output-fidelity.md` | — |
 | P1-59 | export/redaction 서브시스템 전체가 프로덕션 미연결 | P1 | 미해소 ★ | `2026-08-13/13-output-fidelity.md` | — |
 | P1-60 | 검증 절·`renderPrompt` 경로를 단언하는 테스트가 0개 | P1 | **부분해소** ★ | `2026-08-13/13-output-fidelity.md` | `runs/2026-08-13/p1-53-contract-delivery.md` |
-| **P1-61** | `npm test`의 posttest(rule coverage 체커)가 실패한다. 테스트 255건은 전부 통과하는데 주장 1건이 규칙 본문과 불일치 | P1 | 미해소 ★ | `runs/2026-08-13/p1-53-contract-delivery.md` | — |
+| **P1-61** | `npm test`의 posttest(rule coverage 체커)가 실패한다. 테스트 255건은 전부 통과하는데 주장 1건이 규칙 본문과 불일치 | P1 | **해소** ★ | `runs/2026-08-13/p1-53-contract-delivery.md` | `runs/2026-08-13/p1-61-posttest-green.md` |
 
 ### ★ 근거 (P1-50 ~ P1-61)
 
 - **P1-53** [해소]: `test/prompt.test.ts` 3건이 수정 전 전부 실패하고 수정 후 전부 통과. fixture에서 preview와 Run 프롬프트가 `diff` 결과 바이트 동일.
 - **P1-60** [부분해소]: `renderPrompt` 경로는 테스트가 생겼다(`test/prompt.test.ts`, 이 저장소의 첫 `renderPrompt` 테스트). **`run-record.md`의 검증 절은 여전히 테스트 0건** — `grep -rn "rests on\|What was verified" test/` → 0건.
-- **P1-61**: `git stash push -u -- src test`로 작업 내용을 걷어내고 `ce3a4c1`에서 `npm test`를 돌려 **동일한 실패**를 확인했다. 선행 상태이며 이번 변경과 무관하다. 주장 위치는 `test/adapter-resolution.test.ts:375`.
+- **P1-61** [해소]: 최초 실패 커밋은 `3db7d64`(S4) — worktree로 부모 `38cf9c9`(초록)와 대조해 실측. 원인은 조건 줄이 아닌 단어 하나를 인용한 주장이었고, 규칙(`788524d` 이후 불변)과 코드(`run.ts:808-820`) 모두 옳았다. 주장 제거 후 `npm test > /dev/null; echo $?` → **0**, 커버리지 345/545(63.3%) 불변.
 
 ---
 

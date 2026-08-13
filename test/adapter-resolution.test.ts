@@ -372,5 +372,9 @@ test("a Run Option cannot reach outside the adapter allowlist", async () => {
   assert.equal(fromProfile.blockedReason, "");
   assert.equal(fromProfile.selectionSource, "PROFILE_DEFAULT");
 
-  coversRule(RESOLUTION, "selectionSource", "test/adapter-resolution.test.ts");
+  // No coverage claim here on purpose. This test checks the allowlist refusal,
+  // and that condition is already claimed above by the test that reads the
+  // Run Plan. A claim quoting "selectionSource" stood here and quoted no
+  // condition line at all — the checker rejected it and npm test exited
+  // non-zero from S4 (3db7d64) until it was removed. P1-61.
 });
