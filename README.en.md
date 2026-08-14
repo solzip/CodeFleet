@@ -185,7 +185,7 @@ So: CI answers *did the tests pass*. This was trying to answer *is the record of
 
 ## What not to repeat
 
-Four shapes in this codebase produced defects, and three of them are small enough to recognise on sight.
+Five shapes in this codebase produced defects. The first three are small enough to recognise on sight; the last one happened in the record rather than in the code.
 
 **An optional argument for something that is never actually optional.** The run record renderer took its evidence like this:
 
