@@ -292,8 +292,16 @@ Every judgment in this repository is cited to a file and line. The 51 audit and 
 
 ## Successor
 
-The product definition has been reworked and restarted under the name **Warrant** — a judgment layer that does not own an execution engine, and that keeps judgment separate from observation. There is no repository URL yet.
+**The product is unfinished. The shutdown is not.** Those are two different things.
+
+The pipeline never completed on a real project — that stands exactly as written above. Closing it, on the other hand, was carried through: **every registered finding was adjudicated**, with the ones still valid handed forward as the list the next project has to investigate; assets were split into carried and discarded with a reason on each; and "did the design lead the code?" was settled by measuring the commit chronology instead of asserting it. The figures, links and file:line citations in these documents are still checked by `npm test`. **Making what was learned here usable by something else was the last piece of work in this repository, and it was finished.**
+
+The product definition has been reworked and restarted under the name **Warrant** — a judgment layer that does not own an execution engine and keeps judgment separate from observation. There is no public repository yet.
 
 ## License
 
-Published for reading and evaluation only — see [`LICENSE`](LICENSE). Not open source, and no warranty of operation for any purpose.
+Published for reading and evaluation only — see [`LICENSE`](LICENSE). **Not open source, and no right to use the software is granted.**
+
+That is deliberate. This pipeline completed once on a controlled fixture and never on a real project. **Attaching a licence that grants the right to use it would be making a claim this repository cannot back** — which is the one thing the project set out not to do. It is not code offered for use; it is a record offered for reading.
+
+This is also why GitHub shows no licence badge in the sidebar. Nothing is missing; the file is simply not one of the standard licences.
