@@ -13,7 +13,7 @@ An agent edits your repository and reports "tests pass." You now hold a claim, n
 
 CodeFleet asked whether that could be closed structurally — not by trusting the agent less, but by making its report **unable to reach the decision at all.**
 
-There are three things here worth taking even if you never touch an agent: **deriving an idempotency key from meaning rather than from the caller**, **treating a check that examined nothing as a failure rather than a pass**, and **giving state changes exactly one commit point and naming it.** All three are below under "What it figured out" with their evidence — the first as code, the second as the two silent-green bugs the rule actually caught, the third as the eight phases by name — and none of them depend on this project being about agents.
+There are three things here worth taking even if you never touch an agent: **deriving an idempotency key from meaning rather than from the caller**, **treating a check that examined nothing as a failure rather than a pass**, and **giving state changes exactly one commit point and naming it.** All three are below under "What it figured out" with their evidence — the first as code, the second as the three silent-green bugs the rule caught — **one of which was this repository** — the third as the eight phases by name — and none of them depend on this project being about agents.
 
 ## The answer: one command, two files
 
@@ -134,7 +134,16 @@ export function computeMutationId(intent: MutationIntent): string {
 
 Running `apply` twice produced the same `mut_fa210cedffe0ce00` and appended no second event.
 
-**Every check reports what it scanned, not just its verdict.** Otherwise `violations: []` means both *all clear* and *nothing was examined*, and those are the same value. Zero examined is treated as a failure, not a pass. This caught two silent-green bugs here: a rule parser that read 0 blocks because of CRLF and reported success, and a coverage run that recorded no claims at all.
+**Every check reports what it scanned, not just its verdict.** Otherwise `violations: []` means both *all clear* and *nothing was examined*, and those are the same value. Zero examined is treated as a failure, not a pass. This caught **three** silent-green bugs here: a rule parser that read 0 blocks because of CRLF and reported success, a coverage run that recorded no claims at all, and **this repository itself**.
+
+The third took longest. The checker built to stop figures in the documentation going stale printed only this:
+
+```
+declarations checked   34
+mismatches             0
+```
+
+The other **533 numbers in those same documents were not being checked**, and that output read as "the figures here are correct." It is the `violations: []` defect exactly — *all clear* and *only what I was pointed at* collapsing to one value. **A repository that wrote the rule down as a conclusion then broke it in the tool built to enforce that conclusion**, and stayed green for a day. It now prints the denominator and the unchecked remainder, with a baseline under the ratio.
 
 **Every state change goes through eight fixed phases, and exactly one of them commits.**
 
