@@ -287,7 +287,7 @@ selectedWorkspaceRootRealPath: input.selectedWorkspaceRootRealPath ?? "",
 | [`ENVIRONMENT.md`](docs/archive/2026-08-13/ENVIRONMENT.md) | Windows에서 에이전트 도구를 만드는 사람에게 그대로 쓸모 있는 실측 기록. CP949 콘솔과 자식 출력 UTF-8 디코딩, 셸 인터프리터 규칙에 막혀 닿지 않는 배치 wrapper, 프로세스가 정규화하지 말고 git에게 물어야 하는 worktree 경로, Windows가 `TerminateProcess`로 매핑해주는 덕에만 확실한 `SIGTERM`, 그리고 `PATH`만 남긴 spawn 환경 탓에 자식 프로세스에 홈 디렉터리가 없었던 일. 항목마다 재현 조건을 붙였고 해결 미확정 3 / 미검증 4 / 미실측 1로 표시했다 |
 | [`ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md) | 종료 시점의 상태와 사유, 자산 목록. 이 페이지에 나오는 모든 숫자의 출처다 |
 
-이 저장소의 판정에는 전부 파일:라인 근거가 붙어 있다. 감사·실행 기록 51편의 색인은 [`docs/INDEX.md`](docs/INDEX.md), <!-- fact: audit-run-records = 51 --> 동결된 결함 등재부는 [`docs/REGISTER.md`](docs/REGISTER.md), 규칙마다 그것이 필요해진 사건을 함께 적어둔 작업 규약은 [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)에 있다.
+이 저장소의 판정에는 전부 파일:라인 근거가 붙어 있다. 감사·실행 기록 52편의 색인은 [`docs/INDEX.md`](docs/INDEX.md), <!-- fact: audit-run-records = 52 --> 동결된 결함 등재부는 [`docs/REGISTER.md`](docs/REGISTER.md), 규칙마다 그것이 필요해진 사건을 함께 적어둔 작업 규약은 [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)에 있다.
 
 ## 후속
 

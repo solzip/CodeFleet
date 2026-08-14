@@ -1,3 +1,10 @@
+> **There is no next session. This repository was frozen on 2026-08-13.** This
+> handoff was last updated on 2026-08-11 and was never brought forward. Read it
+> as the state of that day, not as instructions: "Session Starter", "Progress"
+> and "Current Bottleneck" below describe work that did not continue. Why it
+> stopped is in `archive/2026-08-13/ARCHIVE.md`, what was open at the freeze is
+> in `REGISTER.md`, and everything recorded after 2026-08-11 is in `INDEX.md`.
+
 # CodeFleet Session Handoff
 
 Last updated: 2026-08-11 (through d66e86b)
