@@ -116,7 +116,7 @@ The decision itself lives somewhere else — one line appended to a ledger, whic
 
 ## What it figured out
 
-Three of these transfer to any backend, agents or not.
+Ten conclusions. **Two of them** — 2 and 7 in the table below — transfer to any backend with no agent involved, and because 2 has two halves that comes to three things to take. Those first.
 
 **Idempotency keys derived from meaning, not from the caller.** Most idempotency is a client-supplied request id, which means it works only when the client cooperates. Here the key is a hash of what actually changes the resulting state — and deliberately excludes reason text and timestamps, so the same decision made twice collapses to one:
 
@@ -213,7 +213,9 @@ selectedWorkspaceRootRealPath: input.selectedWorkspaceRootRealPath ?? "",
 
 **One axis carrying two unrelated permissions.** Roles set a ceiling over both file editing and command execution at once, so of seven built-in roles only two allow running commands, and neither of those is a role that writes application code. The narrowing rule was correct; hanging two independent capabilities on one ordering was not. The completed run needed a role substitution purely because of this.
 
-**Whoever fixed it did not update the register.** This is a defect in the record rather than in the code, and it happened more often than the three above combined. Opening eleven stranded findings showed **eight were already fixed** and only the register did not know. When the 27 unchecked ones were adjudicated after the freeze, one of them had been judged *invalidated* five days earlier. If fixing a defect and carrying the judgment across are two separate jobs, the second stops happening — which is why three document checkers (links, prose figures, file:line citations) hang off `npm test`: **so a judgment that was never carried across is caught by the suite, not by a person.**
+**Whoever fixed it did not update the register.** This is a defect in the record rather than in the code, and it happened more often than the three above combined. Opening eleven stranded findings showed **eight were already fixed** and only the register did not know. When the 27 unchecked ones were adjudicated after the freeze, one of them had been judged *invalidated* two days earlier. If fixing a defect and carrying the judgment across are two separate jobs, the second stops happening.
+
+**This one is not fixed.** Three document checkers (links, prose figures, file:line citations) hang off `npm test`, but what they catch is a **stale figure, a broken link, a drifted citation** — not a judgment that was never carried across. That still needs a person. The root is the same one: **a single fact lives in many copies with no source of truth.** The checkers sit on top of that; they did not reduce it.
 
 The first three share the root named above: **absence and value were not kept distinct.** A missing argument, a fabricated default, and a field declared but never produced are the same mistake wearing different clothes — which is why the fix for each is the same instinct, to make the type refuse to compile until someone says what absence means here.
 
