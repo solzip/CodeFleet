@@ -1,7 +1,9 @@
 # CodeFleet — how do you verify work an agent says it did?
 
-> An experiment, archived on 2026-08-13 with its result and its cost.
-> Not maintained; issues and pull requests are not accepted.
+> A structure that keeps an agent's "tests pass" from **reaching the decision at all**, tested end to end.
+> It **completed once under controlled conditions and never on a real project.** 77 findings were registered and
+> adjudicated, each cited to a file and line. <!-- fact: registered-findings = 77 -->
+> Archived 2026-08-13 — not maintained; issues and pull requests are not accepted.
 
 English | [한국어](README.md)
 
@@ -153,15 +155,16 @@ The rest, in brief — each expanded with implementation and evidence in [`DESIG
 
 | | Conclusion | Status |
 | --- | --- | --- |
-| 1 | Type the source, don't flag it — the authority ladder above | observed |
-| 2 | One window for state change, with a named commit point — the eight phases above | observed |
-| 4 | Decisions append-only, state replayed. The snapshot is a read model with no authority | observed |
-| 5 | Approval covers the contract *and* the conditions it was approved under | observed |
+| 1 | Type the source, don't flag it — **the authority ladder above** | observed |
+| 2 | One window for state change, with a named commit point — **the idempotency key and eight phases above** | observed |
+| 3 | Decisions append-only, state replayed. The snapshot is a read model with no authority | observed |
+| 4 | Approval covers the contract *and* the conditions it was approved under | observed |
+| 5 | Policy composes by `meet` only; roles contribute a ceiling, never a grant. Narrowing was observed; a widening attempt is refused in tests but never seen in real use | **code only** |
 | 6 | Split what you couldn't check into two kinds — a gap a person may sign for, and an evidence defect nobody can stand in for. The distinction lives in data, not in judgement | observed |
+| 7 | Every check reports what it examined, not only its verdict — **the zero-items rule above** | observed |
 | 8 | Keep a decision apart from its side effect. `apply` is a separate human act, and it applies the *observed patch*, not a directory that may have drifted | observed |
 | 9 | Child processes get an allowlisted environment and per-kind limits. A secret exported in the parent was measurably absent in the child | observed |
-| 10 | Treat the human-readable record as an artifact — listed because it **failed twice**: first silent about which command satisfied a gate, then asserting that evidence it linked to did not exist | failed |
-| — | Policy composes by `meet` only; roles contribute a ceiling, never a grant. Narrowing was observed; a widening attempt is refused in tests but never seen in real use | code only |
+| 10 | Treat the human-readable record as an artifact — listed because it **failed twice**: first silent about which command satisfied a gate, then asserting that evidence it linked to did not exist | **failed** |
 
 Two of these turned out to be one idea stated twice. The authority ladder and the gap/defect split are both answers to **how you represent not knowing, as data** — and three of the seven defect types in `LESSONS.md` share that same root: failing to distinguish *absent* from *a value*. The problem this project actually spent itself on was not verifying AI. It was representing absence. That was not the problem it set out to solve: **it took writing all ten down to see they were one.**
 
@@ -210,6 +213,8 @@ selectedWorkspaceRootRealPath: input.selectedWorkspaceRootRealPath ?? "",
 
 **One axis carrying two unrelated permissions.** Roles set a ceiling over both file editing and command execution at once, so of seven built-in roles only two allow running commands, and neither of those is a role that writes application code. The narrowing rule was correct; hanging two independent capabilities on one ordering was not. The completed run needed a role substitution purely because of this.
 
+**Whoever fixed it did not update the register.** This is a defect in the record rather than in the code, and it happened more often than the three above combined. Opening eleven stranded findings showed **eight were already fixed** and only the register did not know. When the 27 unchecked ones were adjudicated after the freeze, one of them had been judged *invalidated* five days earlier. If fixing a defect and carrying the judgment across are two separate jobs, the second stops happening — which is why three document checkers (links, prose figures, file:line citations) hang off `npm test`: **so a judgment that was never carried across is caught by the suite, not by a person.**
+
 The first three share the root named above: **absence and value were not kept distinct.** A missing argument, a fabricated default, and a field declared but never produced are the same mistake wearing different clothes — which is why the fix for each is the same instinct, to make the type refuse to compile until someone says what absence means here.
 
 ## How far any of this was checked
@@ -218,27 +223,12 @@ Short version: **less than the list above might suggest.** "Observed" mostly mea
 
 - **The pipeline completed exactly once**, on a controlled fixture, and **four workarounds were holding it up.** One was a role substitution — of seven built-in roles, only two permit command execution, and neither of those two is a role that writes application code.
 - **On a real Spring Boot project it did not complete.** Of fifteen steps, four were blocked and one failed. The command that ended up satisfying the verification gate was `gradle --version`. Our implementation could not invoke Gradle or Maven wrappers on Windows: the rule forbidding shell interpreters is correct, and it left no path to a batch file.
-- **77 registered findings** — 25 resolved, 8 partial, 1 not reproduced, 15 open, 1 accepted as a limit, and **27 never checked**. The register froze those 27 as unchecked. **They were all adjudicated after the freeze, though, and the result was 21 valid / 3 resolved / 1 invalidated / 2 partial** — see "What was checked after closing" below. The counts above and the register's status column were left alone under the freeze rule, so **reading this table alone says "nobody looked", and that is no longer true.** <!-- fact: registered-findings = 77 --> <!-- fact: findings-resolved = 25 --> <!-- fact: findings-partial = 8 --> <!-- fact: findings-not-reproduced = 1 --> <!-- fact: findings-open = 15 --> <!-- fact: findings-accepted-limit = 1 --> <!-- fact: findings-unchecked = 27 -->
+- **77 registered findings** — 25 resolved, 8 partial, 1 not reproduced, 15 open, 1 accepted as a limit, and **27 never checked**. The register froze those 27 as unchecked, and every one was adjudicated afterwards — **21 valid / 3 resolved / 1 invalidated / 2 partial** ([record](docs/runs/2026-08-14/unchecked-27-adjudication.md)). The counts above and the status column were left alone under the freeze rule, so **reading this table alone says "nobody looked", and that is no longer true.** <!-- fact: registered-findings = 77 --> <!-- fact: findings-resolved = 25 --> <!-- fact: findings-partial = 8 --> <!-- fact: findings-not-reproduced = 1 --> <!-- fact: findings-open = 15 --> <!-- fact: findings-accepted-limit = 1 --> <!-- fact: findings-unchecked = 27 -->
 - `npm test` exits **0 on Windows**, where this was developed (324 passing, 0 failing). <!-- fact: tests-passing = 324 --> <!-- fact: tests-failing = 0 --> **The one time CI ran, both platforms failed** — six tests on Linux, two on Windows. One of the six is a POSIX behaviour this archive predicted and never measured; the two on Windows are **tests added just before the freeze, failing on themselves**. **The workflow was then removed** — an archive has nobody to read a red check and act on it — and the run ids are kept in the record ([record](docs/runs/2026-08-13/ci-first-run.md)). Condition coverage is 345 of 545 lines (63.3%), which means a passing test quoted that many lines — **not** that those conditions are correctly implemented. <!-- fact: conditions-covered = 345 --> <!-- fact: condition-lines = 545 --> <!-- fact: coverage-percent = 63.3 -->
 - **Nothing here was exercised under repetition, concurrency, or multiple users.**
 
 > Runnability is not warranted. These are observations, not a claim that anything works.
 > **The test count and the CI results were measured after the freeze**; the rest are figures from the moment of freezing.
-
-## What was checked after closing
-
-The largest hole in the freeze was the **27 unchecked findings**. The archive wrote that unchecked is not the same as valid, and closed — without ever measuring what checking them would actually cost. That was measured on 2026-08-14: **reading the code settled all of them.**
-
-| Verdict | Count |
-| --- | --- |
-| Valid (open) | **21** |
-| Resolved | 3 (P1-9 · P1-16 · P1-36) |
-| Invalidated | 1 (P1-14) |
-| Partial | 2 (P1-5 · P1-39) |
-
-**P1-14 had already been judged [invalidated] on 2026-08-12.** The register never carried that judgment across, so it sat as [unchecked]. The investigation right before the freeze found eight of eleven stranded findings in the same state — **whoever fixed them did not update the register.** The most repeated failure this repository produced was not a defect; it was that.
-
-The register's counts and status column were not changed, under the freeze rule. The judgments are held by [`runs/2026-08-14/unchecked-27-adjudication.md`](docs/runs/2026-08-14/unchecked-27-adjudication.md).
 
 ## Why it stopped here
 
