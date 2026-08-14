@@ -37,6 +37,34 @@ const executed = attempts.filter((a) => a.authority === "HARNESS_EXECUTED");
 
 이 프로젝트가 내세운 건 이것 하나였고, 완주한 그 한 번에서는 지켜졌다. 아래는 그 실물과, 거기서 남은 것과, 그 대가다.
 
+한 바퀴는 이렇게 돈다. **두 경로가 갈라지고 한쪽이 게이트 앞에서 끊기는 것**이 이 그림의 전부다.
+
+```mermaid
+flowchart TB
+    T["Task 계약<br/>scope · verification · doneCriteria"]
+    AP1["승인 — 실행 전에 고정<br/>sha256(revisionHash, guardrailHash)"]
+    T --> AP1
+    AP1 --> PR["prompt.md<br/>해석된 계약"]
+    PR --> AG["에이전트<br/>격리된 git worktree"]
+
+    AG -->|"자기 보고"| PC["provider-commands.json<br/>PROVIDER_REPORTED_ONLY<br/>notCommandTruth: true"]
+    AG -->|"파일 변경"| WS["워크스페이스 변경"]
+
+    WS --> HO["harness-observation.json<br/>변경 파일 · 경로/커맨드 정책"]
+    WS --> VE["verification/verify-001.json<br/>HARNESS_EXECUTED<br/>Harness가 커맨드를 직접 재실행"]
+
+    PC --> X["게이트에 닿지 못한다"]
+
+    HO --> GT{"게이트 계산<br/>authority === HARNESS_EXECUTED 만 읽는다"}
+    VE --> GT
+    GT --> RW["리뷰<br/>CAPABILITY_GAP은 사람이 이름을 걸고 서명"]
+    RW --> LD[("원장 · append-only<br/>patchRef.hash")]
+    LD --> AY["apply<br/>관측된 패치를 워크스페이스에"]
+
+    classDef dead stroke-dasharray:4,fill:#eeeeee,color:#666666
+    class PC,X dead
+```
+
 ### 그 파일들이 나온 계약
 
 "계약"이 이 문서에서 제일 많이 쓰이는 말이니, 실물을 하나 그대로 보인다. 위 Run을 만든 Task다.

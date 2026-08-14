@@ -38,6 +38,34 @@ A `boolean` plus a separate `source` field can drift apart. One graded value can
 
 That was the whole thesis, and in the one run that finished, it held. Below: what it looked like in practice, what came out of it, and what it cost.
 
+One loop looks like this. The whole point of the picture is **the two paths splitting, and one of them stopping before the gate**.
+
+```mermaid
+flowchart TB
+    T["Task contract<br/>scope · verification · doneCriteria"]
+    AP1["Approval — frozen before execution<br/>sha256(revisionHash, guardrailHash)"]
+    T --> AP1
+    AP1 --> PR["prompt.md<br/>the contract as resolved"]
+    PR --> AG["Agent<br/>isolated git worktree"]
+
+    AG -->|"its own account"| PC["provider-commands.json<br/>PROVIDER_REPORTED_ONLY<br/>notCommandTruth: true"]
+    AG -->|"file changes"| WS["workspace changes"]
+
+    WS --> HO["harness-observation.json<br/>changed files · path/command policy"]
+    WS --> VE["verification/verify-001.json<br/>HARNESS_EXECUTED<br/>the Harness re-runs the command itself"]
+
+    PC --> X["never reaches the gate"]
+
+    HO --> GT{"Gate computation<br/>reads only authority === HARNESS_EXECUTED"}
+    VE --> GT
+    GT --> RW["Review<br/>a CAPABILITY_GAP needs a person to sign by name"]
+    RW --> LD[("Ledger · append-only<br/>patchRef.hash")]
+    LD --> AY["apply<br/>the observed patch into the workspace"]
+
+    classDef dead stroke-dasharray:4,fill:#eeeeee,color:#666666
+    class PC,X dead
+```
+
 ### The contract those files came from
 
 "Contract" is the load-bearing word, so here is a real one — the task that produced the run above, verbatim:
