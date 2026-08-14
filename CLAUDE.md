@@ -21,16 +21,25 @@ git config user.name "sol"
 git config user.email "solarchive.dev@gmail.com"
 ```
 
-## Where to resume
+## Where to start reading
+
+This repository was frozen on 2026-08-13 and is not being developed further. There is
+no next slice. The map below is for reading what is here, not a work queue.
 
 ```
-docs/session-handoff.md               next slice, and why it is next
-docs/design-progress.md               ordered design steps, current position, measured counts
+README.md                             what this was, and what it actually measured
+docs/archive/2026-08-13/ARCHIVE.md    why it stopped; the source of every figure on the cover
+docs/INDEX.md                         every audit and run record, newest first
+docs/REGISTER.md                      the findings, frozen at 2026-08-13
 docs/concept-foundation.md            the design. FINAL RULEs are canonical
+docs/CONVENTIONS.md                   the recording rules, each with the incident that produced it
 docs/rule-implementation-status.json  why each unclaimed rule is unclaimed
-docs/audits/<date>/SUMMARY.md         open findings by severity, and the slice they suggest
 npm run coverage:uncovered            rules with unclaimed conditions, right now
 ```
+
+`docs/session-handoff.md` and `docs/design-progress.md` are the state of 2026-08-11 and
+2026-08-10 and were never brought forward. Each says so at the top. They are kept because
+they record what was believed at the time, not because they describe anything current.
 
 Never trust a count written in prose here. Run the command and read the number it prints.
 
