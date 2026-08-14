@@ -11,6 +11,8 @@ An agent edits your repository and reports "tests pass." You now hold a claim, n
 
 CodeFleet asked whether that could be closed structurally — not by trusting the agent less, but by making its report **unable to reach the decision at all.**
 
+There are three things here worth taking even if you never touch an agent: **deriving an idempotency key from meaning rather than from the caller**, **treating a check that examined nothing as a failure rather than a pass**, and **giving state changes exactly one commit point and naming it.** All three are below under "What it figured out", with the code, and none of them depend on this project being about agents.
+
 ## The answer: one command, two files
 
 The single completed run left a trace containing two files. Both record the same shell command.
@@ -32,7 +34,7 @@ const executed = attempts.filter((a) => a.authority === "HARNESS_EXECUTED");
 
 A `boolean` plus a separate `source` field can drift apart. One graded value cannot — there is no state in which a claim is readable as an observation.
 
-That was the whole thesis, and in the one run that finished, it held. The rest of this page is what it cost.
+That was the whole thesis, and in the one run that finished, it held. Below: what it looked like in practice, what came out of it, and what it cost.
 
 ### The contract those files came from
 
@@ -110,19 +112,6 @@ The decision itself lives somewhere else — one line appended to a ledger, whic
 
 `reason` is required and free text; `seq` and `eventId` make gaps detectable; `patchRef.hash` is what lets someone recompute, months later, whether the change in the workspace is the change that was approved. Recomputing it after the fact is how the byte-identity above was confirmed.
 
-## "Isn't this just CI?"
-
-It is the first thing anyone asks, and it is about ninety percent right. Running the tests yourself after the agent finishes gets you most of this for almost none of the cost. If that is all you need, do that.
-
-What it does not get you is the other ten percent, and the four pieces of it are the part worth arguing about:
-
-- **The contract is fixed before execution, not after.** Approval hashes the task *and* the policy it was approved under — `sha256(revisionHash, guardrailHash)`. Change the workspace policy afterwards and the run is refused, because the approval covered conditions that no longer hold. Re-running CI against a moved target tells you nothing about what was agreed.
-- **The agent cannot edit the thing that judges it.** Scope is `include: src/**`, `exclude: test/**`, enforced against the observed changed-file list. The fixture run reports `1 path(s) checked against 1 allowed and 1 denied pattern(s)`. A green CI run says the tests passed; it does not say the agent left the tests alone.
-- **What could not be checked is recorded, not omitted.** A CI run that skips a step is usually just a shorter log. Here an unobservable channel becomes a named `CAPABILITY_GAP` that blocks acceptance until a person signs for it by name — and the signature, with its reason, lands in the ledger.
-- **The decision is append-only.** There is no mutable `approved` field to quietly become true. State is replayed from events; a snapshot that disagrees loses to the ledger.
-
-So: CI answers *did the tests pass*. This was trying to answer *is the record of this work something you can rely on later* — and those turn out to be different questions once the thing doing the work is also the thing reporting on it.
-
 ## What it figured out
 
 Three of these transfer to any backend, agents or not.
@@ -174,9 +163,22 @@ The rest, in brief — each expanded with implementation and evidence in [`DESIG
 | 10 | Treat the human-readable record as an artifact — listed because it **failed twice**: first silent about which command satisfied a gate, then asserting that evidence it linked to did not exist | failed |
 | — | Policy composes by `meet` only; roles contribute a ceiling, never a grant. Narrowing was observed; a widening attempt is refused in tests but never seen in real use | code only |
 
-Two of these turned out to be one idea stated twice. The authority ladder and the gap/defect split are both answers to **how you represent not knowing, as data** — and three of the seven defect types in `LESSONS.md` share that same root: failing to distinguish *absent* from *a value*. The problem this project actually spent itself on was not verifying AI. It was representing absence.
+Two of these turned out to be one idea stated twice. The authority ladder and the gap/defect split are both answers to **how you represent not knowing, as data** — and three of the seven defect types in `LESSONS.md` share that same root: failing to distinguish *absent* from *a value*. The problem this project actually spent itself on was not verifying AI. It was representing absence. That was not the problem it set out to solve: **it took writing all ten down to see they were one.**
 
 → Each conclusion with its problem, implementation, evidence, and what to carry forward: [`docs/archive/2026-08-13/DESIGN-NOTES.md`](docs/archive/2026-08-13/DESIGN-NOTES.md)
+
+## "Isn't this just CI?"
+
+It is the first thing anyone asks, and it is about ninety percent right. Running the tests yourself after the agent finishes gets you most of this for almost none of the cost. If that is all you need, do that.
+
+What it does not get you is the other ten percent, and the four pieces of it are the part worth arguing about:
+
+- **The contract is fixed before execution, not after.** Approval hashes the task *and* the policy it was approved under — `sha256(revisionHash, guardrailHash)`. Change the workspace policy afterwards and the run is refused, because the approval covered conditions that no longer hold. Re-running CI against a moved target tells you nothing about what was agreed.
+- **The agent cannot edit the thing that judges it.** Scope is `include: src/**`, `exclude: test/**`, enforced against the observed changed-file list. The fixture run reports `1 path(s) checked against 1 allowed and 1 denied pattern(s)`. A green CI run says the tests passed; it does not say the agent left the tests alone.
+- **What could not be checked is recorded, not omitted.** A CI run that skips a step is usually just a shorter log. Here an unobservable channel becomes a named `CAPABILITY_GAP` that blocks acceptance until a person signs for it by name — and the signature, with its reason, lands in the ledger.
+- **The decision is append-only.** There is no mutable `approved` field to quietly become true. State is replayed from events; a snapshot that disagrees loses to the ledger.
+
+So: CI answers *did the tests pass*. This was trying to answer *is the record of this work something you can rely on later* — and those turn out to be different questions once the thing doing the work is also the thing reporting on it.
 
 ## What not to repeat
 
