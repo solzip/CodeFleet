@@ -1,0 +1,17 @@
+{
+  "note": "Written by npm run anchors:baseline. Anchors may not fall and unchecked numbers may not rise.",
+  "declared": 40,
+  "claims": 576,
+  "unchecked": 536,
+  "perDoc": {
+    "README.en.md": 13,
+    "README.md": 13,
+    "docs/CONVENTIONS.md": 0,
+    "docs/INDEX.md": 2,
+    "docs/REGISTER.md": 7,
+    "docs/archive/2026-08-13/ARCHIVE.md": 5,
+    "docs/archive/2026-08-13/DESIGN-NOTES.md": 0,
+    "docs/archive/2026-08-13/ENVIRONMENT.md": 0,
+    "docs/archive/2026-08-13/LESSONS.md": 0
+  }
+}

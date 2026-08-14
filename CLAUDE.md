@@ -44,6 +44,8 @@ A check that quantifies over a set must report what it scanned, not only its ver
 
 **Report the denominator, not only the numerator.** `check-doc-facts.mjs` said "34 declarations checked, 0 mismatches" and was read as "every number here is right" — while 533 numbers in the same documents carried no anchor and were never looked at. It now prints the ratio and the unchecked remainder. A checker that names only what it covered is making the claim its subject is not allowed to make.
 
+Naming an exposure does not stop it growing, so the ratio has a baseline the way rule coverage does — `npm run anchors:baseline`, `docs/doc-anchor-baseline.json`. It guards both directions: removing an anchor lowers `declared`, and adding an unanchored number to a living document raises `unchecked` while `declared` sits still. Guarding only the first lets the exposure grow forever as long as nobody deletes anything.
+
 When one number would blend two different things, split it. Mixing "no code exists" with "code exists but was never labelled" made the remaining work look larger than it was.
 
 Do not estimate to fill a gap in measurement. Say the classification has not been done.
@@ -91,6 +93,17 @@ npm run coverage:baseline     # raise the baseline after adding claims
 ```
 
 The checker fails on: an unknown ruleId, a condition quote not present in the rule, zero claims recorded, coverage below baseline, a rule with neither a claim nor a status entry, a status entry that survived after its rule got a claim, or an evidence path that does not exist.
+
+## Document checkers
+
+```bash
+npm run check:links           # link targets, case, anchors
+npm run check:citations       # file:line citations, each at its document's commit
+npm run check:facts           # declared numbers against measured ones
+npm run anchors:baseline      # after anchoring figures, or after deciding to let the ratio slip
+```
+
+Living documents — both READMEs, `INDEX.md`, `REGISTER.md`, `CONVENTIONS.md`, the four archive covers — are read as current truth, so their citations are checked against the working tree and their figures against `docs/doc-anchor-baseline.json`. Dated audit and run records are checked at the commit they declare, and anything wrong there is reported without failing the suite: no edit made today fixes a citation that was wrong when it was written. `docs/audits/2026-08-10/` names a commit the 2026-08-11 history rewrite destroyed, so its 242 citations are unverifiable rather than broken, and the report says which.
 
 After adding claims, the status entry for that rule must be removed from `docs/rule-implementation-status.json` — the run tells you which ones.
 

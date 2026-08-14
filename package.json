@@ -15,6 +15,7 @@
     "check:links": "node ./scripts/check-links.mjs",
     "check:facts": "node ./scripts/check-doc-facts.mjs",
     "check:citations": "node ./scripts/check-doc-citations.mjs",
+    "anchors:baseline": "node ./scripts/check-doc-facts.mjs --update-baseline",
     "coverage:baseline": "node ./scripts/check-rule-coverage.mjs --update-baseline",
     "coverage:uncovered": "node ./scripts/check-rule-coverage.mjs --list-uncovered"
   },

@@ -27,7 +27,7 @@
 //
 // Output is ASCII only; the console this runs on is CP949.
 
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -37,6 +37,7 @@ import { stripCode } from "./check-links.mjs";
 import { LIVING_DOCS } from "./check-doc-citations.mjs";
 
 export const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+export const ANCHOR_BASELINE_PATH = path.join(REPO_ROOT, "docs", "doc-anchor-baseline.json");
 
 // ---------------------------------------------------------------------------
 // Declarations
@@ -258,6 +259,51 @@ async function measureAll(root, files) {
   return { measured, coverageAvailable: true };
 }
 
+// ---------------------------------------------------------------------------
+// Anchor baseline
+// ---------------------------------------------------------------------------
+
+/**
+ * Reporting the ratio told the next reader that 93% of the numbers here are
+ * undefended. It did not stop that share from growing, and a figure nothing
+ * defends is exactly how three cover documents kept saying 273. So the ratio
+ * gets the same treatment rule coverage already has: it may not erode without
+ * somebody writing down that they let it.
+ *
+ * Two directions, because they fail differently. Deleting an anchor lowers
+ * `declared`; adding an unanchored number to a living document raises
+ * `unchecked` while `declared` sits still. Guarding only the first would let
+ * the exposure grow indefinitely as long as nobody removed anything.
+ */
+export function evaluateAnchors(exposure, baseline) {
+  const errors = [];
+  if (baseline === null || baseline === undefined) return { errors };
+
+  if (exposure.declared < baseline.declared) {
+    errors.push(
+      `anchors fell: ${exposure.declared} declared, baseline is ${baseline.declared}. ` +
+        "Restore the declaration, or run `npm run anchors:baseline` and say why in the commit."
+    );
+  }
+
+  const unchecked = exposure.claims - exposure.declared;
+  if (unchecked > baseline.unchecked) {
+    errors.push(
+      `unchecked numbers rose: ${unchecked}, baseline is ${baseline.unchecked}. ` +
+        "Anchor the figures this change added to a living document, or re-baseline deliberately."
+    );
+  }
+
+  for (const [file, was] of Object.entries(baseline.perDoc ?? {})) {
+    const now = exposure.perDoc[file] ?? 0;
+    if (now < was) {
+      errors.push(`anchors fell in ${file}: ${now}, baseline is ${was}`);
+    }
+  }
+
+  return { errors };
+}
+
 const BANNER = [
   "######################################################################",
   "#  DOC FACT CHECK FAILED",
@@ -275,9 +321,13 @@ export function report(result, measured, exposure = null, log = console.log) {
   // headline: this check defends the numbers somebody marked, and nothing else.
   if (exposure !== null) {
     const pct = ((exposure.declared / exposure.claims) * 100).toFixed(1);
+    const unchecked = exposure.claims - exposure.declared;
     log(`  numbers stated in living docs  ${exposure.claims}  (rough count)`);
     log(`  of those, anchored             ${exposure.declared}  =  ${pct}%`);
-    log(`  UNCHECKED NUMBERS             ${exposure.claims - exposure.declared}  <- not defended by this check`);
+    log(
+      `  UNCHECKED NUMBERS             ${unchecked}  <- not defended by this check` +
+        (exposure.baseline === undefined ? "" : `  (baseline ${exposure.baseline})`)
+    );
   }
   log(`  measurable facts          ${Object.keys(measured).length}`);
   log(`  mismatches                ${result.errors.length}`);
@@ -294,26 +344,64 @@ if (process.argv[1] !== undefined && pathToFileURL(process.argv[1]).href === imp
   const { measured, coverageAvailable } = await measureAll(REPO_ROOT, files);
 
   const declarations = [];
-  const exposure = { claims: 0, declared: 0 };
+  const exposure = { claims: 0, declared: 0, perDoc: {} };
   for (const file of files) {
     const text = await readFile(path.join(REPO_ROOT, file), "utf8");
-    declarations.push(...collectDeclarations(text, file));
-    if (LIVING_DOCS.has(file.replaceAll("\\", "/"))) {
+    const found = collectDeclarations(text, file);
+    declarations.push(...found);
+    const key = file.replaceAll("\\", "/");
+    if (LIVING_DOCS.has(key)) {
       exposure.claims += countNumericClaims(text);
-      exposure.declared += collectDeclarations(text, file).length;
+      exposure.declared += found.length;
+      exposure.perDoc[key] = found.length;
     }
   }
 
+  const updateBaseline = process.argv.includes("--update-baseline");
+  let anchorBaseline = null;
+  try {
+    anchorBaseline = JSON.parse(await readFile(ANCHOR_BASELINE_PATH, "utf8"));
+  } catch {
+    anchorBaseline = null;
+  }
+  if (anchorBaseline !== null) exposure.baseline = anchorBaseline.unchecked;
+
   const result = compareFacts(declarations, measured);
-  if (result.errors.length > 0) for (const line of BANNER) console.log(line);
-  report(result, measured, exposure);
+  const anchors = evaluateAnchors(exposure, updateBaseline ? null : anchorBaseline);
+  const errors = [...result.errors, ...anchors.errors];
+
+  if (errors.length > 0) for (const line of BANNER) console.log(line);
+  report({ ...result, errors }, measured, exposure);
   if (!coverageAvailable) {
     console.log("  coverage facts were not measured: the claim sink is empty. Run `npm test`.");
     console.log("");
   }
 
-  if (result.errors.length > 0) {
-    console.error(`declared-fact check failed: ${result.errors.length} error(s). See the banner above the report.`);
+  if (updateBaseline) {
+    await writeFile(
+      ANCHOR_BASELINE_PATH,
+      `${JSON.stringify(
+        {
+          note: "Written by npm run anchors:baseline. Anchors may not fall and unchecked numbers may not rise.",
+          declared: exposure.declared,
+          claims: exposure.claims,
+          unchecked: exposure.claims - exposure.declared,
+          perDoc: Object.fromEntries(Object.entries(exposure.perDoc).sort()),
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+    console.log(`  anchor baseline written: ${exposure.declared} anchored, ${exposure.claims - exposure.declared} unchecked`);
+    console.log("");
+  } else if (anchorBaseline === null) {
+    console.log("  no anchor baseline recorded yet; run `npm run anchors:baseline` to set one");
+    console.log("");
+  }
+
+  if (errors.length > 0) {
+    console.error(`declared-fact check failed: ${errors.length} error(s). See the banner above the report.`);
     process.exit(1);
   }
 }

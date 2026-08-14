@@ -5,6 +5,7 @@ import {
   compareFacts,
   countIndexRows,
   countNumericClaims,
+  evaluateAnchors,
   parseRegister,
   parseTestSummary,
   report,
@@ -210,4 +211,42 @@ test("the report names the unchecked remainder, not only what it checked", () =>
   const text = out.join(" | ");
   assert.match(text, /of those, anchored\s+7\s+=\s+7\.0%/);
   assert.match(text, /UNCHECKED NUMBERS\s+93/);
+});
+
+// ---------------------------------------------------------------------------
+// The anchor baseline. Reporting 6.9% named the exposure; it did not stop the
+// exposure from growing. These pin both directions it can erode.
+// ---------------------------------------------------------------------------
+
+const BASE = { declared: 40, claims: 576, unchecked: 536, perDoc: { "README.md": 13 } };
+const now = (over = {}) => ({ claims: 576, declared: 40, perDoc: { "README.md": 13 }, ...over });
+
+test("removing an anchor fails", () => {
+  const { errors } = evaluateAnchors(now({ declared: 39, perDoc: { "README.md": 12 } }), BASE);
+  assert.match(errors.join("\n"), /anchors fell: 39 declared, baseline is 40/);
+});
+
+test("an anchor removed from one document fails even if the total holds", () => {
+  const moved = now({ perDoc: { "README.md": 12, "docs/INDEX.md": 1 } });
+  const { errors } = evaluateAnchors(moved, BASE);
+  assert.match(errors.join("\n"), /anchors fell in README\.md: 12, baseline is 13/);
+});
+
+test("adding an unanchored number to a living document fails", () => {
+  const { errors } = evaluateAnchors(now({ claims: 578 }), BASE);
+  assert.match(errors.join("\n"), /unchecked numbers rose: 538, baseline is 536/);
+});
+
+test("anchoring a number that was already there passes", () => {
+  const { errors } = evaluateAnchors(now({ claims: 576, declared: 41 }), BASE);
+  assert.deepEqual(errors, []);
+});
+
+test("no baseline yet is not a failure; it is a state to report", () => {
+  assert.deepEqual(evaluateAnchors(now(), null).errors, []);
+  assert.deepEqual(evaluateAnchors(now(), undefined).errors, []);
+});
+
+test("holding exactly at the baseline passes", () => {
+  assert.deepEqual(evaluateAnchors(now(), BASE).errors, []);
 });

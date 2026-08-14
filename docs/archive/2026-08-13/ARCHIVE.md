@@ -55,7 +55,7 @@ $ npm test > /dev/null 2>&1; echo $?
 
 | 항목 | 값 |
 | --- | --- |
-| 테스트 | **318 통과 / 0 실패** <!-- fact: tests-passing = 318 --> <!-- fact: tests-failing = 0 --> *(동결 시점 257. 링크 체커 16건 — `runs/2026-08-13/link-checker-in-repo.md` — 과 산문 검사기 18건 — `runs/2026-08-13/prose-fact-check.md` — 이 뒤에 추가됐다. 이 줄은 273에서 멈춰 있었고 2026-08-14에 재측정해 고쳤다)* |
+| 테스트 | **324 통과 / 0 실패** <!-- fact: tests-passing = 324 --> <!-- fact: tests-failing = 0 --> *(동결 시점 257. 링크 체커 16건 — `runs/2026-08-13/link-checker-in-repo.md` — 과 산문 검사기 18건 — `runs/2026-08-13/prose-fact-check.md` — 이 뒤에 추가됐다. 이 줄은 273에서 멈춰 있었고 2026-08-14에 재측정해 고쳤다)* |
 | FINAL RULE | 83개 / 조건 줄 545개 | <!-- fact: rules-total = 83 --> <!-- fact: condition-lines = 545 -->
 | 조건 커버리지 | **345 (63.3%)** |
 | 주장(claims) | 352 | <!-- fact: claims-recorded = 352 -->
