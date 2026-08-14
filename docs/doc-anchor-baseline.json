@@ -1,8 +1,8 @@
 {
   "note": "Written by npm run anchors:baseline. Anchors may not fall and unchecked numbers may not rise.",
   "declared": 42,
-  "claims": 580,
-  "unchecked": 538,
+  "claims": 581,
+  "unchecked": 539,
   "perDoc": {
     "README.en.md": 14,
     "README.md": 14,

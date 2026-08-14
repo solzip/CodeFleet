@@ -13,7 +13,7 @@ An agent edits your repository and reports "tests pass." You now hold a claim, n
 
 CodeFleet asked whether that could be closed structurally — not by trusting the agent less, but by making its report **unable to reach the decision at all.**
 
-There are three things here worth taking even if you never touch an agent: **deriving an idempotency key from meaning rather than from the caller**, **treating a check that examined nothing as a failure rather than a pass**, and **giving state changes exactly one commit point and naming it.** All three are below under "What it figured out", with the code, and none of them depend on this project being about agents.
+There are three things here worth taking even if you never touch an agent: **deriving an idempotency key from meaning rather than from the caller**, **treating a check that examined nothing as a failure rather than a pass**, and **giving state changes exactly one commit point and naming it.** All three are below under "What it figured out" with their evidence — the first as code, the second as the two silent-green bugs the rule actually caught, the third as the eight phases by name — and none of them depend on this project being about agents.
 
 ## The answer: one command, two files
 
