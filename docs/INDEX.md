@@ -2,7 +2,7 @@
 
 `docs/audits/`·`docs/runs/`·`docs/archive/`의 전 문서를 시간 역순으로 나열한다. 규약은 `docs/CONVENTIONS.md`, 결함 등재 현황은 `docs/REGISTER.md`.
 
-작성 기준: 2026-08-14, 커밋 `c448b7d`. 전수 58개 문서 (감사 36 · 실행 15 · 아카이브 7). <!-- fact: docs-indexed = 58 --> <!-- fact: docs-on-disk = 58 -->
+작성 기준: 2026-08-14, 커밋 `8748497`(이 색인을 마지막으로 고친 커밋). 전수 58개 문서 (감사 36 · 실행 15 · 아카이브 7). <!-- fact: docs-indexed = 58 --> <!-- fact: docs-on-disk = 58 -->
 
 > **이 저장소는 2026-08-13에 동결됐다.** 종료 사유서는 `archive/2026-08-13/ARCHIVE.md`.
 >
