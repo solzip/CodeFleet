@@ -216,12 +216,27 @@ selectedWorkspaceRootRealPath: input.selectedWorkspaceRootRealPath ?? "",
 
 - **파이프라인은 딱 한 번 완주했다.** 통제된 fixture에서였고, **우회 4건을 얹은 채였다.** 그중 하나가 역할 바꿔치기다. 기본 역할 일곱 중 커맨드 실행이 가능한 건 둘뿐인데, 그 둘 중에 애플리케이션 코드를 쓰는 역할이 없다.
 - **실제 Spring Boot 프로젝트에서는 완주하지 못했다.** 열다섯 단계 중 넷이 막히고 하나가 실패했다. 결국 검증 게이트를 만족시킨 커맨드는 `gradle --version`이었다. 우리 구현은 Windows에서 Gradle·Maven wrapper를 부르지 못했다. 셸 인터프리터를 금지하는 규칙 자체는 옳았고, 다만 그 규칙 아래로 배치 파일에 닿을 길을 만들어두지 않았다.
-- **등재된 결함 77건** — 해소 25, 부분해소 8, 재현안됨 1, 미해소 15, 수용된 한계 1, 그리고 **미확인 27**. 그 27건은 미확인인 채로 닫는다. 등재된 뒤 아무도 들여다보지 않았으니, 아직 유효하다고도 아니라고도 말할 근거가 없다. **한 건은 예외다** — P1-21은 동결 뒤 CI에서 예측한 그대로 재현됐고, 유효한 결함임이 확인됐다. 등재부는 동결돼 있어 여전히 [미확인]으로 적혀 있고, 확인 사실은 [실행 기록](docs/runs/2026-08-13/ci-first-run.md)이 보유한다. <!-- fact: registered-findings = 77 --> <!-- fact: findings-resolved = 25 --> <!-- fact: findings-partial = 8 --> <!-- fact: findings-not-reproduced = 1 --> <!-- fact: findings-open = 15 --> <!-- fact: findings-accepted-limit = 1 --> <!-- fact: findings-unchecked = 27 -->
-- `npm test`는 개발 환경인 **Windows에서 종료 코드 0**이다(273 통과, 0 실패). **CI를 한 번 돌렸을 때는 양쪽 플랫폼이 모두 실패했다** — Linux 6건, Windows 2건. Linux 6건 중 하나는 이 아카이브가 예측만 하고 실측하지 못했던 POSIX 거동이고, Windows 2건은 **동결 직전에 추가된 테스트 자신**이다. **워크플로는 그 뒤 제거했다** — 아카이브에는 빨간 체크를 읽고 조치할 사람이 없기 때문이고, 실행 id는 기록에 남겼다([기록](docs/runs/2026-08-13/ci-first-run.md)). 조건 커버리지는 545줄 중 345줄, 63.3%인데, 이건 통과한 테스트가 그만큼을 인용했다는 뜻이지 **그 조건들이 제대로 구현됐다는 뜻이 아니다.** <!-- fact: conditions-covered = 345 --> <!-- fact: condition-lines = 545 --> <!-- fact: coverage-percent = 63.3 -->
+- **등재된 결함 77건** — 해소 25, 부분해소 8, 재현안됨 1, 미해소 15, 수용된 한계 1, 그리고 **미확인 27**. 등재부는 그 27건을 미확인인 채로 동결했다. **다만 동결 뒤에 그 27건은 전수 판정됐고, 결과는 유효 21 / 해소 3 / 무효화됨 1 / 부분해소 2였다** — 아래 「닫은 뒤에 확인한 것」을 보라. 위 건수와 등재부의 상태 칸은 동결 규칙에 따라 그대로 두었으므로, **이 표만 읽으면 "아무도 안 봤다"로 읽히는데 그것은 더 이상 사실이 아니다.** <!-- fact: registered-findings = 77 --> <!-- fact: findings-resolved = 25 --> <!-- fact: findings-partial = 8 --> <!-- fact: findings-not-reproduced = 1 --> <!-- fact: findings-open = 15 --> <!-- fact: findings-accepted-limit = 1 --> <!-- fact: findings-unchecked = 27 -->
+- `npm test`는 개발 환경인 **Windows에서 종료 코드 0**이다(318 통과, 0 실패). <!-- fact: tests-passing = 318 --> <!-- fact: tests-failing = 0 --> **CI를 한 번 돌렸을 때는 양쪽 플랫폼이 모두 실패했다** — Linux 6건, Windows 2건. Linux 6건 중 하나는 이 아카이브가 예측만 하고 실측하지 못했던 POSIX 거동이고, Windows 2건은 **동결 직전에 추가된 테스트 자신**이다. **워크플로는 그 뒤 제거했다** — 아카이브에는 빨간 체크를 읽고 조치할 사람이 없기 때문이고, 실행 id는 기록에 남겼다([기록](docs/runs/2026-08-13/ci-first-run.md)). 조건 커버리지는 545줄 중 345줄, 63.3%인데, 이건 통과한 테스트가 그만큼을 인용했다는 뜻이지 **그 조건들이 제대로 구현됐다는 뜻이 아니다.** <!-- fact: conditions-covered = 345 --> <!-- fact: condition-lines = 545 --> <!-- fact: coverage-percent = 63.3 -->
 - **반복 실행·동시성·다중 사용자에서 시험한 것은 하나도 없다.**
 
 > 실행 가능 여부를 보증하지 않는다. 위는 관측이지, 무엇이 동작한다는 주장이 아니다.
 > **테스트 수와 CI 결과는 동결 이후에 측정한 값이고**, 나머지는 동결 시점의 값이다.
+
+## 닫은 뒤에 확인한 것
+
+동결의 가장 큰 구멍은 **미확인 27건**이었다. 확인하지 않은 것과 유효한 것은 다르다고 적어놓고 닫았는데, 그 27건을 확인하는 비용이 실제로 얼마인지는 재본 적이 없었다. 2026-08-14에 재봤다 — **코드 읽기로 전부 판정됐다.**
+
+| 판정 | 건수 |
+| --- | --- |
+| 유효 (미해소) | **21** |
+| 해소 | 3 (P1-9 · P1-16 · P1-36) |
+| 무효화됨 | 1 (P1-14) |
+| 부분해소 | 2 (P1-5 · P1-39) |
+
+**P1-14는 2026-08-12에 이미 [무효화됨]으로 판정돼 있었다.** 등재부가 그 판정을 옮기지 않아 [미확인]으로 남아 있었을 뿐이다. 그 직전 조사에서도 방치된 11건 중 8건이 같은 상태였다 — **고친 사람이 등재부를 안 고쳤다.** 이 저장소가 남긴 가장 반복적인 실패는 결함 자체가 아니라 그것이었다.
+
+등재부의 건수와 상태 칸은 동결 규칙에 따라 바꾸지 않았다. 판정은 [`runs/2026-08-14/unchecked-27-adjudication.md`](docs/runs/2026-08-14/unchecked-27-adjudication.md)가 보유한다.
 
 ## 왜 여기서 멈췄나
 
@@ -242,7 +257,7 @@ selectedWorkspaceRootRealPath: input.selectedWorkspaceRootRealPath ?? "",
 | [`ENVIRONMENT.md`](docs/archive/2026-08-13/ENVIRONMENT.md) | Windows에서 에이전트 도구를 만드는 사람에게 그대로 쓸모 있는 실측 기록. CP949 콘솔과 자식 출력 UTF-8 디코딩, 셸 인터프리터 규칙에 막혀 닿지 않는 배치 wrapper, 프로세스가 정규화하지 말고 git에게 물어야 하는 worktree 경로, Windows가 `TerminateProcess`로 매핑해주는 덕에만 확실한 `SIGTERM`, 그리고 `PATH`만 남긴 spawn 환경 탓에 자식 프로세스에 홈 디렉터리가 없었던 일. 항목마다 재현 조건을 붙였고 해결 미확정 3 / 미검증 4 / 미실측 1로 표시했다 |
 | [`ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md) | 종료 시점의 상태와 사유, 자산 목록. 이 페이지에 나오는 모든 숫자의 출처다 |
 
-이 저장소의 판정에는 전부 파일:라인 근거가 붙어 있다. 감사·실행 기록 49편의 색인은 [`docs/INDEX.md`](docs/INDEX.md), <!-- fact: audit-run-records = 49 --> 동결된 결함 등재부는 [`docs/REGISTER.md`](docs/REGISTER.md), 규칙마다 그것이 필요해진 사건을 함께 적어둔 작업 규약은 [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)에 있다.
+이 저장소의 판정에는 전부 파일:라인 근거가 붙어 있다. 감사·실행 기록 51편의 색인은 [`docs/INDEX.md`](docs/INDEX.md), <!-- fact: audit-run-records = 51 --> 동결된 결함 등재부는 [`docs/REGISTER.md`](docs/REGISTER.md), 규칙마다 그것이 필요해진 사건을 함께 적어둔 작업 규약은 [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)에 있다.
 
 ## 후속
 

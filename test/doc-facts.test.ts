@@ -4,7 +4,9 @@ import {
   collectDeclarations,
   compareFacts,
   countIndexRows,
+  countNumericClaims,
   parseRegister,
+  parseTestSummary,
   report,
 } from "../scripts/check-doc-facts.mjs";
 
@@ -146,15 +148,66 @@ test("the index count is of distinct documents, not of mentions", () => {
 test("the report states how many declarations it checked, not only failures", () => {
   const lines: string[] = [];
   const decls = collectDeclarations("<!-- fact: a = 1 -->", "R.md");
-  report(compareFacts(decls, { a: 1 }), { a: 1 }, (line: string) => lines.push(line));
+  report(compareFacts(decls, { a: 1 }), { a: 1 }, null, (line: string) => lines.push(line));
   assert.match(lines.join("\n"), /declarations checked\s+1/);
 });
 
 test("the report is ASCII only", () => {
   const lines: string[] = [];
   const decls = collectDeclarations("<!-- fact: a = 1 -->", "R.md");
-  report(compareFacts(decls, { a: 2 }), { a: 2 }, (line: string) => lines.push(line));
+  report(compareFacts(decls, { a: 2 }), { a: 2 }, null, (line: string) => lines.push(line));
   for (const line of lines) {
     assert.ok(/^[\x20-\x7e]*$/.test(line), `non-ASCII in report line: ${JSON.stringify(line)}`);
   }
+});
+
+
+// ---------------------------------------------------------------------------
+// The test count, and the denominator. Both were added because this checker
+// went green while three cover documents said 273 and the suite said 291.
+// ---------------------------------------------------------------------------
+
+const tapOf = (...lines: string[]): string => lines.join("\n") + "\n";
+
+test("the test count is read from the runner's own TAP output", () => {
+  const tap = tapOf("TAP version 13", "# tests 291", "# suites 0", "# pass 291", "# fail 0");
+  assert.deepEqual(parseTestSummary(tap), { pass: 291, fail: 0 });
+});
+
+test("a truncated or missing summary measures nothing rather than measuring zero", () => {
+  assert.equal(parseTestSummary(tapOf("TAP version 13", "# tests 291")), null);
+  assert.equal(parseTestSummary(""), null);
+});
+
+test("a failing suite is measured as failing, so a document cannot declare 0", () => {
+  assert.deepEqual(parseTestSummary(tapOf("# pass 288", "# fail 3")), { pass: 288, fail: 3 });
+});
+
+test("the denominator counts numbers stated as claims", () => {
+  assert.equal(countNumericClaims("we found 21 valid and 4 invalid"), 2);
+});
+
+// The stripped forms are the ones this repository actually writes: ISO dates,
+// bare years, section marks, and file:line inside a code span. A bare "4.1" in
+// running prose still counts -- the report calls the number rough for exactly
+// this reason, and over-counting the exposure is the safe direction to err.
+test("dates, years, section marks and code spans are identifiers, not claims", () => {
+  assert.equal(countNumericClaims("on 2026-08-14, per 2026 and §4.1, `src/run.ts:1696` moved"), 0);
+});
+
+test("a fenced example does not inflate the denominator", () => {
+  assert.equal(countNumericClaims(tapOf("```", "99 100 101", "```", "2 findings")), 1);
+});
+
+test("a declaration does not count itself as an unchecked number", () => {
+  assert.equal(countNumericClaims("77 findings <!-- fact: registered-findings = 77 -->"), 1);
+});
+
+test("the report names the unchecked remainder, not only what it checked", () => {
+  const out: string[] = [];
+  const decls = collectDeclarations("<!-- fact: a = 1 -->", "R.md");
+  report(compareFacts(decls, { a: 1 }), { a: 1 }, { claims: 100, declared: 7 }, (line: string) => out.push(line));
+  const text = out.join(" | ");
+  assert.match(text, /of those, anchored\s+7\s+=\s+7\.0%/);
+  assert.match(text, /UNCHECKED NUMBERS\s+93/);
 });

@@ -34,6 +34,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { BASELINE_PATH, COVERAGE_DIR, loadRuleIndex } from "./design-doc.mjs";
 import { evaluateCoverage } from "./check-rule-coverage.mjs";
 import { stripCode } from "./check-links.mjs";
+import { LIVING_DOCS } from "./check-doc-citations.mjs";
 
 export const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -107,6 +108,42 @@ export function parseRegister(text) {
 
 export function countIndexRows(text) {
   return new Set([...text.matchAll(/\|\s*`((?:audits|runs|archive)\/[^`]+\.md)`/g)].map((m) => m[1])).size;
+}
+
+// `node --test`'s TAP reporter, written alongside the human output so the count
+// can be measured instead of retyped. It exists because the commit that built
+// *this* checker added 18 tests, updated its own record to 291, and left 273
+// standing in three cover documents -- a number with no anchor, so nothing
+// looked at it. The lesson the checker had just been written to enforce.
+export function parseTestSummary(tap) {
+  const read = (label) => {
+    const m = new RegExp(`^# ${label} (\\d+)$`, "m").exec(tap);
+    return m === null ? null : Number(m[1]);
+  };
+  const pass = read("pass");
+  const fail = read("fail");
+  if (pass === null || fail === null) return null;
+  return { pass, fail };
+}
+
+// How many numbers in a document are stated as claims, whether or not anyone
+// declared them. This is the denominator the report was missing: "34 checked"
+// reads as complete, and "34 of 509" does not.
+//
+// Dates, years, section marks and code spans are removed first -- they are
+// identifiers, not measurements -- and 0 and 1 are dropped because ordinals and
+// list markers swamp the count. It is an estimate of the exposure, deliberately
+// rough, and the report says so.
+export function countNumericClaims(text) {
+  const body = text
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/\d{4}-\d{2}-\d{2}/g, "")
+    .replace(/20\d{2}/g, "")
+    .replace(/§[\d.]+/g, "")
+    .replace(/`[^`]*`/g, "");
+  return [...body.matchAll(/(?<![\w.:\-/])\d{1,6}(?:\.\d+)?(?![\w.\-/])/g)].filter((m) => Number(m[0]) > 1)
+    .length;
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +226,14 @@ async function measureAll(root, files) {
     "audit-run-records": auditRun,
   };
 
+  const summary = await readFile(path.join(COVERAGE_DIR, "test-summary.tap"), "utf8")
+    .then(parseTestSummary)
+    .catch(() => null);
+  if (summary !== null) {
+    measured["tests-passing"] = summary.pass;
+    measured["tests-failing"] = summary.fail;
+  }
+
   const claims = await readClaims();
   if (claims === null || claims.length === 0) {
     // Reporting 0 here would be worse than reporting nothing: every coverage
@@ -220,10 +265,20 @@ const BANNER = [
   "######################################################################",
 ];
 
-export function report(result, measured, log = console.log) {
+export function report(result, measured, exposure = null, log = console.log) {
   log("");
   log("declared-fact check");
   log(`  declarations checked      ${result.checked}`);
+  // The denominator. Without it "34 checked / 0 mismatches" reads as "every
+  // number in this repository is right", which is how three cover documents
+  // kept a stale test count through a green run. The ratio is the honest
+  // headline: this check defends the numbers somebody marked, and nothing else.
+  if (exposure !== null) {
+    const pct = ((exposure.declared / exposure.claims) * 100).toFixed(1);
+    log(`  numbers stated in living docs  ${exposure.claims}  (rough count)`);
+    log(`  of those, anchored             ${exposure.declared}  =  ${pct}%`);
+    log(`  UNCHECKED NUMBERS             ${exposure.claims - exposure.declared}  <- not defended by this check`);
+  }
   log(`  measurable facts          ${Object.keys(measured).length}`);
   log(`  mismatches                ${result.errors.length}`);
   for (const err of result.errors) log(`      x  ${err}`);
@@ -239,13 +294,19 @@ if (process.argv[1] !== undefined && pathToFileURL(process.argv[1]).href === imp
   const { measured, coverageAvailable } = await measureAll(REPO_ROOT, files);
 
   const declarations = [];
+  const exposure = { claims: 0, declared: 0 };
   for (const file of files) {
-    declarations.push(...collectDeclarations(await readFile(path.join(REPO_ROOT, file), "utf8"), file));
+    const text = await readFile(path.join(REPO_ROOT, file), "utf8");
+    declarations.push(...collectDeclarations(text, file));
+    if (LIVING_DOCS.has(file.replaceAll("\\", "/"))) {
+      exposure.claims += countNumericClaims(text);
+      exposure.declared += collectDeclarations(text, file).length;
+    }
   }
 
   const result = compareFacts(declarations, measured);
   if (result.errors.length > 0) for (const line of BANNER) console.log(line);
-  report(result, measured);
+  report(result, measured, exposure);
   if (!coverageAvailable) {
     console.log("  coverage facts were not measured: the claim sink is empty. Run `npm test`.");
     console.log("");

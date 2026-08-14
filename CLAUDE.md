@@ -8,7 +8,7 @@ No dependencies, no `npm install`. Node 24+ only (native TypeScript stripping).
 
 ```bash
 node -v          # must be >= 24
-npm test         # suite, then the coverage, link and declared-fact checkers
+npm test         # suite, then the coverage, link, citation and declared-fact checkers
 ```
 
 `.codefleet/` is not tracked. It holds this repo's own trial runs, not state you need to resume.
@@ -42,6 +42,8 @@ Never trust a count written in prose here. Run the command and read the number i
 
 A check that quantifies over a set must report what it scanned, not only its verdict. **Zero items examined is a failure, not a pass.** This has already caught two silent-green bugs here: a rule parser that read 0 blocks because of CRLF, and a coverage run that recorded no claims. Both would have passed.
 
+**Report the denominator, not only the numerator.** `check-doc-facts.mjs` said "34 declarations checked, 0 mismatches" and was read as "every number here is right" — while 533 numbers in the same documents carried no anchor and were never looked at. It now prints the ratio and the unchecked remainder. A checker that names only what it covered is making the claim its subject is not allowed to make.
+
 When one number would blend two different things, split it. Mixing "no code exists" with "code exists but was never labelled" made the remaining work look larger than it was.
 
 Do not estimate to fill a gap in measurement. Say the classification has not been done.
@@ -51,6 +53,8 @@ Do not estimate to fill a gap in measurement. Say the classification has not bee
 Anything that measures or validates needs tests that make it fail on purpose. A guard that always returns null looks exactly like a guard that works.
 
 `test/rule-coverage.test.ts` reproduces every failure mode of the coverage checker. `scripts/check-rule-coverage.mjs` refuses an evidence path that cannot be opened, because prose can assert anything but a path is checkable.
+
+The same standard holds for the three document checkers — links, declared facts, file:line citations — each with a test file that drives every branch to fail on purpose. Two things they each had to learn separately, so a fourth would learn them again: **a quotation is not a claim** (a citation inside a fence, an example of the syntax, an old line number written down to correct it), and **a citation is relative to its document's target commit, not to HEAD** — comparing a dated audit against today's tree reports a hundred breakages that are not breakages.
 
 Record only what executed. Coverage claims are `coversRule(ruleId, "condition text")` called inside a test body, so a failing or unrun test contributes nothing — the same standard the product applies to agents.
 

@@ -216,12 +216,27 @@ Short version: **less than the list above might suggest.** "Observed" mostly mea
 
 - **The pipeline completed exactly once**, on a controlled fixture, and **four workarounds were holding it up.** One was a role substitution — of seven built-in roles, only two permit command execution, and neither of those two is a role that writes application code.
 - **On a real Spring Boot project it did not complete.** Of fifteen steps, four were blocked and one failed. The command that ended up satisfying the verification gate was `gradle --version`. Our implementation could not invoke Gradle or Maven wrappers on Windows: the rule forbidding shell interpreters is correct, and it left no path to a batch file.
-- **77 registered findings** — 25 resolved, 8 partial, 1 not reproduced, 15 open, 1 accepted as a limit, and **27 never checked**. Those 27 close as unchecked. Nobody looked at them after registration, and there is no basis for claiming they still hold — or that they don't. **One is an exception**: P1-21 was realised in CI after the freeze, exactly as predicted, and is a confirmed defect. The register is frozen and still reads [unchecked]; the confirmation is held by the [run record](docs/runs/2026-08-13/ci-first-run.md). <!-- fact: registered-findings = 77 --> <!-- fact: findings-resolved = 25 --> <!-- fact: findings-partial = 8 --> <!-- fact: findings-not-reproduced = 1 --> <!-- fact: findings-open = 15 --> <!-- fact: findings-accepted-limit = 1 --> <!-- fact: findings-unchecked = 27 -->
-- `npm test` exits **0 on Windows**, where this was developed (273 passing, 0 failing). **The one time CI ran, both platforms failed** — six tests on Linux, two on Windows. One of the six is a POSIX behaviour this archive predicted and never measured; the two on Windows are **tests added just before the freeze, failing on themselves**. **The workflow was then removed** — an archive has nobody to read a red check and act on it — and the run ids are kept in the record ([record](docs/runs/2026-08-13/ci-first-run.md)). Condition coverage is 345 of 545 lines (63.3%), which means a passing test quoted that many lines — **not** that those conditions are correctly implemented. <!-- fact: conditions-covered = 345 --> <!-- fact: condition-lines = 545 --> <!-- fact: coverage-percent = 63.3 -->
+- **77 registered findings** — 25 resolved, 8 partial, 1 not reproduced, 15 open, 1 accepted as a limit, and **27 never checked**. The register froze those 27 as unchecked. **They were all adjudicated after the freeze, though, and the result was 21 valid / 3 resolved / 1 invalidated / 2 partial** — see "What was checked after closing" below. The counts above and the register's status column were left alone under the freeze rule, so **reading this table alone says "nobody looked", and that is no longer true.** <!-- fact: registered-findings = 77 --> <!-- fact: findings-resolved = 25 --> <!-- fact: findings-partial = 8 --> <!-- fact: findings-not-reproduced = 1 --> <!-- fact: findings-open = 15 --> <!-- fact: findings-accepted-limit = 1 --> <!-- fact: findings-unchecked = 27 -->
+- `npm test` exits **0 on Windows**, where this was developed (318 passing, 0 failing). <!-- fact: tests-passing = 318 --> <!-- fact: tests-failing = 0 --> **The one time CI ran, both platforms failed** — six tests on Linux, two on Windows. One of the six is a POSIX behaviour this archive predicted and never measured; the two on Windows are **tests added just before the freeze, failing on themselves**. **The workflow was then removed** — an archive has nobody to read a red check and act on it — and the run ids are kept in the record ([record](docs/runs/2026-08-13/ci-first-run.md)). Condition coverage is 345 of 545 lines (63.3%), which means a passing test quoted that many lines — **not** that those conditions are correctly implemented. <!-- fact: conditions-covered = 345 --> <!-- fact: condition-lines = 545 --> <!-- fact: coverage-percent = 63.3 -->
 - **Nothing here was exercised under repetition, concurrency, or multiple users.**
 
 > Runnability is not warranted. These are observations, not a claim that anything works.
 > **The test count and the CI results were measured after the freeze**; the rest are figures from the moment of freezing.
+
+## What was checked after closing
+
+The largest hole in the freeze was the **27 unchecked findings**. The archive wrote that unchecked is not the same as valid, and closed — without ever measuring what checking them would actually cost. That was measured on 2026-08-14: **reading the code settled all of them.**
+
+| Verdict | Count |
+| --- | --- |
+| Valid (open) | **21** |
+| Resolved | 3 (P1-9 · P1-16 · P1-36) |
+| Invalidated | 1 (P1-14) |
+| Partial | 2 (P1-5 · P1-39) |
+
+**P1-14 had already been judged [invalidated] on 2026-08-12.** The register never carried that judgment across, so it sat as [unchecked]. The investigation right before the freeze found eight of eleven stranded findings in the same state — **whoever fixed them did not update the register.** The most repeated failure this repository produced was not a defect; it was that.
+
+The register's counts and status column were not changed, under the freeze rule. The judgments are held by [`runs/2026-08-14/unchecked-27-adjudication.md`](docs/runs/2026-08-14/unchecked-27-adjudication.md).
 
 ## Why it stopped here
 
@@ -242,7 +257,7 @@ Two structural reasons, neither of which a partial fix would have closed.
 | [`ENVIRONMENT.md`](docs/archive/2026-08-13/ENVIRONMENT.md) | Measured behaviour for anyone building agent tooling on Windows: a CP949 console against UTF-8 decoding of child output, batch wrappers unreachable behind a shell-interpreter rule, worktree paths that must be asked of git, `SIGTERM` that only reliably kills because Windows maps it to `TerminateProcess`, and a spawn environment narrowed to `PATH` — which left the child without a home directory. Each with its reproduction condition; 3 unresolved, 4 unverified, 1 unmeasured |
 | [`ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md) | State, reasons, and asset list at close. The source of every number on this page |
 
-Every judgment in this repository is cited to a file and line. The 49 audit and run records are indexed in [`docs/INDEX.md`](docs/INDEX.md); <!-- fact: audit-run-records = 49 --> the frozen findings register is [`docs/REGISTER.md`](docs/REGISTER.md); the working conventions, each with the incident that made it necessary, are in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).
+Every judgment in this repository is cited to a file and line. The 51 audit and run records are indexed in [`docs/INDEX.md`](docs/INDEX.md); <!-- fact: audit-run-records = 51 --> the frozen findings register is [`docs/REGISTER.md`](docs/REGISTER.md); the working conventions, each with the incident that made it necessary, are in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).
 
 ## Successor
 

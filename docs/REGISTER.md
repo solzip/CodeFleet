@@ -18,6 +18,7 @@
 
 - **상태**는 `최종 갱신 문서`가 내린 판정을 그대로 옮긴 것이다. **그 문서 이후 재확인하지 않았다.**
 - **★** 표시는 2026-08-13 이 세션에서 코드 또는 실행으로 직접 확인한 것이다. 나머지는 문서 인용이다.
+- **◆** 표시는 **동결 이후(2026-08-14) 코드로 판정된 것**이다. 27건 전부에 붙어 있다. **상태 칸은 동결 규칙에 따라 [미확인] 그대로이며, 판정은 `runs/2026-08-14/unchecked-27-adjudication.md`가 보유한다.** 그 문서를 읽지 않고 이 표만 보면 "아무도 안 봤다"로 읽히는데, 그것은 이제 사실이 아니다.
 - 확인되지 않은 것은 **[미확인]**으로 둔다. 추측으로 채우지 않는다.
 - 상태값: `미해소` / `부분해소` / `해소` / `재현안됨` / `정의확정필요` / `미확인`
 - **등급이 바뀌어도 ID는 유지한다** (`CONVENTIONS.md` §7). 등급은 아래 「현재 등급」 열이 유일한 근거다.
@@ -35,6 +36,8 @@
 | 미해소(수용된 한계) | 1 | P1-28 |
 | **미확인** | **27** | P1-1·5·6·7·8·9·10·11·12·13·14·16·18·19·20·21·22·23·24·25·26·29·30·31·33·36·39 |
 | 합계 | 77 | P0 16 + P1 61 | <!-- fact: registered-findings = 77 --> <!-- fact: findings-resolved = 25 --> <!-- fact: findings-partial = 8 --> <!-- fact: findings-not-reproduced = 1 --> <!-- fact: findings-open = 15 --> <!-- fact: findings-accepted-limit = 1 --> <!-- fact: findings-unchecked = 27 -->
+
+**◆ [미확인] 27건은 동결 이후 2026-08-14에 전수 판정됐다.** 결과는 **유효 21 / 해소 3(P1-9·P1-16·P1-36) / 무효화됨 1(P1-14) / 부분해소 2(P1-5·P1-39)** 이며, 근거는 전부 파일:라인으로 `runs/2026-08-14/unchecked-27-adjudication.md`에 있다. **위 건수와 각 행의 상태 칸은 동결 규칙에 따라 바꾸지 않았다** — 재집계는 동결을 푸는 결정이 선행돼야 한다. 그 표에 따르면 P1-14는 이미 `2026-08-12/SUMMARY.md`가 [무효화됨]으로 판정한 것을 이 등재부가 옮기지 않은 경우였다.
 
 **▲ P1-21은 동결 이후 CI에서 확인됐고 유효한 결함이다.** 상태 칸은 동결 규칙에 따라 [미확인] 그대로 두었으므로 아래 건수도 변하지 않는다. 확인 근거는 `runs/2026-08-13/ci-first-run.md`가 보유한다 — 등재부만 읽고 지나치지 않도록 행과 이 문단 양쪽에 표시한다.
 
@@ -83,29 +86,29 @@
 
 | ID | 요약 | 현재 등급 | 상태 | 최초 등재 | 최종 갱신 |
 | --- | --- | --- | --- | --- | --- |
-| P1-1 | 자유 텍스트 `doneCriteria`가 필수이고 실행 가능한 `verification`이 선택이다 | P1 | 미확인 | `2026-08-10/SUMMARY.md` | — |
+| P1-1 | 자유 텍스트 `doneCriteria`가 필수이고 실행 가능한 `verification`이 선택이다 | P1 | 미확인 ◆ | `2026-08-10/SUMMARY.md` | — |
 | P1-2 | 파괴적 명령 승인 경로가 막다른 길. `approvedCategoryIds: []` 하드코딩 | P1 | 미해소 ★ | `2026-08-10/SUMMARY.md` | `2026-08-13/13-output-fidelity.md` |
 | P1-3 | 선언만 되고 소비되지 않는 정책 플래그 5종 | P1 | 부분해소 ★ | `2026-08-10/SUMMARY.md` | `2026-08-13/13-output-fidelity.md` |
 | P1-4 | 승인 해시가 Task 파일만 덮고 프로파일을 포함하지 않는다 | P1→P0-12 | 해소 ★ | `2026-08-10/SUMMARY.md` | `runs/2026-08-13/first-full-loop.md` |
-| P1-5 | actor 신원이 자기 신고 문자열. 승인자=검토자 허용 | P1 | 미확인 | `2026-08-10/SUMMARY.md` | — |
-| P1-6 | 실행 중 계획 이탈 시 재승인 트리거 없음 | P1 | 미확인 | `2026-08-10/SUMMARY.md` | — |
-| P1-7 | 원자적 롤백 부재 | P1 | 미확인 | `2026-08-10/SUMMARY.md` | — |
-| P1-8 | Run 아티팩트에 `objectiveId` 없음 | P1 | 미확인 | `2026-08-10/SUMMARY.md` | — |
-| P1-9 | `objective attach`가 승인 여부·revision·유효성을 검증하지 않는다 | P1 | 미확인 | `2026-08-10/SUMMARY.md` | — |
-| P1-10 | 무작업 Run이 ACCEPTED 가능 | P1 | 미확인 | `2026-08-10/SUMMARY.md` | — |
-| P1-11 | 비용·토큰 상한 부재 | P1 | 미확인 | `2026-08-10/SUMMARY.md` | — |
-| P1-12 | `appendCorrectiveEvent`에 CLI 경로 없음 | P1 | 미확인 | `2026-08-10/SUMMARY.md` | `2026-08-12/SUMMARY.md` |
-| P1-13 | `AgentRunInput.limits`를 채우는 코드가 없다 | P1 | 미확인 | `2026-08-10/SUMMARY.md` | — |
-| P1-14 | 모든 테스트 픽스처가 `isolationMode: NONE` | P1 | 미확인 | `2026-08-10/SUMMARY.md` | — |
+| P1-5 | actor 신원이 자기 신고 문자열. 승인자=검토자 허용 | P1 | 미확인 ◆ | `2026-08-10/SUMMARY.md` | — |
+| P1-6 | 실행 중 계획 이탈 시 재승인 트리거 없음 | P1 | 미확인 ◆ | `2026-08-10/SUMMARY.md` | — |
+| P1-7 | 원자적 롤백 부재 | P1 | 미확인 ◆ | `2026-08-10/SUMMARY.md` | — |
+| P1-8 | Run 아티팩트에 `objectiveId` 없음 | P1 | 미확인 ◆ | `2026-08-10/SUMMARY.md` | — |
+| P1-9 | `objective attach`가 승인 여부·revision·유효성을 검증하지 않는다 | P1 | 미확인 ◆ | `2026-08-10/SUMMARY.md` | — |
+| P1-10 | 무작업 Run이 ACCEPTED 가능 | P1 | 미확인 ◆ | `2026-08-10/SUMMARY.md` | — |
+| P1-11 | 비용·토큰 상한 부재 | P1 | 미확인 ◆ | `2026-08-10/SUMMARY.md` | — |
+| P1-12 | `appendCorrectiveEvent`에 CLI 경로 없음 | P1 | 미확인 ◆ | `2026-08-10/SUMMARY.md` | `2026-08-12/SUMMARY.md` |
+| P1-13 | `AgentRunInput.limits`를 채우는 코드가 없다 | P1 | 미확인 ◆ | `2026-08-10/SUMMARY.md` | — |
+| P1-14 | 모든 테스트 픽스처가 `isolationMode: NONE` | P1 | 미확인 ◆ | `2026-08-10/SUMMARY.md` | — |
 | P1-15 | 어댑터 capabilities 거부에 테스트 0건 | P1 | 미해소 | `2026-08-10/SUMMARY.md` | `2026-08-12/SUMMARY.md` |
-| P1-16 | `status: DONE` Task의 순차 재실행이 경고뿐 | P1 | 미확인 | `2026-08-10/SUMMARY.md` | `2026-08-12/11-model-conformance.md` |
+| P1-16 | `status: DONE` Task의 순차 재실행이 경고뿐 | P1 | 미확인 ◆ | `2026-08-10/SUMMARY.md` | `2026-08-12/11-model-conformance.md` |
 | P1-17 | SIGTERM 후 자식 프로세스 잔존 (SIGKILL 부재) | P1 | 미해소 | `2026-08-11/06-p0-6-limits.md` | `2026-08-12/SUMMARY.md` |
-| P1-18 | `SUMMARY.md` P1 표 + 상세 절 (문서 정합) | P1 | 미확인 | `2026-08-11/SUMMARY.md` | — |
-| P1-19 | fail-closed는 "안전하다"이지 "쓸 수 있다"가 아니다 | P1 | 미확인 | `2026-08-11/08-regression-and-coverage.md` | — |
+| P1-18 | `SUMMARY.md` P1 표 + 상세 절 (문서 정합) | P1 | 미확인 ◆ | `2026-08-11/SUMMARY.md` | — |
+| P1-19 | fail-closed는 "안전하다"이지 "쓸 수 있다"가 아니다 | P1 | 미확인 ◆ | `2026-08-11/08-regression-and-coverage.md` | — |
 
 ### ★ 근거
 
-- **P1-2**: `src/run.ts:1630`이 `approvedCategoryIds: []`를 여전히 하드코딩. `2026-08-13/13-output-fidelity.md` §4-2에서 재확인.
+- **P1-2**: `src/run.ts:1696`이 `approvedCategoryIds: []`를 여전히 하드코딩. `2026-08-13/13-output-fidelity.md` §4-2에서 재확인. *(2026-08-14 정정: 이 줄은 `1630`으로 적혀 있었다. 원 감사 시점(`ce3a4c1`)에는 1630이 맞았고 `f215fac`의 P1-53 수정이 66줄을 밀었는데, **이 등재부는 그 수정 뒤(`097681b`)에 작성되면서 옛 번호를 재측정 없이 옮겼다.** 결함 자체는 유효하다)*
 - **P1-3**: 같은 문서 §4-2 — 5종 중 3종(`allowedModes`, `allowProviderReportedCommandTruth`, `approvalRequiredForDestructiveCommands`)이 아직 미소비, 2종(`requireIsolationForMutation`, `allowDegradedCommandObservation`)은 소비됨. **P1-57·P1-58로 분할 재등재.**
 - **P1-4**: P0-12로 승격된 뒤 해소. P0-12 항목 참조.
 
@@ -115,27 +118,27 @@
 
 | ID | 요약 | 현재 등급 | 상태 | 최초 등재 | 최종 갱신 |
 | --- | --- | --- | --- | --- | --- |
-| P1-20 | 타임아웃으로 죽은 어댑터가 `ADAPTER_FAILED`로만 기록된다 | P1 | 미확인 | `2026-08-12/SUMMARY.md` | — |
-| P1-21 | 폐기 실패 회귀 테스트가 win32 동작에 의존한다 | P1 | 미확인 ▲ | `2026-08-12/SUMMARY.md` | `runs/2026-08-13/ci-first-run.md` |
-| P1-22 | `--no-index` 경로의 잘림 우선순위 규칙이 도달 불가 | P1 | 미확인 | `2026-08-12/03-slice-interactions.md` | — |
-| P1-23 | `isolation.ts`의 `run()`이 `scanScope`를 버린다 | P1 | 미확인 | `2026-08-12/03-slice-interactions.md` | — |
-| P1-24 | 검증 커맨드가 POST_RUN 스냅샷 이후 실행되어 증거에 안 나타난다 | P1 | 미확인 | `2026-08-12/SUMMARY.md` | — |
-| P1-25 | `QUEUE_ITEM_CANCELED`가 `runTask` 종단으로 검증되지 않는다 | P1 | 미확인 | `2026-08-12/01-p0-verdicts.md` | — |
-| P1-26 | 격리 모드 unavailable이 리뷰 게이트로 승격되지 않는다 | P1 | 미확인 | `2026-08-12/02-handoff-inventory.md` | — |
+| P1-20 | 타임아웃으로 죽은 어댑터가 `ADAPTER_FAILED`로만 기록된다 | P1 | 미확인 ◆ | `2026-08-12/SUMMARY.md` | — |
+| P1-21 | 폐기 실패 회귀 테스트가 win32 동작에 의존한다 | P1 | 미확인 ▲◆ | `2026-08-12/SUMMARY.md` | `runs/2026-08-13/ci-first-run.md` |
+| P1-22 | `--no-index` 경로의 잘림 우선순위 규칙이 도달 불가 | P1 | 미확인 ◆ | `2026-08-12/03-slice-interactions.md` | — |
+| P1-23 | `isolation.ts`의 `run()`이 `scanScope`를 버린다 | P1 | 미확인 ◆ | `2026-08-12/03-slice-interactions.md` | — |
+| P1-24 | 검증 커맨드가 POST_RUN 스냅샷 이후 실행되어 증거에 안 나타난다 | P1 | 미확인 ◆ | `2026-08-12/SUMMARY.md` | — |
+| P1-25 | `QUEUE_ITEM_CANCELED`가 `runTask` 종단으로 검증되지 않는다 | P1 | 미확인 ◆ | `2026-08-12/01-p0-verdicts.md` | — |
+| P1-26 | 격리 모드 unavailable이 리뷰 게이트로 승격되지 않는다 | P1 | 미확인 ◆ | `2026-08-12/02-handoff-inventory.md` | — |
 | P1-27 | ACCEPTED 시 격리 트리 반영 경로가 설계되지 않았다 | P1 | **재현안됨** ★ | `2026-08-12/09-registration-check.md` | `runs/2026-08-13/first-full-loop.md` |
 | P1-28 | Objective 디렉터리 삭제로 큐 결정이 소실된다 (수용된 한계) | P1 | 미해소(수용) | `2026-08-12/02-handoff-inventory.md` | `2026-08-12/SUMMARY.md` |
-| P1-29 | 타임아웃 메시지가 모든 자식에 "Adapter"라고 말한다 | P1 | 미확인 | `2026-08-12/03-slice-interactions.md` | — |
-| P1-30 | `--no-index`의 `/dev/null` 처리가 git 구현에 의존한다 | P1 | 미확인 | `2026-08-12/04-platform-qualification.md` | — |
-| P1-31 | 격리 트리 경로 접두가 Windows 260자 한계 여유를 줄인다 | P1 | 미확인 | `2026-08-12/09-registration-check.md` | — |
+| P1-29 | 타임아웃 메시지가 모든 자식에 "Adapter"라고 말한다 | P1 | 미확인 ◆ | `2026-08-12/03-slice-interactions.md` | — |
+| P1-30 | `--no-index`의 `/dev/null` 처리가 git 구현에 의존한다 | P1 | 미확인 ◆ | `2026-08-12/04-platform-qualification.md` | — |
+| P1-31 | 격리 트리 경로 접두가 Windows 260자 한계 여유를 줄인다 | P1 | 미확인 ◆ | `2026-08-12/09-registration-check.md` | — |
 | P1-32 | Core 역할 7개 중 5개로는 어댑터가 실행되지 않는다. `init` 기본값이 그중 하나 | P1 | **부분해소** ★ | `2026-08-12/10-first-real-run.md` | `runs/2026-08-13/first-full-loop.md` |
-| P1-33 | 어댑터 거부 메시지가 원인·조치를 말하지 않는다 | P1 | 미확인 | `2026-08-12/10-first-real-run.md` | — |
+| P1-33 | 어댑터 거부 메시지가 원인·조치를 말하지 않는다 | P1 | 미확인 ◆ | `2026-08-12/10-first-real-run.md` | — |
 | P1-34 | win32에서 Gradle/Maven wrapper를 검증 커맨드로 쓸 수 없다 | P1 | 해소 | `2026-08-12/10-first-real-run.md` | `2026-08-12/12-orchestration-roadmap.md` |
 | P1-35 | `run-record.md`가 실행된 검증 커맨드를 이름으로 적지 않는다 | P1 | **부분해소** ★ | `2026-08-12/10-first-real-run.md` | `2026-08-13/13-output-fidelity.md` |
-| P1-36 | 승인이 계약의 실행 가능성을 검사하지 않는다 | P1 | 미확인 | `2026-08-12/11-model-conformance.md` | — |
+| P1-36 | 승인이 계약의 실행 가능성을 검사하지 않는다 | P1 | 미확인 ◆ | `2026-08-12/11-model-conformance.md` | — |
 | P1-37 | Run 산출물 7개 중 `taskRevision`을 담은 것이 1개뿐 | P1 | 해소 ★ | `2026-08-12/11-model-conformance.md` | `runs/2026-08-13/first-full-loop.md` |
 | P1-38 | Task 원장이 계약 본문을 보관하지 않는다 | P1 | 해소 | `2026-08-12/11-model-conformance.md` | `2026-08-12/12-orchestration-roadmap.md` |
-| P1-39 | Draft / Revision 상태 기계가 코드에 없다 | P1 | 미확인 | `2026-08-12/11-model-conformance.md` | — |
-| P1-40 | 실행 결과 상태(`status`)가 계약 문서 안에 있어 승인 해시에 포함된다 | P1 | 해소 | `2026-08-12/11-model-conformance.md` | `src/task.ts:6-13` (RETIRED_TASK_STATUSES) |
+| P1-39 | Draft / Revision 상태 기계가 코드에 없다 | P1 | 미확인 ◆ | `2026-08-12/11-model-conformance.md` | — |
+| P1-40 | 실행 결과 상태(`status`)가 계약 문서 안에 있어 승인 해시에 포함된다 | P1 | 해소 | `2026-08-12/11-model-conformance.md` | `src/task.ts:7-13` (RETIRED_TASK_STATUSES) |
 | P1-41 | Revision 산출물이 존재하지 않는다 (P1-37·38·39의 공통 원인) | P1 | 부분해소 ★ | `2026-08-12/11-model-conformance.md` | `runs/2026-08-13/first-full-loop.md` |
 | P1-42 | `TASK_REVISION_SUPERSEDED`가 선언·replay되지만 append 코드가 0곳 | P1 | **해소** ★ | `2026-08-12/12-model-conformance-recheck.md` | `runs/2026-08-13/stranded-findings-triage.md` |
 | P1-43 | `resume.sourceHashPolicy`를 읽는 코드·테스트가 없다 | P1 | **해소** ★ | `2026-08-12/12-model-conformance-recheck.md` | `runs/2026-08-13/stranded-findings-triage.md` |
@@ -151,7 +154,7 @@
 - **P1-27** [재현안됨]: `src/apply.ts`가 구현돼 있었고 실제로 동작했다. `codefleet apply`가 워크스페이스를 바꾸고 `RUN_RESULT_APPLIED`를 원장에 남겼다.
 - **P1-32** [부분해소]: 등재 당시 증상(늦은 `LAUNCH_FAILED`)은 재현되지 않았으나, **`init` 기본 역할이 여전히 `BACKEND_IMPLEMENTER`**이고 코드 작성 역할로는 검증 커맨드가 붙은 Task를 실행할 수 없다. 우회로 `INFRA_OPERATOR`를 썼다.
 - **P1-35** [부분해소]: `run-record.md`가 커맨드 이름을 적는 것은 확인했으나, **리뷰 후 그 절이 거짓 문장으로 대체된다**(P1-50). 테스트 0건(`grep "rests on" test/` → 0). `CONVENTIONS.md` §10에 따라 [해소] 아닌 [부분해소].
-- **P1-37** [해소]: Run 산출물 전체에 `taskId`+`taskRevision`이 실려 있다 (`contractRef` 스프레드, `src/run.ts:766`).
+- **P1-37** [해소]: Run 산출물 전체에 `taskId`+`taskRevision`이 실려 있다 (`contractRef` 정의 `src/run.ts:832`, 스프레드 `:948`·`:1000`·`:1044`). *(2026-08-14 정정: `src/run.ts:766`으로 적혀 있었다. 원 문서 시점(`e5fb188`)에는 766이 정의 줄이 맞았고 이후 이동했다)* <!-- cite: quoted -->
 - **P1-41** [부분해소]: `.codefleet/task-revisions/`에 계약 본문이 저장된다(`codefleet task revision` 동작 확인). 다만 P1-39(상태 기계)는 미확인.
 
 ---
@@ -163,7 +166,7 @@
 - **P1-44** [해소]: `task-ledger.ts:249`가 `INVALIDATED`를 정의하고 `:285-292`가 승계 없을 때만 매긴다. **단서** — 코드는 `INVALIDATED`, 등재문은 설계의 `CANCELED`를 인용했는데 설계에서 `CANCELED`는 큐 아이템 상태로 나타난다. enum 정합은 **정의 확정 필요**로 남겼다.
 - **P1-45** [미해소]: `task-ledger.ts:308-311` 주석이 "no event produces it"이라 적고 `DraftState`가 2개뿐이다.
 - **P1-46** [미해소]: `OBJECTIVE_CLOSED`가 `ledger.ts:20`(타입)·`:242`(replay)에만 있고 **생산 0곳**.
-- **P1-47** [미해소]: `review.ts:632` — `ACCEPTED`가 아니면서 번들이 `DEGRADED`가 아니면 `MIGRATION_READY`로 떨어진다. 실행 확인 가능(원장 직접 수정 필요).
+- **P1-47** [미해소]: `review.ts:633` — `ACCEPTED`가 아니면서 번들이 `DEGRADED`가 아니면 `MIGRATION_READY`로 떨어진다. 실행 확인 가능(원장 직접 수정 필요). *(2026-08-14 정정: `632`로 적혀 있었으나 그 줄은 비어 있다. 한 줄 어긋남)*
 - **P1-48** [해소]: `task-revision.ts:64-68,124`가 replay 실패 Objective를 `scanScope`에 분리 기록해 "relation 없음"과 "읽지 못함"을 구분한다. 커밋 `5055cf3`.
 - **P1-49** [해소]: `apply.ts:205-208` 주석이 "This is not the drift check, and an earlier comment here said it was"로 정정됐다.
 

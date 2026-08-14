@@ -10,10 +10,11 @@
   "scripts": {
     "codefleet": "node ./src/cli.ts",
     "pretest": "node ./scripts/reset-rule-coverage.mjs",
-    "test": "node --test",
-    "posttest": "node ./scripts/check-rule-coverage.mjs && node ./scripts/check-links.mjs && node ./scripts/check-doc-facts.mjs",
+    "test": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=.rule-coverage/test-summary.tap",
+    "posttest": "node ./scripts/check-rule-coverage.mjs && node ./scripts/check-links.mjs && node ./scripts/check-doc-citations.mjs && node ./scripts/check-doc-facts.mjs",
     "check:links": "node ./scripts/check-links.mjs",
     "check:facts": "node ./scripts/check-doc-facts.mjs",
+    "check:citations": "node ./scripts/check-doc-citations.mjs",
     "coverage:baseline": "node ./scripts/check-rule-coverage.mjs --update-baseline",
     "coverage:uncovered": "node ./scripts/check-rule-coverage.mjs --list-uncovered"
   },
