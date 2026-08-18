@@ -1,3 +1,14 @@
+> **Archived (2026-08)**
+>
+> Claude Code가 네이티브 worktree(v2.1.49)와 31개 훅 라이프사이클 이벤트를
+> 제공하면서 이 프로젝트의 두 가지 핵심 전제가 무효화되었다.
+>
+> - worktree 생성·정리를 직접 구현해야 한다 → 하네스가 네이티브 지원
+> - 세션 관측에 PTY 래핑이 필요하다 → 훅으로 해결
+>
+> 이후 기존 구현(agentsd, Bernstein)을 코드 레벨로 조사했고,
+> 그 결과 재설계를 보류했다.
+
 # CodeFleet — 에이전트가 했다고 말한 일을 어떻게 검증하나
 
 > 에이전트가 "테스트 통과했다"고 보고할 때, **그 말이 판정에 닿지 못하게 하는** 구조를 시험했다.
@@ -287,7 +298,7 @@ selectedWorkspaceRootRealPath: input.selectedWorkspaceRootRealPath ?? "",
 | [`ENVIRONMENT.md`](docs/archive/2026-08-13/ENVIRONMENT.md) | Windows에서 에이전트 도구를 만드는 사람에게 그대로 쓸모 있는 실측 기록. CP949 콘솔과 자식 출력 UTF-8 디코딩, 셸 인터프리터 규칙에 막혀 닿지 않는 배치 wrapper, 프로세스가 정규화하지 말고 git에게 물어야 하는 worktree 경로, Windows가 `TerminateProcess`로 매핑해주는 덕에만 확실한 `SIGTERM`, 그리고 `PATH`만 남긴 spawn 환경 탓에 자식 프로세스에 홈 디렉터리가 없었던 일. 항목마다 재현 조건을 붙였고 해결 미확정 3 / 미검증 4 / 미실측 1로 표시했다 |
 | [`ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md) | 종료 시점의 상태와 사유, 자산 목록. 이 페이지에 나오는 모든 숫자의 출처다 |
 
-이 저장소의 판정에는 전부 파일:라인 근거가 붙어 있다. 감사·실행 기록 52편의 색인은 [`docs/INDEX.md`](docs/INDEX.md), <!-- fact: audit-run-records = 52 --> 동결된 결함 등재부는 [`docs/REGISTER.md`](docs/REGISTER.md), 규칙마다 그것이 필요해진 사건을 함께 적어둔 작업 규약은 [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)에 있다.
+이 저장소의 판정에는 전부 파일:라인 근거가 붙어 있다. 감사·실행 기록 53편의 색인은 [`docs/INDEX.md`](docs/INDEX.md), <!-- fact: audit-run-records = 53 --> 동결된 결함 등재부는 [`docs/REGISTER.md`](docs/REGISTER.md), 규칙마다 그것이 필요해진 사건을 함께 적어둔 작업 규약은 [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)에 있다.
 
 ## 후속
 
@@ -295,7 +306,7 @@ selectedWorkspaceRootRealPath: input.selectedWorkspaceRootRealPath ?? "",
 
 파이프라인은 실제 프로젝트에서 완주하지 못했다. 그건 위에 적은 그대로다. 반면 닫는 일은 끝까지 했다 — 등재된 결함을 **하나도 남기지 않고 판정했고**(유효로 남은 것은 새 프로젝트가 조사할 목록으로 넘겼다), 자산을 이관과 폐기로 갈라 각각 이유를 적었고, "설계가 코드보다 앞섰나"를 감으로 쓰지 않고 커밋 연대를 실측해 종료 사유로 세웠다. 그리고 이 문서들의 숫자·링크·파일:라인 인용은 지금도 `npm test`가 검사한다. **여기서 배운 것을 다음에 쓸 수 있는 형태로 만들어 두는 것까지가 이 저장소의 마지막 작업이었다.**
 
-제품 정의는 다시 세워 **Warrant**라는 이름으로 시작했다 — 실행 엔진을 소유하지 않고, 판정과 관측을 갈라놓은 판정 계층이다. 공개 저장소는 아직 없다.
+제품 정의는 다시 세워 **Warrant**라는 이름으로 시작했다 — 실행 엔진을 소유하지 않고, 판정과 관측을 갈라놓은 판정 계층이다. **그것도 멈췄다.** 표지에 적은 대로 하네스가 worktree와 세션 관측을 네이티브로 가져가면서 전제 둘이 무효화됐고, 기존 구현(agentsd, Bernstein)을 코드 레벨로 조사한 뒤 재설계를 보류했다. 공개 저장소는 없다.
 
 ## 라이선스
 

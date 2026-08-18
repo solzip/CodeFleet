@@ -1,3 +1,14 @@
+> **Archived (2026-08)**
+>
+> Claude Code now ships native worktrees (v2.1.49) and 31 hook lifecycle events,
+> which invalidated two of this project's core premises.
+>
+> - worktree creation and cleanup had to be implemented here → the harness supports it natively
+> - observing a session required PTY wrapping → hooks cover it
+>
+> The existing implementations (agentsd, Bernstein) were then examined at the code level,
+> and a redesign was put on hold as a result.
+
 # CodeFleet — how do you verify work an agent says it did?
 
 > A structure that keeps an agent's "tests pass" from **reaching the decision at all**, tested end to end.
@@ -288,7 +299,7 @@ Two structural reasons, neither of which a partial fix would have closed.
 | [`ENVIRONMENT.md`](docs/archive/2026-08-13/ENVIRONMENT.md) | Measured behaviour for anyone building agent tooling on Windows: a CP949 console against UTF-8 decoding of child output, batch wrappers unreachable behind a shell-interpreter rule, worktree paths that must be asked of git, `SIGTERM` that only reliably kills because Windows maps it to `TerminateProcess`, and a spawn environment narrowed to `PATH` — which left the child without a home directory. Each with its reproduction condition; 3 unresolved, 4 unverified, 1 unmeasured |
 | [`ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md) | State, reasons, and asset list at close. The source of every number on this page |
 
-Every judgment in this repository is cited to a file and line. The 52 audit and run records are indexed in [`docs/INDEX.md`](docs/INDEX.md); <!-- fact: audit-run-records = 52 --> the frozen findings register is [`docs/REGISTER.md`](docs/REGISTER.md); the working conventions, each with the incident that made it necessary, are in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).
+Every judgment in this repository is cited to a file and line. The 53 audit and run records are indexed in [`docs/INDEX.md`](docs/INDEX.md); <!-- fact: audit-run-records = 53 --> the frozen findings register is [`docs/REGISTER.md`](docs/REGISTER.md); the working conventions, each with the incident that made it necessary, are in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).
 
 ## Successor
 
@@ -296,7 +307,7 @@ Every judgment in this repository is cited to a file and line. The 52 audit and 
 
 The pipeline never completed on a real project — that stands exactly as written above. Closing it, on the other hand, was carried through: **every registered finding was adjudicated**, with the ones still valid handed forward as the list the next project has to investigate; assets were split into carried and discarded with a reason on each; and "did the design lead the code?" was settled by measuring the commit chronology instead of asserting it. The figures, links and file:line citations in these documents are still checked by `npm test`. **Making what was learned here usable by something else was the last piece of work in this repository, and it was finished.**
 
-The product definition has been reworked and restarted under the name **Warrant** — a judgment layer that does not own an execution engine and keeps judgment separate from observation. There is no public repository yet.
+The product definition was reworked and restarted under the name **Warrant** — a judgment layer that does not own an execution engine and keeps judgment separate from observation. **That stopped too.** As the banner at the top says, the harness took worktrees and session observation natively, which invalidated two of the premises; the existing implementations (agentsd, Bernstein) were then examined at the code level, and the redesign was put on hold. There is no public repository.
 
 ## License
 
