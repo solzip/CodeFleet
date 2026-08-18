@@ -299,7 +299,7 @@ Two structural reasons, neither of which a partial fix would have closed.
 | [`ENVIRONMENT.md`](docs/archive/2026-08-13/ENVIRONMENT.md) | Measured behaviour for anyone building agent tooling on Windows: a CP949 console against UTF-8 decoding of child output, batch wrappers unreachable behind a shell-interpreter rule, worktree paths that must be asked of git, `SIGTERM` that only reliably kills because Windows maps it to `TerminateProcess`, and a spawn environment narrowed to `PATH` — which left the child without a home directory. Each with its reproduction condition; 3 unresolved, 4 unverified, 1 unmeasured |
 | [`ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md) | State, reasons, and asset list at close. The source of every number on this page |
 
-Every judgment in this repository is cited to a file and line. The 54 audit and run records are indexed in [`docs/INDEX.md`](docs/INDEX.md); <!-- fact: audit-run-records = 54 --> the frozen findings register is [`docs/REGISTER.md`](docs/REGISTER.md); the working conventions, each with the incident that made it necessary, are in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).
+Every judgment in this repository is cited to a file and line. The 55 audit and run records are indexed in [`docs/INDEX.md`](docs/INDEX.md); <!-- fact: audit-run-records = 55 --> the frozen findings register is [`docs/REGISTER.md`](docs/REGISTER.md); the working conventions, each with the incident that made it necessary, are in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).
 
 ## Successor
 
@@ -315,4 +315,4 @@ Published for reading and evaluation only — see [`LICENSE`](LICENSE). **Not op
 
 That is deliberate. This pipeline completed once on a controlled fixture and never on a real project. **Attaching a licence that grants the right to use it would be making a claim this repository cannot back** — which is the one thing the project set out not to do. It is not code offered for use; it is a record offered for reading.
 
-This is also why GitHub shows no licence badge in the sidebar. Nothing is missing; the file is simply not one of the standard licences.
+This is also why the sidebar's licence entry **carries no name.** GitHub detects the file and links it as `License`, but cannot identify it as a standard licence and records it as `NOASSERTION`. Nothing is missing; that is the intended result.

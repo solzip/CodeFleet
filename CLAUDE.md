@@ -133,8 +133,8 @@ into LICENSE, docs, commit messages, or path examples; use a placeholder.
 readable and forkable for reading, with no grant to use, run, copy, modify,
 distribute, or train on. Do not substitute an OSI license, add an SPDX identifier
 implying one, or call the project open source in the README, `package.json`, or
-the repository description. GitHub does not show a license in its sidebar for
-this file; that is expected, not a defect to fix.
+the repository description. GitHub links the file in its sidebar but shows no
+license name for it (`NOASSERTION`); that is expected, not a defect to fix.
 
 **Commits carry one identity, `sol <solarchive.dev@gmail.com>`.** Every commit
 was rewritten to it. One commit from a second identity puts the history back to

@@ -298,7 +298,7 @@ selectedWorkspaceRootRealPath: input.selectedWorkspaceRootRealPath ?? "",
 | [`ENVIRONMENT.md`](docs/archive/2026-08-13/ENVIRONMENT.md) | Windows에서 에이전트 도구를 만드는 사람에게 그대로 쓸모 있는 실측 기록. CP949 콘솔과 자식 출력 UTF-8 디코딩, 셸 인터프리터 규칙에 막혀 닿지 않는 배치 wrapper, 프로세스가 정규화하지 말고 git에게 물어야 하는 worktree 경로, Windows가 `TerminateProcess`로 매핑해주는 덕에만 확실한 `SIGTERM`, 그리고 `PATH`만 남긴 spawn 환경 탓에 자식 프로세스에 홈 디렉터리가 없었던 일. 항목마다 재현 조건을 붙였고 해결 미확정 3 / 미검증 4 / 미실측 1로 표시했다 |
 | [`ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md) | 종료 시점의 상태와 사유, 자산 목록. 이 페이지에 나오는 모든 숫자의 출처다 |
 
-이 저장소의 판정에는 전부 파일:라인 근거가 붙어 있다. 감사·실행 기록 54편의 색인은 [`docs/INDEX.md`](docs/INDEX.md), <!-- fact: audit-run-records = 54 --> 동결된 결함 등재부는 [`docs/REGISTER.md`](docs/REGISTER.md), 규칙마다 그것이 필요해진 사건을 함께 적어둔 작업 규약은 [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)에 있다.
+이 저장소의 판정에는 전부 파일:라인 근거가 붙어 있다. 감사·실행 기록 55편의 색인은 [`docs/INDEX.md`](docs/INDEX.md), <!-- fact: audit-run-records = 55 --> 동결된 결함 등재부는 [`docs/REGISTER.md`](docs/REGISTER.md), 규칙마다 그것이 필요해진 사건을 함께 적어둔 작업 규약은 [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)에 있다.
 
 ## 후속
 
@@ -314,4 +314,4 @@ selectedWorkspaceRootRealPath: input.selectedWorkspaceRootRealPath ?? "",
 
 의도한 선택이다. 이 파이프라인은 통제된 fixture에서 한 번 완주했고 실제 프로젝트에서는 완주하지 못했다. **그 상태로 사용 권리를 주는 라이선스를 붙이는 것은 이 저장소가 뒷받침할 수 없는 주장을 하는 것**이고, 그건 이 프로젝트가 처음부터 하지 않기로 한 일이다. 쓰라고 내놓은 코드가 아니라 **읽으라고 내놓은 기록**이다.
 
-그래서 GitHub 사이드바에 라이선스 배지가 뜨지 않는다. 빠뜨린 게 아니라 이 파일이 표준 라이선스가 아니기 때문이다.
+그래서 GitHub 사이드바의 라이선스 항목에 **이름이 붙지 않는다.** 파일 자체는 인식해 `License`로 걸어두지만, 표준 라이선스로 식별하지 못해 `NOASSERTION`으로 둔다. 빠뜨린 게 아니라 의도한 결과다.
