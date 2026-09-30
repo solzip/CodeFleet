@@ -41,7 +41,7 @@
 
 - 구현: [draft PR #3](https://github.com/solzip/CodeFleet/pull/3), 계획 PR 위의 별도 구현 브랜치.
 - CI: [Windows 전체·Linux 알파 성공 기록](https://github.com/solzip/CodeFleet/actions/runs/36672858564). 이 링크의 대상은 최초 구현 커밋이며 후속 변경은 해당 PR의 최신 checks를 확인한다.
-- 실제 실행: [구현·실측 기록](../runs/2026-09-30/alpha-engine-implementation.md).
+- 실제 실행: [구현·실측 기록](../runs/2026-09-30/alpha-engine-implementation.md), [공개 배포본 PR 전달·취소 후 재조회](../runs/2026-09-30/alpha3-public-pr-acceptance.md).
 - 패키지 후보: `codefleet-0.2.0-alpha.3.tgz`. 로컬 설치 패키지에서 실제 작업을 완료했다. MIT 배포본은 [릴리스](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.3)에서 제공한다.
 - 파일럿: 외부 참여자·실제 사용자 작업 건수는 아직 없음. 자체 실험을 파일럿으로 집계하지 않는다.
 
