@@ -1,0 +1,26 @@
+name: Alpha feedback
+description: Report an alpha installation or workflow issue without private source or credentials.
+title: '[alpha] '
+body:
+  - type: markdown
+    attributes:
+      value: 'Use only under the current license or explicit owner permission. Do not attach source context, state databases, tokens, account emails, or unredacted logs.'
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Package, OS, Node, Docker, and Claude CLI versions. No account details.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and observed behavior
+      description: Include the command type, run state, and a redacted error summary.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Outcome and effort
+      description: Completion, failure, or cancellation; time spent preparing, intervening, and reviewing; any incorrect acceptance.

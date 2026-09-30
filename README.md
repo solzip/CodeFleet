@@ -1,5 +1,7 @@
 # CodeFleet — 에이전트가 했다고 말한 일을 어떻게 검증하나
 
+> **현재 개발:** [알파 실행 안내](docs/product-completion/alpha-quickstart.md) · [진행 현황](docs/product-completion/progress.md). 제한된 Node 작업의 편집 제안·격리 검증·복구·draft PR 전달을 구현하고 검증 중이다. 공개 사용 릴리스와 라이선스 전환은 아직 완료하지 않았다. 아래 본문은 기존 엔진의 아카이브 기록이다.
+
 > 에이전트가 "테스트 통과했다"고 보고할 때, **그 말이 판정에 닿지 못하게 하는** 구조를 시험했다.
 > 통제된 조건에서 **한 번 완주했고, 실제 프로젝트에서는 하지 못했다.** 결함 77건을 등재해 판정했으며 근거는 전부 파일:라인으로 남아 있다. <!-- fact: registered-findings = 77 -->
 > 2026-08-13 아카이브 — 유지보수하지 않으며 이슈와 PR을 받지 않는다.
@@ -262,7 +264,7 @@ selectedWorkspaceRootRealPath: input.selectedWorkspaceRootRealPath ?? "",
 - **파이프라인은 딱 한 번 완주했다.** 통제된 fixture에서였고, **우회 4건을 얹은 채였다.** 그중 하나가 역할 바꿔치기다. 기본 역할 일곱 중 커맨드 실행이 가능한 건 둘뿐인데, 그 둘 중에 애플리케이션 코드를 쓰는 역할이 없다.
 - **실제 Spring Boot 프로젝트에서는 완주하지 못했다.** 열다섯 단계 중 넷이 막히고 하나가 실패했다. 결국 검증 게이트를 만족시킨 커맨드는 `gradle --version`이었다. 우리 구현은 Windows에서 Gradle·Maven wrapper를 부르지 못했다. 셸 인터프리터를 금지하는 규칙 자체는 옳았고, 다만 그 규칙 아래로 배치 파일에 닿을 길을 만들어두지 않았다.
 - **등재된 결함 77건** — 해소 25, 부분해소 8, 재현안됨 1, 미해소 15, 수용된 한계 1, 그리고 **미확인 27**. 등재부는 그 27건을 미확인인 채로 동결했지만, 이후 전부 판정했다 — **유효 21 / 해소 3 / 무효화됨 1 / 부분해소 2** ([판정 기록](docs/runs/2026-08-14/unchecked-27-adjudication.md)). 위 건수와 상태 칸은 동결 규칙에 따라 그대로 두었으므로 **이 표만 읽으면 "아무도 안 봤다"로 읽히는데, 그건 더 이상 사실이 아니다.** <!-- fact: registered-findings = 77 --> <!-- fact: findings-resolved = 25 --> <!-- fact: findings-partial = 8 --> <!-- fact: findings-not-reproduced = 1 --> <!-- fact: findings-open = 15 --> <!-- fact: findings-accepted-limit = 1 --> <!-- fact: findings-unchecked = 27 -->
-- `npm test`는 개발 환경인 **Windows에서 종료 코드 0**이다(324 통과, 0 실패). <!-- fact: tests-passing = 324 --> <!-- fact: tests-failing = 0 --> **CI를 한 번 돌렸을 때는 양쪽 플랫폼이 모두 실패했다** — Linux 6건, Windows 2건. Linux 6건 중 하나는 이 아카이브가 예측만 하고 실측하지 못했던 POSIX 거동이고, Windows 2건은 **동결 직전에 추가된 테스트 자신**이다. **워크플로는 그 뒤 제거했다** — 아카이브에는 빨간 체크를 읽고 조치할 사람이 없기 때문이고, 실행 id는 기록에 남겼다([기록](docs/runs/2026-08-13/ci-first-run.md)). 조건 커버리지는 545줄 중 345줄, 63.3%인데, 이건 통과한 테스트가 그만큼을 인용했다는 뜻이지 **그 조건들이 제대로 구현됐다는 뜻이 아니다.** <!-- fact: conditions-covered = 345 --> <!-- fact: condition-lines = 545 --> <!-- fact: coverage-percent = 63.3 -->
+- 아카이브 엔진의 `npm run test:legacy`는 **Windows에서 종료 코드 0**이다(324 통과, 0 실패). 알파 스위트는 별도로 실행하며, 현재 `npm test`는 두 스위트와 문서 검사를 포함한다. <!-- fact: tests-passing = 324 --> <!-- fact: tests-failing = 0 --> **CI를 한 번 돌렸을 때는 양쪽 플랫폼이 모두 실패했다** — Linux 6건, Windows 2건. Linux 6건 중 하나는 이 아카이브가 예측만 하고 실측하지 못했던 POSIX 거동이고, Windows 2건은 **동결 직전에 추가된 테스트 자신**이다. **워크플로는 그 뒤 제거했다** — 아카이브에는 빨간 체크를 읽고 조치할 사람이 없기 때문이고, 실행 id는 기록에 남겼다([기록](docs/runs/2026-08-13/ci-first-run.md)). 조건 커버리지는 545줄 중 345줄, 63.3%인데, 이건 통과한 테스트가 그만큼을 인용했다는 뜻이지 **그 조건들이 제대로 구현됐다는 뜻이 아니다.** <!-- fact: conditions-covered = 345 --> <!-- fact: condition-lines = 545 --> <!-- fact: coverage-percent = 63.3 -->
 - **반복 실행·동시성·다중 사용자에서 시험한 것은 하나도 없다.**
 
 > 실행 가능 여부를 보증하지 않는다. 위는 관측이지, 무엇이 동작한다는 주장이 아니다.
@@ -287,9 +289,9 @@ selectedWorkspaceRootRealPath: input.selectedWorkspaceRootRealPath ?? "",
 | [`ENVIRONMENT.md`](docs/archive/2026-08-13/ENVIRONMENT.md) | Windows에서 에이전트 도구를 만드는 사람에게 그대로 쓸모 있는 실측 기록. CP949 콘솔과 자식 출력 UTF-8 디코딩, 셸 인터프리터 규칙에 막혀 닿지 않는 배치 wrapper, 프로세스가 정규화하지 말고 git에게 물어야 하는 worktree 경로, Windows가 `TerminateProcess`로 매핑해주는 덕에만 확실한 `SIGTERM`, 그리고 `PATH`만 남긴 spawn 환경 탓에 자식 프로세스에 홈 디렉터리가 없었던 일. 항목마다 재현 조건을 붙였고 해결 미확정 3 / 미검증 4 / 미실측 1로 표시했다 |
 | [`ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md) | 종료 시점의 상태와 사유, 자산 목록. 이 페이지에 나오는 모든 숫자의 출처다 |
 
-이 저장소의 판정에는 전부 파일:라인 근거가 붙어 있다. 감사·실행 기록 53편의 색인은 [`docs/INDEX.md`](docs/INDEX.md), <!-- fact: audit-run-records = 53 --> 동결된 결함 등재부는 [`docs/REGISTER.md`](docs/REGISTER.md), 규칙마다 그것이 필요해진 사건을 함께 적어둔 작업 규약은 [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)에 있다.
+이 저장소의 판정에는 전부 파일:라인 근거가 붙어 있다. 감사·실행 기록 54편의 색인은 [`docs/INDEX.md`](docs/INDEX.md), <!-- fact: audit-run-records = 54 --> 동결된 결함 등재부는 [`docs/REGISTER.md`](docs/REGISTER.md), 규칙마다 그것이 필요해진 사건을 함께 적어둔 작업 규약은 [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)에 있다.
 
-공개 사용 제품을 위한 새 [제품 완성 계획](docs/product-completion/README.md)을 별도로 작성했다. 기존 아카이브의 성과·한계와 구분하며, 새 제품은 아직 구현·출시되지 않았다. 현재 라이선스는 유지한다.
+공개 사용 제품을 위한 새 [제품 완성 계획](docs/product-completion/README.md)을 별도로 작성했다. 기존 아카이브의 성과·한계와 구분하며, 제한된 알파 경로를 구현·검증 중이며 공개 사용 릴리스는 아직 완료하지 않았다. 현재 라이선스는 유지한다.
 
 ## 후속
 

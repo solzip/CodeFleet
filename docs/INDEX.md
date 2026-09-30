@@ -2,7 +2,7 @@
 
 `docs/audits/`·`docs/runs/`·`docs/archive/`의 전 문서를 시간 역순으로 나열한다. 규약은 `docs/CONVENTIONS.md`, 결함 등재 현황은 `docs/REGISTER.md`.
 
-작성 기준: 2026-09-30. 전수 60개 문서 (감사 36 · 실행 17 · 아카이브 7). <!-- fact: docs-indexed = 60 --> <!-- fact: docs-on-disk = 60 -->
+작성 기준: 2026-09-30. 전수 61개 문서 (감사 36 · 실행 18 · 아카이브 7). <!-- fact: docs-indexed = 61 --> <!-- fact: docs-on-disk = 61 -->
 
 현재 공개 사용 제품 계획은 [제품 완성 문서](product-completion/README.md)에 있다. 기존 아카이브의 실측과 새 제품 계획을 구분하며, 구현 상태는 새 진행 현황에서 관리한다.
 
@@ -10,6 +10,7 @@
 
 | 날짜 | 문서 | 유형 | 결론(한 줄) | 후속 |
 | --- | --- | --- | --- | --- |
+| 09-30 | `runs/2026-09-30/alpha-engine-implementation.md` | 구현·실행 | 제한된 알파의 실제 모델 수정·격리 검증·draft PR 전달 관측. 공개 조건·파일럿 대기 | → [진행 현황](product-completion/progress.md) |
 | 09-30 | `runs/2026-09-30/product-completion-planning.md` | 결정·문서 | 종합 검토·목표 아키텍처·출시 로드맵·진행 상태 문서화. 제품 구현·배포는 미착수 | → [진행 현황](product-completion/progress.md) |
 
 > **이 문장은 커밋 해시를 적지 않는다.** 적으면 반드시 어긋나기 때문이다 — 해시를 쓴 문장을 담은 커밋은 문장을 쓴 **다음에** 생기므로, 이 색인을 마지막으로 고친 커밋은 언제나 여기 적힌 것의 다음 것이다. 실제로 두 번 어긋났고(`c448b7d` → `8748497`), 두 번째 어긋남은 첫 번째를 고치려던 커밋(`8d3e7ad`)이 만들었다. 답은 `git log -1 -- docs/INDEX.md`가 갖고 있다. 경위는 `runs/2026-08-14/freeze-notice.md` §B.

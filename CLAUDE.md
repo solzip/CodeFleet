@@ -1,5 +1,18 @@
 # CodeFleet — working rules
 
+## Active alpha development
+
+The owner has resumed product development under `docs/product-completion/`.
+That directory defines the active alpha scope; `progress.md` records current
+evidence and unresolved release decisions. The freeze notes below describe the
+legacy engine, not a prohibition on the newly authorized alpha work.
+
+`src/alpha/` is a separate test-driven Node workflow. Run `npm test` for both
+legacy and alpha suites plus document checks. Legacy TAP and rule coverage stay
+separate so the archive's measured facts retain their original meaning. Real
+provider and remote acceptance scripts are opt-in and must not run in CI with
+credentials. Do not claim a public-use release until the license gate is resolved.
+
 CodeFleet exists to make "the AI said it worked" structurally untrustworthy. Only evidence the Harness observed counts. That standard applies to this repository's own development too: the rules below are the same rules the product enforces, turned on the work of building it.
 
 ## Setup

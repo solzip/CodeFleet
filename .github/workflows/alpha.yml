@@ -1,0 +1,48 @@
+name: Alpha validation
+on:
+  pull_request:
+  push:
+    branches: [main, 'feat/**']
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - run: npm test
+      - name: Package installation smoke
+        shell: pwsh
+        run: |
+          $pack = npm pack --ignore-scripts --json | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $tarball = Join-Path $PWD $pack.filename
+          $dest = Join-Path $env:RUNNER_TEMP 'alpha-install'
+          New-Item -ItemType Directory -Path $dest | Out-Null
+          Set-Location $dest
+          npm install --ignore-scripts --no-audit --no-fund $tarball
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & ./node_modules/.bin/codefleet-alpha.cmd --help
+          exit $LASTEXITCODE
+  linux-alpha:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - run: npm run test:alpha
+      - run: docker pull node@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
+      - run: node scripts/alpha-verifier-smoke.mjs

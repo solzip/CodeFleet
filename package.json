@@ -1,16 +1,22 @@
 {
   "name": "codefleet",
-  "version": "0.1.0",
+  "version": "0.2.0-alpha.1",
   "private": true,
+  "files": ["src/", "docs/", "examples/", "LICENSE", "SECURITY.md", "README.md", "README.en.md"],
   "type": "module",
   "description": "CodeFleet v0.1 CLI for orchestrating Codex-based development tasks.",
   "bin": {
-    "codefleet": "./src/cli.ts"
+    "codefleet": "./src/cli.ts",
+    "codefleet-alpha": "./src/alpha/cli.mjs"
   },
   "scripts": {
     "codefleet": "node ./src/cli.ts",
     "pretest": "node ./scripts/reset-rule-coverage.mjs",
-    "test": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=.rule-coverage/test-summary.tap",
+    "test": "npm run test:legacy && npm run test:alpha",
+    "test:legacy": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=.rule-coverage/test-summary.tap test/*.ts",
+    "test:alpha": "node --test test/alpha.test.mjs",
+    "alpha:doctor": "node src/alpha/cli.mjs doctor",
+    "alpha:smoke": "node scripts/alpha-smoke.mjs --real-provider",
     "posttest": "node ./scripts/check-rule-coverage.mjs && node ./scripts/check-links.mjs && node ./scripts/check-doc-citations.mjs && node ./scripts/check-doc-facts.mjs",
     "check:links": "node ./scripts/check-links.mjs",
     "check:facts": "node ./scripts/check-doc-facts.mjs",
@@ -20,6 +26,6 @@
     "coverage:uncovered": "node ./scripts/check-rule-coverage.mjs --list-uncovered"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=24.14.1"
   }
 }
