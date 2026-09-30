@@ -1,9 +1,9 @@
 # CodeFleet 알파 실행 안내
 
-> **품질 게이트: NO-GO.** 테스트 검증문이 실행되지 않아도 자동 수락하는 결함을 재현했다. 자율 수락에 의존하는 사용과 파일럿 확대를 보류한다. 과거 성공 기록은 해당 사례에만 유효하다. [품질 감사](../audits/2026-09-30/alpha-quality-gate.md)를 우선한다.
+> **품질 범위: 독립 검토를 유지하는 제한된 알파.** 재현된 조기 종료·비용 기록·검증 복구 결함의 수정과 회귀 검증을 완료했다. 임의의 적대적 JS에 대한 무인 수락은 보증하지 않는다. [수정 근거](../runs/2026-09-30/alpha-quality-remediation.md)를 따른다.
 
 
-상태: MIT 라이선스의 실험적 공개 알파. [릴리스 다운로드](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.1). 외부 사용자 파일럿과 운영 환경 적합성 검증은 아직 미완료다.
+상태: MIT 라이선스의 실험적 공개 알파. [릴리스 다운로드](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.2). 외부 사용자 파일럿과 운영 환경 적합성 검증은 아직 미완료다.
 
 ## 지원 범위
 
@@ -14,6 +14,8 @@
 - Claude는 도구 없이 JSON 편집 제안만 반환한다. Harness가 scope·정확한 원문 일치·변경 크기를 검사한다.
 - Docker 검증 컨테이너에는 네트워크·호스트 자격증명·쓰기 가능한 소스 마운트를 제공하지 않는다. 임시 디렉터리 쓰기만 허용한다.
 - 결과는 로컬 검증 산출물 또는 지정 GitHub 저장소의 draft PR이다. 원본 작업 디렉터리 수정, 자동 병합, 배포는 없다.
+
+테스트 이름·구조가 기준선과 달라지거나 테스트 중 process.exit/reallyExit/abort 및 assert 함수 변경이 필요한 프로젝트는 지원하지 않는다. 이 검사만으로 코드 정확성을 보증하지 않으며 최종 변경은 독립적으로 검토한다. 이전 버전의 실행 증거를 이관하지 말고 새 상태 경로와 새 실행을 사용한다. Docker는 현재 유일한 검증 실행기이며 호스트 직접 실행 옵션은 없다.
 
 ## 준비
 
@@ -26,7 +28,7 @@ docker pull node@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8
 node src/alpha/cli.mjs doctor
 ```
 
-릴리스에서 `codefleet-0.2.0-alpha.1.tgz`와 `SHA256SUMS.txt`를 내려받아 SHA-256을 비교한다. 빈 디렉터리에서 `npm install /path/to/codefleet-0.2.0-alpha.1.tgz`로 설치하고 `npx --no-install codefleet-alpha doctor`를 실행한다. npm 레지스트리에는 게시하지 않는다. 아래 소스 실행 예시는 패키지 설치 시 `node src/alpha/cli.mjs`를 `npx --no-install codefleet-alpha`로 바꿔 사용한다. 설치는 OS 서비스나 백그라운드 데몬을 등록하지 않는다.
+릴리스에서 `codefleet-0.2.0-alpha.2.tgz`와 `SHA256SUMS.txt`를 내려받아 SHA-256을 비교한다. 빈 디렉터리에서 `npm install /path/to/codefleet-0.2.0-alpha.2.tgz`로 설치하고 `npx --no-install codefleet-alpha doctor`를 실행한다. npm 레지스트리에는 게시하지 않는다. 아래 소스 실행 예시는 패키지 설치 시 `node src/alpha/cli.mjs`를 `npx --no-install codefleet-alpha`로 바꿔 사용한다. 설치는 OS 서비스나 백그라운드 데몬을 등록하지 않는다.
 
 `doctor`는 실행 파일·Docker 이미지·Claude 로그인 여부를 확인하며 계정 신원이나 토큰을 출력하지 않는다. GitHub 권한은 PR 전달 시 확인한다. doctor 성공이 모델 서비스의 가용성이나 비용 한도를 보증하지 않는다.
 

@@ -1,6 +1,6 @@
 {
   "name": "codefleet",
-  "version": "0.2.0-alpha.1",
+  "version": "0.2.0-alpha.2",
   "private": true,
   "license": "MIT",
   "files": ["src/", "docs/", "examples/", "LICENSE", "SECURITY.md", "README.md", "README.en.md"],

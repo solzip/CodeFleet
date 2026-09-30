@@ -22,10 +22,10 @@ test('verifier has no parent secrets, no external interface, and read-only sourc
 `);
 process.env.CODEFLEET_BOUNDARY_SENTINEL = 'must-not-enter-container';
 const good = await verify({ directory, tests: ['test/boundaries.test.mjs'], timeoutMs: 30000 });
-assert.equal(judge({ ...good, integrity: true }).outcome, 'ACCEPT', JSON.stringify(good));
+assert.equal(judge({ ...good, integrity: true, testIdentityMatch: true }).outcome, 'ACCEPT', JSON.stringify(good));
 await writeFile(target, "import test from 'node:test'; import assert from 'node:assert/strict'; test('wrong implementation fails',()=>assert.equal(1,2));\n");
 const bad = await verify({ directory, tests: ['test/boundaries.test.mjs'], timeoutMs: 30000 });
-assert.equal(judge({ ...bad, integrity: true }).outcome, 'RETRY');
+assert.equal(judge({ ...bad, integrity: true, testIdentityMatch: true }).outcome, 'RETRY');
 await writeFile(target, "import test from 'node:test'; test('hung test',async()=>new Promise(()=>setInterval(()=>{},1000)));\n");
 const hung = await verify({ directory, tests: ['test/boundaries.test.mjs'], timeoutMs: 500 });
 assert.equal(hung.interrupted, true); assert.equal(judge({ ...hung, integrity: true }).outcome, 'ESCALATE');

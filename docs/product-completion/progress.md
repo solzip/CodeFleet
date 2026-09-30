@@ -1,6 +1,6 @@
 # 진행 현황과 결정 목록
 
-> **품질 게이트: NO-GO.** 테스트 검증문이 실행되지 않아도 자동 수락하는 결함을 재현했다. 자율 수락에 의존하는 사용과 파일럿 확대를 보류한다. 과거 성공 기록은 해당 사례에만 유효하다. [품질 감사](../audits/2026-09-30/alpha-quality-gate.md)를 우선한다.
+> **품질 범위: 독립 검토를 유지하는 제한된 알파.** 재현된 조기 종료·비용 기록·검증 복구 결함의 수정과 회귀 검증을 완료했다. 임의의 적대적 JS에 대한 무인 수락은 보증하지 않는다. [수정 근거](../runs/2026-09-30/alpha-quality-remediation.md)를 따른다.
 
 
 갱신일: 2026-09-30. 현재 단계: 제한된 알파 실행·검증·복구·PR 전달 구현 및 실측, MIT 공개 알파 배포, 외부 파일럿 대기.
@@ -40,7 +40,7 @@
 - 구현: [draft PR #3](https://github.com/solzip/CodeFleet/pull/3), 계획 PR 위의 별도 구현 브랜치.
 - CI: [Windows 전체·Linux 알파 성공 기록](https://github.com/solzip/CodeFleet/actions/runs/36672858564). 이 링크의 대상은 최초 구현 커밋이며 후속 변경은 해당 PR의 최신 checks를 확인한다.
 - 실제 실행: [구현·실측 기록](../runs/2026-09-30/alpha-engine-implementation.md).
-- 패키지 후보: `codefleet-0.2.0-alpha.1.tgz`. 로컬 설치 패키지에서 실제 작업을 완료했다. MIT 배포본은 [릴리스](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.1)에서 제공한다.
+- 패키지 후보: `codefleet-0.2.0-alpha.2.tgz`. 로컬 설치 패키지에서 실제 작업을 완료했다. MIT 배포본은 [릴리스](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.2)에서 제공한다.
 - 파일럿: 외부 참여자·실제 사용자 작업 건수는 아직 없음. 자체 실험을 파일럿으로 집계하지 않는다.
 
 미결정 항목은 관련 작업 직전에 해소한다. 현재 문서 작성과 M0의 읽기 전용 현 상태 조사까지 막는 항목은 아니다. 정책·라이선스·외부 게시 변경은 별도 구체 변경으로 검토한다.

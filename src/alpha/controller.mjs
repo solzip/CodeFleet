@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { validateContract, applyEdits, judge, hash } from './contract.mjs';
 import { repository, snapshot, context, candidateHash } from './workspace.mjs';
 import { propose } from './provider.mjs';
-import { verify, dockerReady, cleanupContainer } from './verifier.mjs';
+import { verify, dockerReady, cleanupContainer, matchTestIdentity } from './verifier.mjs';
 import { deliver } from './delivery.mjs';
 
 export async function createRun(store, repo, input) {
@@ -39,7 +39,8 @@ export async function execute(store, id, dependencies = {}) {
     if (run.state === 'GENERATING') {
       // A worker disappeared after reserving a billable attempt. The reserved
       // attempt stays consumed and its cost cannot be assumed to be zero.
-      run.unknownCostAttempts += 1;
+      if (!run.costPending) run.unknownCostAttempts += 1; // pre-reservation legacy state
+      run.costPending = false;
       save('READY', 'Recovered interrupted provider attempt; cost unknown', 'RECOVERED_PROVIDER');
     }
     // Recover delivery by querying the same remote branch/PR. Never generate a
@@ -77,20 +78,31 @@ export async function execute(store, id, dependencies = {}) {
       current = applyEdits(run.contract, originals, previous.proposal);
       feedback = run.lastEvidenceHash ? store.readArtifact(run.lastEvidenceHash) : null;
     }
-    while (run.attempts < run.contract.maxAttempts) {
-      guard(); run.attempts += 1; save('GENERATING', 'Attempt reserved before provider invocation');
-      // Each proposal is against the pinned original, so restart and replacement
-      // do not depend on a half-written candidate directory.
-      const response = await services.propose({ contract: run.contract, files: originalContext, feedback, timeoutMs: Math.min(remaining(), 180000), cancelled });
+    let pendingVerification = Boolean(run.pendingVerification || run.state === 'VERIFYING');
+    while (pendingVerification || run.attempts < run.contract.maxAttempts) {
       guard();
-      if (response.cost === null) run.unknownCostAttempts += 1; else run.reportedCostUsd += response.cost;
-      current = applyEdits(run.contract, originals, response.proposal);
+      if (!pendingVerification) {
+        run.attempts += 1;
+        run.unknownCostAttempts += 1; run.costPending = true;
+        save('GENERATING', 'Attempt and unknown cost reserved before provider invocation');
+        // Each proposal is against the pinned original, so restart and replacement
+        // do not depend on a half-written candidate directory.
+        const response = await services.propose({ contract: run.contract, files: originalContext, feedback, timeoutMs: Math.min(remaining(), 180000), cancelled });
+        if (Number.isFinite(response.cost) && response.cost >= 0) {
+          run.unknownCostAttempts -= 1; run.reportedCostUsd += response.cost;
+        }
+        run.costPending = false;
+        guard();
+        current = applyEdits(run.contract, originals, response.proposal);
+        const changedFiles = Object.fromEntries(Object.entries(current).filter(([name, body]) => body !== originals[name]));
+        if (!Object.keys(changedFiles).length) throw Error('No effective change proposed');
+        const proposedHash = hash(changedFiles);
+        if (run.lastProposalDigest === proposedHash) { save('WAITING_HUMAN', 'Repeated identical proposal; no progress'); return run; }
+        run.lastProposalDigest = proposedHash;
+        run.proposalHash = store.artifact(response);
+        run.pendingVerification = true;
+      }
       const changedFiles = Object.fromEntries(Object.entries(current).filter(([name, body]) => body !== originals[name]));
-      if (!Object.keys(changedFiles).length) throw Error('No effective change proposed');
-      const proposedHash = hash(changedFiles);
-      if (run.lastProposalDigest === proposedHash) { save('WAITING_HUMAN', 'Repeated identical proposal; no progress'); return run; }
-      run.lastProposalDigest = proposedHash;
-      run.proposalHash = store.artifact(response);
       for (const [name, body] of Object.entries(current)) await writeFile(path.join(directory, name), body);
       run.candidateHash = await services.candidateHash(directory, names);
       run.containerName = `codefleet-${run.id}-attempt-${run.attempts}`;
@@ -100,6 +112,7 @@ export async function execute(store, id, dependencies = {}) {
       evidence.candidateHash = run.candidateHash;
       evidence.integrity = run.candidateHash === await services.candidateHash(directory, names);
       evidence.contractHash = run.contractHash;
+      evidence.testIdentityMatch = matchTestIdentity(baseline, evidence);
       run.lastEvidenceHash = store.artifact(evidence);
       const decision = judge(evidence); run.decisionHash = store.artifact(decision);
       if (decision.outcome === 'ESCALATE') { save('WAITING_HUMAN', decision.reason); return run; }
@@ -113,7 +126,8 @@ export async function execute(store, id, dependencies = {}) {
         run.delivery = await services.deliver(run, changedFiles, undefined, guard);
         save('COMPLETED', 'Remote PR confirmed'); return run;
       }
-      feedback = { ...evidence, previousProposal: response.proposal };
+      feedback = { ...evidence, previousProposal: store.readArtifact(run.proposalHash).proposal };
+      pendingVerification = false; run.pendingVerification = false;
       save('READY', 'Regression still fails; retry within unchanged contract');
     }
     save('WAITING_HUMAN', 'Attempt budget exhausted; inspect evidence and create a revised contract if needed');

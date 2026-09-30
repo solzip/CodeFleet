@@ -6,10 +6,10 @@ import path from 'node:path';
 import { Store } from '../src/alpha/store.mjs';
 import { execute } from '../src/alpha/controller.mjs';
 import { hash, judge } from '../src/alpha/contract.mjs';
-import { verify } from '../src/alpha/verifier.mjs';
+import { verify, matchTestIdentity } from '../src/alpha/verifier.mjs';
 
 const contract = { schemaVersion: 1, goal: 'Repair subtraction with protected regression tests.', files: ['src/math.js'], context: ['src/math.js'], tests: ['test/math.test.js'], maxAttempts: 1, timeoutSeconds: 60, attemptBudgetUsd: 1, delivery: { mode: 'local' } };
-const pass = { exitCode: 0, tests: 1, passed: 1, failed: 0, skipped: 0, todo: 0, interrupted: false, truncated: false, integrity: true };
+const pass = { exitCode: 0, tests: 1, passed: 1, failed: 0, skipped: 0, todo: 0, testNames: ['0:subtract'], testIdentityMatch: true, interrupted: false, truncated: false, integrity: true };
 const fail = { ...pass, exitCode: 1, passed: 0, failed: 1 };
 const proposal = { summary: 'Repair subtraction', edits: [{ path: 'src/math.js', oldText: 'a + b', newText: 'a - b' }] };
 const results = [];
@@ -40,8 +40,22 @@ if (process.argv.includes('--docker')) {
   // Only editable source changes; the protected test stays byte-identical.
   await writeFile(path.join(dir, 'src/math.js'), 'process.exit(0); export const subtract = (a,b) => a + b;');
   const evidence = await verify({ directory: dir, tests: contract.tests, timeoutMs: 15000 });
-  const decision = judge({ ...evidence, integrity: true });
+  const decision = judge({ ...evidence, integrity: true, testIdentityMatch: matchTestIdentity(baseline, evidence) });
   results.push({ case: 'early-exit-skips-protected-assertion', defectReproduced: baseline.failed === 1 && decision.outcome === 'ACCEPT', baseline, evidence, decision });
+  await writeFile(path.join(dir, 'src/math.js'), 'export const subtract = (a,b) => a - b;');
+  const correct = await verify({ directory: dir, tests: contract.tests, timeoutMs: 15000 });
+  if (judge({ ...correct, integrity: true, testIdentityMatch: matchTestIdentity(baseline, correct) }).outcome !== 'ACCEPT') throw Error('Correct repair was rejected');
+  results.push({ case: 'correct-repair-control', defectReproduced: false, passed: correct.passed });
+  for (const [name, source] of [
+    ['assertion-monkey-patch', "import assert from 'node:assert/strict'; assert.equal = () => {}; export const subtract = (a,b) => a + b;"],
+    ['really-exit', 'process.reallyExit(0); export const subtract = (a,b) => a + b;'],
+    ['replace-exit', 'process.exit = () => {}; export const subtract = (a,b) => a + b;']
+  ]) {
+    await writeFile(path.join(dir, 'src/math.js'), source);
+    const result = await verify({ directory: dir, tests: contract.tests, timeoutMs: 15000 });
+    const decision = judge({ ...result, integrity: true, testIdentityMatch: matchTestIdentity(baseline, result) });
+    results.push({ case: name, defectReproduced: decision.outcome === 'ACCEPT', exitCode: result.exitCode, decision });
+  }
 } else {
   const f = await fixture();
   try {
@@ -55,9 +69,10 @@ if (process.argv.includes('--docker')) {
     Object.assign(g.run, { state: 'VERIFYING', attempts: 1, baselineHash: g.store.artifact(fail), proposalHash: g.store.artifact({ proposal, cost: 0.1 }) });
     g.store.save(g.run, owner, 'SIMULATED_CRASH_CHECKPOINT'); g.store.release(g.run.id, owner);
     g.services.propose = async () => { throw Error('Recovery must not request a new proposal'); };
-    g.services.verify = async () => { throw Error('Verification callback reached'); };
+    let verificationCalls = 0;
+    g.services.verify = async () => { verificationCalls++; return pass; };
     const result = await execute(g.store, g.run.id, g.services);
-    results.push({ case: 'resume-last-attempt-verification', defectReproduced: result.reason === 'Attempt budget exhausted; inspect evidence and create a revised contract if needed', state: result.state, reason: result.reason });
+    results.push({ case: 'resume-last-attempt-verification', defectReproduced: result.state !== 'COMPLETED' || verificationCalls !== 1, state: result.state, reason: result.reason, verificationCalls });
   } finally { g.store.close(); }
 }
 console.log(JSON.stringify({ mode: process.argv.includes('--docker') ? 'real Docker' : 'injected controller boundaries', results }, null, 2));

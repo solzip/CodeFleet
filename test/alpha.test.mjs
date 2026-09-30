@@ -7,13 +7,13 @@ import { validateContract, applyEdits, judge, hash } from '../src/alpha/contract
 import { Store } from '../src/alpha/store.mjs';
 import { execute } from '../src/alpha/controller.mjs';
 import { command, environment } from '../src/alpha/process.mjs';
-import { verificationResult, dockerArgs } from '../src/alpha/verifier.mjs';
+import { verificationResult, dockerArgs, matchTestIdentity } from '../src/alpha/verifier.mjs';
 import { deliver } from '../src/alpha/delivery.mjs';
 import { providerArgs } from '../src/alpha/provider.mjs';
 
 const input = () => ({ schemaVersion: 1, goal: 'Return the correct value for subtraction.', files: ['src/math.js'], context: ['src/math.js'], tests: ['test/math.test.js'], maxAttempts: 2, timeoutSeconds: 60, attemptBudgetUsd: 1, delivery: { mode: 'local' } });
 const proposal = (value = 'a - b') => ({ summary: 'Correct subtraction', edits: [{ path: 'src/math.js', oldText: 'a + b', newText: value }] });
-const pass = () => ({ exitCode: 0, tests: 1, passed: 1, failed: 0, skipped: 0, todo: 0, interrupted: false, truncated: false, integrity: true });
+const pass = () => ({ exitCode: 0, tests: 1, passed: 1, failed: 0, skipped: 0, todo: 0, testNames: ['0:subtract'], testIdentityMatch: true, interrupted: false, truncated: false, integrity: true });
 const fail = () => ({ ...pass(), exitCode: 1, passed: 0, failed: 1 });
 
 test('alpha contracts reject scope escalation, test edits, ambiguous paths and unknown grants', () => {
@@ -38,7 +38,7 @@ test('alpha never accepts zero, skipped, missing, truncated or nonzero-exit veri
   assert.equal(judge(pass()).outcome, 'ACCEPT');
   for (const patch of [{ tests: 0 }, { tests: null }, { passed: 0 }, { failed: 1 }, { skipped: 1 }, { todo: 1 }, { integrity: false }, { truncated: true }, { interrupted: true }, { exitCode: 1 }]) assert.notEqual(judge({ ...pass(), ...patch }).outcome, 'ACCEPT');
   const r = verificationResult({ exitCode: 0, stdout: Buffer.from('TAP version 13\n# tests 1\n# pass 1\n# fail 0\n# skipped 0\n# todo 0\n'), stderr: Buffer.alloc(0), interrupted: false, truncated: false });
-  assert.equal(judge({ ...r, integrity: true }).outcome, 'ACCEPT');
+  assert.equal(judge({ ...r, integrity: true }).outcome, 'ESCALATE');
   const empty = verificationResult({ exitCode: 0, stdout: Buffer.from('version 24'), stderr: Buffer.alloc(0), interrupted: false, truncated: false });
   assert.notEqual(judge({ ...empty, integrity: true }).outcome, 'ACCEPT');
 });
@@ -126,6 +126,54 @@ test('alpha leases reject concurrent workers and artifacts reject tampering', as
   } finally { f.store.close(); }
 });
 
+test('alpha refuses missing, renamed, duplicated or file-wrapper test identities', () => {
+  const baseline = pass();
+  assert.equal(matchTestIdentity(baseline, pass()), true);
+  for (const patch of [{ testNames: undefined }, { testNames: [] }, { testNames: ['0:test/math.test.js'] }, { testNames: ['0:subtract', '0:subtract'] }, { tests: 2 }]) {
+    const evidence = { ...pass(), ...patch };
+    assert.equal(judge({ ...evidence, testIdentityMatch: matchTestIdentity(baseline, evidence) }).outcome, 'ESCALATE');
+  }
+});
+
+test('alpha reserves unknown cost before provider errors and does not double count on retry', async () => {
+  const f = await setup(); let calls = 0;
+  f.services.propose = async () => { if (++calls === 1) throw Error('response lost'); return { proposal: proposal(), cost: 0.1 }; };
+  try {
+    const failed = await execute(f.store, f.run.id, f.services);
+    assert.equal(failed.unknownCostAttempts, 1); assert.equal(failed.reportedCostUsd, 0);
+    const recovered = await execute(f.store, f.run.id, f.services);
+    assert.equal(recovered.state, 'COMPLETED'); assert.equal(recovered.unknownCostAttempts, 1);
+    assert.equal(recovered.reportedCostUsd, 0.1); assert.equal(calls, 2);
+  } finally { f.store.close(); }
+});
+
+test('alpha cancellation after a provider response retains known cost', async () => {
+  const f = await setup();
+  f.services.propose = async () => { f.store.control(f.run.id, 'cancel'); return { proposal: proposal(), cost: 0.25 }; };
+  try {
+    const result = await execute(f.store, f.run.id, f.services);
+    assert.equal(result.state, 'CANCELLED'); assert.equal(result.reportedCostUsd, 0.25);
+    assert.equal(result.unknownCostAttempts, 0);
+  } finally { f.store.close(); }
+});
+
+test('alpha resumes last-attempt verification without another model call after pause', async () => {
+  const f = await setup({ ...input(), maxAttempts: 1 }); let verifications = 0;
+  f.services.verify = async () => {
+    if (++verifications === 1) return fail();
+    if (verifications === 2) { f.store.control(f.run.id, 'pause'); return { ...pass(), interrupted: true }; }
+    return pass();
+  };
+  try {
+    assert.equal((await execute(f.store, f.run.id, f.services)).state, 'PAUSED');
+    f.store.control(f.run.id, 'run');
+    const result = await execute(f.store, f.run.id, f.services);
+    assert.equal(result.state, 'COMPLETED'); assert.equal(result.attempts, 1);
+    assert.equal(f.counts().proposals, 1); assert.equal(verifications, 3);
+    assert.equal(result.reportedCostUsd, 0.1);
+  } finally { f.store.close(); }
+});
+
 test('alpha pause and cancel stop before provider calls', async () => {
   const f = await setup();
   try {
@@ -177,6 +225,20 @@ test('alpha resumes after worker process death without restoring the reserved at
     const recovered = await execute(f.store, f.run.id, f.services);
     assert.equal(recovered.state, 'COMPLETED'); assert.equal(recovered.attempts, 2);
     assert.equal(recovered.unknownCostAttempts, 1); assert.equal(f.counts().proposals, 1);
+  } finally { f.store.close(); }
+});
+
+test('alpha recovers a last-attempt VERIFYING worker death without proposal or cost duplication', async () => {
+  const f = await setup({ ...input(), maxAttempts: 1 });
+  try {
+    const module = new URL('../src/alpha/store.mjs', import.meta.url).href;
+    const child = `import { Store } from ${JSON.stringify(module)}; const s=new Store(${JSON.stringify(f.store.directory)}); const r=s.get('run-test'); const owner=s.claim(r.id); r.state='VERIFYING'; r.attempts=1; r.reportedCostUsd=0.1; r.baselineHash=s.artifact(${JSON.stringify(fail())}); r.proposalHash=s.artifact(${JSON.stringify({ proposal: proposal(), cost: 0.1 })}); s.save(r,owner,'VERIFYING'); process.exit(17);`;
+    assert.equal((await command(process.execPath, ['--input-type=module', '-e', child])).exitCode, 17);
+    f.services.verify = async () => pass();
+    const result = await execute(f.store, f.run.id, f.services);
+    assert.equal(result.state, 'COMPLETED'); assert.equal(result.attempts, 1);
+    assert.equal(result.reportedCostUsd, 0.1); assert.equal(result.unknownCostAttempts, 0);
+    assert.equal(f.counts().proposals, 0);
   } finally { f.store.close(); }
 });
 
