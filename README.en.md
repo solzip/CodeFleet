@@ -1,5 +1,7 @@
 # CodeFleet — how do you verify work an agent says it did?
 
+> **Quality hold:** Automatic acceptance can incorrectly pass when candidate source exits before protected assertions execute. Do not rely on alpha acceptance for unattended use. See the [quality audit](docs/audits/2026-09-30/alpha-quality-gate.md).
+
 > **Current development:** [Alpha guide](docs/product-completion/alpha-quickstart.md) and [progress](docs/product-completion/progress.md). A limited Node workflow now implements edit proposals, isolated verification, recovery and draft PR delivery. The [public alpha](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.1) is distributed under MIT. External user pilot results are still pending. The text below records the archived engine.
 
 > A structure that keeps an agent's "tests pass" from **reaching the decision at all**, tested end to end.
@@ -290,7 +292,7 @@ Two structural reasons, neither of which a partial fix would have closed.
 | [`ENVIRONMENT.md`](docs/archive/2026-08-13/ENVIRONMENT.md) | Measured behaviour for anyone building agent tooling on Windows: a CP949 console against UTF-8 decoding of child output, batch wrappers unreachable behind a shell-interpreter rule, worktree paths that must be asked of git, `SIGTERM` that only reliably kills because Windows maps it to `TerminateProcess`, and a spawn environment narrowed to `PATH` — which left the child without a home directory. Each with its reproduction condition; 3 unresolved, 4 unverified, 1 unmeasured |
 | [`ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md) | State, reasons, and asset list at close. The source of every number on this page |
 
-Every judgment in this repository is cited to a file and line. The 56 audit and run records are indexed in [`docs/INDEX.md`](docs/INDEX.md); <!-- fact: audit-run-records = 56 --> the frozen findings register is [`docs/REGISTER.md`](docs/REGISTER.md); the working conventions, each with the incident that made it necessary, are in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).
+Every judgment in this repository is cited to a file and line. The 57 audit and run records are indexed in [`docs/INDEX.md`](docs/INDEX.md); <!-- fact: audit-run-records = 57 --> the frozen findings register is [`docs/REGISTER.md`](docs/REGISTER.md); the working conventions, each with the incident that made it necessary, are in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).
 
 A separate [product completion plan](docs/product-completion/README.md) now describes a proposed product for public use. The limited alpha is distributed under MIT; this does not change the archived results. External pilot validation and the broader roadmap remain unfinished.
 
