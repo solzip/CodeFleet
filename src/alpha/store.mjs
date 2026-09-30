@@ -32,23 +32,35 @@ export class Store {
   events(id) { return this.db.prepare('SELECT seq,at,type,body FROM events WHERE runId=? ORDER BY seq').all(id).map(r => ({ ...r, body: JSON.parse(r.body) })); }
   control(id, control) {
     if (!['run', 'pause', 'cancel'].includes(control)) throw Error('Invalid control');
-    this.get(id); this.db.exec('BEGIN IMMEDIATE');
+    this.db.exec('BEGIN IMMEDIATE');
     try {
-      this.db.prepare('UPDATE runs SET control=? WHERE id=?').run(control, id);
+      const row = this.db.prepare('SELECT body,control FROM runs WHERE id=?').get(id);
+      if (!row) throw Error('Unknown run');
+      const run = JSON.parse(row.body);
+      if ((row.control === 'cancel' || run.state === 'CANCELLED') && control !== 'cancel') throw Error('Cancelled runs cannot resume; create a new contract');
+      if (control === 'run') throw Error('Resume requires an atomic worker claim');
+      if (control === 'cancel' && run.state !== 'COMPLETED') {
+        run.state = ['DELIVERING', 'RECONCILING'].includes(run.state) ? 'RECONCILING' : 'CANCELLED';
+      }
+      this.db.prepare('UPDATE runs SET control=?,body=? WHERE id=?').run(control, JSON.stringify(run), id);
       this.event(id, 'CONTROL', { control }); this.db.exec('COMMIT');
     } catch (e) { this.db.exec('ROLLBACK'); throw e; }
   }
-  claim(id) {
+  claim(id, { resume = false } = {}) {
     this.db.exec('BEGIN IMMEDIATE');
     try {
-      const row = this.db.prepare('SELECT owner,leaseUntil,pid FROM runs WHERE id=?').get(id);
+      const row = this.db.prepare('SELECT owner,leaseUntil,pid,control,body FROM runs WHERE id=?').get(id);
       if (!row) throw Error('Unknown run');
       let alive = false;
       if (row.pid) { try { process.kill(Number(row.pid), 0); alive = true; } catch (e) { alive = e.code === 'EPERM'; } }
       if (row.owner && alive && Number(row.leaseUntil) > Date.now()) throw Error('Run already has an active worker');
+      const run = JSON.parse(row.body);
+      const cancelled = row.control === 'cancel' || run.state === 'CANCELLED';
+      if (resume && cancelled && !['DELIVERING', 'RECONCILING'].includes(run.state)) throw Error('Cancelled runs cannot resume; create a new contract');
+      if (resume && !cancelled) this.db.prepare('UPDATE runs SET control=? WHERE id=?').run('run', id);
       const owner = randomUUID();
       this.db.prepare('UPDATE runs SET owner=?,leaseUntil=?,pid=? WHERE id=?').run(owner, Date.now() + 30000, process.pid, id);
-      this.event(id, 'CLAIMED', { recovered: Boolean(row.owner) }); this.db.exec('COMMIT');
+      this.event(id, 'CLAIMED', { recovered: Boolean(row.owner), resumed: resume, readOnly: resume && cancelled }); this.db.exec('COMMIT');
       return owner;
     } catch (e) { this.db.exec('ROLLBACK'); throw e; }
   }

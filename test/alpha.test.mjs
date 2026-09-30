@@ -166,8 +166,7 @@ test('alpha resumes last-attempt verification without another model call after p
   };
   try {
     assert.equal((await execute(f.store, f.run.id, f.services)).state, 'PAUSED');
-    f.store.control(f.run.id, 'run');
-    const result = await execute(f.store, f.run.id, f.services);
+    const result = await execute(f.store, f.run.id, f.services, { resume: true });
     assert.equal(result.state, 'COMPLETED'); assert.equal(result.attempts, 1);
     assert.equal(f.counts().proposals, 1); assert.equal(verifications, 3);
     assert.equal(result.reportedCostUsd, 0.1);
@@ -197,7 +196,12 @@ test('alpha uncertain PR delivery resumes the same intent without another agent 
 test('alpha delivery refuses base drift before any remote writes', async () => {
   let writes = 0;
   const run = { id: 'r', base: 'old', contract: { delivery: { repository: 'owner/repo', base: 'main' } } };
-  await assert.rejects(deliver(run, {}, async (_endpoint, method) => { if (method) writes++; return { object: { sha: 'new' } }; }), /base changed/);
+  await assert.rejects(deliver(run, {}, async (endpoint, method = 'GET') => {
+    if (method !== 'GET') writes++;
+    if (endpoint.includes('/pulls?')) return [];
+    if (endpoint.includes('/heads/codefleet/')) { const e = Error('not found'); e.notFound = true; throw e; }
+    return { object: { sha: 'new' } };
+  }), /base changed/);
   assert.equal(writes, 0);
 });
 
@@ -245,9 +249,10 @@ test('alpha recovers a last-attempt VERIFYING worker death without proposal or c
 test('alpha delivery reconciles a lost PR response, checks content, and uses explicit public identity', async () => {
   const run = { id: 'delivery-test', base: 'base', evidenceHash: 'evidence', candidateHash: 'candidate', contract: { goal: 'Fix subtraction', tests: ['test/math.test.js'], delivery: { repository: 'owner/repo', base: 'main', authorName: 'public-handle', authorEmail: 'public@example.invalid' } } };
   const files = { 'src/math.js': 'a - b' };
-  let remoteCommit, branch, pr, posts = 0, changed = false;
+  let remoteCommit, branch, pr, posts = 0, changed = false, advanced = false, writes = 0;
   const call = async (endpoint, method = 'GET', body) => {
-    if (endpoint.endsWith('/git/ref/heads/main')) return { object: { sha: 'base' } };
+    if (method !== 'GET') writes++;
+    if (endpoint.endsWith('/git/ref/heads/main')) return { object: { sha: advanced ? 'advanced' : 'base' } };
     if (endpoint.includes('/git/ref/heads/codefleet/')) { if (branch) return { object: { sha: 'new-commit' } }; const e = Error('not found'); e.notFound = true; throw e; }
     if (endpoint.endsWith('/git/commits/base')) return { tree: { sha: 'base-tree' } };
     if (endpoint.endsWith('/git/commits/new-commit')) return remoteCommit;
@@ -269,5 +274,96 @@ test('alpha delivery reconciles a lost PR response, checks content, and uses exp
   await assert.rejects(deliver(run, files, call), /response lost/);
   const result = await deliver(run, files, call);
   assert.equal(result.reconciled, true); assert.equal(posts, 1);
+  advanced = true; const before = writes;
+  assert.equal((await deliver(run, files, call, undefined, { readOnly: true })).reconciled, true);
+  assert.equal(writes, before);
+  branch = false; pr.state = 'closed';
+  assert.equal((await deliver(run, files, call, undefined, { readOnly: true })).state, 'closed');
+  assert.equal(writes, before);
   changed = true; await assert.rejects(deliver(run, files, call), /differs/);
+  changed = false; branch = true; pr = undefined;
+  await assert.rejects(deliver(run, files, call, undefined, { readOnly: true }), /read-only/);
+  assert.equal(writes, before);
+});
+
+test('alpha rejected CLI resume preserves active cancellation and idle cancel is terminal', async () => {
+  const f = await setup();
+  const cli = new URL('../src/alpha/cli.mjs', import.meta.url);
+  const { fileURLToPath } = await import('node:url');
+  const invoke = action => command(process.execPath, [fileURLToPath(cli), '--state', f.store.directory, action, f.run.id]);
+  try {
+    const owner = f.store.claim(f.run.id);
+    assert.equal((await invoke('cancel')).exitCode, 0);
+    const rejected = await invoke('resume');
+    assert.equal(rejected.exitCode, 1); assert.match(rejected.stderr.toString(), /active worker/);
+    assert.equal(f.store.get(f.run.id).control, 'cancel');
+    f.store.release(f.run.id, owner);
+    assert.equal(f.store.get(f.run.id).state, 'CANCELLED');
+    assert.equal((await invoke('resume')).exitCode, 1);
+    assert.equal(f.store.get(f.run.id).control, 'cancel');
+  } finally { f.store.close(); }
+});
+
+test('alpha failed resume transaction rolls back both control and worker ownership', async () => {
+  const f = await setup();
+  try {
+    f.store.control(f.run.id, 'pause');
+    const event = f.store.event.bind(f.store);
+    f.store.event = () => { throw Error('event failure'); };
+    assert.throws(() => f.store.claim(f.run.id, { resume: true }), /event failure/);
+    assert.equal(f.store.get(f.run.id).control, 'pause');
+    f.store.event = event;
+    const owner = f.store.claim(f.run.id, { resume: true });
+    assert.equal(f.store.get(f.run.id).control, 'run'); f.store.release(f.run.id, owner);
+  } finally { f.store.close(); }
+});
+
+async function pendingDelivery() {
+  const f = await setup({ ...input(), delivery: { mode: 'pull-request', repository: 'owner/repo', base: 'main' } });
+  f.services.deliver = async () => { throw Error('response lost'); };
+  await execute(f.store, f.run.id, f.services);
+  return f;
+}
+
+test('alpha exhausted execution budget still reconciles with a bounded read-only allowance', async () => {
+  const f = await pendingDelivery(); let reads = 0;
+  try {
+    const run = f.store.get(f.run.id); run.elapsedMs = run.contract.timeoutSeconds * 1000;
+    const owner = f.store.claim(run.id); f.store.save(run, owner, 'EXPIRED'); f.store.release(run.id, owner);
+    f.services.deliver = async (_run, _files, _api, checkpoint, options) => {
+      assert.equal(options.readOnly, true); assert.ok(options.deadline > Date.now());
+      checkpoint('BEFORE_REMOTE_LOOKUP'); reads++;
+      assert.throws(() => checkpoint('BEFORE_PR'), /read-only/);
+      return { url: 'existing-pr' };
+    };
+    assert.equal((await execute(f.store, run.id, f.services, { resume: true })).state, 'COMPLETED');
+    assert.equal(reads, 1); assert.equal(f.counts().proposals, 1);
+  } finally { f.store.close(); }
+});
+
+test('alpha cancelled uncertain delivery stays cancelled while querying existing effects', async () => {
+  const f = await pendingDelivery();
+  try {
+    f.store.control(f.run.id, 'cancel');
+    assert.equal(f.store.get(f.run.id).state, 'RECONCILING');
+    f.services.deliver = async (_run, _files, _api, checkpoint, options) => {
+      assert.equal(options.readOnly, true); checkpoint('BEFORE_REMOTE_LOOKUP');
+      assert.throws(() => checkpoint('BEFORE_REMOTE_WRITE'), /read-only/);
+      return { url: 'existing-pr' };
+    };
+    const result = await execute(f.store, f.run.id, f.services, { resume: true });
+    assert.equal(result.state, 'COMPLETED'); assert.equal(f.store.get(f.run.id).control, 'cancel');
+    assert.equal(f.counts().proposals, 1);
+  } finally { f.store.close(); }
+});
+
+test('alpha read-only delivery never creates a missing branch or PR', async () => {
+  const run = { id: 'missing', base: 'base', contract: { delivery: { repository: 'owner/repo', base: 'main' } } };
+  let writes = 0;
+  await assert.rejects(deliver(run, {}, async (endpoint, method = 'GET') => {
+    if (method !== 'GET') writes++;
+    if (endpoint.includes('/pulls?')) return [];
+    const e = Error('missing'); e.notFound = true; throw e;
+  }, undefined, { readOnly: true }), /read-only/);
+  assert.equal(writes, 0);
 });

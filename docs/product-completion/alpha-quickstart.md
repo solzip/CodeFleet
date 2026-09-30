@@ -3,7 +3,7 @@
 > **품질 범위: 독립 검토를 유지하는 제한된 알파.** 재현된 조기 종료·비용 기록·검증 복구 결함의 수정과 회귀 검증을 완료했다. 임의의 적대적 JS에 대한 무인 수락은 보증하지 않는다. [수정 근거](../runs/2026-09-30/alpha-quality-remediation.md)를 따른다.
 
 
-상태: MIT 라이선스의 실험적 공개 알파. [릴리스 다운로드](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.2). 외부 사용자 파일럿과 운영 환경 적합성 검증은 아직 미완료다.
+상태: MIT 라이선스의 실험적 공개 알파. [릴리스 다운로드](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.3). 외부 사용자 파일럿과 운영 환경 적합성 검증은 아직 미완료다.
 
 ## 지원 범위
 
@@ -28,7 +28,7 @@ docker pull node@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8
 node src/alpha/cli.mjs doctor
 ```
 
-릴리스에서 `codefleet-0.2.0-alpha.2.tgz`와 `SHA256SUMS.txt`를 내려받아 SHA-256을 비교한다. 빈 디렉터리에서 `npm install /path/to/codefleet-0.2.0-alpha.2.tgz`로 설치하고 `npx --no-install codefleet-alpha doctor`를 실행한다. npm 레지스트리에는 게시하지 않는다. 아래 소스 실행 예시는 패키지 설치 시 `node src/alpha/cli.mjs`를 `npx --no-install codefleet-alpha`로 바꿔 사용한다. 설치는 OS 서비스나 백그라운드 데몬을 등록하지 않는다.
+릴리스에서 `codefleet-0.2.0-alpha.3.tgz`와 `SHA256SUMS.txt`를 내려받아 SHA-256을 비교한다. 빈 디렉터리에서 `npm install /path/to/codefleet-0.2.0-alpha.3.tgz`로 설치하고 `npx --no-install codefleet-alpha doctor`를 실행한다. npm 레지스트리에는 게시하지 않는다. 아래 소스 실행 예시는 패키지 설치 시 `node src/alpha/cli.mjs`를 `npx --no-install codefleet-alpha`로 바꿔 사용한다. 설치는 OS 서비스나 백그라운드 데몬을 등록하지 않는다.
 
 `doctor`는 실행 파일·Docker 이미지·Claude 로그인 여부를 확인하며 계정 신원이나 토큰을 출력하지 않는다. GitHub 권한은 PR 전달 시 확인한다. doctor 성공이 모델 서비스의 가용성이나 비용 한도를 보증하지 않는다.
 
@@ -73,7 +73,7 @@ node src/alpha/cli.mjs export RUN_ID /path/to/new-output-directory
 { "mode": "pull-request", "repository": "OWNER/REPOSITORY", "base": "main", "authorName": "PUBLIC_HANDLE", "authorEmail": "PUBLIC_EMAIL" }
 ```
 
-로컬 기준 커밋과 원격 base가 같아야 한다. `codefleet/RUN_ID` 브랜치와 draft PR을 만들며 사람의 검토를 요청한다. 기존 브랜치를 덮어쓰지 않는다. 응답 유실 시 RECONCILING으로 남기고 `resume`에서 같은 브랜치·PR·파일 내용을 조회한다. 기준 브랜치가 바뀌면 새 기준에서 작업을 다시 시작한다.
+로컬 기준 커밋과 원격 base가 같아야 한다. `codefleet/RUN_ID` 브랜치와 draft PR을 만들며 사람의 검토를 요청한다. 기존 브랜치를 덮어쓰지 않는다. 응답 유실 시 RECONCILING으로 남기고 `resume`에서 같은 브랜치·PR·파일 내용을 조회한다. 기준 브랜치가 바뀌어도 기존 PR은 원래 검증 증거와 대조해 조회한다. 새로운 원격 쓰기는 기준이 달라지면 거부한다. 실행 예산이 소진됐거나 전달 중 취소한 작업의 resume은 별도의 제한 시간 안에서 읽기 전용 조회만 수행한다. 기존 효과를 확인하지 못하면 RECONCILING에 남는다.
 
 ## 예외 해결
 
@@ -85,7 +85,7 @@ node src/alpha/cli.mjs export RUN_ID /path/to/new-output-directory
 | 범위 밖·모호한 편집 제안 | 원인 확인. 필요 시 새 계약으로 더 작은 작업 지정 |
 | 동일 제안 반복·시도 소진 | 결과와 테스트 증거를 확인하고 목표·맥락을 개선한 새 계약 생성 |
 | PAUSED | 원하면 같은 ID로 resume |
-| RECONCILING | 원격 효과가 불명확함. status 확인 후 resume으로 조회·재조정 |
+| RECONCILING | 원격 효과가 불명확함. status 후 resume으로 조회. 취소·예산 소진 시 새 쓰기 금지 |
 | CANCELLED | 새 실행 필요. 이미 반영된 외부 효과는 자동 삭제되지 않음 |
 
 ## 업데이트·제거·한계

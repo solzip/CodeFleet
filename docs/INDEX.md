@@ -2,7 +2,7 @@
 
 `docs/audits/`·`docs/runs/`·`docs/archive/`의 전 문서를 시간 역순으로 나열한다. 규약은 `docs/CONVENTIONS.md`, 결함 등재 현황은 `docs/REGISTER.md`.
 
-작성 기준: 2026-09-30. 전수 66개 문서 (감사 38 · 실행 21 · 아카이브 7). <!-- fact: docs-indexed = 66 --> <!-- fact: docs-on-disk = 66 -->
+작성 기준: 2026-09-30. 전수 67개 문서 (감사 38 · 실행 22 · 아카이브 7). <!-- fact: docs-indexed = 67 --> <!-- fact: docs-on-disk = 67 -->
 
 현재 공개 사용 제품 계획은 [제품 완성 문서](product-completion/README.md)에 있다. 기존 아카이브의 실측과 새 제품 계획을 구분하며, 구현 상태는 새 진행 현황에서 관리한다.
 
@@ -10,6 +10,7 @@
 
 | 날짜 | 문서 | 유형 | 결론(한 줄) | 후속 |
 | --- | --- | --- | --- | --- |
+| 09-30 | `runs/2026-09-30/alpha-reconciliation-fixes.md` | 수정·검증 | 취소·재개 원자화, 예산 소진·base 이동 후 읽기 전용 PR 확인 | → 새 알파 배포 |
 | 09-30 | `audits/2026-09-30/alpha2-final-review.md` | 코드 검토·재현 | 취소 해제와 시간 소진 후 PR 조회 차단 등 추가 발견. 변경 요청 | → 취소·재조정 수정 |
 | 09-30 | `runs/2026-09-30/alpha-quality-remediation.md` | 수정·검증 | 재현 경로 차단·비용 기록·마지막 시도 복구, Docker 반증과 실제 설치 패키지 완주 | → 제한된 알파·독립 검토 |
 | 09-30 | `audits/2026-09-30/alpha-quality-gate.md` | 감사·재현 | 잘못된 자동 수락·비용 불확실성 누락·마지막 검증 복구 실패. 자율 수락 NO-GO | → 수정·회귀 검증 |

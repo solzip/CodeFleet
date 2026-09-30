@@ -52,10 +52,8 @@ try {
       if (result.state !== 'COMPLETED') process.exitCode = 2;
     } else if (action === 'resume') {
       if (values.length !== 1) throw Error('resume requires run-id');
-      if (store.get(values[0]).state === 'CANCELLED') throw Error('Cancelled runs cannot resume; create a new contract');
-      store.control(values[0], 'run');
       activeId = values[0];
-      const result = await execute(store, values[0]); console.log(JSON.stringify(result, null, 2));
+      const result = await execute(store, values[0], {}, { resume: true }); console.log(JSON.stringify(result, null, 2));
       if (result.state !== 'COMPLETED') process.exitCode = 2;
     } else if (['pause', 'cancel'].includes(action)) {
       if (values.length !== 1) throw Error(`${action} requires run-id`);

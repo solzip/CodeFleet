@@ -1,6 +1,6 @@
 # 진행 현황과 결정 목록
 
-> **최종 검토: 변경 요청.** 취소 요청이 실패한 resume에서 해제되는 문제와 시간 예산 소진 후 PR 조회 차단을 추가 재현했다. [최종 코드 검토](../audits/2026-09-30/alpha2-final-review.md)를 우선한다. 아직 수정하지 않았다.
+> **최종 검토 후 수정 완료.** 취소·resume 원자성과 읽기 전용 PR 복구의 회귀 검증을 완료했다. [수정 근거](../runs/2026-09-30/alpha-reconciliation-fixes.md)를 따른다.
 
 > **품질 범위: 독립 검토를 유지하는 제한된 알파.** 재현된 조기 종료·비용 기록·검증 복구 결함의 수정과 회귀 검증을 완료했다. 임의의 적대적 JS에 대한 무인 수락은 보증하지 않는다. [수정 근거](../runs/2026-09-30/alpha-quality-remediation.md)를 따른다.
 
@@ -42,7 +42,7 @@
 - 구현: [draft PR #3](https://github.com/solzip/CodeFleet/pull/3), 계획 PR 위의 별도 구현 브랜치.
 - CI: [Windows 전체·Linux 알파 성공 기록](https://github.com/solzip/CodeFleet/actions/runs/36672858564). 이 링크의 대상은 최초 구현 커밋이며 후속 변경은 해당 PR의 최신 checks를 확인한다.
 - 실제 실행: [구현·실측 기록](../runs/2026-09-30/alpha-engine-implementation.md).
-- 패키지 후보: `codefleet-0.2.0-alpha.2.tgz`. 로컬 설치 패키지에서 실제 작업을 완료했다. MIT 배포본은 [릴리스](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.2)에서 제공한다.
+- 패키지 후보: `codefleet-0.2.0-alpha.3.tgz`. 로컬 설치 패키지에서 실제 작업을 완료했다. MIT 배포본은 [릴리스](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.3)에서 제공한다.
 - 파일럿: 외부 참여자·실제 사용자 작업 건수는 아직 없음. 자체 실험을 파일럿으로 집계하지 않는다.
 
 미결정 항목은 관련 작업 직전에 해소한다. 현재 문서 작성과 M0의 읽기 전용 현 상태 조사까지 막는 항목은 아니다. 정책·라이선스·외부 게시 변경은 별도 구체 변경으로 검토한다.

@@ -15,9 +15,9 @@ export async function createRun(store, repo, input) {
   return store.create({ id, ...selected, contract, contractHash: hash(contract), state: 'READY', attempts: 0, elapsedMs: 0, reportedCostUsd: 0, unknownCostAttempts: 0, createdAt: new Date().toISOString() });
 }
 
-export async function execute(store, id, dependencies = {}) {
+export async function execute(store, id, dependencies = {}, options = {}) {
   const services = { snapshot, context, candidateHash, propose, verify, ready: dockerReady, cleanupContainer, deliver, ...dependencies };
-  const owner = store.claim(id);
+  const owner = store.claim(id, options);
   let run = store.get(id); const entered = Date.now(); const beforeMs = run.elapsedMs;
   let leaseLost = false;
   const heartbeat = setInterval(() => { if (!store.heartbeat(id, owner)) leaseLost = true; }, 5000);
@@ -35,6 +35,27 @@ export async function execute(store, id, dependencies = {}) {
   };
   try {
     if (['COMPLETED', 'CANCELLED'].includes(run.state)) return run;
+    if (['DELIVERING', 'RECONCILING'].includes(run.state)) {
+      const readDeadline = Date.now() + 60000;
+      const readOnly = remaining() <= 0 || run.control === 'cancel';
+      const reconciliationGuard = (phase) => {
+        if (leaseLost) throw Error('Worker lease lost');
+        if (hash(run.contract) !== run.contractHash) throw Error('Contract integrity mismatch');
+        if (Date.now() >= readDeadline) throw Error('Read-only reconciliation time budget exhausted');
+        const control = store.get(id).control;
+        if (control === 'pause') throw Error('Operator requested pause');
+        if (phase !== 'BEFORE_REMOTE_LOOKUP') {
+          if (readOnly || control === 'cancel') throw Error('Reconciliation is read-only; no new remote writes');
+          guard();
+        }
+      };
+      reconciliationGuard('BEFORE_REMOTE_LOOKUP');
+      const accepted = store.readArtifact(run.acceptedHash);
+      const evidence = store.readArtifact(run.evidenceHash);
+      if (accepted.candidateHash !== run.candidateHash || evidence.candidateHash !== run.candidateHash || judge(evidence).outcome !== 'ACCEPT') throw Error('Accepted evidence does not match delivery intent');
+      run.delivery = await services.deliver(run, accepted.changedFiles, undefined, reconciliationGuard, { readOnly, deadline: readDeadline });
+      save('COMPLETED', 'Existing remote PR confirmed; no new model invocation'); return run;
+    }
     guard();
     if (run.state === 'GENERATING') {
       // A worker disappeared after reserving a billable attempt. The reserved
@@ -42,15 +63,6 @@ export async function execute(store, id, dependencies = {}) {
       if (!run.costPending) run.unknownCostAttempts += 1; // pre-reservation legacy state
       run.costPending = false;
       save('READY', 'Recovered interrupted provider attempt; cost unknown', 'RECOVERED_PROVIDER');
-    }
-    // Recover delivery by querying the same remote branch/PR. Never generate a
-    // new proposal or a new branch after an uncertain external write.
-    if (['DELIVERING', 'RECONCILING'].includes(run.state)) {
-      const accepted = store.readArtifact(run.acceptedHash);
-      const evidence = store.readArtifact(run.evidenceHash);
-      if (accepted.candidateHash !== run.candidateHash || evidence.candidateHash !== run.candidateHash || judge(evidence).outcome !== 'ACCEPT') throw Error('Accepted evidence does not match delivery intent');
-      run.delivery = await services.deliver(run, accepted.changedFiles, undefined, guard);
-      save('COMPLETED', 'Remote PR confirmed'); return run;
     }
     await services.ready(); guard();
     if (run.containerName) await services.cleanupContainer(run.containerName);

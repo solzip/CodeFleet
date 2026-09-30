@@ -42,15 +42,23 @@ try {
 } finally { store.close(); }
 
 let requests = [];
-const run = { id: 'already-delivered', base: 'original-base', contract: { delivery: { repository: 'owner/repo', base: 'main' } } };
+const run = { id: 'already-delivered', base: 'original-base', evidenceHash: 'evidence', candidateHash: 'candidate', contract: { delivery: { repository: 'owner/repo', base: 'main' } } };
 try {
-  await deliver(run, { 'src/math.js': 'correct source' }, async endpoint => {
+  const result = await deliver(run, { 'src/math.js': 'correct source' }, async (endpoint, method = 'GET') => {
     requests.push(endpoint);
+    if (method !== 'GET') throw Error('Unexpected remote write');
+    if (endpoint.includes('/pulls?')) return [{ head: { sha: 'delivered' }, html_url: 'https://example.invalid/existing-pr', state: 'open' }];
+    if (endpoint.includes('/heads/codefleet/')) return { object: { sha: 'delivered' } };
+    if (endpoint.endsWith('/git/commits/delivered')) return { sha: 'delivered', message: 'CodeFleet run already-delivered\nEvidence evidence\nCandidate candidate', parents: [{ sha: run.base }], tree: { sha: 'tree' } };
+    if (endpoint.includes('/git/trees/')) return { tree: [{ type: 'blob', path: 'src/math.js', sha: 'blob' }], truncated: false };
+    if (endpoint.includes('/git/blobs/')) return { encoding: 'base64', content: Buffer.from('correct source').toString('base64') };
+    if (endpoint.includes('/compare/')) return { files: [{ filename: 'src/math.js', status: 'modified' }] };
     if (endpoint.endsWith('/git/ref/heads/main')) return { object: { sha: 'advanced-base' } };
-    throw Error('Reconciliation branch lookup reached');
-  });
+    throw Error(`Unexpected endpoint: ${endpoint}`);
+  }, undefined, { readOnly: true });
+  results.push({ case: 'base-drift-prevents-existing-pr-lookup', reconciled: result.reconciled, requests, defectReproduced: result.reconciled !== true });
 } catch (e) {
-  results.push({ case: 'base-drift-prevents-existing-pr-lookup', reason: e.message, requests, defectReproduced: requests.length === 1 && /Remote base changed/.test(e.message) });
+  results.push({ case: 'base-drift-prevents-existing-pr-lookup', reason: e.message, requests, defectReproduced: true });
 }
 console.log(JSON.stringify({ results }, null, 2));
 process.exitCode = results.some(r => r.defectReproduced) ? 2 : 0;

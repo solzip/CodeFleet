@@ -1,8 +1,8 @@
 # CodeFleet — 에이전트가 했다고 말한 일을 어떻게 검증하나
 
-> **Quality scope:** The reproduced early-exit, cost-accounting and verification-recovery defects have regression fixes. Independent code review remains required; arbitrary hostile JavaScript is outside the verified scope. See [remediation evidence](docs/runs/2026-09-30/alpha-quality-remediation.md).
+> **Quality scope:** The reproduced acceptance, cost, cancellation and recovery defects have regression fixes. Independent code review remains required; arbitrary hostile JavaScript is outside the verified scope. See [remediation evidence](docs/runs/2026-09-30/alpha-reconciliation-fixes.md).
 
-> **현재 개발:** [알파 실행 안내](docs/product-completion/alpha-quickstart.md) · [진행 현황](docs/product-completion/progress.md). 제한된 Node 작업의 편집 제안·격리 검증·복구·draft PR 전달을 구현하고 검증 중이다. MIT 라이선스의 [공개 알파](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.2)를 배포한다. 외부 사용자 파일럿은 아직 미완료다. 아래 본문은 기존 엔진의 아카이브 기록이다.
+> **현재 개발:** [알파 실행 안내](docs/product-completion/alpha-quickstart.md) · [진행 현황](docs/product-completion/progress.md). 제한된 Node 작업의 편집 제안·격리 검증·복구·draft PR 전달을 구현하고 검증 중이다. MIT 라이선스의 [공개 알파](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.3)를 배포한다. 외부 사용자 파일럿은 아직 미완료다. 아래 본문은 기존 엔진의 아카이브 기록이다.
 
 > 에이전트가 "테스트 통과했다"고 보고할 때, **그 말이 판정에 닿지 못하게 하는** 구조를 시험했다.
 > 통제된 조건에서 **한 번 완주했고, 실제 프로젝트에서는 하지 못했다.** 결함 77건을 등재해 판정했으며 근거는 전부 파일:라인으로 남아 있다. <!-- fact: registered-findings = 77 -->
@@ -291,7 +291,7 @@ selectedWorkspaceRootRealPath: input.selectedWorkspaceRootRealPath ?? "",
 | [`ENVIRONMENT.md`](docs/archive/2026-08-13/ENVIRONMENT.md) | Windows에서 에이전트 도구를 만드는 사람에게 그대로 쓸모 있는 실측 기록. CP949 콘솔과 자식 출력 UTF-8 디코딩, 셸 인터프리터 규칙에 막혀 닿지 않는 배치 wrapper, 프로세스가 정규화하지 말고 git에게 물어야 하는 worktree 경로, Windows가 `TerminateProcess`로 매핑해주는 덕에만 확실한 `SIGTERM`, 그리고 `PATH`만 남긴 spawn 환경 탓에 자식 프로세스에 홈 디렉터리가 없었던 일. 항목마다 재현 조건을 붙였고 해결 미확정 3 / 미검증 4 / 미실측 1로 표시했다 |
 | [`ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md) | 종료 시점의 상태와 사유, 자산 목록. 이 페이지에 나오는 모든 숫자의 출처다 |
 
-이 저장소의 판정에는 전부 파일:라인 근거가 붙어 있다. 감사·실행 기록 59편의 색인은 [`docs/INDEX.md`](docs/INDEX.md), <!-- fact: audit-run-records = 59 --> 동결된 결함 등재부는 [`docs/REGISTER.md`](docs/REGISTER.md), 규칙마다 그것이 필요해진 사건을 함께 적어둔 작업 규약은 [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)에 있다.
+이 저장소의 판정에는 전부 파일:라인 근거가 붙어 있다. 감사·실행 기록 60편의 색인은 [`docs/INDEX.md`](docs/INDEX.md), <!-- fact: audit-run-records = 60 --> 동결된 결함 등재부는 [`docs/REGISTER.md`](docs/REGISTER.md), 규칙마다 그것이 필요해진 사건을 함께 적어둔 작업 규약은 [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)에 있다.
 
 공개 사용 제품을 위한 새 [제품 완성 계획](docs/product-completion/README.md)을 별도로 작성했다. 기존 아카이브의 성과·한계와 구분하며, 제한된 알파 경로를 MIT로 배포한다. 외부 파일럿 결과와 전체 로드맵 완성은 아직 남아 있다.
 

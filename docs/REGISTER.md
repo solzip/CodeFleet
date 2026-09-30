@@ -1,6 +1,6 @@
 # 결함 등재부
 
-현재 알파의 신규 결함은 별도 [품질 감사](audits/2026-09-30/alpha-quality-gate.md)에서 추적한다. 후속 [수정·재검증](runs/2026-09-30/alpha-quality-remediation.md)을 함께 읽는다. 추가 [최종 검토](audits/2026-09-30/alpha2-final-review.md)는 현재 미해결 항목을 기록한다. 아래 등재부는 기존 아카이브로 보존한다.
+현재 알파의 신규 결함은 별도 [품질 감사](audits/2026-09-30/alpha-quality-gate.md)에서 추적한다. 후속 [수정·재검증](runs/2026-09-30/alpha-quality-remediation.md)을 함께 읽는다. 추가 [최종 검토](audits/2026-09-30/alpha2-final-review.md)의 후속 상태는 [취소·재조정 수정](runs/2026-09-30/alpha-reconciliation-fixes.md)을 따른다. 아래 등재부는 기존 아카이브로 보존한다.
 
 > ## 동결
 >
