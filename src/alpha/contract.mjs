@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 export const IMAGE = 'node@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6';
 export const hash = (value) => createHash('sha256').update(typeof value === 'string' || Buffer.isBuffer(value) ? value : JSON.stringify(value)).digest('hex');
 export function filePath(value) {
-  if (typeof value !== 'string' || !/^[a-zA-Z0-9_./-]+$/.test(value) || value.startsWith('/') || value.split('/').some(p => !p || p === '.' || p === '..' || p.startsWith('.')) || /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\.|$)/i.test(value.split('/').at(-1))) throw Error(`Unsafe relative file path: ${String(value)}`);
+  if (typeof value !== 'string' || !/^[a-zA-Z0-9_./-]+$/.test(value) || value.startsWith('/') || value.split('/').some(p => !p || p === '.' || p === '..' || p.startsWith('.') || p.endsWith('.') || /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\.|$)/i.test(p))) throw Error(`Unsafe relative file path: ${String(value)}`);
   return value;
 }
 function keys(obj, allowed, label) {

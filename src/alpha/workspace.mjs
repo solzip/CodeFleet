@@ -17,8 +17,8 @@ export async function snapshot(repo, base, target) {
   if (!/^[a-f0-9]{40,64}$/.test(base)) throw Error('Invalid base commit');
   const listing = requireSuccess(await git(repo, ['ls-tree', '-rz', '--full-tree', base]), 'Git tree');
   const entries = listing.split('\0').filter(Boolean).map(line => {
-    const [meta, name] = line.split('\t'); const [mode, type, object] = meta.split(' ');
-    if (!['100644', '100755'].includes(mode) || type !== 'blob' || !name || name.startsWith('/') || name.includes('\\') || name.includes(':') || name.split('/').some(p => !p || p === '..' || p === '.' || p.toLowerCase() === '.git')) throw Error('Alpha requires regular tracked files without submodules or symlinks');
+    const separator = line.indexOf('\t'); const meta = line.slice(0, separator); const name = line.slice(separator + 1); const [mode, type, object] = meta.split(' ');
+    if (separator < 0 || !['100644', '100755'].includes(mode) || type !== 'blob' || !name || name.startsWith('/') || /[\\:\u0000-\u001f\u007f]/.test(name) || name.split('/').some(p => !p || p === '..' || p === '.' || /[. ]$/.test(p) || p.toLowerCase() === '.git' || /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\.|$)/i.test(p))) throw Error('Alpha requires regular portable tracked files without submodules or symlinks');
     return { name, object, mode };
   });
   if (!entries.length || entries.length > 1500 || new Set(entries.map(e => e.name.toLowerCase())).size !== entries.length) throw Error('Unsupported tree size or case-colliding paths');

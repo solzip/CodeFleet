@@ -18,7 +18,7 @@ const fail = () => ({ ...pass(), exitCode: 1, passed: 0, failed: 1 });
 
 test('alpha contracts reject scope escalation, test edits, ambiguous paths and unknown grants', () => {
   assert.deepEqual(validateContract(input()), input());
-  for (const file of ['../src/math.js', 'src/../math.js', 'src/.env', 'test/math.test.js', 'src/math.test.js', 'src/NUL.js', 'src/a.js:secret']) {
+  for (const file of ['../src/math.js', 'src/../math.js', 'src/.env', 'test/math.test.js', 'src/math.test.js', 'src/NUL.js', 'src/COM1/file.js', 'src/folder./file.js', 'src/a.js:secret']) {
     const c = input(); c.files = [file]; c.context = [file]; assert.throws(() => validateContract(c));
   }
   assert.throws(() => validateContract({ ...input(), allowShell: true }));

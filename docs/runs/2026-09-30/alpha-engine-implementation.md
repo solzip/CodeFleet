@@ -75,7 +75,9 @@
 
 로컬 `npm pack --ignore-scripts`로 후보 패키지를 만들고 빈 디렉터리에서 offline install·`codefleet-alpha --help`·uninstall 모두 exit 0을 확인했다. 최종 변경 이후의 패키지는 재생성해야 한다. 패키지 게시나 공개 사용 릴리스는 수행하지 않았다.
 
-CI는 Windows 전체 검사·패키지 설치, Linux 알파 테스트·실제 컨테이너 경계 검증으로 나눴다. [checkout](https://github.com/actions/checkout)과 [setup-node](https://github.com/actions/setup-node)의 공식 안내·태그를 확인하고 action commit을 고정했다. 원격 CI 결과는 확인 후 추가한다.
+CI는 Windows 전체 검사·패키지 설치, Linux 알파 테스트·실제 컨테이너 경계 검증으로 나눴다. [checkout](https://github.com/actions/checkout)과 [setup-node](https://github.com/actions/setup-node)의 공식 안내·태그를 확인하고 action commit을 고정했다. 최초 구현 커밋 `22d3c03`의 [원격 CI](https://github.com/solzip/CodeFleet/actions/runs/36672858564)는 두 job 모두 success였다. 후속 변경의 최종 CI는 구현 PR의 최신 checks가 기준이다.
+
+추가로 `npm run alpha:package-smoke -- --real-provider`를 실행해 tarball을 빈 디렉터리에 설치한 후 **설치된 CLI로** 실제 모델·Docker 작업을 완주했다. 실행 ID `3c477256-8137-4938-8b7c-cca59ee59a15`, 시도 1회, 공급자 보고 비용 약 0.0105 USD. install/help/workflow/uninstall 모두 성공했다. 이 자체 검증은 외부 사용자 실적이 아니다. 이때 패키지 파일 수는 134개였으며 문서 추가 이후 최종 후보는 다시 패키징한다.
 
 라이선스 선택과 파일럿 참여자 확보를 사용자에게 질문했으며 아직 답변을 받지 않았다. [설치 안내](../../product-completion/alpha-quickstart.md)와 [파일럿 패킷](../../product-completion/pilot.md)은 준비했다. 사용 불가 LICENSE를 유지한 채 공개 사용 가능하다고 표시하지 않는다.
 

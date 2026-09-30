@@ -17,6 +17,7 @@
     "test:alpha": "node --test test/alpha.test.mjs",
     "alpha:doctor": "node src/alpha/cli.mjs doctor",
     "alpha:smoke": "node scripts/alpha-smoke.mjs --real-provider",
+    "alpha:package-smoke": "node scripts/alpha-package-smoke.mjs",
     "posttest": "node ./scripts/check-rule-coverage.mjs && node ./scripts/check-links.mjs && node ./scripts/check-doc-citations.mjs && node ./scripts/check-doc-facts.mjs",
     "check:links": "node ./scripts/check-links.mjs",
     "check:facts": "node ./scripts/check-doc-facts.mjs",

@@ -13,7 +13,7 @@
 | M1 신뢰할 수 있는 한 작업 | 제한된 알파 경로 VERIFIED | 실제 CodeFleet 소스의 회귀 테스트가 Claude 수정 전 실패·후 성공. 일반 에이전트 실행·Java 지원 제외 |
 | M2 자율 루프·복구 | 제한된 알파 경로 VERIFIED | 알파 테스트에 범위·예산·중단·worker 강제 종료 후 재개·증거 변조 반증 포함. 자동 작업 분해·다중 작업 큐는 후속 |
 | M3 PR 전달 | 제한된 알파 경로 VERIFIED | [검증용 draft PR](https://github.com/solzip/CodeFleet/pull/2), 같은 PR 재조회. 응답 유실은 모의 API 통합 시험으로 검증 |
-| M4 공개 알파·파일럿 | IN_PROGRESS / 공개 조건 대기 | 패키지 설치·도움말·제거 확인, 안내·피드백 양식 작성. 라이선스·참여자 답변 대기 |
+| M4 공개 알파·파일럿 | 후보 검증 / 공개 조건 대기 | 설치 패키지에서 실제 모델→Docker 완주·제거 확인. Windows 전체·Linux 알파 CI 통과. 라이선스·참여자 답변 대기 |
 | M5 공개 사용 릴리스 | TODO | 출시 게이트 미평가 |
 
 상태 정의: TODO → IN_PROGRESS → IMPLEMENTED → VERIFIED. 막히면 BLOCKED와 원인·해제 조건을 기록한다. DOCUMENTED는 설계 산출물에만 사용하며 구현 완료로 집계하지 않는다.
@@ -31,6 +31,14 @@
 | D07 | SQLite 상태 저장소·아티팩트 파일 분리 | 구현·로컬 검증 | Node 내장 SQLite 사용. schema version 검사, lease·worker 복구 시험 |
 | D08 | 공개 저장소 소유자·이름·패키지 배포 경로 | solzip/CodeFleet, tarball 후보 | 원격 저장소 유지. npm 레지스트리 게시 미수행 |
 | D09 | 파일럿 목표와 참여자 모집 | 제안 기본안 | M4 전 확정. 개인·회사 저장소 동의와 비밀 경계 확인 |
+
+## 검증 증거와 검토 경로
+
+- 구현: [draft PR #3](https://github.com/solzip/CodeFleet/pull/3), 계획 PR 위의 별도 구현 브랜치.
+- CI: [Windows 전체·Linux 알파 성공 기록](https://github.com/solzip/CodeFleet/actions/runs/36672858564). 이 링크의 대상은 최초 구현 커밋이며 후속 변경은 해당 PR의 최신 checks를 확인한다.
+- 실제 실행: [구현·실측 기록](../runs/2026-09-30/alpha-engine-implementation.md).
+- 패키지 후보: `codefleet-0.2.0-alpha.1.tgz`. 로컬 설치 패키지에서 실제 작업이 완료됐으나 공개 사용 릴리스는 아직 아니다.
+- 파일럿: 외부 참여자·실제 사용자 작업 건수는 아직 없음. 자체 실험을 파일럿으로 집계하지 않는다.
 
 미결정 항목은 관련 작업 직전에 해소한다. 현재 문서 작성과 M0의 읽기 전용 현 상태 조사까지 막는 항목은 아니다. 정책·라이선스·외부 게시 변경은 별도 구체 변경으로 검토한다.
 

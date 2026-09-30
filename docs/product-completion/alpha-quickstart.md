@@ -87,4 +87,4 @@ node src/alpha/cli.mjs export RUN_ID /path/to/new-output-directory
 
 패키지 제거는 해당 설치 디렉터리에서 `npm uninstall codefleet`로 수행한다. 상태·후보 임시 디렉터리는 자동 삭제하지 않으며, 보존이 필요 없는지 확인한 후 운영자가 제거한다. 업데이트 전 worker를 멈추고 상태 디렉터리를 백업한다. 향후 schema migration은 검증 전까지 지원하지 않는다.
 
-아직 설치 패키지·Linux CI·강제 종료 복구·원격 PR 재조정·외부 파일럿 전체를 검증한 것은 아니다. 최신 검증 범위는 [진행 현황](progress.md)을 따른다. 기존 `codefleet` CLI와 새 `codefleet-alpha`는 실행 모델이 다르며 상태를 상호 이관하지 않는다.
+설치 패키지의 실제 모델·Docker 작업, Windows 전체 검사, Linux 알파 검사·컨테이너 경계를 확인했다. 강제 종료 복구와 원격 응답 유실은 자동 테스트로, 실제 PR 생성·재조회는 전용 브랜치에서 확인했다. Linux의 실제 모델 인증부터 PR까지와 외부 사용자 파일럿은 아직 검증하지 않았다. 최신 범위는 [진행 현황](progress.md)을 따른다. 기존 `codefleet` CLI와 새 `codefleet-alpha`는 실행 모델이 다르며 상태를 상호 이관하지 않는다.
