@@ -4,9 +4,9 @@
 
 ## 알파 실행 범위 결정
 
-### Java 빌드 도구 확장 (2026-09-30, 개발 브랜치)
+### Java 빌드 도구 확장 (2026-09-30, alpha.4)
 
-사용자 지시로 기존 Node 경로에 Java/Gradle·Maven 검증 어댑터를 추가한다. alpha.3 공개 패키지에는 아직 포함되지 않은 변경이다. Controller·Store·Provider·Judge·Delivery는 공유하고 계약의 `verification`으로 빌드 도구를 선택한다. 첫 Java 범위는 JDK 21, Gradle 9.4.1 또는 Maven 3.9.9, 한 모듈의 명시된 Java 소스와 JUnit 테스트다.
+사용자 지시로 기존 Node 경로에 Java/Gradle·Maven 검증 어댑터를 추가했다. alpha.3에는 없으며 alpha.4에 포함한다. Controller·Store·Provider·Judge·Delivery는 공유하고 계약의 `verification`으로 빌드 도구를 선택한다. 첫 Java 범위는 JDK 21, Gradle 9.4.1 또는 Maven 3.9.9, 한 모듈의 명시된 Java 소스와 JUnit 테스트다.
 
 - `prepare-java`는 사용자가 신뢰하는 깨끗한 기준 커밋을 별도 스냅샷으로 만들고 네트워크를 사용해 의존성 이미지를 준비한다. 원본 작업 트리·사용자 홈·인증 파일은 컨테이너에 마운트하지 않는다. 준비 단계는 후보 검증과 구분한다.
 - 준비한 로컬 이미지 ID를 계약에 고정한다. 후보 검증은 네트워크 차단·일반 사용자·읽기 전용 소스 마운트로 실행한다. 컴파일 산출물과 의존성 캐시 사본은 매번 새 tmpfs에 둔다. 테스트·빌드 파일은 AI 편집 범위에서 제외한다.

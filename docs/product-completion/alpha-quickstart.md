@@ -3,11 +3,11 @@
 > **품질 범위: 독립 검토를 유지하는 제한된 알파.** 재현된 조기 종료·비용 기록·검증 복구 결함의 수정과 회귀 검증을 완료했다. 임의의 적대적 JS에 대한 무인 수락은 보증하지 않는다. [수정 근거](../runs/2026-09-30/alpha-quality-remediation.md)를 따른다.
 
 
-상태: MIT 라이선스의 실험적 공개 알파. [릴리스 다운로드](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.3). 외부 사용자 파일럿과 운영 환경 적합성 검증은 아직 미완료다.
+상태: MIT 라이선스의 실험적 공개 알파. [릴리스 다운로드](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.4). 운영자 보조 Java 적용을 확인했으며 독립 외부 사용자 자가 온보딩과 운영 환경 적합성 검증은 아직 미완료다.
 
 ## 지원 범위
 
-아래 Node 안내는 공개 alpha.3 기준이다. 개발 브랜치의 Java 확장은 이 문서 마지막 절에 별도로 설명한다.
+아래는 Node 실행 안내이며 alpha.4의 Java 확장은 이 문서 마지막 절에 별도로 설명한다.
 
 현재 실제 관측 환경은 Windows의 Node v24.14.1, Claude CLI 2.1.285, Linux 컨테이너를 실행하는 Docker 엔진이다. 첫 실행 대상은 **의존성 설치가 필요 없는 Node 프로젝트의 기존 실패 테스트를 고치는 작업**이다. 다른 OS는 CI로 확인하기 전 지원을 보증하지 않는다.
 
@@ -30,7 +30,7 @@ docker pull node@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8
 node src/alpha/cli.mjs doctor
 ```
 
-릴리스에서 `codefleet-0.2.0-alpha.3.tgz`와 `SHA256SUMS.txt`를 내려받아 SHA-256을 비교한다. 빈 디렉터리에서 `npm install /path/to/codefleet-0.2.0-alpha.3.tgz`로 설치하고 `npx --no-install codefleet-alpha doctor`를 실행한다. npm 레지스트리에는 게시하지 않는다. 아래 소스 실행 예시는 패키지 설치 시 `node src/alpha/cli.mjs`를 `npx --no-install codefleet-alpha`로 바꿔 사용한다. 설치는 OS 서비스나 백그라운드 데몬을 등록하지 않는다.
+릴리스에서 `codefleet-0.2.0-alpha.4.tgz`와 `SHA256SUMS.txt`를 내려받아 SHA-256을 비교한다. 빈 디렉터리에서 `npm install /path/to/codefleet-0.2.0-alpha.4.tgz`로 설치하고 `npx --no-install codefleet-alpha doctor`를 실행한다. npm 레지스트리에는 게시하지 않는다. 아래 소스 실행 예시는 패키지 설치 시 `node src/alpha/cli.mjs`를 `npx --no-install codefleet-alpha`로 바꿔 사용한다. 설치는 OS 서비스나 백그라운드 데몬을 등록하지 않는다.
 
 `doctor`는 실행 파일·Docker 이미지·Claude 로그인 여부를 확인하며 계정 신원이나 토큰을 출력하지 않는다. GitHub 권한은 PR 전달 시 확인한다. doctor 성공이 모델 서비스의 가용성이나 비용 한도를 보증하지 않는다.
 
@@ -96,9 +96,9 @@ node src/alpha/cli.mjs export RUN_ID /path/to/new-output-directory
 
 설치 패키지의 실제 모델·Docker 작업, Windows 전체 검사, Linux 알파 검사·컨테이너 경계를 확인했다. 강제 종료 복구와 원격 응답 유실은 자동 테스트로, 실제 PR 생성·재조회는 전용 브랜치에서 확인했다. Linux의 실제 모델 인증부터 PR까지와 외부 사용자 파일럿은 아직 검증하지 않았다. 최신 범위는 [진행 현황](progress.md)을 따른다. 기존 `codefleet` CLI와 새 `codefleet-alpha`는 실행 모델이 다르며 상태를 상호 이관하지 않는다.
 
-## Java Gradle/Maven 개발 브랜치
+## Java Gradle/Maven
 
-공개 alpha.3에는 없는 기능이다. Java 지원이 포함된 소스 체크아웃에서 아래 명령을 실행한다. 호스트 JDK 없이도 검증할 수 있지만 Linux 컨테이너 Docker와 이미지 준비 시 인터넷이 필요하다. 첫 지원 조합은 JDK 21 + Gradle 9.4.1(래퍼 버전 일치 필수) 또는 Maven 3.9.9다. 임의 JDK·빌드 도구 버전, Android, Kotlin 소스 수정, 사설 의존성 인증, 통합 인프라 실행은 이 범위에 포함하지 않는다.
+alpha.4에 추가된 기능이다. 설치한 패키지에서는 아래 `node src/alpha/cli.mjs` 대신 `npx --no-install codefleet-alpha`를 사용한다. 호스트 JDK 없이도 검증할 수 있지만 Linux 컨테이너 Docker와 이미지 준비 시 인터넷이 필요하다. 첫 지원 조합은 JDK 21 + Gradle 9.4.1(래퍼 버전 일치 필수) 또는 Maven 3.9.9다. 임의 JDK·빌드 도구 버전, Android, Kotlin 소스 수정, 사설 의존성 인증, 통합 인프라 실행은 이 범위에 포함하지 않는다.
 
 계약은 기존 필드를 유지하면서 다음 `verification`을 추가한다. Maven은 `kind`를 `java-maven`으로 바꾼다. 단일 모듈은 `module` 필드를 생략한다.
 

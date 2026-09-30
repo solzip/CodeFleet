@@ -1,10 +1,10 @@
 # CodeFleet — how do you verify work an agent says it did?
 
-> **Development branch:** Java verification adapters now support Gradle and Maven. An operator-assisted real Gradle project completed model repair, isolated tests and draft PR delivery; a Maven fixture completed locally. This extension is not in the published alpha.3 package. See the [Java guide](docs/product-completion/alpha-quickstart.md#java-gradlemaven-개발-브랜치) for supported versions and instructions.
+> **Java support:** alpha.4 adds Gradle and Maven verification adapters. An operator-assisted real Gradle project completed model repair, isolated tests and draft PR delivery; a Maven fixture completed locally. See the [Java guide](docs/product-completion/alpha-quickstart.md#java-gradlemaven) for supported versions and instructions.
 
 > **Quality scope:** The reproduced acceptance, cost, cancellation and recovery defects have regression fixes. Independent code review remains required; arbitrary hostile JavaScript is outside the verified scope. See [remediation evidence](docs/runs/2026-09-30/alpha-reconciliation-fixes.md).
 
-> **Current development:** [Alpha guide](docs/product-completion/alpha-quickstart.md) and [progress](docs/product-completion/progress.md). A limited Node workflow now implements edit proposals, isolated verification, recovery and draft PR delivery. The [public alpha](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.3) is distributed under MIT. External user pilot results are still pending. The text below records the archived engine.
+> **Current development:** [Alpha guide](docs/product-completion/alpha-quickstart.md) and [progress](docs/product-completion/progress.md). Limited Node and Java workflows implement edit proposals, isolated verification, recovery and draft PR delivery. The [public alpha](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.4) is distributed under MIT. Independent external-user onboarding validation is still pending. The text below records the archived engine.
 
 > A structure that keeps an agent's "tests pass" from **reaching the decision at all**, tested end to end.
 > It **completed once under controlled conditions and never on a real project.** 77 findings were registered and

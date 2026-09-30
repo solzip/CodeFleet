@@ -9,9 +9,9 @@
 
 ## 현재 상태
 
-### Java 빌드 어댑터 실측 (2026-09-30, 개발 브랜치)
+### Java 빌드 어댑터 실측 (2026-09-30, alpha.4 대상)
 
-- CodeFleet 공통 Controller·Store·Provider·Judge·Delivery를 재사용하고 Java 계약, Gradle/Maven 실행, 안전한 JUnit XML 판독과 `prepare-java`/`doctor CONTRACT`를 추가했다. 공개 alpha.3 배포와는 별개이며 새 릴리스는 아직 게시하지 않았다.
+- CodeFleet 공통 Controller·Store·Provider·Judge·Delivery를 재사용하고 Java 계약, Gradle/Maven 실행, 안전한 JUnit XML 판독과 `prepare-java`/`doctor CONTRACT`를 추가했다. alpha.3에는 없고 alpha.4 릴리스 대상에 편입했다. [Java 구현 PR](https://github.com/solzip/CodeFleet/pull/5)과 [실행 안내](alpha-quickstart.md)를 따른다.
 - 사용자 지정 Gradle 프로젝트에서 최대 페이지 번호의 정수 오버플로를 새 보호 테스트로 재현했다. 실제 Claude 1회 → 격리 검증 9/9 통과 → 개인 원격의 **dev 기반 파일럿 브랜치 대상 draft PR** 생성. 원본 dev 수정·자동 병합·조직 원격 반영은 없다. 시간 81,615ms, 공급자 보고 비용 $0.0507282(독립 청구 증거 아님).
 - Maven 샘플은 실제 Claude 1회 → 2/2 통과 → 로컬 산출물 생성. 시간 19,966ms, 공급자 보고 비용 $0.0166602. Maven 실사용 프로젝트·PR 전달 검증으로 확대 해석하지 않는다.
 - 최종 검증기에서 모델 재호출 없이 두 경로를 재검증했다. Gradle 9건 중 1건 실패→9/9 통과, Maven 2건 중 1건 실패→2/2 통과. 테스트 이름 동일성·소스 및 테스트 실제 쓰기 거부를 확인했다. 이 재검증에는 모델 호출·추가 PR 생성이 없다.
@@ -22,13 +22,13 @@
 
 이번 관측은 사용자가 지정한 실제 프로젝트에 운영자 보조로 적용한 첫 사례다. 독립 외부 사용자 모집·무지원 자가 온보딩 완료와 동일하게 집계하지 않는다. 다음은 구현 PR 검토·지원 환경 CI·패키지 배포 검토, 추가 실제 Maven 프로젝트 적용이다.
 
-사용자의 확정 목표는 제품 완성, 공개 저장소, 실제 사용자 사용이다. Node 실패 테스트 기반 변경에 한정한 새 알파 경로를 구현했다. 실제 Claude·Docker로 CodeFleet CLI 결함 수정 제안을 검증했고, 별도 acceptance 브랜치에서 draft PR 생성과 재조회도 확인했다. 권리자의 MIT 전환 승인에 따라 공개 알파를 배포한다. 외부 파일럿은 아직 완료하지 않았다. 광범위한 원래 로드맵 전체와 이번 제한된 알파 수직 경로를 구분한다.
+사용자의 확정 목표는 제품 완성, 공개 저장소, 실제 사용자 사용이다. Node 실패 테스트 기반 알파에 Java 빌드 어댑터를 추가했다. 실제 Claude·Docker로 수정 제안을 검증했고, 별도 브랜치에서 draft PR 생성도 확인했다. 권리자의 MIT 전환 승인에 따라 공개 알파를 배포한다. 사용자 지정 프로젝트의 운영자 보조 적용과 독립 외부 사용자 자가 온보딩을 구분한다. 광범위한 원래 로드맵 전체가 완성된 것은 아니다.
 
 | 단계 | 상태 | 근거 |
 | --- | --- | --- |
 | 종합 검토·아키텍처·로드맵 문서화 | DOCUMENTED | [이번 작업 기록](../runs/2026-09-30/product-completion-planning.md) |
 | M0 기준선·범위 확정 | 기준선 VERIFIED / MIT 확정 | 기존 전체 검사 exit 0, 324 통과. 실제 소스 복제에서 승인 상한·apply preview 실패 재현 |
-| M1 신뢰할 수 있는 한 작업 | 제한된 알파 경로 VERIFIED | 실제 CodeFleet 소스의 회귀 테스트가 Claude 수정 전 실패·후 성공. 일반 에이전트 실행·Java 지원 제외 |
+| M1 신뢰할 수 있는 한 작업 | 제한된 알파 경로 VERIFIED | Node·Java/Gradle 실제 소스와 Maven 샘플에서 Claude 수정 전 실패·후 성공. 일반 에이전트 실행·임의 빌드 도구 조합 제외 |
 | M2 자율 루프·복구 | 제한된 알파 경로 VERIFIED | 알파 테스트에 범위·예산·중단·worker 강제 종료 후 재개·증거 변조 반증 포함. 자동 작업 분해·다중 작업 큐는 후속 |
 | M3 PR 전달 | 제한된 알파 경로 VERIFIED | [검증용 draft PR](https://github.com/solzip/CodeFleet/pull/2), 같은 PR 재조회. 응답 유실은 모의 API 통합 시험으로 검증 |
 | M4 공개 알파·파일럿 | 알파 배포 / 외부 파일럿 대기 | 설치 패키지에서 실제 모델→Docker 완주·제거 확인. Windows 전체·Linux 알파 CI 통과. MIT 전환 승인. 외부 참여 기록 대기 |
@@ -55,7 +55,7 @@
 - 구현: [draft PR #3](https://github.com/solzip/CodeFleet/pull/3), 계획 PR 위의 별도 구현 브랜치.
 - CI: [Windows 전체·Linux 알파 성공 기록](https://github.com/solzip/CodeFleet/actions/runs/36672858564). 이 링크의 대상은 최초 구현 커밋이며 후속 변경은 해당 PR의 최신 checks를 확인한다.
 - 실제 실행: [구현·실측 기록](../runs/2026-09-30/alpha-engine-implementation.md), [공개 배포본 PR 전달·취소 후 재조회](../runs/2026-09-30/alpha3-public-pr-acceptance.md).
-- 패키지 후보: `codefleet-0.2.0-alpha.3.tgz`. 로컬 설치 패키지에서 실제 작업을 완료했다. MIT 배포본은 [릴리스](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.3)에서 제공한다.
+- 현재 릴리스 대상: `codefleet-0.2.0-alpha.4.tgz`. 게시물과 체크섬은 [릴리스](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.4)에서 확인한다. 설치 패키지 실측의 범위와 시점은 아래 추가 기록으로 구분한다.
 - 파일럿: 외부 참여자·실제 사용자 작업 건수는 아직 없음. 자체 실험을 파일럿으로 집계하지 않는다.
 
 미결정 항목은 관련 작업 직전에 해소한다. 현재 문서 작성과 M0의 읽기 전용 현 상태 조사까지 막는 항목은 아니다. 정책·라이선스·외부 게시 변경은 별도 구체 변경으로 검토한다.
