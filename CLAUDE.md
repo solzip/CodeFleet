@@ -7,7 +7,7 @@ That directory defines the active alpha scope; `progress.md` records current
 evidence and unresolved release decisions. The freeze notes below describe the
 legacy engine, not a prohibition on the newly authorized alpha work.
 
-`src/alpha/` is a separate test-driven Node workflow. Run `npm test` for both
+`src/alpha/` is a separate test-driven Node and Java workflow. Run `npm test` for both
 legacy and alpha suites plus document checks. Legacy TAP and rule coverage stay
 separate so the archive's measured facts retain their original meaning. Real
 provider and remote acceptance scripts are opt-in and must not run in CI with
