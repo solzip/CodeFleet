@@ -65,7 +65,7 @@
 
 알파 테스트는 scope 이탈, 검사 누락·0건·skip, stdout 초과, 실제 timeout 종료, 기존 성공 baseline 재개 우회, 반복 제안·예산 소진, 증거 변조, 동시 worker, pause/cancel, worker 프로세스 사망 후 시도 예산 보존, PR 응답 유실 후 내용 재검증·중복 방지를 포함한다.
 
-최종 로컬 `npm test`: exit 0. 기존 스위트 324 통과, 알파 스위트 14 통과, 문서·coverage 후처리 통과. 이는 실행한 로컬 환경의 결과다.
+최초 구현의 로컬 `npm test`: exit 0. 기존 스위트 324 통과, 알파 스위트 14 통과, 문서·coverage 후처리 통과. 이후 실행 생성·이벤트 기록의 원자성과 외부 쓰기 전 취소 확인을 보완하고 추가 반증 테스트를 넣었다. 최종 결과는 해당 구현 PR의 최신 CI에서 확인한다.
 
 `node scripts/alpha-verifier-smoke.mjs`: exit 0. 실제 컨테이너에서 호스트 비밀값 미전달·외부 네트워크 인터페이스 없음·소스 쓰기 차단 확인. 잘못된 테스트는 exit 1, 무한 대기는 interrupted로 처리했다. 컨테이너 내부에도 별도 timeout을 두어 호스트 controller 사망 시 무기한 실행을 방지한다.
 

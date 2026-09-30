@@ -16,8 +16,11 @@ export class Store {
     this.db.exec('PRAGMA user_version=1');
   }
   create(run) {
-    this.db.prepare('INSERT INTO runs(id,body) VALUES (?,?)').run(run.id, JSON.stringify(run));
-    this.event(run.id, 'CREATED', { contractHash: run.contractHash }); return run;
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      this.db.prepare('INSERT INTO runs(id,body) VALUES (?,?)').run(run.id, JSON.stringify(run));
+      this.event(run.id, 'CREATED', { contractHash: run.contractHash }); this.db.exec('COMMIT'); return run;
+    } catch (e) { this.db.exec('ROLLBACK'); throw e; }
   }
   get(id) {
     const row = this.db.prepare('SELECT * FROM runs WHERE id=?').get(id);

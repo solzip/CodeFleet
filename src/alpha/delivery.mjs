@@ -16,6 +16,7 @@ export async function deliver(run, files, call = api, checkpoint = () => {}) {
   const root = `repos/${repository}`;
   const branch = `codefleet/${run.id}`;
   const marker = `CodeFleet run ${run.id}\nEvidence ${run.evidenceHash}\nCandidate ${run.candidateHash}`;
+  checkpoint('BEFORE_REMOTE_LOOKUP');
   const baseRef = await call(`${root}/git/ref/heads/${base}`);
   if (baseRef.object.sha !== run.base) throw Error('Remote base changed or does not match the verified local base; create a new run');
   let existing;
@@ -43,11 +44,14 @@ export async function deliver(run, files, call = api, checkpoint = () => {}) {
     for (const [name, body] of Object.entries(files)) {
       const entry = sourceTree.tree.find(e => e.path === name && e.type === 'blob');
       if (!entry || !['100644', '100755'].includes(entry.mode)) throw Error('Delivery requires an existing regular file');
+      checkpoint('BEFORE_BLOB');
       const blob = await call(`${root}/git/blobs`, 'POST', { content: Buffer.from(body).toString('base64'), encoding: 'base64' });
       tree.push({ path: name, mode: entry.mode, type: 'blob', sha: blob.sha });
     }
+    checkpoint('BEFORE_TREE');
     const candidate = await call(`${root}/git/trees`, 'POST', { base_tree: original.tree.sha, tree });
     const identity = { name: run.contract.delivery.authorName, email: run.contract.delivery.authorEmail };
+    checkpoint('BEFORE_COMMIT');
     commit = await call(`${root}/git/commits`, 'POST', { message: marker, tree: candidate.sha, parents: [run.base], author: identity, committer: identity });
     checkpoint('BEFORE_BRANCH');
     await call(`${root}/git/refs`, 'POST', { ref: `refs/heads/${branch}`, sha: commit.sha });

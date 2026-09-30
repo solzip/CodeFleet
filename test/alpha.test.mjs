@@ -153,6 +153,19 @@ test('alpha delivery refuses base drift before any remote writes', async () => {
   assert.equal(writes, 0);
 });
 
+test('alpha run creation is atomic with its audit event and cancelled delivery makes no request', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'cf-atomic-')); const store = new Store(dir);
+  try {
+    store.event = () => { throw Error('injected event write failure'); };
+    assert.throws(() => store.create({ id: 'never-created', contractHash: 'hash' }), /event write/);
+    assert.throws(() => store.get('never-created'), /Unknown run/);
+  } finally { store.close(); }
+  let requests = 0;
+  const run = { id: 'r', contract: { delivery: { repository: 'owner/repo', base: 'main' } } };
+  await assert.rejects(deliver(run, {}, async () => { requests++; return {}; }, () => { throw Error('cancelled'); }), /cancelled/);
+  assert.equal(requests, 0);
+});
+
 test('alpha resumes after worker process death without restoring the reserved attempt budget', async () => {
   const f = await setup();
   try {
