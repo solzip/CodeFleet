@@ -19,6 +19,8 @@ jobs:
           node-version: 24.14.1
           package-manager-cache: false
       - run: npm test
+        env:
+          CODEFLEET_TEST_JAVA: java
       - name: Package installation smoke
         shell: pwsh
         run: |
@@ -44,6 +46,8 @@ jobs:
           node-version: 24.14.1
           package-manager-cache: false
       - run: npm run test:alpha
+        env:
+          CODEFLEET_TEST_JAVA: java
       - run: docker pull node@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
       - run: node scripts/alpha-verifier-smoke.mjs
       - run: node scripts/alpha-quality-audit.mjs

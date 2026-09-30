@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "goal": "Fix Page.hasNext overflow at Integer.MAX_VALUE while preserving ordinary pagination.",
+  "files": ["src/main/java/example/Page.java"],
+  "context": ["src/main/java/example/Page.java"],
+  "tests": ["src/test/java/example/PageTest.java"],
+  "verification": {"kind": "java-maven", "image": "sha256:0000000000000000000000000000000000000000000000000000000000000000"},
+  "maxAttempts": 2,
+  "timeoutSeconds": 600,
+  "attemptBudgetUsd": 1,
+  "delivery": {"mode": "local"}
+}

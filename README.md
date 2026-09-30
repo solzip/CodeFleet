@@ -1,5 +1,7 @@
 # CodeFleet — 에이전트가 했다고 말한 일을 어떻게 검증하나
 
+> **개발 브랜치 확장:** Java의 Gradle·Maven 검증 어댑터를 추가했다. 사용자 지정 Gradle 프로젝트의 실제 AI 수정→테스트→draft PR과 Maven 샘플의 로컬 완주를 확인했다. 공개 alpha.3 패키지에는 아직 포함되지 않는다. 지원 버전과 실행 방법은 [Java 실행 안내](docs/product-completion/alpha-quickstart.md#java-gradlemaven-개발-브랜치)를 따른다.
+
 > **Quality scope:** The reproduced acceptance, cost, cancellation and recovery defects have regression fixes. Independent code review remains required; arbitrary hostile JavaScript is outside the verified scope. See [remediation evidence](docs/runs/2026-09-30/alpha-reconciliation-fixes.md).
 
 > **현재 개발:** [알파 실행 안내](docs/product-completion/alpha-quickstart.md) · [진행 현황](docs/product-completion/progress.md). 제한된 Node 작업의 편집 제안·격리 검증·복구·draft PR 전달을 구현하고 검증 중이다. MIT 라이선스의 [공개 알파](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.3)를 배포한다. 외부 사용자 파일럿은 아직 미완료다. 아래 본문은 기존 엔진의 아카이브 기록이다.

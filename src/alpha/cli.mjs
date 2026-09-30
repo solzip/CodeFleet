@@ -6,7 +6,8 @@ import { Store } from './store.mjs';
 import { createRun, execute } from './controller.mjs';
 import { command, requireSuccess, environment } from './process.mjs';
 import { dockerReady } from './verifier.mjs';
-import { IMAGE } from './contract.mjs';
+import { IMAGE, validateContract } from './contract.mjs';
+import { prepareJava } from './java-prepare.mjs';
 
 const args = process.argv.slice(2);
 const index = args.indexOf('--state');
@@ -18,12 +19,18 @@ if (index !== -1) {
 const [action, ...values] = args;
 let store;
 let activeId;
-const interrupt = () => { if (store && activeId) store.control(activeId, 'cancel'); };
+let interrupted = false;
+const interrupt = () => { interrupted = true; if (store && activeId) store.control(activeId, 'cancel'); };
 process.on('SIGINT', interrupt); process.on('SIGTERM', interrupt);
 try {
   if (!action || ['help', '--help'].includes(action)) {
-    console.log(`CodeFleet experimental alpha — test-driven Node changes\n\n  codefleet-alpha doctor\n  codefleet-alpha run <contract.json> <repository>\n  codefleet-alpha resume <run-id>\n  codefleet-alpha pause|cancel <run-id>\n  codefleet-alpha status [run-id]\n  codefleet-alpha export <run-id> <directory>\n\nOptional: --state <local-state-directory>\n\nRun grants the explicit contract scope and delivery permission. Only named context/test files are sent to Claude. Requires a clean repository, an existing failing Node regression test, Claude authentication and Docker image ${IMAGE}. Alpha does not install dependencies, merge PRs, deploy, or edit the original repository. Cost is provider-reported, not an independent billing guarantee.`);
+    console.log(`CodeFleet experimental alpha — test-driven Node and Java changes\n\n  codefleet-alpha doctor [contract.json]\n  codefleet-alpha prepare-java <contract.json> <trusted-repository>\n  codefleet-alpha run <contract.json> <repository>\n  codefleet-alpha resume <run-id>\n  codefleet-alpha pause|cancel <run-id>\n  codefleet-alpha status [run-id]\n  codefleet-alpha export <run-id> <directory>\n\nOptional: --state <local-state-directory>\n\nRun grants the explicit contract scope and delivery permission. Only named context/test files are sent to Claude. Requires a clean repository, an existing failing regression test, Claude authentication and a pinned Docker verifier image. Node uses ${IMAGE}. Java supports JDK 21 with Gradle 9.4.1 or Maven 3.9.9; prepare-java executes the trusted baseline with network to cache dependencies in a local image. Candidate verification is offline. Alpha never merges PRs, deploys, or edits the original repository. Cost is provider-reported, not an independent billing guarantee.`);
+  } else if (action === 'prepare-java') {
+    if (values.length !== 2) throw Error('prepare-java requires contract.json and a clean trusted repository');
+    console.log(JSON.stringify(await prepareJava(JSON.parse(await readFile(path.resolve(values[0]), 'utf8')), path.resolve(values[1]), { cancelled: () => interrupted }), null, 2));
   } else if (action === 'doctor') {
+    if (values.length > 1) throw Error('doctor accepts one contract.json');
+    const verification = values.length ? validateContract(JSON.parse(await readFile(path.resolve(values[0]), 'utf8'))).verification : undefined;
     const checks = [];
     for (const [name, exe, argv, env] of [
       ['git', 'git', ['--version'], environment()],
@@ -36,7 +43,7 @@ try {
     let loggedIn = false;
     try { loggedIn = auth.exitCode === 0 && JSON.parse(auth.stdout.toString()).loggedIn === true; } catch {}
     checks.push({ name: 'claude-authentication', ok: loggedIn, detail: loggedIn ? 'Authenticated; account identity omitted' : 'Run claude auth login before using the provider' });
-    try { await dockerReady(); checks.push({ name: 'isolated-verifier', ok: true }); }
+    try { await dockerReady(verification); checks.push({ name: 'isolated-verifier', ok: true }); }
     catch (e) { checks.push({ name: 'isolated-verifier', ok: false, detail: e.message }); }
     console.log(JSON.stringify({ node: process.version, platform: process.platform, checks, githubAuthentication: 'Needed only for PR delivery; checked on delivery. This diagnostic never prints account identities or tokens.' }, null, 2));
     if (checks.some(c => !c.ok)) process.exitCode = 1;

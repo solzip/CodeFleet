@@ -84,7 +84,7 @@ export async function deliver(run, files, call = api, checkpoint = () => {}, { r
   checkpoint('BEFORE_PR');
   const pr = await call(`${root}/pulls`, 'POST', {
     title: `CodeFleet: ${run.contract.goal.replace(/[\r\n]/g, ' ').slice(0, 100)}`, head: branch, base, draft: true,
-    body: `Automated alpha proposal. Human review is required before merge.\n\n${marker}\n\nDeclared Node tests passed in the pinned, network-disabled container. Tests: ${run.contract.tests.join(', ')}.\n\nNo automatic merge or deployment. Local evidence is retained by the operator; source context and test logs are not uploaded in this PR.`
+    body: `Automated alpha proposal. Human review is required before merge.\n\n${marker}\n\nDeclared ${run.contract.verification?.kind ?? 'Node'} tests passed in the pinned, network-disabled container. Tests: ${run.contract.tests.join(', ')}.\n\nNo automatic merge or deployment. Local evidence is retained by the operator; source context and test logs are not uploaded in this PR.`
   });
   return { url: pr.html_url, state: pr.state, reconciled: false, commit: commit.sha };
 }

@@ -64,7 +64,7 @@ export async function execute(store, id, dependencies = {}, options = {}) {
       run.costPending = false;
       save('READY', 'Recovered interrupted provider attempt; cost unknown', 'RECOVERED_PROVIDER');
     }
-    await services.ready(); guard();
+    await services.ready(run.contract.verification); guard();
     if (run.containerName) await services.cleanupContainer(run.containerName);
     const directory = await mkdtemp(path.join(tmpdir(), 'codefleet-candidate-'));
     run.candidateDirectory = directory;
@@ -77,7 +77,7 @@ export async function execute(store, id, dependencies = {}, options = {}) {
     if (!run.baselineHash) {
       run.containerName = `codefleet-${run.id}-baseline`;
       save('BASELINE', 'Checking protected regression tests before generating a change');
-      const baseline = await services.verify({ directory, tests: run.contract.tests, timeoutMs: Math.min(remaining(), 120000), cancelled, containerName: run.containerName });
+      const baseline = await services.verify({ directory, contract: run.contract, tests: run.contract.tests, timeoutMs: Math.min(remaining(), run.contract.verification ? 600000 : 120000), cancelled, containerName: run.containerName });
       guard(); run.baselineHash = store.artifact(baseline);
     }
     const baseline = store.readArtifact(run.baselineHash);
@@ -119,7 +119,7 @@ export async function execute(store, id, dependencies = {}, options = {}) {
       run.candidateHash = await services.candidateHash(directory, names);
       run.containerName = `codefleet-${run.id}-attempt-${run.attempts}`;
       save('VERIFYING', 'Candidate fixed; running protected tests');
-      const evidence = await services.verify({ directory, tests: run.contract.tests, timeoutMs: Math.min(remaining(), 120000), cancelled, containerName: run.containerName });
+      const evidence = await services.verify({ directory, contract: run.contract, tests: run.contract.tests, timeoutMs: Math.min(remaining(), run.contract.verification ? 600000 : 120000), cancelled, containerName: run.containerName });
       guard();
       evidence.candidateHash = run.candidateHash;
       evidence.integrity = run.candidateHash === await services.candidateHash(directory, names);

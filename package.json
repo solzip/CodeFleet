@@ -5,7 +5,7 @@
   "license": "MIT",
   "files": ["src/", "docs/", "examples/", "LICENSE", "SECURITY.md", "README.md", "README.en.md"],
   "type": "module",
-  "description": "Experimental AI-assisted Node repair workflow with isolated verification, recovery and draft PR delivery.",
+  "description": "Experimental AI-assisted Node and Java repair workflow with isolated verification, recovery and draft PR delivery.",
   "bin": {
     "codefleet": "./src/cli.ts",
     "codefleet-alpha": "./src/alpha/cli.mjs"
@@ -15,7 +15,7 @@
     "pretest": "node ./scripts/reset-rule-coverage.mjs",
     "test": "npm run test:legacy && npm run test:alpha",
     "test:legacy": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=.rule-coverage/test-summary.tap test/*.ts",
-    "test:alpha": "node --test test/alpha.test.mjs",
+    "test:alpha": "node --test test/alpha.test.mjs test/alpha-java.test.mjs",
     "alpha:doctor": "node src/alpha/cli.mjs doctor",
     "alpha:smoke": "node scripts/alpha-smoke.mjs --real-provider",
     "alpha:package-smoke": "node scripts/alpha-package-smoke.mjs",

@@ -3,12 +3,19 @@ import { chmod } from 'node:fs/promises';
 import { command, environment, requireSuccess } from './process.mjs';
 import { IMAGE } from './contract.mjs';
 import { fileURLToPath } from 'node:url';
+import { verifyJava } from './java-verifier.mjs';
 
 const guardFile = fileURLToPath(new URL('./verification-guard.mjs', import.meta.url));
 
-export async function dockerReady() {
-  requireSuccess(await command('docker', ['version', '--format', '{{.Server.Os}}'], { env: environment('docker') }), 'Docker engine');
-  requireSuccess(await command('docker', ['image', 'inspect', IMAGE], { env: environment('docker') }), `Pinned Node image (run docker pull ${IMAGE})`);
+export async function dockerReady(verification) {
+  const os = requireSuccess(await command('docker', ['version', '--format', '{{.Server.Os}}'], { env: environment('docker') }), 'Docker engine');
+  if (os !== 'linux') throw Error('Verifier requires Linux containers');
+  const image = verification?.image ?? IMAGE;
+  requireSuccess(await command('docker', ['image', 'inspect', image], { env: environment('docker') }), `Pinned verifier image (${image})`);
+  if (verification) {
+    const kind = requireSuccess(await command('docker', ['image', 'inspect', '--format', '{{index .Config.Labels "codefleet.adapter"}}', image], { env: environment('docker') }), 'Java image adapter');
+    if (kind !== verification.kind) throw Error('Prepared Java image adapter mismatch');
+  }
 }
 export function dockerArgs(directory, tests, name, timeoutMs = 120000) {
   if (directory.includes(',') || guardFile.includes(',')) throw Error('Docker mount paths cannot contain commas');
@@ -36,13 +43,14 @@ export async function cleanupContainer(name) {
   if (!/^codefleet-[a-z0-9-]+$/.test(name)) throw Error('Invalid owned container name');
   await command('docker', ['rm', '-f', name], { env: environment('docker'), timeoutMs: 10000 });
 }
-export async function verify({ directory, tests, timeoutMs, cancelled, containerName }) {
+export async function verify({ directory, tests, contract, timeoutMs, cancelled, containerName }) {
   const name = containerName ?? `codefleet-${randomUUID()}`;
   if (!/^codefleet-[a-z0-9-]+$/.test(name)) throw Error('Invalid owned container name');
   // mkdtemp uses 0700 on POSIX. The container's unprivileged user needs to read
   // this disposable, explicitly selected source snapshot (never the state DB).
   await chmod(directory, 0o755);
   try {
+    if (contract?.verification) return await verifyJava({ directory, contract, timeoutMs, cancelled, containerName: name });
     return verificationResult(await command('docker', dockerArgs(directory, tests, name, timeoutMs), { env: environment('docker'), timeoutMs, cancelled }));
   } finally {
     // Kill only the container created for this attempt, including after CLI interruption.

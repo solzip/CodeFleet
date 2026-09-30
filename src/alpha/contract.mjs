@@ -11,7 +11,7 @@ function keys(obj, allowed, label) {
   for (const key of Object.keys(obj)) if (!allowed.includes(key)) throw Error(`Unknown ${label} field: ${key}`);
 }
 export function validateContract(input) {
-  keys(input, ['schemaVersion', 'goal', 'files', 'context', 'tests', 'maxAttempts', 'timeoutSeconds', 'attemptBudgetUsd', 'delivery'], 'contract');
+  keys(input, ['schemaVersion', 'goal', 'files', 'context', 'tests', 'maxAttempts', 'timeoutSeconds', 'attemptBudgetUsd', 'delivery', 'verification'], 'contract');
   if (input.schemaVersion !== 1) throw Error('schemaVersion must be 1');
   if (typeof input.goal !== 'string' || input.goal.trim().length < 10 || input.goal.length > 4000) throw Error('Provide a goal of 10..4000 characters');
   for (const key of ['files', 'context', 'tests']) {
@@ -19,12 +19,23 @@ export function validateContract(input) {
     input[key].forEach(filePath);
     if (new Set(input[key].map(p => p.toLowerCase())).size !== input[key].length) throw Error(`Duplicate ${key}`);
   }
+  const java = input.verification !== undefined;
+  let prefix = '';
+  if (java) {
+    keys(input.verification, ['kind', 'image', 'module'], 'verification');
+    if (!['java-gradle', 'java-maven'].includes(input.verification.kind)) throw Error('Unsupported verification kind');
+    if (!/^sha256:[a-f0-9]{64}$/.test(input.verification.image ?? '')) throw Error('Java verifier requires a prepared immutable local image ID');
+    if (input.verification.module !== undefined) {
+      if (filePath(input.verification.module).split('/').some(p => p.startsWith('-'))) throw Error('Module cannot be a build option');
+      prefix = input.verification.module + '/';
+    }
+  }
   for (const file of input.files) {
-    if (!file.startsWith('src/') || !/\.(mjs|cjs|js|ts)$/.test(file) || /(^|\/)(test|tests|__tests__)(\/|$)|\.(test|spec)\./i.test(file)) throw Error('Alpha edits only non-test JS/TS files under src/');
+    if (java ? !file.startsWith(prefix + 'src/main/java/') || !file.endsWith('.java') : !file.startsWith('src/') || !/\.(mjs|cjs|js|ts)$/.test(file) || /(^|\/)(test|tests|__tests__)(\/|$)|\.(test|spec)\./i.test(file)) throw Error('Editable files must be non-test sources of the selected adapter/module');
     if (!input.context.includes(file)) throw Error(`Editable file must be explicit context: ${file}`);
   }
   for (const test of input.tests) {
-    if (!/^(test|tests)\/.*\.(test|spec)\.(mjs|cjs|js|ts)$/.test(test)) throw Error('Tests must name explicit Node test files under test/ or tests/');
+    if (java ? !test.startsWith(prefix + 'src/test/java/') || !/^[A-Za-z_$][\w$]*(\/[A-Za-z_$][\w$]*)*\.java$/.test(test.slice((prefix + 'src/test/java/').length)) : !/^(test|tests)\/.*\.(test|spec)\.(mjs|cjs|js|ts)$/.test(test)) throw Error('Tests must name explicit test files of the selected adapter/module');
     if (input.files.includes(test)) throw Error('Verification assets must be protected');
   }
   if (!Number.isInteger(input.maxAttempts) || input.maxAttempts < 1 || input.maxAttempts > 5) throw Error('maxAttempts must be 1..5');
