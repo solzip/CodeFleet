@@ -128,4 +128,4 @@ node src/alpha/cli.mjs run /path/to/contract.json /path/to/repository --state /p
 
 실행 예시용 Maven 프로젝트는 [examples/java-maven](../../examples/java-maven/pom.xml)에 있다. 해당 디렉터리를 별도 폴더로 복사해 **독립 Git 저장소**로 초기화·커밋하고 계약 파일은 저장소 밖에 복사한다. 샘플은 의도적으로 경계값 테스트가 실패한다. Windows 복제 시 `git -c core.autocrlf=false clone ...`로 LF 기준선을 유지한다. 원본 저장소의 하위 디렉터리만 지정하면 Git 루트로 정규화되므로 독립 저장소가 필요하다.
 
-완료된 Java 실행을 모델 재호출 없이 다시 검증하려면 `node scripts/alpha-java-verifier-smoke.mjs STATE RUN_ID`를 사용한다. 새 스냅샷에서 실패 기준선→기존 AI 수정 결과의 통과와 소스·테스트 쓰기 차단을 확인한다. 선택 테스트 통과만으로 악성 JVM 코드의 모든 보고서 위조나 업무 요구사항 충족을 보증하지 않으며 독립 리뷰를 유지한다.
+완료된 Java 실행을 모델 재호출 없이 다시 검증하는 개발용 도구는 소스 체크아웃의 `node scripts/alpha-java-verifier-smoke.mjs STATE RUN_ID`다(설치 패키지에는 scripts 디렉터리를 포함하지 않는다). 새 스냅샷에서 실패 기준선→기존 AI 수정 결과의 통과와 소스·테스트 쓰기 차단을 확인한다. 선택 테스트 통과만으로 악성 JVM 코드의 모든 보고서 위조나 업무 요구사항 충족을 보증하지 않으며 독립 리뷰를 유지한다.
