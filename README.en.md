@@ -1,6 +1,6 @@
 # CodeFleet — how do you verify work an agent says it did?
 
-> **Current development:** [Alpha guide](docs/product-completion/alpha-quickstart.md) and [progress](docs/product-completion/progress.md). A limited Node workflow now implements edit proposals, isolated verification, recovery and draft PR delivery. A public-use release and license transition are still pending. The text below records the archived engine.
+> **Current development:** [Alpha guide](docs/product-completion/alpha-quickstart.md) and [progress](docs/product-completion/progress.md). A limited Node workflow now implements edit proposals, isolated verification, recovery and draft PR delivery. The [public alpha](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.1) is distributed under MIT. External user pilot results are still pending. The text below records the archived engine.
 
 > A structure that keeps an agent's "tests pass" from **reaching the decision at all**, tested end to end.
 > It **completed once under controlled conditions and never on a real project.** 77 findings were registered and
@@ -290,9 +290,9 @@ Two structural reasons, neither of which a partial fix would have closed.
 | [`ENVIRONMENT.md`](docs/archive/2026-08-13/ENVIRONMENT.md) | Measured behaviour for anyone building agent tooling on Windows: a CP949 console against UTF-8 decoding of child output, batch wrappers unreachable behind a shell-interpreter rule, worktree paths that must be asked of git, `SIGTERM` that only reliably kills because Windows maps it to `TerminateProcess`, and a spawn environment narrowed to `PATH` — which left the child without a home directory. Each with its reproduction condition; 3 unresolved, 4 unverified, 1 unmeasured |
 | [`ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md) | State, reasons, and asset list at close. The source of every number on this page |
 
-Every judgment in this repository is cited to a file and line. The 54 audit and run records are indexed in [`docs/INDEX.md`](docs/INDEX.md); <!-- fact: audit-run-records = 54 --> the frozen findings register is [`docs/REGISTER.md`](docs/REGISTER.md); the working conventions, each with the incident that made it necessary, are in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).
+Every judgment in this repository is cited to a file and line. The 55 audit and run records are indexed in [`docs/INDEX.md`](docs/INDEX.md); <!-- fact: audit-run-records = 55 --> the frozen findings register is [`docs/REGISTER.md`](docs/REGISTER.md); the working conventions, each with the incident that made it necessary, are in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).
 
-A separate [product completion plan](docs/product-completion/README.md) now describes a proposed product for public use. A limited alpha implementation is now under validation; this does not change the archived results or imply a public-use release. The current license remains unchanged.
+A separate [product completion plan](docs/product-completion/README.md) now describes a proposed product for public use. The limited alpha is distributed under MIT; this does not change the archived results. External pilot validation and the broader roadmap remain unfinished.
 
 ## Successor
 
@@ -304,8 +304,6 @@ The product definition has been reworked and restarted under the name **Warrant*
 
 ## License
 
-Published for reading and evaluation only — see [`LICENSE`](LICENSE). **Not open source, and no right to use the software is granted.**
+Released under the MIT license. Use, modification, distribution and commercial use are permitted with the copyright and license notice retained. See [`LICENSE`](LICENSE).
 
-That is deliberate. This pipeline completed once on a controlled fixture and never on a real project. **Attaching a licence that grants the right to use it would be making a claim this repository cannot back** — which is the one thing the project set out not to do. It is not code offered for use; it is a record offered for reading.
-
-This is also why GitHub shows no licence badge in the sidebar. Nothing is missing; the file is simply not one of the standard licences.
+The owner approved replacing the previous restrictive policy. Historical commits and audit records describe their original policy; the current distribution uses MIT. Permission to use is not a warranty of correctness or production readiness.

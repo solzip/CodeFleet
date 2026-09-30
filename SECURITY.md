@@ -6,4 +6,4 @@ Do not post credentials, private source, state databases, or exploit details aff
 
 If a boundary failure or incorrect automatic acceptance is suspected, pause affected runs and retain local evidence. Already created remote branches and PRs are not automatically deleted. The maintainer will reproduce the issue, document scope, and require a regression test before restoring the affected workflow.
 
-Current use rights are defined by [LICENSE](LICENSE). Publishing this policy does not grant additional rights or certify a public-use release.
+Current use rights are defined by [LICENSE](LICENSE). The MIT license permits use; this policy does not certify production readiness.

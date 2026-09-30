@@ -2,7 +2,7 @@
 
 `docs/audits/`·`docs/runs/`·`docs/archive/`의 전 문서를 시간 역순으로 나열한다. 규약은 `docs/CONVENTIONS.md`, 결함 등재 현황은 `docs/REGISTER.md`.
 
-작성 기준: 2026-09-30. 전수 61개 문서 (감사 36 · 실행 18 · 아카이브 7). <!-- fact: docs-indexed = 61 --> <!-- fact: docs-on-disk = 61 -->
+작성 기준: 2026-09-30. 전수 62개 문서 (감사 36 · 실행 19 · 아카이브 7). <!-- fact: docs-indexed = 62 --> <!-- fact: docs-on-disk = 62 -->
 
 현재 공개 사용 제품 계획은 [제품 완성 문서](product-completion/README.md)에 있다. 기존 아카이브의 실측과 새 제품 계획을 구분하며, 구현 상태는 새 진행 현황에서 관리한다.
 
@@ -10,6 +10,7 @@
 
 | 날짜 | 문서 | 유형 | 결론(한 줄) | 후속 |
 | --- | --- | --- | --- | --- |
+| 09-30 | `runs/2026-09-30/mit-public-alpha.md` | 결정·배포 | 권리자 승인으로 MIT 전환, 알파 패키지 공개 절차. 외부 파일럿 미완료 | → [진행 현황](product-completion/progress.md) |
 | 09-30 | `runs/2026-09-30/alpha-engine-implementation.md` | 구현·실행 | 제한된 알파의 실제 모델 수정·격리 검증·draft PR 전달 관측. 공개 조건·파일럿 대기 | → [진행 현황](product-completion/progress.md) |
 | 09-30 | `runs/2026-09-30/product-completion-planning.md` | 결정·문서 | 종합 검토·목표 아키텍처·출시 로드맵·진행 상태 문서화. 제품 구현·배포는 미착수 | → [진행 현황](product-completion/progress.md) |
 

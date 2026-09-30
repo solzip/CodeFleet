@@ -1,6 +1,6 @@
 # CodeFleet 알파 실행 안내
 
-상태: 개발 중인 알파 후보. 공개 사용 릴리스 전이다. 현재 LICENSE는 사용을 허용하지 않으므로, 권리자의 허가 또는 라이선스 전환이 이루어진 파일럿에서만 사용한다.
+상태: MIT 라이선스의 실험적 공개 알파. [릴리스 다운로드](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.1). 외부 사용자 파일럿과 운영 환경 적합성 검증은 아직 미완료다.
 
 ## 지원 범위
 
@@ -23,7 +23,7 @@ docker pull node@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8
 node src/alpha/cli.mjs doctor
 ```
 
-패키지 후보를 받았다면 빈 디렉터리에서 `npm install /path/to/codefleet-package.tgz`로 설치하고 `npx --no-install codefleet-alpha doctor`를 실행한다. 공개 릴리스 파일명과 배포 URL은 아직 확정되지 않았다. 설치는 OS 서비스나 백그라운드 데몬을 등록하지 않는다.
+릴리스에서 `codefleet-0.2.0-alpha.1.tgz`와 `SHA256SUMS.txt`를 내려받아 SHA-256을 비교한다. 빈 디렉터리에서 `npm install /path/to/codefleet-0.2.0-alpha.1.tgz`로 설치하고 `npx --no-install codefleet-alpha doctor`를 실행한다. npm 레지스트리에는 게시하지 않는다. 아래 소스 실행 예시는 패키지 설치 시 `node src/alpha/cli.mjs`를 `npx --no-install codefleet-alpha`로 바꿔 사용한다. 설치는 OS 서비스나 백그라운드 데몬을 등록하지 않는다.
 
 `doctor`는 실행 파일·Docker 이미지·Claude 로그인 여부를 확인하며 계정 신원이나 토큰을 출력하지 않는다. GitHub 권한은 PR 전달 시 확인한다. doctor 성공이 모델 서비스의 가용성이나 비용 한도를 보증하지 않는다.
 

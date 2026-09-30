@@ -11,7 +11,8 @@ legacy engine, not a prohibition on the newly authorized alpha work.
 legacy and alpha suites plus document checks. Legacy TAP and rule coverage stay
 separate so the archive's measured facts retain their original meaning. Real
 provider and remote acceptance scripts are opt-in and must not run in CI with
-credentials. Do not claim a public-use release until the license gate is resolved.
+credentials. The owner approved MIT licensing on 2026-09-30. Publish only tested
+alpha artifacts and distinguish public availability from external pilot evidence.
 
 CodeFleet exists to make "the AI said it worked" structurally untrustworthy. Only evidence the Harness observed counts. That standard applies to this repository's own development too: the rules below are the same rules the product enforces, turned on the work of building it.
 
@@ -142,12 +143,11 @@ the old objects were purged server-side rather than left unreachable by hash. Us
 the pseudonymous handle, not an oversight to correct. Never write a legal name
 into LICENSE, docs, commit messages, or path examples; use a placeholder.
 
-**This is source-available, not open source.** LICENSE is all-rights-reserved:
-readable and forkable for reading, with no grant to use, run, copy, modify,
-distribute, or train on. Do not substitute an OSI license, add an SPDX identifier
-implying one, or call the project open source in the README, `package.json`, or
-the repository description. GitHub does not show a license in its sidebar for
-this file; that is expected, not a defect to fix.
+**The current release is MIT licensed.** The owner explicitly approved replacing
+the former all-rights-reserved policy on 2026-09-30. Preserve the `solzip`
+copyright and MIT notice in distributions. Historical records describe the
+policy at their original commits; they do not override the current LICENSE.
+Licensing permits use but does not certify correctness or production readiness.
 
 **Commits carry one identity, `sol <solarchive.dev@gmail.com>`.** Every commit
 was rewritten to it. One commit from a second identity puts the history back to

@@ -2,9 +2,10 @@
   "name": "codefleet",
   "version": "0.2.0-alpha.1",
   "private": true,
+  "license": "MIT",
   "files": ["src/", "docs/", "examples/", "LICENSE", "SECURITY.md", "README.md", "README.en.md"],
   "type": "module",
-  "description": "CodeFleet v0.1 CLI for orchestrating Codex-based development tasks.",
+  "description": "Experimental AI-assisted Node repair workflow with isolated verification, recovery and draft PR delivery.",
   "bin": {
     "codefleet": "./src/cli.ts",
     "codefleet-alpha": "./src/alpha/cli.mjs"
