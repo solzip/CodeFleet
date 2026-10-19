@@ -1,0 +1,49 @@
+✔ Java contracts pin image and module; no test/build edits, selectors or shell grants (1.8746ms)
+✔ Java tool adapters use exact declared classes, offline execution and force fresh Gradle tests (0.2826ms)
+✔ Java isolation keeps source read-only, network disabled and build output ephemeral (11.4737ms)
+✔ real JDK parser rejects missing, forged, skipped and undeclared reports (7408.0706ms)
+(node:53032) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ alpha contracts reject scope escalation, test edits, ambiguous paths and unknown grants (2.4003ms)
+✔ alpha applies only unique exact edits in delegated files without replacement expansion (0.265ms)
+✔ alpha never accepts zero, skipped, missing, truncated or nonzero-exit verification (0.5911ms)
+✔ alpha judgment rejects absent and provider-only authority even with passing counts (0.1683ms)
+✔ alpha baseline predicate preserves executed regression requirements without mutation (0.1381ms)
+✔ alpha node v1 contract completes with real isolated verification and a fixed proposal (2204.3139ms)
+✔ alpha java-maven v1 contract completes with real isolated verification and a fixed proposal (11148.9062ms)
+✔ alpha refuses an unobserved baseline before spending a provider attempt (111.078ms)
+✔ alpha does not complete or deliver on provider-only candidate evidence (48.8366ms)
+✔ alpha provider success claims cannot replace failed Harness verification (63.5026ms)
+✔ alpha malformed provider output and verification loss never produce accepted artifacts (202.4116ms)
+✔ alpha stale worker cannot save, heartbeat or release a replacement lease (41.5694ms)
+✔ alpha reconciliation refuses missing or tampered evidence before delivery (205.6268ms)
+✔ alpha process boundaries limit output and time; provider receives no GitHub token (667.9747ms)
+✔ alpha persists verified evidence, completes locally and does not rerun completed work (67.2628ms)
+✔ alpha passing baseline cannot be bypassed by resume and never invokes provider (43.616ms)
+✔ alpha exhausts attempt budget, rejects no-progress and never widens the contract (72.1771ms)
+✔ alpha retries failed verification then succeeds within the same delegated contract (53.1457ms)
+✔ alpha leases reject concurrent workers and artifacts reject tampering (47.1698ms)
+✔ alpha refuses missing, renamed, duplicated or file-wrapper test identities (0.2026ms)
+✔ alpha reserves unknown cost before provider errors and does not double count on retry (77.7103ms)
+✔ alpha cancellation after a provider response retains known cost (63.0176ms)
+✔ alpha resumes last-attempt verification without another model call after pause (55.5581ms)
+✔ alpha pause and cancel stop before provider calls (56.4721ms)
+✔ alpha uncertain PR delivery resumes the same intent without another agent call (57.5996ms)
+✔ alpha delivery refuses base drift before any remote writes (0.5865ms)
+✔ alpha run creation is atomic with its audit event and cancelled delivery makes no request (27.2902ms)
+✔ alpha resumes after worker process death without restoring the reserved attempt budget (202.3238ms)
+✔ alpha recovers a last-attempt VERIFYING worker death without proposal or cost duplication (143.4821ms)
+✔ alpha delivery reconciles a lost PR response, checks content, and uses explicit public identity (1.0155ms)
+✔ alpha rejected CLI resume preserves active cancellation and idle cancel is terminal (315.5654ms)
+✔ alpha failed resume transaction rolls back both control and worker ownership (37.0147ms)
+✔ alpha exhausted execution budget still reconciles with a bounded read-only allowance (76.1397ms)
+✔ alpha cancelled uncertain delivery stays cancelled while querying existing effects (57.6482ms)
+✔ alpha read-only delivery never creates a missing branch or PR (0.2822ms)
+ℹ tests 39
+ℹ suites 0
+ℹ pass 39
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 16257.0902

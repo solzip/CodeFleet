@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { readFile, mkdir, writeFile, open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { Store } from './store.mjs';
@@ -8,6 +8,10 @@ import { command, requireSuccess, environment } from './process.mjs';
 import { dockerReady } from './verifier.mjs';
 import { IMAGE, validateContract } from './contract.mjs';
 import { prepareJava } from './java-prepare.mjs';
+import { verifiedEvidence } from './evidence.mjs';
+import { productCli } from '../product/cli.mjs';
+import { runReport } from '../product/report.mjs';
+import { planIntent } from '../intent/engine.mjs';
 
 const args = process.argv.slice(2);
 const index = args.indexOf('--state');
@@ -23,8 +27,31 @@ let interrupted = false;
 const interrupt = () => { interrupted = true; if (store && activeId) store.control(activeId, 'cancel'); };
 process.on('SIGINT', interrupt); process.on('SIGTERM', interrupt);
 try {
-  if (!action || ['help', '--help'].includes(action)) {
-    console.log(`CodeFleet experimental alpha — test-driven Node and Java changes\n\n  codefleet-alpha doctor [contract.json]\n  codefleet-alpha prepare-java <contract.json> <trusted-repository>\n  codefleet-alpha run <contract.json> <repository>\n  codefleet-alpha resume <run-id>\n  codefleet-alpha pause|cancel <run-id>\n  codefleet-alpha status [run-id]\n  codefleet-alpha export <run-id> <directory>\n\nOptional: --state <local-state-directory>\n\nRun grants the explicit contract scope and delivery permission. Only named context/test files are sent to Claude. Requires a clean repository, an existing failing regression test, Claude authentication and a pinned Docker verifier image. Node uses ${IMAGE}. Java supports JDK 21 with Gradle 9.4.1 or Maven 3.9.9; prepare-java executes the trusted baseline with network to cache dependencies in a local image. Candidate verification is offline. Alpha never merges PRs, deploys, or edits the original repository. Cost is provider-reported, not an independent billing guarantee.`);
+  if (action === 'objective') {
+    const result = await productCli(values, directory); console.log(JSON.stringify(result.data, null, 2)); process.exitCode = result.exitCode;
+  } else if (!action || ['help', '--help'].includes(action)) {
+    console.log(`CodeFleet experimental alpha — test-driven Node and Java changes\n\n  codefleet-alpha plan "objective" [repository] [--draft draft.json] (read-only, no model call)\n  codefleet-alpha doctor [contract.json]\n  codefleet-alpha prepare-java <contract.json> <trusted-repository>\n  codefleet-alpha run <contract.json> <repository>\n  codefleet-alpha resume <run-id>\n  codefleet-alpha pause|cancel <run-id>\n  codefleet-alpha status [run-id]\n  codefleet-alpha export <run-id> <directory>\n\nOptional: --state <local-state-directory>\n\nRun grants the explicit contract scope and delivery permission. Only named context/test files are sent to Claude. Requires a clean repository, an existing failing regression test, Claude authentication and a pinned Docker verifier image. Node uses ${IMAGE}. Java supports JDK 21 with Gradle 9.4.1 or Maven 3.9.9; prepare-java executes the trusted baseline with network to cache dependencies in a local image. Candidate verification is offline. Alpha never merges PRs, deploys, or edits the original repository. Cost is provider-reported, not an independent billing guarantee.`);
+  } else if (action === 'plan') {
+    // Planning never opens the Store or launches a model. Supplied drafts remain
+    // untrusted and cannot carry authorization or executable command strings.
+    const draftIndex = values.indexOf('--draft');
+    let draftInput;
+    if (draftIndex !== -1) {
+      if (!values[draftIndex + 1]) throw Error('--draft requires a JSON file');
+      const handle = await open(path.resolve(values[draftIndex + 1]), 'r');
+      try {
+        if (!(await handle.stat()).isFile()) throw Error('Draft must be a regular file');
+        const bytes = Buffer.alloc(160001);
+        const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
+        if (bytesRead > 160000) throw Error('Draft input exceeds limit');
+        draftInput = bytes.subarray(0, bytesRead).toString('utf8');
+      } finally { await handle.close(); }
+      values.splice(draftIndex, 2);
+    }
+    if (values.length < 1 || values.length > 2) throw Error('plan requires a quoted objective and optional repository, with optional --draft draft.json');
+    const result = await planIntent(path.resolve(values[1] ?? '.'), values[0], { draftInput });
+    console.log(JSON.stringify(result, null, 2));
+    if (result.status === 'BLOCKED' || result.validation?.status !== 'VALIDATED') process.exitCode = 2;
   } else if (action === 'prepare-java') {
     if (values.length !== 2) throw Error('prepare-java requires contract.json and a clean trusted repository');
     console.log(JSON.stringify(await prepareJava(JSON.parse(await readFile(path.resolve(values[0]), 'utf8')), path.resolve(values[1]), { cancelled: () => interrupted }), null, 2));
@@ -68,16 +95,19 @@ try {
     } else if (action === 'status') {
       if (values.length > 1) throw Error('status accepts one run-id');
       console.log(JSON.stringify(values.length ? { ...store.get(values[0]), events: store.events(values[0]) } : store.list(), null, 2));
+    } else if (action === 'report') {
+      if (values.length !== 1) throw Error('report requires run-id');
+      console.log(JSON.stringify(await runReport(store, values[0]), null, 2));
     } else if (action === 'export') {
       if (values.length !== 2) throw Error('export requires run-id and a new directory');
       const run = store.get(values[0]);
       if (!run.acceptedHash) throw Error('No verified candidate to export');
-      const accepted = store.readArtifact(run.acceptedHash); const evidence = store.readArtifact(run.evidenceHash);
+      const { accepted, evidence } = await verifiedEvidence(store, run);
       const target = path.resolve(values[1]); await mkdir(target); // refuse existing paths
       await writeFile(path.join(target, 'verified-change.json'), JSON.stringify({ runId: run.id, baseCommit: run.base, contractHash: run.contractHash, evidenceHash: run.evidenceHash, ...accepted }, null, 2));
       await writeFile(path.join(target, 'verification.json'), JSON.stringify(evidence, null, 2));
       console.log('Exported local evidence. Review for sensitive source and logs before sharing.');
     } else throw Error(`Unknown command: ${action}`);
   }
-} catch (error) { console.error(error.message); process.exitCode = 1; }
+} catch (error) { if (action === 'plan') console.log(JSON.stringify({ status: 'BLOCKED', executable: false, error: error.message })); else console.error(error.message); process.exitCode = 1; }
 finally { process.off('SIGINT', interrupt); process.off('SIGTERM', interrupt); store?.close(); }

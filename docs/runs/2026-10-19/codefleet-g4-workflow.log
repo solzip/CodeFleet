@@ -1,0 +1,31 @@
+(node:54692) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ DAG rejects cycles, missing references, duplicates, scope and budget expansion (2.5088ms)
+✔ G3 validated plans compile, unresolved plans cannot auto-authorize workflows (1187.2463ms)
+✔ sequential child Alpha runs and final integrated verification are distinct; requests idempotent (1929.4569ms)
+✔ verification failure blocks descendants and cannot be retried as the same attempt (1204.5061ms)
+✔ provider-only evidence never satisfies WorkItem or final success (1061.5141ms)
+✔ graph revisions require fresh approval and CAS; old snapshots stay unchanged (1985.5482ms)
+✔ reserved attempt prevents graph mutation and relaunch after process restart (579.2767ms)
+✔ recovery reconciles completed child evidence without a second model call (1705.3524ms)
+✔ migration preserves V1 rows/events/artifacts and is idempotent on reopen (35.679ms)
+✔ a V1 run created before migration still executes after V2 migration and reopen (925.865ms)
+✔ attempt reservation and event write rollback atomically on SQLite failure (908.5703ms)
+✔ Codex unverified capabilities block before reserving or launching a child (1603.489ms)
+✔ active coordinator rejects concurrent requests and in-flight graph changes (2643.0247ms)
+✔ final integration failure is not workflow completion despite successful items (3011.6748ms)
+✔ expiry and unknown provider cost block downstream work without privilege fallback (1912.7386ms)
+✔ reservations enforce READY dependencies, exact child scope and the one-child limit (652.8297ms)
+✔ real Docker Node verification checks the final combined tree (7950.8024ms)
+✔ one-child ceiling also applies across workflows sharing the same Store (977.3167ms)
+✔ expired approvals still permit read-only completed-child reconciliation, then require renewed review (2219.767ms)
+✔ tampered graph artifact blocks scheduling before any provider invocation (530.1731ms)
+✔ operator cancellation blocks descendants and leaves no reusable terminal attempt (1401.4624ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 34509.7831

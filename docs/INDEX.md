@@ -2,9 +2,22 @@
 
 `docs/audits/`·`docs/runs/`·`docs/archive/`의 전 문서를 시간 역순으로 나열한다. 규약은 `docs/CONVENTIONS.md`, 결함 등재 현황은 `docs/REGISTER.md`.
 
-작성 기준: 2026-09-30. 전수 73개 문서 (감사 38 · 실행 28 · 아카이브 7). <!-- fact: docs-indexed = 73 --> <!-- fact: docs-on-disk = 73 -->
+작성 기준: 2026-10-19. 전수 81개 문서 (감사 38 · 실행 36 · 아카이브 7). <!-- fact: docs-indexed = 81 --> <!-- fact: docs-on-disk = 81 -->
 
 현재 공개 사용 제품 계획은 [제품 완성 문서](product-completion/README.md)에 있다. 기존 아카이브의 실측과 새 제품 계획을 구분하며, 구현 상태는 새 진행 현황에서 관리한다.
+
+## 2026-10-19
+
+| 날짜 | 문서 | 유형 | 결론(한 줄) | 후속 |
+| --- | --- | --- | --- | --- |
+| 10-19 | `runs/2026-10-19/alpha-g7a-live-provider-readiness.md` | 감사·오프라인 검증 | 외부 Sandbox 경계와 no-tool 미충족 재현, Live 차단 유지 | 보안 집행 경로 구현·반증 |
+| 10-19 | `runs/2026-10-19/alpha-g6-product-integration.md` | 구현·검증 | 통합 CLI·보고·계획 계약·패키지 검증, Live 운영 차단 | Provider 안전성 실증 대기 |
+| 10-19 | `runs/2026-10-19/alpha-g5-controlled-hybrid.md` | 구현·검증 | 통제형 병렬 협업·메시지·격리·통합·복구, Live 차단 유지 | G6 지시 대기 |
+| 10-19 | `runs/2026-10-19/alpha-g4-workflow-dag.md` | 구현·검증 | 순차 DAG·영속 승인·통합 검증, Live Provider 차단 유지 | G5 지시 대기 |
+| 10-19 | `runs/2026-10-19/alpha-g3-intent-contract.md` | 구현·검증 | 읽기 전용 Intent·Draft·승인 계약 검증, Live Planner 미검증 | G4 지시 대기 |
+| 10-19 | `runs/2026-10-19/alpha-g2-provider-integration.md` | 구현·검증 | Provider 공통 계약·회귀 통과, Live 미검증·Codex 차단 | G3 지시 대기 |
+| 10-19 | `runs/2026-10-19/alpha-g1-contract-preservation.md` | 수정·검증 | 알파 판정 책임 분리와 증거 권한 반증·필수 검증 통과 | 후속 구현 보류 |
+| 10-19 | `runs/2026-10-19/alpha-baseline-refresh.md` | 실행·검증 | 최신 원격 알파를 별도 작업 공간에 확보하고 기본 검증 완료 | 구현 보류 |
 
 ## 2026-09-30
 

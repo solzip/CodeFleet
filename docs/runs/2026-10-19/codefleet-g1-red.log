@@ -1,0 +1,123 @@
+(node:59036) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ alpha contracts reject scope escalation, test edits, ambiguous paths and unknown grants (1.8216ms)
+✔ alpha applies only unique exact edits in delegated files without replacement expansion (0.218ms)
+✔ alpha never accepts zero, skipped, missing, truncated or nonzero-exit verification (0.5418ms)
+✖ alpha judgment rejects absent and provider-only authority even with passing counts (0.5922ms)
+✖ alpha refuses an unobserved baseline before spending a provider attempt (69.7043ms)
+✖ alpha does not complete or deliver on provider-only candidate evidence (56.6944ms)
+✔ alpha provider success claims cannot replace failed Harness verification (73.4429ms)
+✔ alpha malformed provider output and verification loss never produce accepted artifacts (199.6152ms)
+✔ alpha stale worker cannot save, heartbeat or release a replacement lease (38.4049ms)
+✖ alpha reconciliation refuses missing or tampered evidence before delivery (207.7737ms)
+✔ alpha process boundaries limit output and time; provider receives no GitHub token (247.6322ms)
+✔ alpha persists verified evidence, completes locally and does not rerun completed work (46.2391ms)
+✔ alpha passing baseline cannot be bypassed by resume and never invokes provider (56.536ms)
+✔ alpha exhausts attempt budget, rejects no-progress and never widens the contract (59.2865ms)
+✔ alpha retries failed verification then succeeds within the same delegated contract (75.3103ms)
+✔ alpha leases reject concurrent workers and artifacts reject tampering (33.5145ms)
+✔ alpha refuses missing, renamed, duplicated or file-wrapper test identities (0.2527ms)
+✔ alpha reserves unknown cost before provider errors and does not double count on retry (67.1317ms)
+✔ alpha cancellation after a provider response retains known cost (33.3315ms)
+✔ alpha resumes last-attempt verification without another model call after pause (68.3995ms)
+✔ alpha pause and cancel stop before provider calls (46.5126ms)
+✔ alpha uncertain PR delivery resumes the same intent without another agent call (58.6745ms)
+✔ alpha delivery refuses base drift before any remote writes (0.8676ms)
+✔ alpha run creation is atomic with its audit event and cancelled delivery makes no request (34.2495ms)
+✔ alpha resumes after worker process death without restoring the reserved attempt budget (147.6415ms)
+✔ alpha recovers a last-attempt VERIFYING worker death without proposal or cost duplication (119.1127ms)
+✔ alpha delivery reconciles a lost PR response, checks content, and uses explicit public identity (0.94ms)
+✔ alpha rejected CLI resume preserves active cancellation and idle cancel is terminal (263.859ms)
+✔ alpha failed resume transaction rolls back both control and worker ownership (30.2634ms)
+✔ alpha exhausted execution budget still reconciles with a bounded read-only allowance (94.4041ms)
+✔ alpha cancelled uncertain delivery stays cancelled while querying existing effects (82.9241ms)
+✔ alpha read-only delivery never creates a missing branch or PR (0.6722ms)
+ℹ tests 32
+ℹ suites 0
+ℹ pass 28
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2295.0748
+
+✖ failing tests:
+
+test at test\alpha.test.mjs:46:1
+✖ alpha judgment rejects absent and provider-only authority even with passing counts (0.5922ms)
+  AssertionError [ERR_ASSERTION]: undefined
+  + actual - expected
+  
+  + 'ACCEPT'
+  - 'ESCALATE'
+  
+      at TestContext.<anonymous> (file:///C:/Users/<USER>/Desktop/%EA%B0%9C%EC%9D%B8/sol/codeFleet/codeFleet/.codefleet/worktrees/alpha-g0/test/alpha.test.mjs:48:12)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:787:18)
+      at Test.postRun (node:internal/test_runner/test:1247:19)
+      at Test.run (node:internal/test_runner/test:1175:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'ACCEPT',
+    expected: 'ESCALATE',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\alpha.test.mjs:56:1
+✖ alpha refuses an unobserved baseline before spending a provider attempt (69.7043ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  2 !== 0
+  
+      at TestContext.<anonymous> (file:///C:/Users/<USER>/Desktop/%EA%B0%9C%EC%9D%B8/sol/codeFleet/codeFleet/.codefleet/worktrees/alpha-g0/test/alpha.test.mjs:63:14)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\alpha.test.mjs:70:1
+✖ alpha does not complete or deliver on provider-only candidate evidence (56.6944ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'COMPLETED'
+  - 'WAITING_HUMAN'
+  
+      at TestContext.<anonymous> (file:///C:/Users/<USER>/Desktop/%EA%B0%9C%EC%9D%B8/sol/codeFleet/codeFleet/.codefleet/worktrees/alpha-g0/test/alpha.test.mjs:77:12)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'COMPLETED',
+    expected: 'WAITING_HUMAN',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\alpha.test.mjs:131:1
+✖ alpha reconciliation refuses missing or tampered evidence before delivery (207.7737ms)
+  AssertionError [ERR_ASSERTION]: provider-only
+  + actual - expected
+  
+  + 'COMPLETED'
+  - 'RECONCILING'
+  
+      at TestContext.<anonymous> (file:///C:/Users/<USER>/Desktop/%EA%B0%9C%EC%9D%B8/sol/codeFleet/codeFleet/.codefleet/worktrees/alpha-g0/test/alpha.test.mjs:144:14)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'COMPLETED',
+    expected: 'RECONCILING',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

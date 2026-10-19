@@ -1,0 +1,20 @@
+(node:38468) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ code-context planning reads code and test references, never treats matching as semantic proof (1178.1268ms)
+✔ Intent to reviewed Contract to Workflow to Run to Verification completes with fake provider (3041.1801ms)
+✔ CLI parallel options bind to approved workflow; independent candidates integrate (3028.8011ms)
+✔ task review invalidates old approval and prevents scope expansion and unsafe settings (3970.2001ms)
+✔ approval rejection persists and cannot resume; risk intent cannot be waived by review (2378.0403ms)
+✔ pause resume cancellation flow preserves pinned contract and refuses cancelled replay (4529.211ms)
+✔ report and legacy export reject altered final tree without new model execution (3133.0686ms)
+✔ actual CLI JSON/non-TTY plan review approve capability block status and report (3400.2826ms)
+✔ product migration is additive and task/event update is atomic (1171.7448ms)
+﹣ actual Docker integrated product flow verifies original tests and preserves repository (0.1733ms) # SKIP
+ℹ tests 10
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 25925.9685

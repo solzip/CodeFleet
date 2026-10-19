@@ -66,9 +66,5 @@ export function applyEdits(contract, originals, proposal) {
   return result;
 }
 
-export function judge(evidence) {
-  if (evidence.interrupted || evidence.truncated || !evidence.integrity) return { outcome: 'ESCALATE', reason: 'Evidence incomplete, interrupted, or mismatched' };
-  if (evidence.testIdentityMatch !== true) return { outcome: 'ESCALATE', reason: 'Test identities missing or different from the failing baseline; independent review required' };
-  if (evidence.exitCode === 0 && evidence.tests > 0 && evidence.passed === evidence.tests && evidence.failed === 0 && evidence.skipped === 0 && evidence.todo === 0) return { outcome: 'ACCEPT', reason: 'Baseline test identities matched and reported passing; independent code review remains required' };
-  return { outcome: 'RETRY', reason: 'Declared tests failed, were skipped, or did not execute' };
-}
+// Preserve the Alpha v1 import used by existing callers and diagnostic scripts.
+export { judge } from './judge.mjs';

@@ -1,5 +1,7 @@
 # CodeFleet — how do you verify work an agent says it did?
 
+> **Unreleased development branch:** [Integrated orchestration CLI guide](docs/product-completion/orchestration-guide.md). Local integration evidence does not establish live provider readiness.
+
 > **Java support:** alpha.4 adds Gradle and Maven verification adapters. An operator-assisted real Gradle project completed model repair, isolated tests and draft PR delivery; a Maven fixture completed locally. See the [Java guide](docs/product-completion/alpha-quickstart.md#java-gradlemaven) for supported versions and instructions.
 
 > **Quality scope:** The reproduced acceptance, cost, cancellation and recovery defects have regression fixes. Independent code review remains required; arbitrary hostile JavaScript is outside the verified scope. See [remediation evidence](docs/runs/2026-09-30/alpha-reconciliation-fixes.md).
@@ -294,7 +296,7 @@ Two structural reasons, neither of which a partial fix would have closed.
 | [`ENVIRONMENT.md`](docs/archive/2026-08-13/ENVIRONMENT.md) | Measured behaviour for anyone building agent tooling on Windows: a CP949 console against UTF-8 decoding of child output, batch wrappers unreachable behind a shell-interpreter rule, worktree paths that must be asked of git, `SIGTERM` that only reliably kills because Windows maps it to `TerminateProcess`, and a spawn environment narrowed to `PATH` — which left the child without a home directory. Each with its reproduction condition; 3 unresolved, 4 unverified, 1 unmeasured |
 | [`ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md) | State, reasons, and asset list at close. The source of every number on this page |
 
-Every judgment in this repository is cited to a file and line. The 66 audit and run records are indexed in [`docs/INDEX.md`](docs/INDEX.md); <!-- fact: audit-run-records = 66 --> the frozen findings register is [`docs/REGISTER.md`](docs/REGISTER.md); the working conventions, each with the incident that made it necessary, are in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).
+Every judgment in this repository is cited to a file and line. The 74 audit and run records are indexed in [`docs/INDEX.md`](docs/INDEX.md); <!-- fact: audit-run-records = 74 --> the frozen findings register is [`docs/REGISTER.md`](docs/REGISTER.md); the working conventions, each with the incident that made it necessary, are in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).
 
 A separate [product completion plan](docs/product-completion/README.md) now describes a proposed product for public use. The limited alpha is distributed under MIT; this does not change the archived results. External pilot validation and the broader roadmap remain unfinished.
 

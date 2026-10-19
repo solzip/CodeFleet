@@ -1,0 +1,54 @@
+{
+  "base": "c61e9b829b62dd41336a7225bf3b9165136484db",
+  "scope": "Uncommitted controlled G5; no Live Provider validation",
+  "files": {
+    "src/alpha/controller.mjs": "e2690d9208f3fd0cf3b84def3e508a7e899d61cb3b932093dab297dc78272eef",
+    "src/alpha/store.mjs": "3ed9948ad5e8c6eb8e40622bb2c34473141a3be048a7ab6e70d0a87f4a55fec7",
+    "src/workflow/definition.mjs": "c21cc8b56488b7c0d723c5a4e091f6243da9dd021f9e0cea667b82ad46e068dd",
+    "src/workflow/persistence.mjs": "e267b1ce7bdb6736593a71783649cbd2aa525dda7b3e57627b542a362c046117",
+    "src/workflow/collaboration.mjs": "602b0cff018d25a5f5b69a1e269e1b5a31ff71a2f89a84da570bca24504c49a1",
+    "test/hybrid.test.mjs": "9e439782dcc703c56bc9b90dc45c1251241318130433c50a8c83b136b5a8953a",
+    "test/workflow.test.mjs": "7d3d5aeabe42dd32f05265e8db880b20c58c3f89299fd83b7df0ab5c689e255e",
+    "package.json": "b199d9b0d876305e17a7c87feafb178ba6e69c217ea189c0a0ce3057a91cee8a"
+  },
+  "priorEvidenceComparison": {
+    "g1": {
+      "src/alpha/judge.mjs": true,
+      "src/alpha/contract.mjs": true,
+      "src/alpha/controller.mjs": false,
+      "test/alpha.test.mjs": true
+    },
+    "g2": {
+      "src/alpha/controller.mjs": false,
+      "src/alpha/provider.mjs": true,
+      "src/alpha/contract.mjs": true,
+      "src/alpha/judge.mjs": true,
+      "test/alpha.test.mjs": true,
+      "docs/runs/2026-10-19/alpha-g1-contract-preservation.md": true,
+      "test/providers.test.mjs": true,
+      "scripts/provider-probe.mjs": true,
+      "package.json": false,
+      "src/providers/capabilities.mjs": true,
+      "src/providers/claude.mjs": true,
+      "src/providers/codex.mjs": true,
+      "src/providers/interface.mjs": true,
+      "src/providers/registry.mjs": true
+    },
+    "g3": {
+      "src/alpha/cli.mjs": true,
+      "src/intent/discovery.mjs": true,
+      "src/intent/contract.mjs": true,
+      "src/intent/engine.mjs": true,
+      "test/intent.test.mjs": true,
+      "package.json": false
+    },
+    "g4": {
+      "src/alpha/store.mjs": false,
+      "src/alpha/controller.mjs": false,
+      "src/workflow/definition.mjs": false,
+      "src/workflow/persistence.mjs": false,
+      "test/workflow.test.mjs": true,
+      "package.json": false
+    }
+  }
+}

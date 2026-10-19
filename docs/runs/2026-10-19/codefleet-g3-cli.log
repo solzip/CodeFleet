@@ -1,0 +1,551 @@
+node : (node:8548) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+위치 줄:2 문자:1
++ node src/alpha/cli.mjs plan '챗봇 세션 저장의 동시성 문제를 분석해' . *> $env:TEMP/co ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ((node:8548) Exp...nge at any time:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+(Use `node --trace-warnings ...` to show where the warning was created)
+{
+  "kind": "IntentPlan",
+  "intent": {
+    "original": "챗봇 세션 저장의 동시성 문제를 분석해",
+    "authority": "USER_REQUEST_ONLY"
+  },
+  "discovery": {
+    "repositoryId": "37acbd3c6e05a87b15a3697c35da86c5df91ad99c74712b4bd82d4b96717e2d9",
+    "base": "c61e9b829b62dd41336a7225bf3b9165136484db",
+    "dirty": true,
+    "files": [
+      {
+        "path": "src/agent-role.ts",
+        "oid": "53ff10046978b6d40d7b286a927d407bb58cace2",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/agent.ts",
+        "oid": "54c1232c1254596e2531711b476d10e2e1d345cd",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/alpha/cli.mjs",
+        "oid": "e0439fa99496f86795f6b24a4517ab4073b82413",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/alpha/contract.mjs",
+        "oid": "79b6d86d81c1f57de9edec92ebaa95e0499610eb",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/alpha/controller.mjs",
+        "oid": "7db91b6f1b7dc29234959a4976c285eaffa0e47e",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/alpha/delivery.mjs",
+        "oid": "94d67934a4d819fefdba431fc9c2a2925befc26a",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/alpha/java-prepare.mjs",
+        "oid": "83e9e8f293e59db7c2cf6128a034671c64e55899",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/alpha/java-verifier.mjs",
+        "oid": "769dde835a345930f6d495dce1b66962eaf6f95a",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/alpha/java/JunitReport.java",
+        "oid": "51e59757902c694e608dc735773c572630cc2164",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/alpha/process.mjs",
+        "oid": "30d3c469e0e96f89e08cd1971e4f0ef62b805ec4",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/alpha/provider.mjs",
+        "oid": "dd6a523a869730bde96c95b03e3f12288e35186e",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/alpha/store.mjs",
+        "oid": "0d605b62ea01ffa6f6f2cf3da6b273a415052988",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/alpha/verification-guard.mjs",
+        "oid": "2b2dd500b0770c2cfb2441f497bd2134eb4f21e7",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/alpha/verifier.mjs",
+        "oid": "9898b1088e0e090b66da95baac0928be5a013eb6",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/alpha/workspace.mjs",
+        "oid": "a88f97a93fad18f357c31fd42cb0221da4f312a0",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/apply.ts",
+        "oid": "adb704d56cc8c6c9fbda1b84b048431192dcced0",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/auto-review.ts",
+        "oid": "ab88db577e0ccf3647ab62d6fb94f2843a818dc6",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/cli.ts",
+        "oid": "61c5148c8196cb20671ad884c74afa63f4a4d68b",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/command-policy.ts",
+        "oid": "face5f5f9995173188257d3c760243b0e96726cc",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/config.ts",
+        "oid": "9b5aeebfd33379fb37b378d5e8600928663a7131",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/export.ts",
+        "oid": "40db05c4fbbc93498a8c9a8eb1f31928de10b8b7",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/isolation.ts",
+        "oid": "3d50ded518663e52fcdda548193b1fd1aff9e398",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/ledger.ts",
+        "oid": "cf282d33e9e4ea0466ac12eb173ea222929712a4",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/mutation.ts",
+        "oid": "573731469994c1c03e0fd58ade5d86b29c38415b",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/path-policy.ts",
+        "oid": "d8630df3d9eb61d3b92c22e53ca9404fcea49f2e",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/policy-rule-id.ts",
+        "oid": "d8582538bdfce32b5014dadebca2df72b65eb55e",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/profile.ts",
+        "oid": "4fe6dfa385c0c17d4848d69258b25876557fadec",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/prompt.ts",
+        "oid": "1133ed097c874ac4be25c11dba010126903e20d3",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/redaction.ts",
+        "oid": "403060975bedfe56f3205d4571e566a8659e18a0",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/required-gates.ts",
+        "oid": "ed937ed6a5b0872d0398b3845322df0842a90941",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/review.ts",
+        "oid": "36e9dcd72ce9ac3f0088f7f67dc5cf185b75c836",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/risk.ts",
+        "oid": "31146a74e6f2c290d463ac9e09d9a05d6a5925e5",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/run-record.ts",
+        "oid": "76d23aa7defdf723f2946f14a56691eec40a3289",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/run.ts",
+        "oid": "9d03aa28c155a0424fc472350776164df128264f",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/task-events.ts",
+        "oid": "b2ad30a3a2660e2232991c53883e6c8949fbd892",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/task-ledger.ts",
+        "oid": "379570495b8b692e14cc3bd6a2499107706434d3",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/task-revision.ts",
+        "oid": "aaeac46c165294692f5b5818788add814da9b743",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/task.ts",
+        "oid": "a464c1bf053cf1982964025fae01dd7fe77981fa",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/types.ts",
+        "oid": "efbcd5f18534a602eb43277b27059349b4d799ff",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/workspace-snapshot.ts",
+        "oid": "291591dd42162f8b9d09bf4a9884dc98cfa51b2f",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/workspace.ts",
+        "oid": "c7d47fd9c4d0d6776a52dacadabc158af8c485b7",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "src/yaml.ts",
+        "oid": "fde3699f8b6c7dd26e7ac6600b40f35016c1c504",
+        "kind": "source",
+        "relevance": 0
+      },
+      {
+        "path": "test/adapter-resolution.test.ts",
+        "oid": "09975f3c4a67cd6283404a773981554cb1197a37",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/agent-role.test.ts",
+        "oid": "8bedde2f13adc48d0c7ca2b3fd61d4adbf57a560",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/alpha-java.test.mjs",
+        "oid": "ea7a7a53b5d1881893725209e60e5fe17c000ba9",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/alpha.test.mjs",
+        "oid": "b0f5a05723155b5d49545efc7cad2aff365bcec2",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/apply.test.ts",
+        "oid": "91f41bcfa750ebb56174fb318304eecb693b99ff",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/approval-contract.test.ts",
+        "oid": "66c55016d364bfbc74a692b46bbeb3ea930ad540",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/auto-advance.test.ts",
+        "oid": "89d8650623717794b604e5369745379691f56eaa",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/auto-review.test.ts",
+        "oid": "d745667a70f38c9361db92f75e328ebbacb997f5",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/cli.test.ts",
+        "oid": "71ed9ac9ff607899219eb58b105f6b4766eeae3b",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/command-policy.test.ts",
+        "oid": "8607c75a8b1b51410a3be18e703067271d517bf0",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/config.test.ts",
+        "oid": "7fdbd54fe808150cc70d5822a38c6eac8b240992",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/defect-repro.test.ts",
+        "oid": "87f04018f5e7e1c9e8c753d4c965ed9323ee21eb",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/design-rules.test.ts",
+        "oid": "97539c149ec7b13a7079a49354bba4c146e23a94",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/doc-citations.test.ts",
+        "oid": "cccb5407f283fbe8dd968bf11b80da12b3aefe7d",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/doc-facts.test.ts",
+        "oid": "5b0f49ab9a2332c80a649fbf832302088e1eb061",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/export.test.ts",
+        "oid": "a4e1cdf5837ca28b6455baefa2bf43b63a31ae36",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/fixtures.test.ts",
+        "oid": "cf0aa975151429113daf770ac93f88e9e8eb22e8",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/isolation.test.ts",
+        "oid": "ffb1558ca801bc4f3bf38e4459511869eb0265f0",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/ledger.test.ts",
+        "oid": "7e34ab04fb52c877eac42d8656914eb0f4488c4b",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/link-check.test.ts",
+        "oid": "31ef683fae840f5d2987b4c5d1f3b1df7c178f2b",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/path-policy.test.ts",
+        "oid": "6ed64c58494371fea17bd5b7d364548cb39a2653",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/policy-rule-id.test.ts",
+        "oid": "619f7ba06ce943f8709ff21e0b49b015df15adff",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/process-boundaries.test.ts",
+        "oid": "a9c0b392ea6522acf3d8d6ba15e9704355a4ba77",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/profile-fixture.ts",
+        "oid": "64c9427f18838623ddd241e55ab587a71e3aaf2d",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/profile.test.ts",
+        "oid": "46c2269d04d2c5394143b5bccf0000c848f41126",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/prompt.test.ts",
+        "oid": "9b8e22081f81b6d79692d909be06a762f8bfb4b2",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/provider-transcript.test.ts",
+        "oid": "0a1bc81621ca7b1853fdafb598c113d87d5fd5ac",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/required-gates.test.ts",
+        "oid": "c4696cddd8273aaa3931d7832c5a162e1bec9e3d",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/review.test.ts",
+        "oid": "ae7af6398de96cdb7bc11c7cffa6e0cadafea16e",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/risk.test.ts",
+        "oid": "f8238e82d87ac1edae837d847c6bb7f55234d497",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/rule-coverage.test.ts",
+        "oid": "43caaee8f333c7157022fc899ca8ed2c32810991",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/rule-coverage.ts",
+        "oid": "b9028e1faadc4458b7075599a47968d9db5b0ed8",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/run.test.ts",
+        "oid": "3af9326c6e9b8df58efa5c64a18141bca47416f6",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/second-adapter.test.ts",
+        "oid": "8e0021e77a156aa4a88489a4685b972bc4b8fa00",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/task-ledger-fixture.ts",
+        "oid": "29fcebb29e2bd8518fd426c41469b70acb4d5f60",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/task-revision.test.ts",
+        "oid": "893afffdc4927a92477e4e4815008380eabab3aa",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/workspace-snapshot.test.ts",
+        "oid": "946e4e2ea73bfd275d5a83bf0e352be137d260eb",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/workspace.test.ts",
+        "oid": "3e0207442b19c889609238920225062eade9a13c",
+        "kind": "test",
+        "relevance": 0
+      },
+      {
+        "path": "test/yaml.test.ts",
+        "oid": "88bc57f5c690fd2a698935079e72cbd87c6fb0fc",
+        "kind": "test",
+        "relevance": 0
+      }
+    ],
+    "excluded": [],
+    "scanned": 212,
+    "contentRead": false
+  },
+  "draft": {
+    "schemaVersion": 2,
+    "objective": "챗봇 세션 저장의 동시성 문제를 분석해",
+    "base": "c61e9b829b62dd41336a7225bf3b9165136484db",
+    "files": [],
+    "tests": [],
+    "criteria": [
+      {
+        "description": "챗봇 세션 저장의 동시성 문제를 분석해",
+        "method": "unresolved",
+        "tests": []
+      }
+    ],
+    "risks": [],
+    "unknowns": [
+      "Confirm objective-to-test coverage; filename matching is not semantic verification"
+    ],
+    "effects": [
+      "local-edit"
+    ]
+  },
+  "validation": {
+    "status": "NEEDS_INPUT",
+    "gaps": [],
+    "unknowns": [
+      "Confirm objective-to-test coverage; filename matching is not semantic verification",
+      "Select explicit existing source files",
+      "Select protected regression tests",
+      "No executable method: 챗봇 세션 저장의 동시성 문제를 분석해",
+      "Working tree has changes; review and replan from a clean baseline"
+    ],
+    "v1": null
+  },
+  "stages": [
+    "INTENT_RECEIVED",
+    "DISCOVERED",
+    "DRAFTED"
+  ],
+  "providerResult": null,
+  "executable": false
+}

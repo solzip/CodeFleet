@@ -1,5 +1,17 @@
 # 진행 현황과 결정 목록
 
+> G6 로컬 통합 구현·검증 완료 (2026-10-19): [통합 결과와 Live 차단 사항](../runs/2026-10-19/alpha-g6-product-integration.md), [CLI 안내](orchestration-guide.md). 목표 제품 전체의 Live 준비 상태는 BLOCKED_OR_UNSUPPORTED다. 실제 의미 Planner·Provider 협업을 검증 완료로 표시하지 않는다. 커밋·배포하지 않은 개발 브랜치 결과다.
+
+> G5 완료 (2026-10-19): [통제형 협업·병렬 통합 검증](../runs/2026-10-19/alpha-g5-controlled-hybrid.md). 기존 순차 경로를 유지하면서 역할 메시징·격리된 병렬 후보·직렬 통합·복구 차단을 검증했다. Live Provider와 Live Planner는 미검증이며 실행 차단을 유지한다. G6 결과는 별도 기록으로 관리한다.
+
+> G4 완료 (2026-10-19): [순차 Workflow·DAG 검증](../runs/2026-10-19/alpha-g4-workflow-dag.md). 기존 Controller에 순차 조정과 최종 통합 검증을 연결하고 추가 SQLite 마이그레이션·영속 승인을 검증했다. Live Provider는 차단 상태이며 겹치는 수정·병렬 실행은 지원하지 않는다. G5 결과는 별도 기록으로 관리한다.
+
+> G3 완료 (2026-10-19): [Intent·Draft·승인 계약 검증](../runs/2026-10-19/alpha-g3-intent-contract.md). 읽기 전용 plan CLI와 V1 컴파일, 프로세스 내부 승인·고정 API를 추가했다. Live Planner·Codex는 미검증이며 자동 실행·영속 승인은 제공하지 않는다. G4 결과는 별도 기록으로 관리한다.
+
+> G2 완료 (2026-10-19): [Provider 공통 계약·회귀 검증](../runs/2026-10-19/alpha-g2-provider-integration.md). Legacy 324·Alpha 39·Provider 15건 통과, 제외 0. Live Provider 미검증, Codex 실행 차단, 신규 strict Routing은 미확인 capability를 거절한다. 기존 Claude 호환 경로 유지. G3 결과는 별도 기록으로 관리한다.
+
+> G1 완료 (2026-10-19): [Alpha 계약 보호·판정 경계 검증](../runs/2026-10-19/alpha-g1-contract-preservation.md). 아래 배포·파일럿 기록과 구분하며 전체 필수 게이트 exit 0, Legacy 324건·Alpha 39건 통과(제외 0). Node/Maven 격리 검증과 JDK 검사를 포함하며 실제 모델·원격 전달의 재검증은 아니다. G2 후속 결과는 별도 기록으로 관리한다.
+
 > **최종 검토 후 수정 완료.** 취소·resume 원자성과 읽기 전용 PR 복구의 회귀 검증을 완료했다. [수정 근거](../runs/2026-09-30/alpha-reconciliation-fixes.md)를 따른다.
 
 > **품질 범위: 독립 검토를 유지하는 제한된 알파.** 재현된 조기 종료·비용 기록·검증 복구 결함의 수정과 회귀 검증을 완료했다. 임의의 적대적 JS에 대한 무인 수락은 보증하지 않는다. [수정 근거](../runs/2026-09-30/alpha-quality-remediation.md)를 따른다.

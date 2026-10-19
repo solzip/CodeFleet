@@ -1,0 +1,81 @@
+(node:52220) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✖ hybrid independent work overlaps, isolates candidates and integrates deterministically (1992.2567ms)
+✔ dependency edges and shared resources serialize; limits and overlap fail closed (2345.8988ms)
+✖ role messages are durable untrusted proposals, duplicate safe and cannot authorize (1783.5429ms)
+✔ parallel failure preserves unrelated verified success; no final integration (1614.0976ms)
+✔ semantic conflict fails combined verification despite disjoint accepted files (1830.2097ms)
+✔ cancel and approval revocation stop both children without replay (2822.2192ms)
+✔ reservation duplicates, stale messages and hybrid revision mixing are rejected (673.3655ms)
+✔ graph revision compare-and-swap invalidates approval; late revision rejected (889.9533ms)
+✔ provider claims and out-of-scope proposals never integrate (2526.2954ms)
+✔ final tree tampering invalidates workflow completion (1765.4985ms)
+(node:52396) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ DAG rejects cycles, missing references, duplicates, scope and budget expansion (3.4957ms)
+✔ G3 validated plans compile, unresolved plans cannot auto-authorize workflows (1533.8053ms)
+✔ sequential child Alpha runs and final integrated verification are distinct; requests idempotent (2450.4725ms)
+✔ verification failure blocks descendants and cannot be retried as the same attempt (1609.2043ms)
+✔ provider-only evidence never satisfies WorkItem or final success (1315.6947ms)
+✔ graph revisions require fresh approval and CAS; old snapshots stay unchanged (2518.5341ms)
+✔ reserved attempt prevents graph mutation and relaunch after process restart (676.5027ms)
+✔ recovery reconciles completed child evidence without a second model call (2140.2019ms)
+✔ migration preserves V1 rows/events/artifacts and is idempotent on reopen (26.0521ms)
+✔ a V1 run created before migration still executes after V2 migration and reopen (1103.899ms)
+✔ attempt reservation and event write rollback atomically on SQLite failure (627.6988ms)
+✔ Codex unverified capabilities block before reserving or launching a child (824.2859ms)
+✔ active coordinator rejects concurrent requests and in-flight graph changes (2091.7889ms)
+✔ final integration failure is not workflow completion despite successful items (2078.0689ms)
+✔ expiry and unknown provider cost block downstream work without privilege fallback (1466.1102ms)
+✔ reservations enforce READY dependencies, exact child scope and the one-child limit (622.1475ms)
+﹣ real Docker Node verification checks the final combined tree (0.0815ms) # SKIP
+✔ one-child ceiling also applies across workflows sharing the same Store (1134.3032ms)
+✔ expired approvals still permit read-only completed-child reconciliation, then require renewed review (2262.9489ms)
+✔ tampered graph artifact blocks scheduling before any provider invocation (653.5012ms)
+✔ operator cancellation blocks descendants and leaves no reusable terminal attempt (1225.3648ms)
+ℹ tests 31
+ℹ suites 0
+ℹ pass 28
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 26484.3447
+
+✖ failing tests:
+
+test at test\hybrid.test.mjs:51:1
+✖ hybrid independent work overlaps, isolates candidates and integrates deterministically (1992.2567ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /a+b/. Input:
+  
+  'module.exports = (a,b) => a+b;'
+  
+      at TestContext.<anonymous> (file:///C:/Users/[redacted-local-profile]/Desktop/%EA%B0%9C%EC%9D%B8/sol/codeFleet/codeFleet/.codefleet/worktrees/alpha-g0/test/hybrid.test.mjs:64:12)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'module.exports = (a,b) => a+b;',
+    expected: /a+b/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at test\hybrid.test.mjs:82:1
+✖ role messages are durable untrusted proposals, duplicate safe and cannot authorize (1783.5429ms)
+  AssertionError [ERR_ASSERTION]: Child verification/approval failed; subsequent WorkItems blocked
+  + actual - expected
+  
+  + 'WAITING_HUMAN'
+  - 'COMPLETED'
+  
+      at TestContext.<anonymous> (file:///C:/Users/[redacted-local-profile]/Desktop/%EA%B0%9C%EC%9D%B8/sol/codeFleet/codeFleet/.codefleet/worktrees/alpha-g0/test/hybrid.test.mjs:97:12)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'WAITING_HUMAN',
+    expected: 'COMPLETED',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

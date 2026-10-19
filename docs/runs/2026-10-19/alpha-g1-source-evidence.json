@@ -1,0 +1,26 @@
+{
+    "skippedTests":  0,
+    "files":  [
+                  {
+                      "sha256":  "001b40526a6853a0c12920e65465997bd3443cf7a200f817eadd5312ef09fbe6",
+                      "path":  "src/alpha/judge.mjs"
+                  },
+                  {
+                      "sha256":  "473769034a4a7af63f6013fbf8c5df6ed0304a6a3a8c5d7adb681c380b30a54a",
+                      "path":  "src/alpha/contract.mjs"
+                  },
+                  {
+                      "sha256":  "91e097085f91ddb6f2615afb87a81a5ccb2f13b6952dac619ca202cc219c6f5c",
+                      "path":  "src/alpha/controller.mjs"
+                  },
+                  {
+                      "sha256":  "82f3bc7502aa481a2fafef2412982d8effd99b6a0227a0e9a1f6cd7ec82653bd",
+                      "path":  "test/alpha.test.mjs"
+                  }
+              ],
+    "baseCommit":  "c61e9b829b62dd41336a7225bf3b9165136484db",
+    "branch":  "feature/alpha-g0-refresh",
+    "fullTestExitCode":  0,
+    "alphaTests":  39,
+    "legacyTests":  324
+}
