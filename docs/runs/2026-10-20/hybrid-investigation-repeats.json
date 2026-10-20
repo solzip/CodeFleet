@@ -1,0 +1,122 @@
+[
+  {
+    "command": "node --test --test-name-pattern='hybrid independent work overlaps' test/hybrid.test.mjs",
+    "phase": "original",
+    "run": 1,
+    "summary": [
+      "\u2139 tests 1\r",
+      "\u2139 pass 1\r",
+      "\u2139 fail 0\r",
+      "\u2139 skipped 0\r",
+      "\u2139 duration_ms 2133.2999\r"
+    ]
+  },
+  {
+    "command": "node --test --test-name-pattern='hybrid independent work overlaps' test/hybrid.test.mjs",
+    "phase": "original",
+    "run": 2,
+    "summary": [
+      "\u2139 tests 1\r",
+      "\u2139 pass 1\r",
+      "\u2139 fail 0\r",
+      "\u2139 skipped 0\r",
+      "\u2139 duration_ms 2220.731\r"
+    ]
+  },
+  {
+    "command": "node --test --test-name-pattern='hybrid independent work overlaps' test/hybrid.test.mjs",
+    "phase": "original",
+    "run": 3,
+    "summary": [
+      "\u2139 tests 1\r",
+      "\u2139 pass 1\r",
+      "\u2139 fail 0\r",
+      "\u2139 skipped 0\r",
+      "\u2139 duration_ms 2430.3242\r"
+    ]
+  },
+  {
+    "command": "node --test --test-name-pattern='hybrid independent work overlaps' test/hybrid.test.mjs",
+    "phase": "original",
+    "run": 4,
+    "summary": [
+      "\u2139 tests 1\r",
+      "\u2139 pass 1\r",
+      "\u2139 fail 0\r",
+      "\u2139 skipped 0\r",
+      "\u2139 duration_ms 2293.9264\r"
+    ]
+  },
+  {
+    "command": "node --test --test-name-pattern='hybrid independent work overlaps' test/hybrid.test.mjs",
+    "phase": "original",
+    "run": 5,
+    "summary": [
+      "\u2139 tests 1\r",
+      "\u2139 pass 1\r",
+      "\u2139 fail 0\r",
+      "\u2139 skipped 0\r",
+      "\u2139 duration_ms 2230.9686\r"
+    ]
+  },
+  {
+    "command": "node --test --test-name-pattern='hybrid independent work overlaps' test/hybrid.test.mjs",
+    "phase": "fixed-repeat",
+    "run": 1,
+    "summary": [
+      "\u2139 tests 2\r",
+      "\u2139 pass 2\r",
+      "\u2139 fail 0\r",
+      "\u2139 skipped 0\r",
+      "\u2139 duration_ms 3874.604\r"
+    ]
+  },
+  {
+    "command": "node --test --test-name-pattern='hybrid independent work overlaps' test/hybrid.test.mjs",
+    "phase": "fixed-repeat",
+    "run": 2,
+    "summary": [
+      "\u2139 tests 2\r",
+      "\u2139 pass 2\r",
+      "\u2139 fail 0\r",
+      "\u2139 skipped 0\r",
+      "\u2139 duration_ms 3858.1209\r"
+    ]
+  },
+  {
+    "command": "node --test --test-name-pattern='hybrid independent work overlaps' test/hybrid.test.mjs",
+    "phase": "fixed-repeat",
+    "run": 3,
+    "summary": [
+      "\u2139 tests 2\r",
+      "\u2139 pass 2\r",
+      "\u2139 fail 0\r",
+      "\u2139 skipped 0\r",
+      "\u2139 duration_ms 3920.2573\r"
+    ]
+  },
+  {
+    "command": "node --test --test-name-pattern='hybrid independent work overlaps' test/hybrid.test.mjs",
+    "phase": "fixed-repeat",
+    "run": 4,
+    "summary": [
+      "\u2139 tests 2\r",
+      "\u2139 pass 2\r",
+      "\u2139 fail 0\r",
+      "\u2139 skipped 0\r",
+      "\u2139 duration_ms 3992.2783\r"
+    ]
+  },
+  {
+    "command": "node --test --test-name-pattern='hybrid independent work overlaps' test/hybrid.test.mjs",
+    "phase": "fixed-repeat",
+    "run": 5,
+    "summary": [
+      "\u2139 tests 2\r",
+      "\u2139 pass 2\r",
+      "\u2139 fail 0\r",
+      "\u2139 skipped 0\r",
+      "\u2139 duration_ms 3847.3665\r"
+    ]
+  }
+]

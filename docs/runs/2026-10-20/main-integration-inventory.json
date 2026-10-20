@@ -1,0 +1,732 @@
+{
+  "status": "AWAITING_GATE_A",
+  "head": "c3bca1e8b3481a1a3e6dff1cc7e1e8ef5c72bc03",
+  "branch": "feature/alpha-g0-refresh",
+  "stagedPaths": [],
+  "entries": [
+    {
+      "path": ".gitignore",
+      "gitState": " M",
+      "commitGroup": 3,
+      "bytes": 318,
+      "sha256": "ece0add92f336c65ac7334d6ce59ebb024f071a4f834cd0c2550682fa698e227"
+    },
+    {
+      "path": "README.en.md",
+      "gitState": " M",
+      "commitGroup": 3,
+      "bytes": 30857,
+      "sha256": "25fec5b8870462f4f37c35856750004c34c8265b7b6783b25fb62d64c534e4e1"
+    },
+    {
+      "path": "README.md",
+      "gitState": " M",
+      "commitGroup": 3,
+      "bytes": 34620,
+      "sha256": "86993992649d01c9ba0339cd78d7cfd2af28aa839e3d97b923e44fffb710e51b"
+    },
+    {
+      "path": "docs/INDEX.md",
+      "gitState": " M",
+      "commitGroup": 3,
+      "bytes": 30371,
+      "sha256": "3a24a3f8194ce7be7752790d75dc95e6496b870a0402c3dc486faad6b14802cb"
+    },
+    {
+      "path": "docs/product-completion/host-core-guide.md",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 9543,
+      "sha256": "6c74ffa6c62d39bfe9f6480f4c171bd1660acff612116a82ed6444f49e2fbb18"
+    },
+    {
+      "path": "docs/product-completion/host-native-guide.md",
+      "gitState": " M",
+      "commitGroup": 3,
+      "bytes": 8821,
+      "sha256": "7f5ea3d419344504c16a9ba3fda4df482454b80f77294ad71aa988178134ca8c"
+    },
+    {
+      "path": "docs/product-completion/progress.md",
+      "gitState": " M",
+      "commitGroup": 3,
+      "bytes": 23637,
+      "sha256": "33dc834de7c8a3420906489922906e08c2a4abbc0dcdc047659a0b21c01f2158"
+    },
+    {
+      "path": "docs/runs/2026-10-20/alpha-h7-doctor.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 1198,
+      "sha256": "7806ae27b321c497038872505c7df47c1f2ed014214cdf6e15cffd22fe4a509e"
+    },
+    {
+      "path": "docs/runs/2026-10-20/alpha-h7-full.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 53787,
+      "sha256": "2fd314f3589122711bce4cb329fc15295bb6372836ae126ff4af8f1dc5c993ae"
+    },
+    {
+      "path": "docs/runs/2026-10-20/alpha-h7-real-host-qualification.md",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 11433,
+      "sha256": "44a64efd671da4e15ce231365ce6ee80184baf6836024d24c11465de1a7134d0"
+    },
+    {
+      "path": "docs/runs/2026-10-20/alpha-h7-source-evidence.json",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 5497,
+      "sha256": "4be1401c5e3a1b81470620e5e1f0db5489ef98b4a0e2bf76ca4923d9a127fb6a"
+    },
+    {
+      "path": "docs/runs/2026-10-20/alpha-h8-environment-evidence.json",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 2305,
+      "sha256": "01c6ebe2199869c59fe529ef4373d094405c7c869224e1b48cd5ea4072a63edf"
+    },
+    {
+      "path": "docs/runs/2026-10-20/alpha-h8-installed-evidence.json",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 30273,
+      "sha256": "a336a3a24da148ed67af92a05b31482cdb6726e72b9b19af041b7eb235f5fd88"
+    },
+    {
+      "path": "docs/runs/2026-10-20/alpha-h8-linux-host-preparation.md",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 12559,
+      "sha256": "5430544099beece07047e7353bbe448b7ae2bdad2af369d99b9a84be2b468de0"
+    },
+    {
+      "path": "docs/runs/2026-10-20/first-host-native-acceptance-preflight.md",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 18324,
+      "sha256": "4048907ff1a935739f8a489d2d68e905555e58697bc1503337c09687aa0da01e"
+    },
+    {
+      "path": "docs/runs/2026-10-20/first-host-native-fixture-test.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 1238,
+      "sha256": "2531340a0dce91bf8ab6167c25ce8673193291935aeb8c077e0a6b16c4e84b98"
+    },
+    {
+      "path": "docs/runs/2026-10-20/first-host-native-gate-checks.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 3419,
+      "sha256": "ff3a3d63b4a13041cf2e4c87e8a4fa2d64ab34332129010a6a232735cb834835"
+    },
+    {
+      "path": "docs/runs/2026-10-20/first-host-native-gate-resolution-evidence.json",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 6265,
+      "sha256": "2a8c94071f5152fedb47a3e42e8c91ef013b5d8bdc409bb3547a0e741f4a1307"
+    },
+    {
+      "path": "docs/runs/2026-10-20/first-host-native-gate-resolution.md",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 15866,
+      "sha256": "391a9d2f4c635f526c65a444214808d7941d8fb6ea8feac89243426d3cf47ba0"
+    },
+    {
+      "path": "docs/runs/2026-10-20/first-host-native-preflight-docs.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 3419,
+      "sha256": "3ef310cf08f96a0243cb4a3c96f5a04a32cf4bc687bbf596dd729d6184c24029"
+    },
+    {
+      "path": "docs/runs/2026-10-20/first-host-native-preflight-evidence.json",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 14242,
+      "sha256": "ec0dcce9eea36082f9e5942dd639ebc44bd904538d22d054749958e0020a95da"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-alpha-doctor.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 1238,
+      "sha256": "4927afab95623731f5aa521474ea48eea7491803faf1900c8f2cf24c30bf8c21"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-backend-regression.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 5079,
+      "sha256": "302546d05a47575271fb5f5b8a589d15fd0cd355dc3a34fba88d32b8c2411004"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-baseline-negative.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 1048,
+      "sha256": "967dc4893d253aa460092a9e128fd5f2b828f4bf317c6e6be80835e28add2559"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-final-docs.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 3419,
+      "sha256": "fb4abad894f30decce3e20b7d9ca0bca5b4a3a5ce50986f3ed377c382641759f"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-full-final-v2.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 55860,
+      "sha256": "88043daadc9d38ad6c7f3105c982e4957c1086e0f62a06244105f7c698a46431"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-full-final.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 55767,
+      "sha256": "2ff11d0c4f7835912f0123c45569513f1f43a1f3a78a0ae674db825c6a3ae33d"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-full-first.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 56494,
+      "sha256": "cf946e2194405a630cb38d0650e0cd68618ba4d3cb9595c0ac20beab5ce3f082"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-hardened.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 2238,
+      "sha256": "20713a85780f50952e978fe95fd39470c7d3434d9f50592bc63a7d8c473b02d5"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-host-doctor.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 1384,
+      "sha256": "0281226de769525eb5f30251b6570ed36c3da6c1a2dbbb8c0b8edad1f30ebd26"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-security.json",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 167,
+      "sha256": "c910f50f5a0fe59d1a8c0a3ecb0e859a2d4ff917cc1567293183fe0a77b13482"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-baseline-docs.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 3419,
+      "sha256": "26a694d2f1b77e7f27b4d1c7f04b40338acd51533ad3282ec005e17edbec5b60"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-baseline-doctor.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 1238,
+      "sha256": "e2fd2981fc21f6d508f89814c9e0a055b4110aec0e7009e1376746d2b7951194"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-baseline-host-doctor.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 1384,
+      "sha256": "73f3c4fbf7ef5f209acd737f1afe24f0dbd8c0b97172b420f897b00fdb9789bf"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-baseline-hybrid.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 1984,
+      "sha256": "4f2d26a905f397b73d89aae7f10417d2fbbc3e2b0fc7ca278abcab509dde99f2"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-baseline-inventory.json",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 12469,
+      "sha256": "a6c2098f5e9bd45a93a55a1674a39c5ddd7d50d97a9471931afcca62ca572061"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-baseline-readiness.md",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 19059,
+      "sha256": "647a0a3ab3fb9e14b2512b7f8e1441bce6cf4d7f4e7a37474dfbdc98b2829083"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-baseline-results.json",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 1297,
+      "sha256": "587faf82a3e26f71fc737e72311681131e7b0c7e80c68734eac4504dd77d447b"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-baseline-test-first.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 51657,
+      "sha256": "d5a960f5ebf674f4c7a11825bf9aa27c60c8d4f9dce56c05bd1931a0bd2520ff"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-baseline-test.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 56430,
+      "sha256": "c2f11fbd450c7992741750dec22d448c33500a97fa161d832b74a209f038b79d"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-core-source-evidence.json",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 21195,
+      "sha256": "70ae9e7066c8275c2b364a592cf1fbc55ae090ef66f6cc9e7f2e452d274833e7"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-core-verification.md",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 13052,
+      "sha256": "1c2b2ce0266182896d188e3ed616f305d2e58e17fc5b757bafb538d760c05d32"
+    },
+    {
+      "path": "docs/runs/2026-10-20/hybrid-checkpoint-inventory.json",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 15251,
+      "sha256": "6bf0d7e7b4cd3d4857ca669728cbd76515cda52f6049e7a3783c3f85cf6bfcc9"
+    },
+    {
+      "path": "docs/runs/2026-10-20/hybrid-concurrency-checkpoint.md",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 12574,
+      "sha256": "bdb0b2cb900fcbd9378f43e0d71f695d031fbc3c8baebeb206ea47452ef2a540"
+    },
+    {
+      "path": "docs/runs/2026-10-20/hybrid-fixed.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 2119,
+      "sha256": "fb0893ba396c301ea6150715ef8920c11fa7ba9440656fe5662484390e3ba633"
+    },
+    {
+      "path": "docs/runs/2026-10-20/hybrid-investigation-docs.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 3419,
+      "sha256": "1d1185b81a197937546aaa622d1aaa7a3d726b6ec154e48b130c2b4304b2a826"
+    },
+    {
+      "path": "docs/runs/2026-10-20/hybrid-investigation-full.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 55998,
+      "sha256": "6bb6e8faf4e93055e842e771fdc2820c0924643aff0191fd3b71989973c42ecd"
+    },
+    {
+      "path": "docs/runs/2026-10-20/hybrid-investigation-repeats.json",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 3343,
+      "sha256": "2981f429538bd9327747c62d26a7980e7b96a01814797ea75ade1051778af425"
+    },
+    {
+      "path": "docs/runs/2026-10-20/hybrid-investigation-results.json",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 1647,
+      "sha256": "960f6aede4d346e044905b0827af4965776c7ca7fbdc793d8744f99c1db775c1"
+    },
+    {
+      "path": "docs/runs/2026-10-20/hybrid-phase-skew.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 1348,
+      "sha256": "9e9bca5b318ee44c156e3789eacfaedba23a9184366d5970920ff4e314afcda6"
+    },
+    {
+      "path": "docs/runs/2026-10-20/hybrid-serial-negative-v2.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 1556,
+      "sha256": "6228aa6515d0df524bf8e1a919c8ef1315fe0c6f1e34015f4234f525d22a06e0"
+    },
+    {
+      "path": "docs/runs/2026-10-20/hybrid-serial-negative.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 1255,
+      "sha256": "5cc94118c19d0d1660fdcc9058d0b7a2499b3b291922f391a992abe9c28ca448"
+    },
+    {
+      "path": "docs/runs/2026-10-20/main-integration-branches.json",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 32052,
+      "sha256": "c2facee5581c9c4a86150835f4ab740310256ee03f6fbe014311713c598199f7"
+    },
+    {
+      "path": "docs/runs/2026-10-20/main-integration-docs-facts-failed.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 4208,
+      "sha256": "b9b5c263ed444b169b62baa59b623dac8a388b45bce3f94392cceaad99134133"
+    },
+    {
+      "path": "docs/runs/2026-10-20/main-integration-docs-sandbox-failed.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 1643,
+      "sha256": "ec8468d81e017d545801312d85cbac39af5f3ba53b372980b3e42e0907279255"
+    },
+    {
+      "path": "docs/runs/2026-10-20/main-integration-docs.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 3419,
+      "sha256": "3bf8275a8e6603e1df5e1d0932f78e863014c60b294500a50b06dcfa06ea88f9"
+    },
+    {
+      "path": "docs/runs/2026-10-20/main-integration-doctor.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 1228,
+      "sha256": "55c2a337042cfb629f1e02a0c133ca3e695acdcfefc8f61996c47709952daddc"
+    },
+    {
+      "path": "docs/runs/2026-10-20/main-integration-full.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 56008,
+      "sha256": "802b98b960b71a0bb7fee36ae29b679b0174a0bc6548dab48bcf3d5c6ee6f873"
+    },
+    {
+      "path": "docs/runs/2026-10-20/main-integration-gate-a.md",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 15309,
+      "sha256": "fb446a13314161eb942e84afe7caad5bb23e675978a31682b762620a97c1e679"
+    },
+    {
+      "path": "docs/runs/2026-10-20/main-integration-host-doctor.log",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 1374,
+      "sha256": "bb21e1610d74ac74ac1b3f0b56870a38a7729609a893aabc34a5e1c42eaf8ad2"
+    },
+    {
+      "path": "docs/runs/2026-10-20/main-integration-inventory.json",
+      "gitState": "??",
+      "commitGroup": 3,
+      "sha256": null,
+      "selfHashOmitted": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/main-integration-results.json",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 1978,
+      "sha256": "d134f2183657cf2513608709e28c5d821746f683aa02bcdcccc7f9dd06a5b4dc"
+    },
+    {
+      "path": "docs/runs/2026-10-20/main-integration-security.json",
+      "gitState": "??",
+      "commitGroup": 3,
+      "bytes": 14708,
+      "sha256": "8ac9da2773ac8ef6de13be0ee12c77dc200f297dcb776cee1e6d15876df4469d"
+    },
+    {
+      "path": "package.json",
+      "gitState": " M",
+      "commitGroup": 1,
+      "bytes": 2456,
+      "sha256": "93afb77cf2c3168f68613dcfcbf64fe6991acea942b4a02010d19905b6d86864"
+    },
+    {
+      "path": "src/alpha/cli.mjs",
+      "gitState": " M",
+      "commitGroup": 1,
+      "bytes": 10579,
+      "sha256": "f4c6eb16cb14b9e5495b65bc18bbce2c47faacf53f8aac451bbf3055017a5abf"
+    },
+    {
+      "path": "src/alpha/controller.mjs",
+      "gitState": " M",
+      "commitGroup": 1,
+      "bytes": 25999,
+      "sha256": "5e18d9e61361fdaaa1761bc67aae73e4ada3f343e1d5af9428b16e13a59c9ab7"
+    },
+    {
+      "path": "src/alpha/judge.mjs",
+      "gitState": " M",
+      "commitGroup": 1,
+      "bytes": 1863,
+      "sha256": "420ebefc42809d0c341fb7b14a81a84b01afd21f917714e5e8beea1324bd9ee5"
+    },
+    {
+      "path": "src/alpha/verification-evidence.mjs",
+      "gitState": "??",
+      "commitGroup": 1,
+      "bytes": 2390,
+      "sha256": "6cb3d531428fdc7c463d967087fea77e3e424f16abe137e66b52a1e450fe0ffc"
+    },
+    {
+      "path": "src/alpha/verifier.mjs",
+      "gitState": " M",
+      "commitGroup": 1,
+      "bytes": 4549,
+      "sha256": "976ce2321f4483fc925d46ac489653d63359f06e194b73a221efb5ca7c8bf41d"
+    },
+    {
+      "path": "src/hosts/cli.mjs",
+      "gitState": " M",
+      "commitGroup": 1,
+      "bytes": 7846,
+      "sha256": "5e53017157ec3e2f71806f5b47318dab1eb6c07526ca72726219de258a7f59d3"
+    },
+    {
+      "path": "src/hosts/doctor.mjs",
+      "gitState": "??",
+      "commitGroup": 1,
+      "bytes": 1700,
+      "sha256": "539845622c18baf49fb50f42c47d44e3ec08aecd46f9b2e883d7851da3f559c4"
+    },
+    {
+      "path": "src/hosts/harness-service.mjs",
+      "gitState": " M",
+      "commitGroup": 1,
+      "bytes": 6542,
+      "sha256": "93c377b17ad426dfcde13317262cd632aa0aa94dda54a427c38e26ed17e32d39"
+    },
+    {
+      "path": "src/hosts/install.mjs",
+      "gitState": " M",
+      "commitGroup": 1,
+      "bytes": 9173,
+      "sha256": "3f9a6fb3aeac72a4474a4f80110e8d68fe1e0e173f173cb7680998695b570fdb"
+    },
+    {
+      "path": "src/hosts/workflow-authorization.mjs",
+      "gitState": " M",
+      "commitGroup": 1,
+      "bytes": 4815,
+      "sha256": "aa16a2d6a2a075729a5c280407539c53b895d5f9281291b49fb045c722bc5477"
+    },
+    {
+      "path": "src/product/report.mjs",
+      "gitState": " M",
+      "commitGroup": 1,
+      "bytes": 4984,
+      "sha256": "14e8bb0a1c8448eb359c5c4def8202e613f12d3d8dd6f05d5e426a78f66d074b"
+    },
+    {
+      "path": "src/product/tasks.mjs",
+      "gitState": " M",
+      "commitGroup": 1,
+      "bytes": 9307,
+      "sha256": "a80c41112167933ec932a2c901d7ae3b7c762129901925fbb628f739cb83a6c0"
+    },
+    {
+      "path": "src/verification/backends.mjs",
+      "gitState": "??",
+      "commitGroup": 1,
+      "bytes": 7340,
+      "sha256": "18e40a7f6f212b4b0085b6956c69d544e7564b71176b237e9f04d27f7e2ad04f"
+    },
+    {
+      "path": "src/workflow/capability-policy.mjs",
+      "gitState": "??",
+      "commitGroup": 1,
+      "bytes": 1807,
+      "sha256": "94c63ca69098aded3c677eae58d39d2f5e3a1216c96b814c826ffc05f8281be3"
+    },
+    {
+      "path": "test/alpha.test.mjs",
+      "gitState": " M",
+      "commitGroup": 1,
+      "bytes": 33845,
+      "sha256": "2d740bf535364a65a9a56b4b17fdc06da4fef13463dd491034ca4daa68e2616c"
+    },
+    {
+      "path": "test/host-core.test.mjs",
+      "gitState": "??",
+      "commitGroup": 1,
+      "bytes": 6747,
+      "sha256": "e3c33fe8bc7a25b1aa6a611319d1bc8afd00615d814e661772d311623fba0e69"
+    },
+    {
+      "path": "test/hybrid.test.mjs",
+      "gitState": " M",
+      "commitGroup": 2,
+      "bytes": 24623,
+      "sha256": "bb7d6dc5d43f31c44a11cc4ff952a3f39be415e50670bf0a04e2e070f4781305"
+    },
+    {
+      "path": "test/operator-runtime.test.mjs",
+      "gitState": " M",
+      "commitGroup": 1,
+      "bytes": 11001,
+      "sha256": "a7edfe70307105759c51bd2c514b14a2b3867acb35fc8301fe2e2abf82d41a9a"
+    },
+    {
+      "path": "test/verification-backends.test.mjs",
+      "gitState": "??",
+      "commitGroup": 1,
+      "bytes": 7571,
+      "sha256": "9fd1f1d8e9f6392e23e068a20584f4ae334e4eed8e25f2af99a0b27d53d7a2a3"
+    },
+    {
+      "path": "test/workflow.test.mjs",
+      "gitState": " M",
+      "commitGroup": 1,
+      "bytes": 24650,
+      "sha256": "37ceb472865ec6054c8cbb32fe333e693962f80db7575b9cc3b2c1fc2120c9a4"
+    }
+  ],
+  "excludedVisiblePaths": [
+    {
+      "path": ".trials/g6-help-state/state.sqlite",
+      "reason": "local runtime or raw diagnostic; not opened for public review"
+    },
+    {
+      "path": ".trials/g6-readiness-state/state.sqlite",
+      "reason": "local runtime or raw diagnostic; not opened for public review"
+    },
+    {
+      "path": ".trials/g7c-docs-complete.log",
+      "reason": "local runtime or raw diagnostic; not opened for public review"
+    },
+    {
+      "path": ".trials/g7c-docs-final.log",
+      "reason": "local runtime or raw diagnostic; not opened for public review"
+    },
+    {
+      "path": ".trials/g7c-docs-recheck.log",
+      "reason": "local runtime or raw diagnostic; not opened for public review"
+    },
+    {
+      "path": ".trials/g7c-doctor.log",
+      "reason": "local runtime or raw diagnostic; not opened for public review"
+    },
+    {
+      "path": ".trials/g7c-focused.log",
+      "reason": "local runtime or raw diagnostic; not opened for public review"
+    },
+    {
+      "path": ".trials/g7c-full.log",
+      "reason": "local runtime or raw diagnostic; not opened for public review"
+    }
+  ],
+  "excludedPrefixes": [
+    ".trials/",
+    ".codefleet/",
+    ".claude/",
+    ".agents/",
+    ".codex/",
+    ".rule-coverage/"
+  ],
+  "priorManifestComparison": {
+    "unchanged": [
+      ".gitignore",
+      "docs/product-completion/host-native-guide.md",
+      "docs/product-completion/progress.md",
+      "package.json",
+      "src/alpha/cli.mjs",
+      "src/alpha/controller.mjs",
+      "src/alpha/judge.mjs",
+      "src/alpha/verifier.mjs",
+      "src/hosts/cli.mjs",
+      "src/hosts/harness-service.mjs",
+      "src/hosts/install.mjs",
+      "src/hosts/workflow-authorization.mjs",
+      "src/product/report.mjs",
+      "src/product/tasks.mjs",
+      "test/alpha.test.mjs",
+      "test/hybrid.test.mjs",
+      "test/operator-runtime.test.mjs",
+      "test/workflow.test.mjs",
+      "docs/product-completion/host-core-guide.md",
+      "docs/runs/2026-10-20/alpha-h7-doctor.log",
+      "docs/runs/2026-10-20/alpha-h7-full.log",
+      "docs/runs/2026-10-20/alpha-h7-real-host-qualification.md",
+      "docs/runs/2026-10-20/alpha-h7-source-evidence.json",
+      "docs/runs/2026-10-20/alpha-h8-environment-evidence.json",
+      "docs/runs/2026-10-20/alpha-h8-installed-evidence.json",
+      "docs/runs/2026-10-20/alpha-h8-linux-host-preparation.md",
+      "docs/runs/2026-10-20/host-core-alpha-doctor.log",
+      "docs/runs/2026-10-20/host-core-backend-regression.log",
+      "docs/runs/2026-10-20/host-core-baseline-negative.log",
+      "docs/runs/2026-10-20/host-core-final-docs.log",
+      "docs/runs/2026-10-20/host-core-full-final-v2.log",
+      "docs/runs/2026-10-20/host-core-full-final.log",
+      "docs/runs/2026-10-20/host-core-full-first.log",
+      "docs/runs/2026-10-20/host-core-hardened.log",
+      "docs/runs/2026-10-20/host-core-host-doctor.log",
+      "docs/runs/2026-10-20/host-core-security.json",
+      "docs/runs/2026-10-20/host-native-baseline-docs.log",
+      "docs/runs/2026-10-20/host-native-baseline-doctor.log",
+      "docs/runs/2026-10-20/host-native-baseline-host-doctor.log",
+      "docs/runs/2026-10-20/host-native-baseline-hybrid.log",
+      "docs/runs/2026-10-20/host-native-baseline-inventory.json",
+      "docs/runs/2026-10-20/host-native-baseline-readiness.md",
+      "docs/runs/2026-10-20/host-native-baseline-results.json",
+      "docs/runs/2026-10-20/host-native-baseline-test-first.log",
+      "docs/runs/2026-10-20/host-native-baseline-test.log",
+      "docs/runs/2026-10-20/host-native-core-source-evidence.json",
+      "docs/runs/2026-10-20/host-native-core-verification.md",
+      "docs/runs/2026-10-20/hybrid-concurrency-checkpoint.md",
+      "docs/runs/2026-10-20/hybrid-fixed.log",
+      "docs/runs/2026-10-20/hybrid-investigation-docs.log",
+      "docs/runs/2026-10-20/hybrid-investigation-full.log",
+      "docs/runs/2026-10-20/hybrid-investigation-repeats.json",
+      "docs/runs/2026-10-20/hybrid-investigation-results.json",
+      "docs/runs/2026-10-20/hybrid-phase-skew.log",
+      "docs/runs/2026-10-20/hybrid-serial-negative-v2.log",
+      "docs/runs/2026-10-20/hybrid-serial-negative.log",
+      "src/alpha/verification-evidence.mjs",
+      "src/hosts/doctor.mjs",
+      "src/verification/backends.mjs",
+      "src/workflow/capability-policy.mjs",
+      "test/host-core.test.mjs",
+      "test/verification-backends.test.mjs"
+    ],
+    "changed": [
+      "README.en.md",
+      "README.md",
+      "docs/INDEX.md"
+    ],
+    "new": [
+      "docs/runs/2026-10-20/first-host-native-acceptance-preflight.md",
+      "docs/runs/2026-10-20/first-host-native-fixture-test.log",
+      "docs/runs/2026-10-20/first-host-native-gate-checks.log",
+      "docs/runs/2026-10-20/first-host-native-gate-resolution-evidence.json",
+      "docs/runs/2026-10-20/first-host-native-gate-resolution.md",
+      "docs/runs/2026-10-20/first-host-native-preflight-docs.log",
+      "docs/runs/2026-10-20/first-host-native-preflight-evidence.json",
+      "docs/runs/2026-10-20/hybrid-checkpoint-inventory.json"
+    ],
+    "missing": []
+  },
+  "commitGroups": {
+    "1": "Host core implementation, corresponding tests and package.json",
+    "2": "Hybrid timing observation test only",
+    "3": "Guides, qualification evidence, integration records, indexes and local ignore rules"
+  },
+  "approved": false,
+  "count": 84,
+  "groupCounts": {
+    "3": 63,
+    "1": 20,
+    "2": 1
+  }
+}

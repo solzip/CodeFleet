@@ -1,0 +1,340 @@
+{
+  "candidateFiles": 73,
+  "outgoingCommits": 4,
+  "outgoingChangedBlobs": 248,
+  "findings": [
+    {
+      "path": "scripts/host-acceptance-evidence.mjs",
+      "line": 29,
+      "kind": "personal-path",
+      "scope": "81144a6dedb7e73b41b0029d14161943bffdfaeb"
+    },
+    {
+      "path": "docs/runs/2026-10-20/codefleet-g7b-full.log",
+      "line": 520,
+      "kind": "personal-path",
+      "scope": "9dc429835fd272253f8efac60ac0f76bf7188de5"
+    },
+    {
+      "path": "docs/runs/2026-10-20/codefleet-g7b-full.log",
+      "line": 531,
+      "kind": "personal-path",
+      "scope": "9dc429835fd272253f8efac60ac0f76bf7188de5"
+    },
+    {
+      "path": "docs/runs/2026-10-20/codefleet-g7c-docs-failed.log",
+      "line": 22,
+      "kind": "personal-path",
+      "scope": "9dc429835fd272253f8efac60ac0f76bf7188de5"
+    },
+    {
+      "path": "docs/runs/2026-10-20/codefleet-g7c-docs-failed.log",
+      "line": 34,
+      "kind": "personal-path",
+      "scope": "9dc429835fd272253f8efac60ac0f76bf7188de5"
+    },
+    {
+      "path": "docs/runs/2026-10-20/codefleet-g7c-docs-failed.log",
+      "line": 36,
+      "kind": "personal-path",
+      "scope": "9dc429835fd272253f8efac60ac0f76bf7188de5"
+    },
+    {
+      "path": "test/fixtures/model-tls/fake-key.pem",
+      "line": 1,
+      "kind": "private-key",
+      "scope": "9dc429835fd272253f8efac60ac0f76bf7188de5"
+    },
+    {
+      "path": "test/fixtures/model-tls/wrong-key.pem",
+      "line": 1,
+      "kind": "private-key",
+      "scope": "9dc429835fd272253f8efac60ac0f76bf7188de5"
+    },
+    {
+      "path": "docs/runs/2026-10-19/codefleet-g5-full-failed.log",
+      "line": 494,
+      "kind": "personal-path",
+      "scope": "effb42b501c25865b19d955cea828cc5a7eb4b08"
+    },
+    {
+      "path": "docs/runs/2026-10-19/codefleet-g5-initial.log",
+      "line": 53,
+      "kind": "personal-path",
+      "scope": "effb42b501c25865b19d955cea828cc5a7eb4b08"
+    },
+    {
+      "path": "docs/runs/2026-10-19/codefleet-g5-initial.log",
+      "line": 72,
+      "kind": "personal-path",
+      "scope": "effb42b501c25865b19d955cea828cc5a7eb4b08"
+    },
+    {
+      "path": "docs/runs/2026-10-19/codefleet-g5-sandbox-failed.log",
+      "line": 38,
+      "kind": "personal-path",
+      "scope": "effb42b501c25865b19d955cea828cc5a7eb4b08"
+    },
+    {
+      "path": "docs/runs/2026-10-19/codefleet-g5-syntax-failed.log",
+      "line": 1,
+      "kind": "personal-path",
+      "scope": "effb42b501c25865b19d955cea828cc5a7eb4b08"
+    },
+    {
+      "path": "docs/runs/2026-10-19/codefleet-g6-docs-failed.log",
+      "line": 22,
+      "kind": "personal-path",
+      "scope": "effb42b501c25865b19d955cea828cc5a7eb4b08"
+    },
+    {
+      "path": "docs/runs/2026-10-19/codefleet-g6-docs-failed.log",
+      "line": 34,
+      "kind": "personal-path",
+      "scope": "effb42b501c25865b19d955cea828cc5a7eb4b08"
+    },
+    {
+      "path": "docs/runs/2026-10-19/codefleet-g6-docs-failed.log",
+      "line": 36,
+      "kind": "personal-path",
+      "scope": "effb42b501c25865b19d955cea828cc5a7eb4b08"
+    }
+  ],
+  "largeFiles": [],
+  "binaryFiles": [
+    {
+      "path": "docs/implementation/codefleet-g0-npm-test-2026-10-19.log",
+      "scope": "81144a6dedb7e73b41b0029d14161943bffdfaeb"
+    }
+  ],
+  "scope": "bounded patterns, changed blobs at every outgoing commit; not credential inspection or exhaustive secret certification",
+  "manualDisposition": {
+    "candidateFindings": 0,
+    "outgoingPatternHits": 16,
+    "redactionPatternCode": 1,
+    "alreadyAnonymizedProfilePaths": 13,
+    "publicLoopbackTestPrivateKeys": 2,
+    "utf16Log": "22,042-byte preserved G0 log decoded as UTF-16; no actual username or user-profile path found",
+    "unresolvedSecretFindings": 0,
+    "limitations": "Bounded scan and diff review; not an exhaustive secret certification. Existing anonymized path suffixes are retained historical evidence."
+  },
+  "publicLogNormalization": [
+    {
+      "path": "docs/runs/2026-10-20/alpha-h7-doctor.log",
+      "beforeSha256": "ef9da481931665d4fa601aca0174b26fdbed2dc13d3b6e5d3ded1704d0dac18c",
+      "afterSha256": "7806ae27b321c497038872505c7df47c1f2ed014214cdf6e15cffd22fe4a509e",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/alpha-h7-full.log",
+      "beforeSha256": "c9fda0a96c8c399d3fb4d040b71c40a1485b49270a6d5c981e944be144f446d3",
+      "afterSha256": "2fd314f3589122711bce4cb329fc15295bb6372836ae126ff4af8f1dc5c993ae",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/first-host-native-fixture-test.log",
+      "beforeSha256": "a0877cc4eac883ddabb7a6d5e75f6b70adaaad765561f62189e8996bcb09d771",
+      "afterSha256": "2531340a0dce91bf8ab6167c25ce8673193291935aeb8c077e0a6b16c4e84b98",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/first-host-native-gate-checks.log",
+      "beforeSha256": "4c8f73d1316f99bb91c5afc438ccb5f2afad568bfb97e868c04bcfcf65e427b1",
+      "afterSha256": "ff3a3d63b4a13041cf2e4c87e8a4fa2d64ab34332129010a6a232735cb834835",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/first-host-native-preflight-docs.log",
+      "beforeSha256": "3c2f03f01128235393eb023d5657cb707e51c6ec6414c7c75f8bad8b831c8c6b",
+      "afterSha256": "3ef310cf08f96a0243cb4a3c96f5a04a32cf4bc687bbf596dd729d6184c24029",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-alpha-doctor.log",
+      "beforeSha256": "c8f357e29f82644c4452be8b0379b02d0d894381bd656c7e93e998a7718951a1",
+      "afterSha256": "4927afab95623731f5aa521474ea48eea7491803faf1900c8f2cf24c30bf8c21",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-backend-regression.log",
+      "beforeSha256": "1b5e2440079a9ae8e89764149fc3e569c745f4725b5d84ec5a8374a56d5cf452",
+      "afterSha256": "302546d05a47575271fb5f5b8a589d15fd0cd355dc3a34fba88d32b8c2411004",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-baseline-negative.log",
+      "beforeSha256": "6ebaa0f77b960fa3cecc8d60d458f884a3cb7fe17020a17fb24141a3f43a0d07",
+      "afterSha256": "967dc4893d253aa460092a9e128fd5f2b828f4bf317c6e6be80835e28add2559",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-final-docs.log",
+      "beforeSha256": "bf16a7c2d91749ccbf1e65fdbc70960ddfca34c5c17ef030a156140b64c04cb1",
+      "afterSha256": "fb4abad894f30decce3e20b7d9ca0bca5b4a3a5ce50986f3ed377c382641759f",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-full-final-v2.log",
+      "beforeSha256": "2fbc7ce7e7a36d7cda5fbeec603baafa6c86c9e2d3f9206b264ffe181ad917cd",
+      "afterSha256": "88043daadc9d38ad6c7f3105c982e4957c1086e0f62a06244105f7c698a46431",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-full-final.log",
+      "beforeSha256": "8a00d9ba519a0972b73c49cf89d7522eff4151c31b47def57012382d56660c5f",
+      "afterSha256": "2ff11d0c4f7835912f0123c45569513f1f43a1f3a78a0ae674db825c6a3ae33d",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-full-first.log",
+      "beforeSha256": "444179f82d9c9a01b0509dbaef0946313367867961e249fdea38250b7cc134d6",
+      "afterSha256": "cf946e2194405a630cb38d0650e0cd68618ba4d3cb9595c0ac20beab5ce3f082",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-hardened.log",
+      "beforeSha256": "5daed760b32a83bcded9ae7f385b909de9b2f5e4da17b5fba1f58323c8822178",
+      "afterSha256": "20713a85780f50952e978fe95fd39470c7d3434d9f50592bc63a7d8c473b02d5",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-host-doctor.log",
+      "beforeSha256": "97d5185f933996dfa50358bb8667942683a4bbafb9d6889aa5b9c69d28789da8",
+      "afterSha256": "0281226de769525eb5f30251b6570ed36c3da6c1a2dbbb8c0b8edad1f30ebd26",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-baseline-docs.log",
+      "beforeSha256": "a5184dfd062e8b7ba0c200c744816aed0d6b97c1505cebb57983352a5035ca69",
+      "afterSha256": "26a694d2f1b77e7f27b4d1c7f04b40338acd51533ad3282ec005e17edbec5b60",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-baseline-doctor.log",
+      "beforeSha256": "a91228e3f2af4aa9139fc5830159e74cba9a372ca4214013380ad5518a7a6179",
+      "afterSha256": "e2fd2981fc21f6d508f89814c9e0a055b4110aec0e7009e1376746d2b7951194",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-baseline-host-doctor.log",
+      "beforeSha256": "a7bbf439313f35b4e2f071d96ff1c9f721b14f34146116fdc5fece091d90685b",
+      "afterSha256": "73f3c4fbf7ef5f209acd737f1afe24f0dbd8c0b97172b420f897b00fdb9789bf",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-baseline-test-first.log",
+      "beforeSha256": "d0be0a6ea49e6586d291a5ff591fd904da3a013be405aeac1e303b9189cca125",
+      "afterSha256": "d5a960f5ebf674f4c7a11825bf9aa27c60c8d4f9dce56c05bd1931a0bd2520ff",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-baseline-test.log",
+      "beforeSha256": "9b8cdc4d30741d164c3e2edb9a82080cbf3c30ae5063dd4cea943ddbde6f58df",
+      "afterSha256": "c2f11fbd450c7992741750dec22d448c33500a97fa161d832b74a209f038b79d",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/hybrid-investigation-docs.log",
+      "beforeSha256": "8cdc714e067a97d0ccde44fb72ba84655d8026ad62474076429477c72876c631",
+      "afterSha256": "1d1185b81a197937546aaa622d1aaa7a3d726b6ec154e48b130c2b4304b2a826",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/hybrid-investigation-full.log",
+      "beforeSha256": "d3f8e83065f400990a60a5a225600f562aad2945696a63237aa8585cd6b6d1c3",
+      "afterSha256": "6bb6e8faf4e93055e842e771fdc2820c0924643aff0191fd3b71989973c42ecd",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/hybrid-phase-skew.log",
+      "beforeSha256": "0ce1251e62e9cb6c1f2aff74506122d9a76434447eb8ccbdb1bd20fefaeb27ac",
+      "afterSha256": "9e9bca5b318ee44c156e3789eacfaedba23a9184366d5970920ff4e314afcda6",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/hybrid-serial-negative-v2.log",
+      "beforeSha256": "e4cf51b0c242363f44ed64fa6f822afd6a92061b2334d17c0e5685836fad0102",
+      "afterSha256": "6228aa6515d0df524bf8e1a919c8ef1315fe0c6f1e34015f4234f525d22a06e0",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/hybrid-serial-negative.log",
+      "beforeSha256": "f64c63bc7d29982f9a0e7be66cebfac97b17090c798d45d34e458d92a80328c3",
+      "afterSha256": "5cc94118c19d0d1660fdcc9058d0b7a2499b3b291922f391a992abe9c28ca448",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/main-integration-docs-facts-failed.log",
+      "beforeSha256": "14729a5425d777aba04546fcad9d3c526b28f2b50e0f509e9a490ed572600b4a",
+      "afterSha256": "b9b5c263ed444b169b62baa59b623dac8a388b45bce3f94392cceaad99134133",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/main-integration-docs-sandbox-failed.log",
+      "beforeSha256": "3b0676945dcc2068492d011f10fe59937bd0040fef0719a12e408004d7bcdef9",
+      "afterSha256": "ec8468d81e017d545801312d85cbac39af5f3ba53b372980b3e42e0907279255",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/main-integration-docs.log",
+      "beforeSha256": "d1939a09e9f6505b63c3f2561d0a15586683c1f6e5ba349f1dd910732b2b3c2d",
+      "afterSha256": "3bf8275a8e6603e1df5e1d0932f78e863014c60b294500a50b06dcfa06ea88f9",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/main-integration-doctor.log",
+      "beforeSha256": "6bf40e75a8caa2d9e7017c3233eb371590a4a2a3e581d82876706e21cfd3914a",
+      "afterSha256": "55c2a337042cfb629f1e02a0c133ca3e695acdcfefc8f61996c47709952daddc",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/main-integration-full.log",
+      "beforeSha256": "2faf154a0ca2892e9bacb25736af0b9b4c53237497d73fe017d075364c5ccd47",
+      "afterSha256": "802b98b960b71a0bb7fee36ae29b679b0174a0bc6548dab48bcf3d5c6ee6f873",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    },
+    {
+      "path": "docs/runs/2026-10-20/main-integration-host-doctor.log",
+      "beforeSha256": "ac3b90f13d25d22cc79d99e3921406094884b9324e8d636ada1ff6af4829142d",
+      "afterSha256": "bb21e1610d74ac74ac1b3f0b56870a38a7729609a893aabc34a5e1c42eaf8ad2",
+      "nonWhitespaceContentUnchanged": true,
+      "originalRetainedIgnored": true
+    }
+  ],
+  "finalWorkingScan": {
+    "files": 84,
+    "findings": [],
+    "publicUntrackedWhitespaceFiles": 63,
+    "whitespaceFindings": [],
+    "staged": "NOT_RUN; actual index remains empty"
+  }
+}

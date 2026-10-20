@@ -1,5 +1,11 @@
 # CodeFleet inside Codex and Claude Code
 
+For Docker-free planning, semantic draft intake, Workflow/DAG inspection,
+request-only approval, separate Doctor readiness and explicit-trust Local
+Verification, follow the [Host-Native core guide](host-core-guide.md).
+The protected execution gates below remain in force; H6 isolation is optional
+for basic preparation and mandatory only for its strict profile.
+
 CodeFleet's default integration direction is Host-Native. Use the AI in your existing authenticated host to prepare proposals; CodeFleet owns contracts, scheduling and independent verification. The staged integration is offline tested, not live certified. Automated host tools and automatic delegation remain blocked/unverified.
 
 **H2 gate:** public Host `requests`, `submit`, `run` and `resume` now return BLOCKED before opening state. The trusted Operator broker has no supported production OS/IPC deployment. Neither `--actor` nor a fake signed approval enables execution. The examples below describe the staged protocol; its execution portion is currently available only to internal offline fixtures. Do not invoke legacy commands or import internal modules to bypass this gate. See the [authorization boundary](../implementation/operator-authorization.md).

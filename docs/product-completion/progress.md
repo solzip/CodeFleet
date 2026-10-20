@@ -1,5 +1,7 @@
 # 진행 현황과 결정 목록
 
+> **Host-Native Core:** [구현·검증 기록](../runs/2026-10-20/host-native-core-verification.md)과 [사용 안내](host-core-guide.md). 기본 계획·Draft·DAG·승인 요청과 선택적 검증 Backend를 분리했다. 기존 보호된 검증 게이트는 유지하며 Local 성공을 보호된 완료로 승격하지 않는다. 실제 Host Live는 별도 미검증 상태다.
+
 > **H4:** [Host IPC and existing Docker Harness](../runs/2026-10-20/alpha-h4-host-ipc-harness.md) connect in the separated Linux offline fixture. Human input and actual Host deployment remain BLOCKED.
 
 > **H3 런타임:** [Linux UID·IPC와 Workflow 연결](../runs/2026-10-20/alpha-h3-operator-runtime.md). 오프라인 권한 반증과 제한된 자동화를 검증한다. 실제 Host client·격리·실행 서비스는 미완료이며 H2/전체 제품의 BLOCKED를 해제하지 않는다.
@@ -162,3 +164,7 @@ H5 acceptance audit: see [environment, usability and live gates](../runs/2026-10
 H5 limited Codex pilot authorization was subsequently received, but the pre-execution security gate remained **BLOCKED** and no model call was made. This supersedes the earlier pending-authorization wording for that pilot only. See the [separate Live preflight record](../runs/2026-10-20/alpha-h5-codex-live-preflight.md). No full execution or fixture commit was authorized.
 
 H6 adds [planning-only Skills and offline isolation](../implementation/host-planning.md). See the [H6 evidence record](../runs/2026-10-20/alpha-h6-host-planning-isolation.md). Real Host confinement and authentication/model transport remain BLOCKED.
+
+H7 [actual Host isolation qualification](../runs/2026-10-20/alpha-h7-real-host-qualification.md) remains BLOCKED: the installed Windows binaries did not load inside the proposed restricted boundary. Codex discovery outside that boundary and existing regression passed; authenticated execution and model/tool network separation remain unverified.
+
+H8 [Linux environment preparation](../runs/2026-10-20/alpha-h8-linux-host-preparation.md) installed the approved native binaries and verified offline startup plus bounded confinement probes in the measured WSL environment. Live remains BLOCKED pending transport, authentication, tool-policy and Claude discovery qualification.

@@ -1,0 +1,70 @@
+{
+  "status": "AWAITING_GATE_A",
+  "baselineHead": "c3bca1e8b3481a1a3e6dff1cc7e1e8ef5c72bc03",
+  "remoteMain": "c61e9b829b62dd41336a7225bf3b9165136484db",
+  "fullSuite": {
+    "command": "npm.cmd test",
+    "exitCode": 0,
+    "legacyPassed": 324,
+    "alphaPassed": 212,
+    "hostCorePassed": 12,
+    "totalPassed": 548,
+    "failed": 0,
+    "skipped": 0,
+    "dockerEnabled": true,
+    "javaEnabled": true,
+    "modelCalls": 0
+  },
+  "alphaDoctor": {
+    "command": "node src/alpha/cli.mjs doctor --no-auth",
+    "exitCode": 2,
+    "authentication": "NOT_CHECKED",
+    "fullReadiness": false
+  },
+  "hostDoctor": {
+    "command": "node src/alpha/cli.mjs host codex doctor --probe-container",
+    "exitCode": 0,
+    "planning": "AVAILABLE",
+    "workflow": "AVAILABLE",
+    "localVerification": "CONDITIONAL",
+    "containerVerification": "AVAILABLE",
+    "hostSandbox": "NOT_VERIFIED",
+    "hostLive": "NOT_RUN"
+  },
+  "documents": {
+    "attempts": [
+      {
+        "exitCode": 1,
+        "cause": "Managed sandbox Git ownership restriction"
+      },
+      {
+        "exitCode": 1,
+        "cause": "New INDEX duplicate unanchored number; removed, baseline unchanged"
+      },
+      {
+        "exitCode": 0,
+        "declaredFacts": 42,
+        "mismatches": 0,
+        "uncheckedNumbers": 539
+      }
+    ],
+    "finalCommand": "npm.cmd run posttest",
+    "finalExitCode": 0
+  },
+  "worktreeDiffCheck": 0,
+  "publicStagedCheck": "NOT_RUN: no staging or commit authorization yet",
+  "productCommitsCreated": 0,
+  "remoteWrites": 0,
+  "branchDeletions": 0,
+  "newIntegrationBranch": "integration/host-native-baseline",
+  "sourceOrTestEditsThisTask": 0,
+  "publicAddedFileWhitespace": {
+    "files": 63,
+    "diagnostics": 0,
+    "note": "git no-index exit 1 is difference; exit 3 whitespace issues normalized"
+  },
+  "productSourceAndTestCandidateHashComparison": {
+    "files": 20,
+    "changed": 0
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "kernel": "6.6.114.1-microsoft-standard-WSL2",
+  "arch": "x86_64",
+  "release": "PRETTY_NAME=\"Ubuntu 24.04.3 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nVERSION=\"24.04.3 LTS (Noble Numbat)\"\nVERSION_CODENAME=noble\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.launchpad.net/ubuntu/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=noble\nLOGO=ubuntu-logo\n",
+  "uid": 1002,
+  "groups": [
+    27,
+    100,
+    1001,
+    1002
+  ],
+  "tools": {
+    "node": {
+      "found": false,
+      "windowsMount": false,
+      "path": null
+    },
+    "npm": {
+      "found": true,
+      "windowsMount": true,
+      "path": "USER_OR_WINDOWS_PATH"
+    },
+    "git": {
+      "found": true,
+      "windowsMount": false,
+      "path": "/usr/bin/git"
+    },
+    "codex": {
+      "found": true,
+      "windowsMount": true,
+      "path": "USER_OR_WINDOWS_PATH"
+    },
+    "claude": {
+      "found": false,
+      "windowsMount": false,
+      "path": null
+    },
+    "docker": {
+      "found": true,
+      "windowsMount": false,
+      "path": "/usr/bin/docker"
+    },
+    "bwrap": {
+      "found": false,
+      "windowsMount": false,
+      "path": null
+    },
+    "socat": {
+      "found": false,
+      "windowsMount": false,
+      "path": null
+    },
+    "unshare": {
+      "found": true,
+      "windowsMount": false,
+      "path": "/usr/bin/unshare"
+    },
+    "curl": {
+      "found": true,
+      "windowsMount": false,
+      "path": "/usr/bin/curl"
+    }
+  },
+  "dockerSocket": {
+    "exists": true,
+    "readable": true,
+    "writable": true
+  },
+  "unshareProbe": {
+    "exit": 0,
+    "stderr": ""
+  },
+  "gitVersion": {
+    "exit": 0,
+    "output": "git version 2.43.0"
+  },
+  "dockerVersion": {
+    "exit": 0,
+    "output": "Docker version 24.0.6, build ed223bc"
+  },
+  "status": "BLOCKED_INSTALLATION_APPROVAL_PENDING",
+  "modelCalls": 0,
+  "tests": {
+    "exit": 0,
+    "legacy": 324,
+    "alpha": 205,
+    "total": 529,
+    "failed": 0,
+    "skipped": 0,
+    "doctorExit": 0
+  },
+  "actualLinuxHostLoading": "NOT_RUN",
+  "modelToolNetworkSeparation": "UNVERIFIED"
+}

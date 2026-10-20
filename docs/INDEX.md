@@ -2,7 +2,7 @@
 
 `docs/audits/`·`docs/runs/`·`docs/archive/`의 전 문서를 시간 역순으로 나열한다. 규약은 `docs/CONVENTIONS.md`, 결함 등재 현황은 `docs/REGISTER.md`.
 
-작성 기준: 2026-10-20. 전수 91개 문서 (감사 38 · 실행 46 · 아카이브 7). <!-- fact: docs-indexed = 91 --> <!-- fact: docs-on-disk = 91 -->
+작성 기준: 2026-10-20. 전수 99개 문서 (감사 38 · 실행 54 · 아카이브 7). <!-- fact: docs-indexed = 99 --> <!-- fact: docs-on-disk = 99 -->
 
 현재 공개 사용 제품 계획은 [제품 완성 문서](product-completion/README.md)에 있다. 기존 아카이브의 실측과 새 제품 계획을 구분하며, 구현 상태는 새 진행 현황에서 관리한다.
 
@@ -10,6 +10,14 @@
 
 | 날짜 | 문서 | 유형 | 결론(한 줄) | 후속 |
 | --- | --- | --- | --- | --- |
+| 10-20 | `runs/2026-10-20/main-integration-gate-a.md` | Git integration preparation | Offline regression passed; exact checkpoint allowlist ready | Gate A, then separate main and deletion approvals |
+| 10-20 | `runs/2026-10-20/first-host-native-gate-resolution.md` | 설치·발견·권한 확인 | Default Skill discovered; read-only denial bounded; Live BLOCKED | Fixture Commit and effective Live permissions |
+| 10-20 | `runs/2026-10-20/first-host-native-acceptance-preflight.md` | 기본 Host 수용 사전 점검 | Synthetic fixture prepared; Live blocked on fixed baseline, model and Skill binding | Separate bounded approval |
+| 10-20 | `runs/2026-10-20/hybrid-concurrency-checkpoint.md` | 동시성 조사·체크포인트 | Verifier timing oracle corrected; production scheduler unchanged | Review exact commit candidates; separate Live approval |
+| 10-20 | `runs/2026-10-20/host-native-baseline-readiness.md` | 기준선 감사·수용 준비 | Offline baseline and commit inventory; strict planning Live remains blocked | Fixture binding and separate Host authorization |
+| 10-20 | `runs/2026-10-20/host-native-core-verification.md` | Host core / verification | Offline core and backend regression passed; protected gates retained | Host Live remains separate |
+| 10-20 | `runs/2026-10-20/alpha-h8-linux-host-preparation.md` | Linux Host preparation | Offline native startup and bounded denials; Live BLOCKED | Model transport, tool allowlist and Claude discovery |
+| 10-20 | `runs/2026-10-20/alpha-h7-real-host-qualification.md` | Real Host qualification | BLOCKED: Windows backend and Linux binary loading | Provision qualified Host boundary |
 | 10-20 | `runs/2026-10-20/alpha-h6-host-planning-isolation.md` | Planning / isolation | Offline worker and draft intake; real Host blocked | Host runtime and auth transport attestation |
 | 10-20 | `runs/2026-10-20/alpha-h5-codex-live-preflight.md` | Approved Live preflight | BLOCKED before model invocation; 0 calls | Prove no-tool and fixture-only isolation |
 | 10-20 | `runs/2026-10-20/alpha-h5-host-acceptance.md` | Host acceptance | Offline checks; live blocked | Isolated deployment and bounded live approval |

@@ -1,0 +1,53 @@
+{
+  "status": "OFFLINE_REGRESSION_PASSED_WITH_UNRESOLVED_FLAKE",
+  "firstFullRun": {
+    "command": "npm.cmd test",
+    "exitCode": 1,
+    "legacyPassed": 324,
+    "alphaPassed": 210,
+    "alphaFailed": 1,
+    "core": "NOT_RUN",
+    "posttest": "NOT_RUN"
+  },
+  "hybridDiagnostic": {
+    "command": "node --test test/hybrid.test.mjs",
+    "exitCode": 0,
+    "passed": 18,
+    "skipped": 1,
+    "failed": 0,
+    "scope": "Docker gate not enabled for standalone diagnostic"
+  },
+  "alphaDoctor": {
+    "command": "node src/alpha/cli.mjs doctor --no-auth",
+    "exitCode": 2,
+    "authentication": "NOT_CHECKED"
+  },
+  "hostDoctor": {
+    "command": "node src/alpha/cli.mjs host codex doctor --probe-container",
+    "exitCode": 0,
+    "hostLive": "NOT_RUN"
+  },
+  "secondFullRun": {
+    "command": "npm.cmd test",
+    "exitCode": 0,
+    "legacyPassed": 324,
+    "alphaPassed": 211,
+    "corePassed": 12,
+    "totalPassed": 547,
+    "failed": 0,
+    "skipped": 0,
+    "posttest": "PASSED"
+  },
+  "modelCalls": 0,
+  "diffCheck": {
+    "command": "git diff --check",
+    "exitCode": 0
+  },
+  "documentChecks": {
+    "command": "npm.cmd run posttest",
+    "exitCode": 0,
+    "declaredFacts": 42,
+    "mismatches": 0,
+    "uncheckedNumbers": 539
+  }
+}

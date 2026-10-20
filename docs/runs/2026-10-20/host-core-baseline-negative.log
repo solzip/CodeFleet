@@ -1,0 +1,30 @@
+✖ A: explicitly mismatched new baseline evidence cannot authorize a repair attempt (1.0563ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 70.0948
+
+✖ failing tests:
+
+test at test\verification-backends.test.mjs:40:1
+✖ A: explicitly mismatched new baseline evidence cannot authorize a repair attempt (1.0563ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  true !== false
+
+      at TestContext.<anonymous> (file:///<USERPROFILE>/Desktop/%EA%B0%9C%EC%9D%B8/sol/codeFleet/codeFleet/.codefleet/worktrees/alpha-g0/test/verification-backends.test.mjs:43:10)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.start (node:internal/test_runner/test:1015:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:358:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
