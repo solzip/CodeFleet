@@ -49,21 +49,40 @@ async function setup(items = [item('a'), item('b', ['a'])]) {
 
 import { delegate, sendMessage, messages } from '../src/workflow/collaboration.mjs';
 
-test('hybrid independent work overlaps, isolates candidates and integrates deterministically', async () => {
+for (const delayed of [false, true]) test('hybrid independent work overlaps, isolates candidates and integrates deterministically' + (delayed ? ' with skewed verifier arrival' : ''), async () => {
   const f = await setup([item('b'), item('a')]);
+  let deadline;
   try {
     let active = 0, peak = 0; const dirs = new Set(), verify = f.dependencies.verify;
+    const arrivals = new Set(), together = Promise.withResolvers(), first = Promise.withResolvers();
     f.dependencies.verify = async req => {
+      const item = req.tests.length === 1 ? req.tests[0] : null;
+      if (item && !arrivals.has(item) && delayed && item === 'test/b.test.js') {
+        await first.promise;
+        await new Promise(resolve => setTimeout(resolve, 75));
+      }
+      if (!item) assert.equal(active, 0, 'integration must follow both independent children');
       dirs.add(req.directory); active++; peak = Math.max(peak, active);
-      await new Promise(r => setTimeout(r, 30));
-      try { return await verify(req); } finally { active--; }
+      try {
+        if (item && !arrivals.has(item)) {
+          arrivals.add(item);
+          first.resolve();
+          // Synchronize the observation, not production scheduling. A serial
+          // launcher cannot reach the second arrival and must fail this test.
+          if (arrivals.size === 1) deadline = setTimeout(() => together.reject(Error('Independent verifier rendezvous timed out')), 10000);
+          if (arrivals.size === 2) { clearTimeout(deadline); together.resolve(); }
+          await together.promise;
+        }
+        return await verify(req);
+      } finally { active--; }
     };
     f.approve(); const r = await execute(f.store, f.run.id, f.dependencies);
     assert.equal(r.state, 'COMPLETED', r.reason); assert.equal(peak, 2); assert.equal(dirs.size, 3);
+    assert.equal(arrivals.size, 2);
     assert.deepEqual(attempts(f.store, r.id).map(a => a.itemId), ['a', 'b', 'final']);
     assert.equal(Object.keys(f.store.readArtifact(r.acceptedHash).changedFiles).length, 2);
     assert.equal(await readFile(path.join(f.repo, 'src/a.js'), 'utf8'), 'module.exports = (a,b) => a+b;');
-  } finally { f.store.close(); }
+  } finally { clearTimeout(deadline); f.store.close(); }
 });
 
 test('dependency edges and shared resources serialize; limits and overlap fail closed', async () => {
