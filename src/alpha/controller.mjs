@@ -13,6 +13,7 @@ import { delegate, sendMessage, receiveMessages } from '../workflow/collaboratio
 import * as workflowStore from '../workflow/persistence.mjs';
 import { verify, dockerReady, cleanupContainer, matchTestIdentity } from './verifier.mjs';
 import { deliver } from './delivery.mjs';
+import { workflowGuard } from '../hosts/workflow-authorization.mjs';
 
 export async function createRun(store, repo, input) {
   const contract = validateContract(input);
@@ -39,6 +40,12 @@ export async function execute(store, id, dependencies = {}, options = {}) {
     }
   }
   const services = { snapshot, context, candidateHash, propose, verify, ready: dockerReady, cleanupContainer, deliver, ...dependencies };
+  const effect = kind => {
+    if (initial.workflowParent) {
+      const parent = store.get(initial.workflowParent), authorization = workflowGuard(store, parent);
+      if (authorization) { if (cancelled()) throw Error('Effect coordinator fence changed'); authorization.effect(parent, kind); }
+    }
+  };
   const owner = store.claim(id, options);
   let run = store.get(id); const entered = Date.now(); const beforeMs = run.elapsedMs;
   let leaseLost = false;
@@ -83,6 +90,7 @@ export async function execute(store, id, dependencies = {}, options = {}) {
       const accepted = store.readArtifact(run.acceptedHash);
       const evidence = store.readArtifact(run.evidenceHash);
       if (accepted.candidateHash !== run.candidateHash || evidence.candidateHash !== run.candidateHash || judge(evidence).outcome !== 'ACCEPT') throw Error('Accepted evidence does not match delivery intent');
+      effect('remote');
       run.delivery = await services.deliver(run, accepted.changedFiles, undefined, reconciliationGuard, { readOnly, deadline: readDeadline });
       save('COMPLETED', 'Existing remote PR confirmed; no new model invocation'); return run;
     }
@@ -98,6 +106,7 @@ export async function execute(store, id, dependencies = {}, options = {}) {
     if (run.containerName) await services.cleanupContainer(run.containerName);
     const directory = await mkdtemp(path.join(tmpdir(), 'codefleet-candidate-'));
     run.candidateDirectory = directory;
+    effect('read');
     const names = await services.snapshot(run.repo, run.base, directory); guard();
     run.candidatePaths = names;
     const originalContext = await services.context(directory, run.contract);
@@ -108,6 +117,7 @@ export async function execute(store, id, dependencies = {}, options = {}) {
     if (!run.baselineHash) {
       run.containerName = `codefleet-${run.id}-baseline`;
       save('BASELINE', 'Checking protected regression tests before generating a change');
+      effect('verify');
       const baseline = await services.verify({ directory, contract: run.contract, tests: run.contract.tests, timeoutMs: Math.min(remaining(), run.contract.verification ? 600000 : 120000), cancelled, containerName: run.containerName });
       guard(); run.baselineHash = store.artifact(baseline);
     }
@@ -130,6 +140,7 @@ export async function execute(store, id, dependencies = {}, options = {}) {
         save('GENERATING', 'Attempt and unknown cost reserved before provider invocation');
         // Each proposal is against the pinned original, so restart and replacement
         // do not depend on a half-written candidate directory.
+        effect('proposal');
         const response = await services.propose({ contract: run.contract, files: originalContext, feedback, timeoutMs: Math.min(remaining(), 180000), cancelled });
         if (Number.isFinite(response.cost) && response.cost >= 0) {
           run.unknownCostAttempts -= 1; run.reportedCostUsd += response.cost;
@@ -151,6 +162,7 @@ export async function execute(store, id, dependencies = {}, options = {}) {
       run.candidateHash = await services.candidateHash(directory, names);
       run.containerName = `codefleet-${run.id}-attempt-${run.attempts}`;
       save('VERIFYING', 'Candidate fixed; running protected tests');
+      effect('verify');
       const evidence = await services.verify({ directory, contract: run.contract, tests: run.contract.tests, timeoutMs: Math.min(remaining(), run.contract.verification ? 600000 : 120000), cancelled, containerName: run.containerName });
       guard();
       evidence.candidateHash = run.candidateHash;
@@ -167,6 +179,7 @@ export async function execute(store, id, dependencies = {}, options = {}) {
           save('COMPLETED', 'Verified change available in content-addressed local artifacts; original repository unchanged'); return run;
         }
         save('DELIVERING', 'PR intent persisted before remote effects'); guard();
+        effect('remote');
         run.delivery = await services.deliver(run, changedFiles, undefined, guard);
         save('COMPLETED', 'Remote PR confirmed'); return run;
       }
@@ -254,8 +267,9 @@ async function executeWorkflow(store, id, dependencies, options) {
     }
     const selectedRepo = await repository(run.repo); guard();
     if (selectedRepo.base !== run.base) throw Error('Workflow baseline changed');
-    const registry = dependencies.workflowRegistry ?? createRegistry();
+    const registry = dependencies.hostExecution ? null : dependencies.workflowRegistry ?? createRegistry();
     const choose = async () => {
+      if (dependencies.hostExecution) { guard(); return dependencies.hostExecution.select(run); }
       const reports = []; for (const adapter of registry.values()) reports.push(await adapter.probe());
       guard();
       return selectProvider(registry, reports, { required: run.contract.requiredCapabilities, requested: run.providerId });
@@ -312,6 +326,7 @@ async function executeWorkflow(store, id, dependencies, options) {
           guard();
           if (final) return { cost: 0, proposal: { summary: 'Host integration of independently verified disjoint edits', edits: Object.entries(changes).map(([file, body]) => ({ path: file, oldText: request.files[file], newText: body })) } };
           await choose();
+          if (dependencies.hostExecution) return requireProposal(await dependencies.hostExecution.execute(child, request, channels));
           return requireProposal(await registry.get(selection.providerId).execute(request));
         } }, { workflowOwner: owner });
       }));

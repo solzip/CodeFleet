@@ -1,0 +1,33 @@
+# H3 Linux Operator runtime
+
+Local Unix socket ingress uses Linux SO_PEERCRED, never a UID supplied in JSON. A Python standard-library bridge starts the Node coordinator with private pipes. The bridge accepts one bounded JSON request per connection, serializes coordinator mutations, and checks the peer UID against distinct provisioned Agent and Operator UIDs. No TCP listener, cloud service, API key or model process is used. Same UID configuration and non-Linux platforms fail closed.
+
+Config/state leaf paths must be Operator-owned and private (0700 directories/0600 files). Ancestors must be root/Operator owned, non-symlink directories without group/other write permission. This intentionally rejects generic shared temporary directories as production roots. Socket parent is Operator-owned, non-Agent-writable; socket access itself is subject to kernel UID checks. Runtime code and executable paths must be provisioned read-only to Agent by the trusted administrator; this prototype is not a deployment attestor.
+
+Provisioning is a trusted administrator responsibility: runtime/config and coordinator state must be owned by the Operator, without Agent write access; Operator UID must never run AI-authored code or host tools. Root/administrator and deliberate Operator credential delegation remain outside this boundary. OS UID authentication is not proof of physical human presence. Only a separately authenticated Operator login may use operator methods. Windows native and WSL2 deployment remain unverified; no fallback to actor labels or environment tokens.
+
+Node owns the H2 signing key and ledger, existing Store and a fixed catalog of workflow hashes. Agent can inspect and request actions. Only kernel-authenticated Operator peers may approve/deny/revoke exact request IDs and binding digests. Operator decisions never accept an Agent-provided key, principal or signature. H2 one-use and expiry checks remain authoritative. Coordinator restart preserves the key, ledger and dispatch consumption; fresh leases invalidate old grants.
+
+The catalog identifies risky WorkItems; Agent cannot lower their risk or add contracts. Approved scope is immutable. Confined read/plan/proposal/verification do not need per-operation human approval. Assignment of a risky WorkItem consumes a hash/revision/lease-bound grant immediately before the existing workflow reservation. Unknown operations, scope expansion and all remote delivery remain unsupported. A grant for assignment is never a grant for an external command.
+
+Workflow hooks are additive: protected runs require the registered trusted coordinator on approval/reservation and child effects. Existing Alpha/Legacy runs retain their original behavior. A private run marker prevents reopening a protected run through a legacy entry point without its guard. The broker owns Store and mutations; the Agent cannot open it. Pause/cancel/resume, graph changes, current policy and active lease are rechecked. Separate external writers to trusted state invalidate the deployment assumptions.
+
+This slice exposes inspection, approval and WorkItem assignment over IPC; it does not expose arbitrary commands, a model launcher, remote writes or a production Harness service. Existing independent Harness regression remains mandatory. Public Host execution stays BLOCKED until a bounded execution service, deployment attestation and actual host confinement are verified. Linux fixture IPC verification is not HOST_LIVE_VERIFIED.
+
+## Prototype operation
+
+The trusted deployment must first provision distinct non-root accounts, a protected existing Store with `authorizationMode: OS_OPERATOR_V1` runs, and a private config containing `operatorUid`, `agentUid`, `state`, `catalog` and `environment`. Catalog entries bind exact `workflowHash`, `revision` and `riskyItems`. No remote request can add or edit this catalog. There is no automatic account installer, production enrollment or privileged startup helper in this slice.
+
+From the authenticated Operator OS account, the entry point is `python3 src/hosts/operator-ipc.py CONFIG SOCKET ABSOLUTE_NODE ABSOLUTE_WORKER`. WORKER is the trusted absolute path to `src/hosts/operator-runtime.mjs`. Keep code outside Agent-writable repositories. Only the fixture starts this runtime in the current work; no host account or global settings were changed.
+
+IPC is one JSON object plus newline per connection: `{ "method": "inspect", "params": { "runId": "catalog-run" } }`. Agent methods are inspect/open/request/assign/pause/cancel. `request` and `assign` also require `itemId`; `request` returns the actual bound action and reviewDigest. Operator `decide` takes exactly id, reviewDigest, kind (APPROVE/DENY/REVOKE) and expiresAt (at most one hour). UID from SO_PEERCRED determines access. No actor/principal/signature fields are accepted from clients. The API does not attest physical input; an exclusive authenticated Operator OS session is required. No general Host IPC client or production terminal review UI has been registered yet.
+
+Reservations consume before creation; a failure/crash after consumption cannot refund/replay a grant. Pending request routing is memory-only; restart requires a fresh request/lease and cannot reuse old request IDs through the runtime. Started attempts require recovery and are not automatically relaunched. Revocation stops an unconsumed grant; an already assigned action cannot be retroactively undone. Pause/cancel controls stop later scheduling. External actions remain unsupported even with an assignment grant.
+
+Reproduce only the offline fixture using the pinned Dockerfile in `test/fixtures/operator-runtime.Dockerfile`; set `CODEFLEET_OPERATOR_IMAGE` to the resulting immutable image ID and `CODEFLEET_TEST_DOCKER=1`, then run `npm run test:operator-runtime`. The existing full-suite Java/Maven prerequisites still apply. The Docker runtime has no network or Docker socket, mounts only source/fixture code read-only, and uses a disposable private filesystem.
+
+References: [Linux Unix socket credentials](https://man7.org/linux/man-pages/man7/unix.7.html), [Python socket API](https://docs.python.org/3/library/socket.html). SO_PEERCRED identifies the connecting OS principal. Trusted clients must not pass connected descriptors to the Agent; no descriptor-passing protocol is supported here.
+
+## H4 extension
+
+The [H4 IPC contract](host-ipc.md) adds the versioned Agent client and existing Docker Harness service when hostService is enabled. H3 prototype methods above remain documented for compatibility; they are not a bypass for the H4 Agent interface. H4 blocks Operator decisions until human input is independently attested.

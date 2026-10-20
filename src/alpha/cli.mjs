@@ -12,6 +12,7 @@ import { verifiedEvidence } from './evidence.mjs';
 import { productCli } from '../product/cli.mjs';
 import { runReport } from '../product/report.mjs';
 import { planIntent } from '../intent/engine.mjs';
+import { hostCli, hostHelp } from '../hosts/cli.mjs';
 
 const args = process.argv.slice(2);
 const index = args.indexOf('--state');
@@ -27,9 +28,12 @@ let interrupted = false;
 const interrupt = () => { interrupted = true; if (store && activeId) store.control(activeId, 'cancel'); };
 process.on('SIGINT', interrupt); process.on('SIGTERM', interrupt);
 try {
-  if (action === 'objective') {
+  if (action === 'host') {
+    const result = await hostCli(values, directory); console.log(JSON.stringify(result.data, null, 2)); process.exitCode = result.exitCode;
+  } else if (action === 'objective') {
     const result = await productCli(values, directory); console.log(JSON.stringify(result.data, null, 2)); process.exitCode = result.exitCode;
   } else if (!action || ['help', '--help'].includes(action)) {
+    console.log(hostHelp + '\n');
     console.log(`CodeFleet experimental alpha — test-driven Node and Java changes\n\n  codefleet-alpha plan "objective" [repository] [--draft draft.json] (read-only, no model call)\n  codefleet-alpha doctor [contract.json]\n  codefleet-alpha prepare-java <contract.json> <trusted-repository>\n  codefleet-alpha run <contract.json> <repository>\n  codefleet-alpha resume <run-id>\n  codefleet-alpha pause|cancel <run-id>\n  codefleet-alpha status [run-id]\n  codefleet-alpha export <run-id> <directory>\n\nOptional: --state <local-state-directory>\n\nRun grants the explicit contract scope and delivery permission. Only named context/test files are sent to Claude. Requires a clean repository, an existing failing regression test, Claude authentication and a pinned Docker verifier image. Node uses ${IMAGE}. Java supports JDK 21 with Gradle 9.4.1 or Maven 3.9.9; prepare-java executes the trusted baseline with network to cache dependencies in a local image. Candidate verification is offline. Alpha never merges PRs, deploys, or edits the original repository. Cost is provider-reported, not an independent billing guarantee.`);
   } else if (action === 'plan') {
     // Planning never opens the Store or launches a model. Supplied drafts remain

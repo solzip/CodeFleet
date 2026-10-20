@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { hash } from '../alpha/contract.mjs';
 import { repository } from '../alpha/workspace.mjs';
 import { validateWorkflow, policyFor, parallelLimit } from './definition.mjs';
+import { workflowGuard } from '../hosts/workflow-authorization.mjs';
 
 function transaction(store, fn) {
   store.db.exec('BEGIN IMMEDIATE');
@@ -30,6 +31,7 @@ export async function createWorkflow(store, repo, input, source, commandId = ran
 export function approveWorkflow(store, runId, { actor, workflowHash, expiresAt }) {
   return transaction(store, () => {
     const run = store.get(runId); idle(store, run);
+    if (run.authorizationMode === 'OS_OPERATOR_V1') throw Error('Protected workflow cannot use actor approval');
     if (typeof actor !== 'string' || !actor.trim() || workflowHash !== run.contractHash || !Number.isFinite(expiresAt) || expiresAt <= Date.now() || expiresAt > Date.now() + 3600000) throw Error('Explicit matching workflow approval and bounded expiry required');
     store.db.prepare('INSERT OR REPLACE INTO workflow_approvals VALUES (?,?,?,?,?)').run(runId, run.revision, workflowHash, actor, expiresAt);
     run.state = 'READY'; store.db.prepare('UPDATE runs SET body=? WHERE id=?').run(JSON.stringify(run), runId);
@@ -37,6 +39,8 @@ export function approveWorkflow(store, runId, { actor, workflowHash, expiresAt }
   });
 }
 export function approval(store, run) {
+  const guard = workflowGuard(store, run);
+  if (guard) { guard.check(run); return; }
   const a = store.db.prepare('SELECT * FROM workflow_approvals WHERE runId=? AND revision=?').get(run.id, run.revision);
   if (!a || a.digest !== run.contractHash || a.expires <= Date.now() || run.contract.policySnapshotRef !== hash(policyFor(run.contract))) throw Error('Workflow approval absent, expired or invalid');
 }
@@ -87,6 +91,7 @@ export function reserve(store, run, owner, itemId, contract) {
       if (a.revision !== run.revision || node?.files.some(f => other.files.includes(f)) || node?.resources?.some(r => other.resources?.includes(r))) throw Error('Active file/resource/revision conflict');
     }
     const child = { id: randomUUID(), repo: run.repo, base: run.base, contract, contractHash: hash(contract), state: 'READY', attempts: 0, elapsedMs: 0, reportedCostUsd: 0, unknownCostAttempts: 0, workflowParent: run.id, workflowRevision: run.revision, workflowGraphHash: run.contractHash, workflowItemId: itemId, workflowFence: owner };
+    workflowGuard(store, run)?.beforeReserve(run, owner, itemId, contract);
     store.db.prepare('INSERT INTO runs(id,body) VALUES (?,?)').run(child.id, JSON.stringify(child));
     store.db.prepare('INSERT INTO workflow_attempts VALUES (?,?,?,?,?)').run(run.id, itemId, child.id, run.revision, 'STARTED');
     store.event(child.id, 'CREATED', { contractHash: child.contractHash });

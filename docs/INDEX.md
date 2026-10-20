@@ -2,7 +2,7 @@
 
 `docs/audits/`·`docs/runs/`·`docs/archive/`의 전 문서를 시간 역순으로 나열한다. 규약은 `docs/CONVENTIONS.md`, 결함 등재 현황은 `docs/REGISTER.md`.
 
-작성 기준: 2026-10-20. 전수 83개 문서 (감사 38 · 실행 38 · 아카이브 7). <!-- fact: docs-indexed = 83 --> <!-- fact: docs-on-disk = 83 -->
+작성 기준: 2026-10-20. 전수 88개 문서 (감사 38 · 실행 43 · 아카이브 7). <!-- fact: docs-indexed = 88 --> <!-- fact: docs-on-disk = 88 -->
 
 현재 공개 사용 제품 계획은 [제품 완성 문서](product-completion/README.md)에 있다. 기존 아카이브의 실측과 새 제품 계획을 구분하며, 구현 상태는 새 진행 현황에서 관리한다.
 
@@ -10,6 +10,11 @@
 
 | 날짜 | 문서 | 유형 | 결론(한 줄) | 후속 |
 | --- | --- | --- | --- | --- |
+| 10-20 | `runs/2026-10-20/alpha-h4-host-ipc-harness.md` | Host IPC / Harness | Linux process E2E; Host Live blocked | Human input and real Host isolation |
+| 10-20 | `runs/2026-10-20/alpha-h3-operator-runtime.md` | IPC·Workflow 반증 | Linux UID 승인 IPC와 실제 예약 연결, Host 수용 차단 유지 | Host 격리·IPC client·Harness 서비스 |
+| 10-20 | `runs/2026-10-20/alpha-h2-operator-isolation.md` | 승인·격리 반증 | 오프라인 서명 원장과 UID 반증, 생산 Host 실행 차단 | Operator 인증·OS/IPC·위험 효과 집행 |
+| 10-20 | `runs/2026-10-20/alpha-h1-host-acceptance-readiness.md` | 설치·발견 검증 | Codex 실제 로더 확인, 양쪽 호출·Live 권한 격리 미검증 | 승인 경계 및 제한된 Live 수용 |
+| 10-20 | `runs/2026-10-20/alpha-host-native-transition.md` | 설계·오프라인 통합 | Host 제안과 독립 Harness 연결, Live 미검증 | Host 권한 경계와 실제 세션 승인 테스트 |
 | 10-20 | `runs/2026-10-20/alpha-g7c-live-transport-compatibility.md` | 구현·오프라인 검증 | 제한 HTTPS·인증·응답 계약, Live 차단 유지 | 승인·활성 모델·비용·Live attestation |
 | 10-20 | `runs/2026-10-20/alpha-g7b-proposal-only-model-interface.md` | 구현·오프라인 검증 | 도구 없는 모델 프로토콜·필수 환경 검사, Live 차단 유지 | Live 전송·인증·비용 검증 |
 

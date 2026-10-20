@@ -1,0 +1,63 @@
+(node:49344) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ H3: protected workflow cannot reopen through legacy actor approval or missing guard (116.4396ms)
+✔ H3: actual reserve denies risky work before inserting an attempt and consumes exact approved action (191.8075ms)
+✔ H3: revision, pause, lease change and unsupported effects invalidate execution (163.3242ms)
+✔ H3: confined actual Workflow and independent tests complete without per-action human grants (2010.8611ms)
+✖ H3: real Linux authenticated IPC, Operator and Agent UIDs, attacks and workflow assignments (574.8508ms)
+(node:2216) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ operator: fake signed normal action is single-use, durable and not verification (75.1564ms)
+✔ operator: actor strings, direct agent approval, hooks and stolen unsigned receipts fail (37.3813ms)
+✔ operator: current runId change invalidates approval (57.437ms)
+✔ operator: current workItemId change invalidates approval (37.1717ms)
+✔ operator: current revision change invalidates approval (49.248ms)
+✔ operator: current contractHash change invalidates approval (44.8456ms)
+✔ operator: current repository change invalidates approval (39.0847ms)
+✔ operator: current environment change invalidates approval (56.0245ms)
+✔ operator: current policyHash change invalidates approval (29.996ms)
+✔ operator: current leaseOwner change invalidates approval (39.8956ms)
+✔ operator: expiry, revoked/denied decisions, cancel, pause and lease expiration block dispatch (237.4997ms)
+✔ operator: command changes and signed decision tampering fail (52.6581ms)
+✔ operator: recheck after reservation rejects changed state without returning grant use (46.674ms)
+✔ operator: concurrent dispatch and failed execution cannot duplicate or retry (67.9479ms)
+✔ operator: Fake Operator signs in a separate process and trusted executor performs bounded file write (158.142ms)
+✔ operator: same-account child CAN steal fake secret; production host execution stays blocked (89.351ms)
+✔ operator: ledger owner CAN roll back consumption; this configuration is unsupported (56.7548ms)
+✔ operator: actual public CLI cannot enable execution with actor or isolation flags (191.2096ms)
+✔ operator: isolated Fake Agent and descendant cannot access broker files or Docker socket (647.005ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 23
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3174.8572
+
+✖ failing tests:
+
+test at test\operator-runtime.test.mjs:83:1
+✖ H3: real Linux authenticated IPC, Operator and Agent UIDs, attacks and workflow assignments (574.8508ms)
+  AssertionError [ERR_ASSERTION]: Traceback (most recent call last):
+    File "/app/test/fixtures/operator-ipc-probe.py", line 14, in <module>
+      os.chown(ROOT + '/' + entry, 1000, 1000)
+  PermissionError: [Errno 13] Permission denied: '/fixture/private/state'
+  
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file:///<WORKTREE>/test/operator-runtime.test.mjs:88:10)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:787:18)
+      at Test.postRun (node:internal/test_runner/test:1247:19)
+      at Test.run (node:internal/test_runner/test:1175:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

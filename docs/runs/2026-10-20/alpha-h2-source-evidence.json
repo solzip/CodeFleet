@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-20",
+  "head": "9dc429835fd272253f8efac60ac0f76bf7188de5",
+  "status": "BLOCKED",
+  "offlineScope": "SIGNED_DECISION_CORE_AND_LINUX_UID_FIXTURE",
+  "hostLive": "NOT_RUN",
+  "sameAccountIsolation": "UNSUPPORTED_DEMONSTRATED_SECRET_AND_LEDGER_ACCESS",
+  "productionHostExecution": "BLOCKED",
+  "tests": {
+    "fullExit": 0,
+    "legacy": 324,
+    "alpha": 191,
+    "h2": 19,
+    "failed": 0,
+    "skipped": 0
+  },
+  "sourceFiles": [
+    {
+      "file": "src/hosts/operator.mjs",
+      "sha256": "8c946240640835ec8a7f2468a9f5a61d747245db213bcc7099b6352079d2cf9c"
+    },
+    {
+      "file": "src/hosts/cli.mjs",
+      "sha256": "63493d549f3da83c8814ddbbf151e0346d31963d8d640f3fd312e03e08106854"
+    },
+    {
+      "file": "src/hosts/exchange.mjs",
+      "sha256": "771da2d2856011e4b7941b9aa2912be14636791e33673d70fe40d8e663987e8c"
+    },
+    {
+      "file": "src/hosts/install.mjs",
+      "sha256": "60452f0d247987dcf6f0ad599dda29409c82448c256b7f5e464608044b65a876"
+    },
+    {
+      "file": "test/operator.test.mjs",
+      "sha256": "6673bffbf557c2a2c7f7ffba375ec1fa289febda62d194beca066d8650bba6e2"
+    },
+    {
+      "file": "test/host.test.mjs",
+      "sha256": "18a41a1e4f1c5d03091099334017d88b7684798bf4edd1cbc304f3155aff99e4"
+    },
+    {
+      "file": "package.json",
+      "sha256": "a0eec7d8f3088c808a8f6bd843eb21168f6780387e6c531636be9c9377971cd9"
+    },
+    {
+      "file": "src/alpha/controller.mjs",
+      "sha256": "e8a378d35d41665d173e0da2017ce3fad3c638f9cb7e0c75ce69d1e13ffbf67b"
+    },
+    {
+      "file": "src/alpha/store.mjs",
+      "sha256": "3ed9948ad5e8c6eb8e40622bb2c34473141a3be048a7ab6e70d0a87f4a55fec7"
+    }
+  ]
+}

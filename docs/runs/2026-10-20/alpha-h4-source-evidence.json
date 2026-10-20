@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-20",
+  "head": "9dc429835fd272253f8efac60ac0f76bf7188de5",
+  "offlineStatus": "OFFLINE_VERIFIED",
+  "scope": "LINUX_SEPARATE_UID_FIXED_CONTRACT_DOCKER_HARNESS",
+  "hostProductStatus": "BLOCKED",
+  "hostLive": "NOT_RUN",
+  "humanInput": "BLOCKED",
+  "ipcChecks": 28,
+  "tests": {
+    "exit": 0,
+    "legacy": 324,
+    "alpha": 198,
+    "h4": 2,
+    "failed": 0,
+    "skipped": 0
+  },
+  "hostIpcImage": "sha256:47e30452abb8ab756bf3c09ad729f4a3469f3babb5b4c602912fdb88ec153f8a",
+  "sourceFiles": [
+    {
+      "file": "src/hosts/ipc-client.mjs",
+      "sha256": "02769fbc11bc951b3e7dd4e1276d1b17d514e6f35b45e72dc6702187d4053d02"
+    },
+    {
+      "file": "src/hosts/harness-service.mjs",
+      "sha256": "347de854067f1621508351ee8c579789006ce177401741648b521d9d6133f9df"
+    },
+    {
+      "file": "src/hosts/operator-ipc.py",
+      "sha256": "b127dbf9b77a0e3809cc3a9a1fbd5dc1da053a93c1dab83a506839a1b6e0a317"
+    },
+    {
+      "file": "src/hosts/operator-runtime.mjs",
+      "sha256": "808298df203f0423ea9f12962071e3f7314f3f3bed14d07c0a66b347de9e4acb"
+    },
+    {
+      "file": "src/hosts/install.mjs",
+      "sha256": "9d3fc25a630eaabdf8b796c43a1ec5525f0c8a5bfeae8b759d6e93fe0bddffae"
+    },
+    {
+      "file": "test/host-ipc.test.mjs",
+      "sha256": "a427370e6ee00b0fa26c4071ab38ba804473b48f1df732358b6b4218934a3c0a"
+    },
+    {
+      "file": "test/host.test.mjs",
+      "sha256": "1d0db76608f5e08f55c1345bc3118990ee1451c8bd3de1ab489e8785caecd481"
+    },
+    {
+      "file": "test/fixtures/host-ipc.Dockerfile",
+      "sha256": "a64a4ff56350a9cf8b985882f7298ca24edaebd5adbf0f6aaa7bd2e5ab8e3750"
+    },
+    {
+      "file": "test/fixtures/host-ipc-seed.mjs",
+      "sha256": "7ce6425db0662cb45973811673f91266374facb864fa537a4fe32f1e992035f8"
+    },
+    {
+      "file": "test/fixtures/host-ipc-probe.py",
+      "sha256": "401d2837da5deb0d66bb00de48129f84ab5028f9c4ab6b66337083bee620bbdb"
+    },
+    {
+      "file": "package.json",
+      "sha256": "abee133fe3241723f2f226d610e5a562ccf63a372f6d379fb08228438b23e8dd"
+    }
+  ]
+}

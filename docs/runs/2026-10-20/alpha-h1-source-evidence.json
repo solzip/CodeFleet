@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-20",
+  "modelTurns": 0,
+  "fixtureCommits": 0,
+  "hosts": [
+    {
+      "host": "codex",
+      "runtimeExit": 0,
+      "skillHash": "a4287998a0c7e15921a435649013f7aa4eff44b95472ed53807b883807b227c7",
+      "contractHash": "41c632abc1946fdc978d04731228405b014c4e2b7757acae85ef86fdc9e0dec2",
+      "baseline": "AWAITING_EXPLICIT_FIXTURE_COMMIT_AUTHORIZATION",
+      "actualSkillInvocation": "NOT_RUN",
+      "live": "NOT_RUN"
+    },
+    {
+      "host": "claude",
+      "runtimeExit": 0,
+      "skillHash": "b1bb0927e793ceae08d285264d6540df2066a82e8ca69c18f3e0fd69bca5f0f5",
+      "contractHash": "41c632abc1946fdc978d04731228405b014c4e2b7757acae85ef86fdc9e0dec2",
+      "baseline": "AWAITING_EXPLICIT_FIXTURE_COMMIT_AUTHORIZATION",
+      "actualSkillInvocation": "NOT_RUN",
+      "live": "NOT_RUN"
+    }
+  ],
+  "harnessBaseline": {
+    "authority": "HARNESS_EXECUTED",
+    "tests": 2,
+    "passed": 0,
+    "failed": 2,
+    "exitCode": 1,
+    "skipped": 0
+  },
+  "codexDiscovery": {
+    "host": "codex",
+    "protocol": "LOCAL_APP_SERVER",
+    "methods": [
+      "initialize",
+      "skills/list",
+      "skills/list",
+      "skills/list"
+    ],
+    "modelTurnsRequested": 0,
+    "authenticationUsed": false,
+    "configScope": "TEMPORARY_CLEAN_HOME",
+    "states": [
+      {
+        "state": "enabled",
+        "exactLocalSkillMatches": 1,
+        "enabled": true,
+        "scope": "repo",
+        "errors": 0
+      },
+      {
+        "state": "disabled",
+        "exactLocalSkillMatches": 0,
+        "enabled": false,
+        "scope": null,
+        "errors": 0
+      },
+      {
+        "state": "enabled-again",
+        "exactLocalSkillMatches": 1,
+        "enabled": true,
+        "scope": "repo",
+        "errors": 0
+      }
+    ],
+    "status": "HOST_DISCOVERY_VERIFIED_NO_MODEL"
+  },
+  "claudeDiscovery": "NOT_RUN_INTERACTIVE_SESSION_REQUIRED",
+  "lifecycle": [
+    {
+      "host": "codex",
+      "installed": {
+        "host": "codex",
+        "status": "ENABLED",
+        "liveValidation": "NOT_RUN"
+      },
+      "disabled": {
+        "host": "codex",
+        "status": "DISABLE",
+        "liveValidation": "NOT_RUN"
+      },
+      "enabled": {
+        "host": "codex",
+        "status": "ENABLE",
+        "liveValidation": "NOT_RUN"
+      },
+      "removed": {
+        "host": "codex",
+        "status": "REMOVE",
+        "liveValidation": "NOT_RUN"
+      }
+    },
+    {
+      "host": "claude",
+      "installed": {
+        "host": "claude",
+        "status": "ENABLED",
+        "liveValidation": "NOT_RUN"
+      },
+      "disabled": {
+        "host": "claude",
+        "status": "DISABLE",
+        "liveValidation": "NOT_RUN"
+      },
+      "enabled": {
+        "host": "claude",
+        "status": "ENABLE",
+        "liveValidation": "NOT_RUN"
+      },
+      "removed": {
+        "host": "claude",
+        "status": "REMOVE",
+        "liveValidation": "NOT_RUN"
+      }
+    }
+  ],
+  "sources": {
+    "src/hosts/cli.mjs": "15c120428e6ed93c3ae06bfba6fa713a72f316fab12ccc1914da4bb4673205ec",
+    "src/hosts/exchange.mjs": "59dde2e608ce71af16b52aad3cb26a9e47a129547f9b979ce5969ca9c0236134",
+    "src/hosts/install.mjs": "6a957153871d03059a17f2a8a999bd84066d334fb44ea4713486e1e8255e4bb2",
+    "src/alpha/cli.mjs": "016e0b3bfebf6dce4cd1331f3b8a4a0e6c07c749bd23202bda3e1ab24dd820c3",
+    "src/alpha/controller.mjs": "e8a378d35d41665d173e0da2017ce3fad3c638f9cb7e0c75ce69d1e13ffbf67b",
+    "test/host.test.mjs": "18a41a1e4f1c5d03091099334017d88b7684798bf4edd1cbc304f3155aff99e4",
+    "scripts/host-acceptance-prepare.mjs": "bad82842220dca820dd2fc18730ef793bac2d6209744a54644f07df56382fe79",
+    "scripts/host-codex-discovery.mjs": "a67dcc983a5c9c11fb8dbcd53d060511715ee8809bbfe377efa6443c3413ad2c",
+    "scripts/host-acceptance-evidence.mjs": "b9c98da63a79248339ba9582ab496dc96430d9e0f4b81714380f7ec8bb422d4c"
+  }
+}

@@ -1,5 +1,15 @@
 # 진행 현황과 결정 목록
 
+> **H4:** [Host IPC and existing Docker Harness](../runs/2026-10-20/alpha-h4-host-ipc-harness.md) connect in the separated Linux offline fixture. Human input and actual Host deployment remain BLOCKED.
+
+> **H3 런타임:** [Linux UID·IPC와 Workflow 연결](../runs/2026-10-20/alpha-h3-operator-runtime.md). 오프라인 권한 반증과 제한된 자동화를 검증한다. 실제 Host client·격리·실행 서비스는 미완료이며 H2/전체 제품의 BLOCKED를 해제하지 않는다.
+
+> **H2 승인 경계:** [오프라인 구현과 반증](../runs/2026-10-20/alpha-h2-operator-isolation.md). 서명된 승인 원장과 Fake Agent UID 격리를 검증하며 공개 Host 실행은 차단한다. 실제 Operator 인증·Host OS/IPC·위험 효과별 집행은 미완료이며 전체 상태 BLOCKED다.
+
+> **H1 준비:** [실제 설치·발견 결과](../runs/2026-10-20/alpha-h1-host-acceptance-readiness.md), [Live 수용 패킷](host-live-acceptance.md). 양쪽 로컬 설치와 Codex 실제 로더 발견을 확인했다. 실제 Skill 호출·단일 Agent Live 실행·승인 권한 격리는 미검증/차단 상태다.
+
+> **Host-Native 전환:** [설계](../implementation/host-native.md), [사용 안내](host-native-guide.md), [실행 기록](../runs/2026-10-20/alpha-host-native-transition.md). 기존 Host 세션의 구조화 제안과 CodeFleet Harness를 연결하며 직접 API는 선택 사항으로 유지한다. Live Host 권한 경계와 실제 세션 검증은 미완료다. 아래 기록은 각 작업 당시의 상태다.
+
 > [제한 HTTPS 전송과 Provider 호환성](../runs/2026-10-20/alpha-g7c-live-transport-compatibility.md): 로컬 TLS·가짜 키 및 전체 회귀를 검증했다. 실제 모델 호출·API 인증 검증은 하지 않았으며 Live 실행과 엄격한 비용 상한은 차단/미지원 상태다. 아래 오프라인 HTTP 경로에 HTTPS 준비 계약을 추가한 미커밋 후속 변경이다.
 
 

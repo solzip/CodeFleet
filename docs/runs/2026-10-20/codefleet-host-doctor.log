@@ -1,0 +1,39 @@
+node : (node:55704) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+위치 줄:2 문자:1
++ node src/alpha/cli.mjs doctor > .codefleet/host-native-checkpoint/doc ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ((node:55704) Ex...nge at any time:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+(Use `node --trace-warnings ...` to show where the warning was created)
+{
+  "node": "v24.14.1",
+  "platform": "win32",
+  "checks": [
+    {
+      "name": "git",
+      "ok": true,
+      "detail": "git version 2.42.0.windows.2"
+    },
+    {
+      "name": "claude",
+      "ok": true,
+      "detail": "2.1.304 (Claude Code)"
+    },
+    {
+      "name": "github",
+      "ok": true,
+      "detail": "gh version 2.87.3 (2026-02-23)"
+    },
+    {
+      "name": "claude-authentication",
+      "ok": true,
+      "detail": "Authenticated; account identity omitted"
+    },
+    {
+      "name": "isolated-verifier",
+      "ok": true
+    }
+  ],
+  "githubAuthentication": "Needed only for PR delivery; checked on delivery. This diagnostic never prints account identities or tokens."
+}
