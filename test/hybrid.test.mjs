@@ -19,7 +19,7 @@ import { planIntent } from '../src/intent/engine.mjs';
 
 const source = () => ({ schemaVersion: 1, goal: 'Repair arithmetic regressions with protected tests.', files: ['src/a.js', 'src/b.js'], context: ['src/a.js', 'src/b.js'], tests: ['test/a.test.js', 'test/b.test.js'], maxAttempts: 3, timeoutSeconds: 120, attemptBudgetUsd: 1, delivery: { mode: 'local' } });
 const item = (id, dependencies = []) => ({ id, dependencies, priority: 0, files: [`src/${id}.js`], tests: [`test/${id}.test.js`], acceptanceCriteria: ['Protected arithmetic regression passes'], resources: [], roles: { Planner: 'planner', Architect: 'architect', Executor: 'executor', Reviewer: 'reviewer' } });
-const supported = () => ({ installed: true, identity: { id: 'claude', version: 'fake' }, capabilities: Object.fromEntries(CAPABILITIES.map(c => [c, { status: 'SUPPORTED' }])) });
+const supported = () => ({ installed: true, identity: { id: 'claude', version: 'fake' }, environment: Object.fromEntries(['filesystem_restriction', 'network_restriction', 'credential_isolation'].map(c => [c, { status: 'SUPPORTED', evidence: 'Fake host fixture only' }])), capabilities: Object.fromEntries(CAPABILITIES.map(c => [c, { status: 'SUPPORTED' }])) });
 async function setup(items = [item('a'), item('b', ['a'])]) {
   const root = await mkdtemp(path.join(tmpdir(), 'cf-workflow-')), repo = path.join(root, 'repo');
   await mkdir(path.join(repo, 'src'), { recursive: true }); await mkdir(path.join(repo, 'test'));

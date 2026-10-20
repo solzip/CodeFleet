@@ -3,6 +3,8 @@ import { createCodexAdapter } from './codex.mjs';
 import { CAPABILITIES } from './capabilities.mjs';
 import { ProviderError, resultRecord, fail, requireProposal } from './interface.mjs';
 
+export const PROPOSAL_ENVIRONMENT = Object.freeze(['filesystem_restriction', 'network_restriction', 'credential_isolation']);
+
 // ProviderRegistry is a small map of trusted host adapters, not a plugin loader.
 export function createRegistry(adapters = [createClaudeAdapter(), createCodexAdapter()]) {
   const registry = new Map();
@@ -19,13 +21,14 @@ export function createRegistry(adapters = [createClaudeAdapter(), createCodexAda
 export function selectProvider(registry, reports, { requested, projectDefault = 'claude', required = ['non_interactive_execution', 'structured_output', 'proposal_only'], environmentRequired = [], allowed = [...registry.keys()], previousAttempt = null } = {}) {
   if (required.some(c => !CAPABILITIES.includes(c))) throw Error('Unknown required capability');
   required = [...new Set(['non_interactive_execution', 'structured_output', 'proposal_only', ...required])];
+  environmentRequired = [...new Set([...PROPOSAL_ENVIRONMENT, ...environmentRequired])];
   const rejected = {}, eligible = [];
   for (const [id] of registry) {
     const report = reports.find(r => r.identity.id === id);
     const reasons = [];
     if (!report?.installed || !report.identity.version) reasons.push('Installation/version unavailable');
-    for (const name of required) if (report?.capabilities[name]?.status !== 'SUPPORTED') reasons.push(`Capability ${name} not verified supported`);
-    for (const name of environmentRequired) if (report?.environment[name]?.status !== 'SUPPORTED') reasons.push(`Environment ${name} not verified supported`);
+    for (const name of required) if (report?.capabilities?.[name]?.status !== 'SUPPORTED') reasons.push(`Capability ${name} not verified supported`);
+    for (const name of environmentRequired) if (report?.environment?.[name]?.status !== 'SUPPORTED') reasons.push(`Environment ${name} not verified supported`);
     if (!allowed.includes(id)) reasons.push('Denied by host policy');
     if (report?.executionBlocked) reasons.push(report.executionBlocked);
     if (reasons.length) rejected[id] = reasons; else eligible.push(id);

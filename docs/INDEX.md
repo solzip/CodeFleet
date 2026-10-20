@@ -2,9 +2,16 @@
 
 `docs/audits/`·`docs/runs/`·`docs/archive/`의 전 문서를 시간 역순으로 나열한다. 규약은 `docs/CONVENTIONS.md`, 결함 등재 현황은 `docs/REGISTER.md`.
 
-작성 기준: 2026-10-19. 전수 81개 문서 (감사 38 · 실행 36 · 아카이브 7). <!-- fact: docs-indexed = 81 --> <!-- fact: docs-on-disk = 81 -->
+작성 기준: 2026-10-20. 전수 83개 문서 (감사 38 · 실행 38 · 아카이브 7). <!-- fact: docs-indexed = 83 --> <!-- fact: docs-on-disk = 83 -->
 
 현재 공개 사용 제품 계획은 [제품 완성 문서](product-completion/README.md)에 있다. 기존 아카이브의 실측과 새 제품 계획을 구분하며, 구현 상태는 새 진행 현황에서 관리한다.
+
+## 2026-10-20
+
+| 날짜 | 문서 | 유형 | 결론(한 줄) | 후속 |
+| --- | --- | --- | --- | --- |
+| 10-20 | `runs/2026-10-20/alpha-g7c-live-transport-compatibility.md` | 구현·오프라인 검증 | 제한 HTTPS·인증·응답 계약, Live 차단 유지 | 승인·활성 모델·비용·Live attestation |
+| 10-20 | `runs/2026-10-20/alpha-g7b-proposal-only-model-interface.md` | 구현·오프라인 검증 | 도구 없는 모델 프로토콜·필수 환경 검사, Live 차단 유지 | Live 전송·인증·비용 검증 |
 
 ## 2026-10-19
 

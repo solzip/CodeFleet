@@ -1,0 +1,37 @@
+(node:30912) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ openai: structured edit, no tools, isolated fake credential, no ambient config (26.3812ms)
+✔ openai: tool calls, forged completion, wrong model, schema and scope rejected (13.4568ms)
+✔ anthropic: structured edit, no tools, isolated fake credential, no ambient config (2.4859ms)
+✔ anthropic: tool calls, forged completion, wrong model, schema and scope rejected (8.7459ms)
+✔ transport forbids live addresses, credential/config overrides and redirects (3.3369ms)
+✔ credential reflection, oversized response and HTTP failure remain safe and cost unknown (6.7565ms)
+✔ timeout, cancellation, stale ownership and request mutation cannot yield a proposal (145.8604ms)
+✔ semantic Planner uses the same environment hard gate and validates actual code citations (1512.188ms)
+✔ Sequential reuses controller, actual tests and CLI report; missing environment blocks (2656.0724ms)
+✔ Hybrid reuses controller, actual tests and CLI report; missing environment blocks (2699.3148ms)
+✔ wire protocol has no execution policy knobs and does not accept configuration from model input (0.3655ms)
+✔ host files, fake secrets and secondary network remain untouched by model tool requests (10.8543ms)
+✔ parallel requests have distinct host bindings; changed budgets and pre-cancelled requests fail closed (80.3604ms)
+✔ openai TLS: structured contract and credential isolation (40.2903ms)
+✔ openai TLS: HTTP rejection, rate limits, no retries or body leakage (34.8942ms)
+✔ openai TLS: refusal, incomplete, malformed, foreign envelope and tools (33.3844ms)
+✔ openai TLS: missing/invalid usage is unknown, not free (17.1376ms)
+✔ anthropic TLS: structured contract and credential isolation (4.8759ms)
+✔ anthropic TLS: HTTP rejection, rate limits, no retries or body leakage (26.9751ms)
+✔ anthropic TLS: refusal, incomplete, malformed, foreign envelope and tools (28.2664ms)
+✔ anthropic TLS: missing/invalid usage is unknown, not free (16.3569ms)
+✔ TLS rejects untrusted certificate and trusted certificate with wrong hostname (14.816ms)
+✔ fixed hosts/configuration, provider credentials, and Live capabilities fail closed (0.9025ms)
+✔ TLS credentials stay in transport; missing, bad, cross-provider and reflected values rejected (12.294ms)
+✔ TLS limits, incomplete HTTP and content type are enforced (26.0611ms)
+✔ TLS timeout, cancellation, stale Attempt and immutable request; no retry (150.6884ms)
+✔ request budget/token/size and original schema validation remain required (7.8941ms)
+ℹ tests 27
+ℹ suites 0
+ℹ pass 27
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7295.545

@@ -22,7 +22,7 @@ const envelope = () => JSON.stringify({ structured_output: proposal(), total_cos
 const identity = id => ({ id, version: 'fixture-1', platform: process.platform, executable: 'fake' });
 const events = () => [{ type: 'thread.started', thread_id: 'fixture' }, { type: 'turn.started' }, { type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify(proposal()) } }, { type: 'turn.completed', usage: { input_tokens: 10, output_tokens: 20 } }];
 const jsonl = values => values.map(v => JSON.stringify(v)).join('\n');
-const supported = id => ({ identity: identity(id), installed: true, capabilities: Object.fromEntries(CAPABILITIES.map(c => [c, { status: 'SUPPORTED', evidence: 'Fake provider contract fixture, not live evidence' }])), environment: { filesystem_restriction: { status: 'SUPPORTED' } } });
+const supported = id => ({ identity: identity(id), installed: true, capabilities: Object.fromEntries(CAPABILITIES.map(c => [c, { status: 'SUPPORTED', evidence: 'Fake provider contract fixture, not live evidence' }])), environment: Object.fromEntries(['filesystem_restriction', 'network_restriction', 'credential_isolation'].map(c => [c, { status: 'SUPPORTED', evidence: 'Fake host fixture only' }])) });
 
 test('Claude v1 flags/schema/context/environment remain bounded through the adapter', async () => {
   assert.equal(v1Args, providerArgs); assert.equal(v1Schema, responseSchema);
@@ -140,7 +140,9 @@ test('Balanced selection hard-filters before preference and uses deterministic t
 test('missing OS enforcement and post-attempt failover are denied without trusting preferences', () => {
   const registry = createRegistry([fake('claude'), fake('codex')]);
   const reports = [supported('claude'), supported('codex')];
-  assert.throws(() => selectProvider(registry, reports, { environmentRequired: ['network_restriction'] }), /Environment/);
+  const missingEnvironment = reports.map(r => ({ ...r, environment: {} }));
+  assert.throws(() => selectProvider(registry, missingEnvironment, { environmentRequired: [] }), /Environment/);
+  assert.throws(() => selectProvider(registry, missingEnvironment, { environmentRequired: ['network_restriction'] }), /Environment/);
   assert.throws(() => selectProvider(registry, reports, { requested: 'codex', previousAttempt: { providerId: 'claude', exited: true } }), /FALLBACK_BLOCKED/);
   reports[1].installed = false;
   assert.throws(() => selectProvider(registry, reports, { requested: 'codex' }), /CAPABILITY_UNAVAILABLE/);

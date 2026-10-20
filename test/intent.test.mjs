@@ -29,7 +29,7 @@ async function draftFor(repo) {
   return { schemaVersion: 2, objective, base: (await discover(repo, objective)).base, files: ['src/math.js'], tests: ['test/math.test.js'], criteria: [{ description: 'Subtraction regression passes', method: 'protected-tests', tests: ['test/math.test.js'] }], risks: [], unknowns: [], effects: ['local-edit'] };
 }
 async function validPlan(repo) { return planIntent(repo, objective, { draftInput: JSON.stringify(await draftFor(repo)) }); }
-const fake = (body, patch = {}) => ({ id: 'fake', tasks: ['intent-planning'], probe: async () => ({ identity: { id: 'fake', version: 'fixture' }, installed: true, capabilities: Object.fromEntries(CAPABILITIES.map(c => [c, { status: 'SUPPORTED' }])) }), execute: async () => ({ ...resultRecord({ id: 'fake' }, { stdout: Buffer.from(body), stderr: Buffer.alloc(0), exitCode: 0, interrupted: false, truncated: false }), status: 'PROPOSED', ...patch }) });
+const fake = (body, patch = {}) => ({ id: 'fake', tasks: ['intent-planning'], probe: async () => ({ identity: { id: 'fake', version: 'fixture' }, installed: true, environment: Object.fromEntries(['filesystem_restriction', 'network_restriction', 'credential_isolation'].map(c => [c, { status: 'SUPPORTED', evidence: 'Fake host fixture only' }])), capabilities: Object.fromEntries(CAPABILITIES.map(c => [c, { status: 'SUPPORTED' }])) }), execute: async () => ({ ...resultRecord({ id: 'fake' }, { stdout: Buffer.from(body), stderr: Buffer.alloc(0), exitCode: 0, interrupted: false, truncated: false }), status: 'PROPOSED', ...patch }) });
 
 test('natural-language planning preserves original intent and requires test coverage confirmation', async () => {
   const repo = await fixture(); const before = await readFile(path.join(repo, 'src/math.js'));

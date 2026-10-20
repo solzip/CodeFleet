@@ -1,0 +1,38 @@
+{
+  "base": "effb42b501c25865b19d955cea828cc5a7eb4b08",
+  "files": {
+    "src/providers/model-api.mjs": "22d2697ed3546d88992d397687fcfc5231ab909e2a4f1da85e9fc7ae20c7743f",
+    "src/providers/registry.mjs": "1f2d5bdb00d31fd2091a8a88fbf388cd0d9087ab970cde4494b8cc7230938e17",
+    "test/model-api.test.mjs": "63d3f915217f030a15f72674851655dc24f0fb0defbf2632cb1b3f0fd4c13922",
+    "test/providers.test.mjs": "f2012854386cafd8186b99577b8f28e5291a060234fad111d7a1c7ce8a42fa6c",
+    "test/intent.test.mjs": "4f9da1dffdf6291495ecedac9ba551413e54bd66f82ee21c47475af6ea094c3f",
+    "test/workflow.test.mjs": "18b52913c768d9ff558e61c3bf1fa8ef078f6ebd6a81dbe6cf17d89b59380ed0",
+    "test/hybrid.test.mjs": "57da0b0ee710f177bb6d6b7a0deb3ea710da6a8d387f1ac9cc079828871c7139",
+    "test/product.test.mjs": "8ae4ce3d204a20674d50dea12dab7043bc3261aba1fe1478e54e69dd21779865",
+    "package.json": "849361fc43967a6c90f3af15aea3382b69317c9dfe07130904d38550ea575295"
+  },
+  "preserved": {
+    "src/alpha/judge.mjs": true,
+    "src/alpha/controller.mjs": true,
+    "src/alpha/store.mjs": true,
+    "src/alpha/provider.mjs": true,
+    "src/providers/codex.mjs": true,
+    "src/providers/claude.mjs": true,
+    "src/intent/contract.mjs": true,
+    "src/workflow/definition.mjs": true,
+    "src/workflow/persistence.mjs": true,
+    "src/workflow/collaboration.mjs": true,
+    "src/product/cli.mjs": true
+  },
+  "verification": {
+    "fullExit": 0,
+    "legacy": 324,
+    "alphaAndExtensions": 138,
+    "total": 462,
+    "skipped": 0,
+    "posttestExit": 0,
+    "liveCalls": 0,
+    "realKeysUsed": 0
+  },
+  "scope": "OFFLINE_LOOPBACK_FAKE_ONLY; Live remains blocked"
+}

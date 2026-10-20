@@ -1,6 +1,11 @@
 # 진행 현황과 결정 목록
 
-> G6 로컬 통합 구현·검증 완료 (2026-10-19): [통합 결과와 Live 차단 사항](../runs/2026-10-19/alpha-g6-product-integration.md), [CLI 안내](orchestration-guide.md). 목표 제품 전체의 Live 준비 상태는 BLOCKED_OR_UNSUPPORTED다. 실제 의미 Planner·Provider 협업을 검증 완료로 표시하지 않는다. 커밋·배포하지 않은 개발 브랜치 결과다.
+> [제한 HTTPS 전송과 Provider 호환성](../runs/2026-10-20/alpha-g7c-live-transport-compatibility.md): 로컬 TLS·가짜 키 및 전체 회귀를 검증했다. 실제 모델 호출·API 인증 검증은 하지 않았으며 Live 실행과 엄격한 비용 상한은 차단/미지원 상태다. 아래 오프라인 HTTP 경로에 HTTPS 준비 계약을 추가한 미커밋 후속 변경이다.
+
+
+> [도구 없는 모델 인터페이스의 오프라인 구현](../runs/2026-10-20/alpha-g7b-proposal-only-model-interface.md): Fake Server 기반 제안·Planner·Workflow 연결과 필수 환경 검사를 추가했다. 외부 모델 endpoint와 실제 인증 경로는 제공하지 않으며 Live 차단을 유지한다. 이 후속 변경은 미커밋 상태다.
+
+> G6 로컬 통합 구현·검증 완료 (2026-10-19): [통합 결과와 Live 차단 사항](../runs/2026-10-19/alpha-g6-product-integration.md), [CLI 안내](orchestration-guide.md). 목표 제품 전체의 Live 준비 상태는 BLOCKED_OR_UNSUPPORTED다. 실제 의미 Planner·Provider 협업을 검증 완료로 표시하지 않는다. 이후 사용자 승인으로 개발 브랜치에 커밋·푸시했으며 제품 배포는 하지 않았다.
 
 > G5 완료 (2026-10-19): [통제형 협업·병렬 통합 검증](../runs/2026-10-19/alpha-g5-controlled-hybrid.md). 기존 순차 경로를 유지하면서 역할 메시징·격리된 병렬 후보·직렬 통합·복구 차단을 검증했다. Live Provider와 Live Planner는 미검증이며 실행 차단을 유지한다. G6 결과는 별도 기록으로 관리한다.
 
