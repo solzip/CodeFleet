@@ -2,7 +2,7 @@
 
 `docs/audits/`·`docs/runs/`·`docs/archive/`의 전 문서를 시간 역순으로 나열한다. 규약은 `docs/CONVENTIONS.md`, 결함 등재 현황은 `docs/REGISTER.md`.
 
-작성 기준: 2026-10-20. 전수 88개 문서 (감사 38 · 실행 43 · 아카이브 7). <!-- fact: docs-indexed = 88 --> <!-- fact: docs-on-disk = 88 -->
+작성 기준: 2026-10-20. 전수 91개 문서 (감사 38 · 실행 46 · 아카이브 7). <!-- fact: docs-indexed = 91 --> <!-- fact: docs-on-disk = 91 -->
 
 현재 공개 사용 제품 계획은 [제품 완성 문서](product-completion/README.md)에 있다. 기존 아카이브의 실측과 새 제품 계획을 구분하며, 구현 상태는 새 진행 현황에서 관리한다.
 
@@ -10,6 +10,9 @@
 
 | 날짜 | 문서 | 유형 | 결론(한 줄) | 후속 |
 | --- | --- | --- | --- | --- |
+| 10-20 | `runs/2026-10-20/alpha-h6-host-planning-isolation.md` | Planning / isolation | Offline worker and draft intake; real Host blocked | Host runtime and auth transport attestation |
+| 10-20 | `runs/2026-10-20/alpha-h5-codex-live-preflight.md` | Approved Live preflight | BLOCKED before model invocation; 0 calls | Prove no-tool and fixture-only isolation |
+| 10-20 | `runs/2026-10-20/alpha-h5-host-acceptance.md` | Host acceptance | Offline checks; live blocked | Isolated deployment and bounded live approval |
 | 10-20 | `runs/2026-10-20/alpha-h4-host-ipc-harness.md` | Host IPC / Harness | Linux process E2E; Host Live blocked | Human input and real Host isolation |
 | 10-20 | `runs/2026-10-20/alpha-h3-operator-runtime.md` | IPC·Workflow 반증 | Linux UID 승인 IPC와 실제 예약 연결, Host 수용 차단 유지 | Host 격리·IPC client·Harness 서비스 |
 | 10-20 | `runs/2026-10-20/alpha-h2-operator-isolation.md` | 승인·격리 반증 | 오프라인 서명 원장과 UID 반증, 생산 Host 실행 차단 | Operator 인증·OS/IPC·위험 효과 집행 |

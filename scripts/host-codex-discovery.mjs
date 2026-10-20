@@ -6,7 +6,9 @@ import path from 'node:path';
 import { manageHost } from '../src/hosts/install.mjs';
 import { environment } from '../src/alpha/process.mjs';
 
-const [executable, preparationFile] = process.argv.slice(2);
+const [executable, preparationFile, kind = 'execution'] = process.argv.slice(2);
+if (!['execution', 'planning'].includes(kind)) throw Error('Unknown discovery kind');
+const planning = kind === 'planning', skillName = planning ? 'codefleet-plan' : 'codefleet';
 if (!executable || !preparationFile || !path.isAbsolute(executable) || /\.(cmd|bat|ps1)$/i.test(executable)) throw Error('Native Codex executable and preparation.json required');
 const preparation = JSON.parse(await readFile(preparationFile, 'utf8'));
 const fixture = preparation.hosts.find(h => h.host === 'codex');
@@ -38,12 +40,12 @@ try {
   await request('initialize', { clientInfo: { name: 'codefleet_h1_discovery', version: '0.1.0' } });
   child.stdin.write(JSON.stringify({ method: 'initialized', params: {} }) + '\n');
   for (const state of ['enabled', 'disabled', 'enabled-again']) {
-    if (state === 'disabled') await manageHost(fixture.repo, 'codex', 'disable');
-    if (state === 'enabled-again') await manageHost(fixture.repo, 'codex', 'enable');
+    if (state === 'disabled') await manageHost(fixture.repo, 'codex', 'disable', { planning });
+    if (state === 'enabled-again') await manageHost(fixture.repo, 'codex', 'enable', { planning });
     const listed = await request('skills/list', { cwds: [fixture.repo], forceReload: true });
     const entry = listed.data?.find(d => path.resolve(d.cwd) === path.resolve(fixture.repo));
     if (!entry) throw Error('Requested cwd missing from Host result');
-    const found = entry.skills.filter(s => s.name === 'codefleet');
+    const found = entry.skills.filter(s => s.name === skillName);
     const matched = found.filter(s => path.resolve(s.path) === path.join(fixture.skill, 'SKILL.md'));
     const expected = state === 'disabled' ? 0 : 1;
     if (matched.length !== expected || entry.errors?.length) throw Error('Host discovery does not match installed lifecycle state');
@@ -53,7 +55,7 @@ try {
 } catch (error) { result.status = 'BLOCKED'; result.reason = error.message; process.exitCode = 1; }
 finally {
   // Restore only the fixture's owned skill and terminate only our local child.
-  await manageHost(fixture.repo, 'codex', 'enable').catch(() => {});
+  await manageHost(fixture.repo, 'codex', 'enable', { planning }).catch(() => {});
   child.stdin.end();
   await new Promise(resolve => { if (child.exitCode !== null) return resolve(); child.once('exit', resolve); setTimeout(() => { child.kill(); resolve(); }, 1500).unref(); });
   lines.close();

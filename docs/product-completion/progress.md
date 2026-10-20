@@ -156,3 +156,9 @@
 | 사람의 수고가 계약 작성으로 이동 | 준비·질문·확인까지 개입 시간에 포함 | 파일럿 비교 |
 | 공개했지만 설치·유지가 어려움 | 깨끗한 환경 설치·이슈 대응 준비 | 외부 사용자 완주 |
 | 과거 상태와 현재 상태 혼동 | 이 문서를 현재 진행의 단일 출처로 사용 | 근거 링크와 상태 일치 |
+
+H5 acceptance audit: see [environment, usability and live gates](../runs/2026-10-20/alpha-h5-host-acceptance.md). Codex discovery without model execution is verified; full Host Live remains BLOCKED. H4 IPC/Harness implementation is preserved.
+
+H5 limited Codex pilot authorization was subsequently received, but the pre-execution security gate remained **BLOCKED** and no model call was made. This supersedes the earlier pending-authorization wording for that pilot only. See the [separate Live preflight record](../runs/2026-10-20/alpha-h5-codex-live-preflight.md). No full execution or fixture commit was authorized.
+
+H6 adds [planning-only Skills and offline isolation](../implementation/host-planning.md). See the [H6 evidence record](../runs/2026-10-20/alpha-h6-host-planning-isolation.md). Real Host confinement and authentication/model transport remain BLOCKED.

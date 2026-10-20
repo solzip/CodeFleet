@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hash } from '../alpha/contract.mjs';
 import { hostIdentity } from './exchange.mjs';
+import { planningSkill } from './planning.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 async function regularTree(directory, prefix = '') {
@@ -16,7 +17,7 @@ async function regularTree(directory, prefix = '') {
   }
   return files.sort();
 }
-async function destination(project, host, create = false) {
+async function destination(project, host, create = false, planning = false) {
   hostIdentity(host);
   const base = await realpath(project);
   let current = base;
@@ -26,7 +27,7 @@ async function destination(project, host, create = false) {
     const stat = await lstat(current);
     if (!stat.isDirectory() || stat.isSymbolicLink()) throw Error('Unsafe install parent');
   }
-  return path.join(current, 'codefleet');
+  return path.join(current, planning ? 'codefleet-plan' : 'codefleet');
 }
 function skill(host) {
   return `---
@@ -52,23 +53,23 @@ Single-agent reasoning is the default. Planner, Architect, Executor and Reviewer
 Legacy local plan/review/prepare tooling remains preparation-only; public legacy requests/submit/run/resume remain blocked. No API key is needed by IPC. Host subscription limits apply; host session cost is unknown. Installing this Skill does not install or attest the trusted service. Do not bypass host permissions or CodeFleet approval gates.
 `;
 }
-export async function installHost(project, host) {
-  const target = await destination(project, host, true);
+export async function installHost(project, host, { planning = false } = {}) {
+  const target = await destination(project, host, true, planning);
   // Exclusive directory creation: never overwrite an existing skill.
   await mkdir(target);
-  const files = { 'SKILL.md': skill(host), LICENSE: await readFile(path.join(root, 'LICENSE'), 'utf8') };
-  for (const name of await regularTree(path.join(root, 'src'))) files['runtime/' + name] = await readFile(path.join(root, 'src', name));
+  const files = { 'SKILL.md': planning ? planningSkill(host) : skill(host), LICENSE: await readFile(path.join(root, 'LICENSE'), 'utf8') };
+  if (!planning) for (const name of await regularTree(path.join(root, 'src'))) files['runtime/' + name] = await readFile(path.join(root, 'src', name));
   const inventory = {};
   for (const [name, body] of Object.entries(files)) {
     const dest = path.join(target, name); await mkdir(path.dirname(dest), { recursive: true });
     await writeFile(dest, body, { flag: 'wx' }); inventory[name] = hash(Buffer.isBuffer(body) ? body : Buffer.from(body));
   }
   await writeFile(path.join(target, 'installation.json'), JSON.stringify({ schemaVersion: 1, host, files: inventory }, null, 2), { flag: 'wx' });
-  return { host, status: 'INSTALLED_OFFLINE', liveValidation: 'NOT_RUN', invocation: host === 'codex' ? '$codefleet' : '/codefleet' };
+  return { host, status: 'INSTALLED_OFFLINE', liveValidation: 'NOT_RUN', invocation: (host === 'codex' ? '$' : '/') + (planning ? 'codefleet-plan' : 'codefleet') };
 }
-export async function manageHost(project, host, action) {
+export async function manageHost(project, host, action, { planning = false } = {}) {
   if (!['enable', 'disable', 'remove', 'status'].includes(action)) throw Error('Unknown install action');
-  const target = await destination(project, host), stat = await lstat(target);
+  const target = await destination(project, host, false, planning), stat = await lstat(target);
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw Error('Unsafe installation target');
   const names = await regularTree(target);
   const receipt = JSON.parse(await readFile(path.join(target, 'installation.json'), 'utf8'));

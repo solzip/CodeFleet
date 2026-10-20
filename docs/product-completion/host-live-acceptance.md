@@ -1,4 +1,8 @@
-# H1 supervised Host acceptance packet
+# Supervised Host acceptance packet
+
+H5 current gate (2026-10-20): **BLOCKED for full Host Live**. H4 now supplies the Linux Host IPC client and restricted Harness service; the H1-H3 paragraphs below describe historical gates. H5 rechecks the installed Codex loader without model turns, both temporary Skill installations, and the offline regression path. Windows native IPC is unsupported; the current WSL UID can access Docker directly and cannot be treated as an isolated Agent. Human approval remains unattested. See the [H5 record](../runs/2026-10-20/alpha-h5-host-acceptance.md).
+
+A separately authorized first pilot may contain only one Codex read/proposal turn in the fresh temporary fixture. No writes, shell/network tools, Operator access, Harness execution, delegation or commits. Confirm enforceable tool restrictions before starting; otherwise remain BLOCKED. Existing host authentication may consume subscription quota and transmit fixture content to the host service. This pilot cannot establish complete product acceptance. Claude requires a separate later scope. No pilot is authorized by this document.
 
 Status: prepared, **not authorized or executed**. See the [H1 record](../runs/2026-10-20/alpha-h1-host-acceptance-readiness.md). Start with one Codex agent; repeat in Claude only after the first vertical path passes. No parallel agents or automatic delegation.
 
@@ -44,3 +48,5 @@ Actual role delegation and multi-agent collaboration require a subsequent scope 
 - [Claude Code skills](https://code.claude.com/docs/en/skills): project `.claude/skills` and standalone slash invocation. H1 did not start an interactive Claude session.
 
 Install success, actual discovery, actual invocation, host execution and independently verified completion are separate acceptance claims.
+
+H5 limited Codex pilot authorization was subsequently received, but the pre-execution security gate remained **BLOCKED** and no model call was made. This supersedes the earlier pending-authorization wording for that pilot only. See the [separate Live preflight record](../runs/2026-10-20/alpha-h5-codex-live-preflight.md). No full execution or fixture commit was authorized.

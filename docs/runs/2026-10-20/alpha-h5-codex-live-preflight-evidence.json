@@ -1,0 +1,116 @@
+{
+  "date": "2026-10-20",
+  "head": "81144a6dedb7e73b41b0029d14161943bffdfaeb",
+  "status": "BLOCKED",
+  "scope": "approved single Codex Skill read/proposal test",
+  "version": "0.162.1",
+  "liveCalls": 0,
+  "threadStartCalls": 0,
+  "turnStartCalls": 0,
+  "model": null,
+  "sessionId": null,
+  "proposal": null,
+  "cost": null,
+  "costReason": "No test request; billing ledger not queried",
+  "schemas": [
+    {
+      "name": "ThreadStartParams",
+      "sha256": "80a40a7fac15b4bf70efb7f893fb353acc0a0d30c68f54aee4f01923deca85de",
+      "properties": [
+        "allowProviderModelFallback",
+        "approvalPolicy",
+        "approvalsReviewer",
+        "baseInstructions",
+        "config",
+        "cwd",
+        "daybreakEnabled",
+        "developerInstructions",
+        "dynamicTools",
+        "environments",
+        "ephemeral",
+        "experimentalRawEvents",
+        "historyMode",
+        "mockExperimentalField",
+        "model",
+        "modelProvider",
+        "multiAgentMode",
+        "permissions",
+        "personality",
+        "projectId",
+        "runtimeWorkspaceRoots",
+        "sandbox",
+        "selectedCapabilityRoots",
+        "serviceName",
+        "serviceTier",
+        "sessionStartSource",
+        "threadSource"
+      ]
+    },
+    {
+      "name": "TurnStartParams",
+      "sha256": "062373a7dfc290b506e591bc5c2a35005211df27b3c60358cee3efed12859062",
+      "properties": [
+        "additionalContext",
+        "approvalPolicy",
+        "approvalsReviewer",
+        "clientUserMessageId",
+        "collaborationMode",
+        "cwd",
+        "cyberAccessProgram",
+        "disabledPluginIds",
+        "effort",
+        "environments",
+        "input",
+        "model",
+        "multiAgentMode",
+        "outputSchema",
+        "parentTurnId",
+        "permissions",
+        "personality",
+        "responsesapiClientMetadata",
+        "rootTurnId",
+        "runtimeWorkspaceRoots",
+        "sandboxPolicy",
+        "serviceTier",
+        "serviceTierForTurn",
+        "summary",
+        "threadId",
+        "toolOutput",
+        "turnTrigger"
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "command": "codex.cmd --version",
+      "exit": 0
+    },
+    {
+      "command": "codex.cmd app-server --help",
+      "exit": 0
+    },
+    {
+      "command": "codex.cmd exec --help",
+      "exit": 0
+    },
+    {
+      "command": "codex.cmd app-server generate-json-schema --help",
+      "exit": 0
+    },
+    {
+      "command": "codex.cmd app-server generate-json-schema --experimental --out <ignored-checkpoint>",
+      "exit": 0
+    },
+    {
+      "command": "codex.cmd features list",
+      "exit": 0
+    }
+  ],
+  "blockers": [
+    "All-tool execution prohibition not proven",
+    "Fixture-only access enforcement not proven"
+  ],
+  "priorSkillDiscovery": "See alpha-h5-source-evidence.json; not rerun in this preflight",
+  "liveVerification": "NOT_RUN",
+  "regression": "Prior H5 522 passes; not rerun for documentation-only change"
+}
