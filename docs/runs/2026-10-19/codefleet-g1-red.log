@@ -47,10 +47,10 @@ test at test\alpha.test.mjs:46:1
 ✖ alpha judgment rejects absent and provider-only authority even with passing counts (0.5922ms)
   AssertionError [ERR_ASSERTION]: undefined
   + actual - expected
-  
+
   + 'ACCEPT'
   - 'ESCALATE'
-  
+
       at TestContext.<anonymous> (file:///C:/Users/<USER>/Desktop/%EA%B0%9C%EC%9D%B8/sol/codeFleet/codeFleet/.codefleet/worktrees/alpha-g0/test/alpha.test.mjs:48:12)
       at Test.runInAsyncScope (node:async_hooks:228:14)
       at Test.run (node:internal/test_runner/test:1118:25)
@@ -70,9 +70,9 @@ test at test\alpha.test.mjs:46:1
 test at test\alpha.test.mjs:56:1
 ✖ alpha refuses an unobserved baseline before spending a provider attempt (69.7043ms)
   AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
-  
+
   2 !== 0
-  
+
       at TestContext.<anonymous> (file:///C:/Users/<USER>/Desktop/%EA%B0%9C%EC%9D%B8/sol/codeFleet/codeFleet/.codefleet/worktrees/alpha-g0/test/alpha.test.mjs:63:14)
       at async Test.run (node:internal/test_runner/test:1125:7)
       at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
@@ -88,10 +88,10 @@ test at test\alpha.test.mjs:70:1
 ✖ alpha does not complete or deliver on provider-only candidate evidence (56.6944ms)
   AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
   + actual - expected
-  
+
   + 'COMPLETED'
   - 'WAITING_HUMAN'
-  
+
       at TestContext.<anonymous> (file:///C:/Users/<USER>/Desktop/%EA%B0%9C%EC%9D%B8/sol/codeFleet/codeFleet/.codefleet/worktrees/alpha-g0/test/alpha.test.mjs:77:12)
       at async Test.run (node:internal/test_runner/test:1125:7)
       at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
@@ -107,10 +107,10 @@ test at test\alpha.test.mjs:131:1
 ✖ alpha reconciliation refuses missing or tampered evidence before delivery (207.7737ms)
   AssertionError [ERR_ASSERTION]: provider-only
   + actual - expected
-  
+
   + 'COMPLETED'
   - 'RECONCILING'
-  
+
       at TestContext.<anonymous> (file:///C:/Users/<USER>/Desktop/%EA%B0%9C%EC%9D%B8/sol/codeFleet/codeFleet/.codefleet/worktrees/alpha-g0/test/alpha.test.mjs:144:14)
       at async Test.run (node:internal/test_runner/test:1125:7)
       at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {

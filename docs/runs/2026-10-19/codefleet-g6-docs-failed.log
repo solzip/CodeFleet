@@ -26,7 +26,7 @@ lpha-g0/scripts/check-links.mjs:237
 + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     + CategoryInfo          : NotSpecified: (file:///C:/User...k-links.mjs:237:String) [], RemoteException
     + FullyQualifiedErrorId : NativeCommandError
- 
+
     throw new Error(
           ^
 

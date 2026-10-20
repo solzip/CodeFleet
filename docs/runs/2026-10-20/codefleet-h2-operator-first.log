@@ -1,70 +1,70 @@
-(node:26972) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
-✔ operator: fake signed normal action is single-use, durable and not verification (49.912ms)
-✔ operator: actor strings, direct agent approval, hooks and stolen unsigned receipts fail (25.785ms)
-✔ operator: current runId change invalidates approval (38.3913ms)
-✔ operator: current workItemId change invalidates approval (23.8552ms)
-✔ operator: current revision change invalidates approval (22.708ms)
-✔ operator: current contractHash change invalidates approval (29.4569ms)
-✔ operator: current repository change invalidates approval (35.859ms)
-✔ operator: current environment change invalidates approval (20.9946ms)
-✔ operator: current policyHash change invalidates approval (22.757ms)
-✔ operator: current leaseOwner change invalidates approval (29.4037ms)
-✔ operator: expiry, revoked/denied decisions, cancel, pause and lease expiration block dispatch (172.8115ms)
-✔ operator: command changes and signed decision tampering fail (37.7513ms)
-✔ operator: recheck after reservation rejects changed state without returning grant use (42.1348ms)
-✔ operator: concurrent dispatch and failed execution cannot duplicate or retry (32.3539ms)
-✔ operator: Fake Operator signs in a separate process and trusted executor performs bounded file write (181.318ms)
-✔ operator: same-account child CAN steal fake secret; production host execution stays blocked (82.6112ms)
-✖ operator: isolated Fake Agent and descendant cannot access broker files or Docker socket (958.8663ms)
-ℹ tests 17
-ℹ suites 0
-ℹ pass 16
-ℹ fail 1
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 1960.9521
-
-✖ failing tests:
-
-test at test\operator.test.mjs:139:1
-✖ operator: isolated Fake Agent and descendant cannot access broker files or Docker socket (958.8663ms)
-  AssertionError [ERR_ASSERTION]: [eval]:1
-  const fs=require('node:fs'),cp=require('node:child_process');const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync('/operator/operator.sqlite');db.exec('CREATE TABLE approval(state TEXT); INSERT INTO approval VALUES ("PENDING")');db.close();fs.writeFileSync('/operator/fake-key','FAKE_ONLY',{mode:0o600});const before=fs.readFileSync('/operator/operator.sqlite');const result=cp.spawnSync(process.execPath,['-e',"const cp=require('node:child_process');const code=\"const fs=require('node:fs');const paths=['/operator/operator.sqlite','/operator/fake-key'];const checks=paths.map(p=>{let read=false,write=false,readError,writeError;try{fs.readFileSync(p);read=true}catch(e){readError=e.code}try{fs.writeFileSync(p,'forged');write=true}catch(e){writeError=e.code}return {read,write,readError,writeError}});let elevate=false;try{process.setuid(0);elevate=true}catch{};console.log(JSON.stringify({uid:process.getuid(),checks,elevate,socket:fs.existsSync('/var/run/docker.sock')}));\";const parent=cp.spawnSync(process.execPath,['-e',code],{encoding:'utf8'});const child=cp.spawnSync(process.execPath,['-e',code],{encoding:'utf8'});console.log(JSON.stringify({parent:JSON.parse(parent.stdout),child:JSON.parse(child.stdout),exits:[parent.status,child.status]}));"],{uid:65534,gid:65534,encoding:'utf8'});if(result.status!==0)throw Error(result.stderr);console.log(JSON.stringify({agent:JSON.parse(result.stdout),unchanged:before.equals(fs.readFileSync('/operator/operator.sqlite'))&&fs.readFileSync('/operator/fake-key','utf8')==='FAKE_ONLY'}));
-                                                                                                                                                                     ^
-  
-  Error: no such column: "PENDING" - should this be a string literal in single-quotes?
-      at [eval]:1:164
-      at runScriptInThisContext (node:internal/vm:219:10)
-      at node:internal/process/execution:451:12
-      at [eval]-wrapper:6:24
-      at runScriptInContext (node:internal/process/execution:449:60)
-      at evalFunction (node:internal/process/execution:283:30)
-      at evalTypeScript (node:internal/process/execution:295:3)
-      at node:internal/main/eval_string:71:3 {
-    code: 'ERR_SQLITE_ERROR',
-    errcode: 1,
-    errstr: 'SQL logic error'
-  }
-  
-  Node.js v24.21.0
-  
-  
-  1 !== 0
-  
-      at TestContext.<anonymous> (file:///<WORKTREE>/test/operator.test.mjs:148:12)
-      at Test.runInAsyncScope (node:async_hooks:228:14)
-      at Test.run (node:internal/test_runner/test:1118:25)
-      at Test.processPendingSubtests (node:internal/test_runner/test:787:18)
-      at Test.postRun (node:internal/test_runner/test:1247:19)
-      at Test.run (node:internal/test_runner/test:1175:12)
-      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
-      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
-    generatedMessage: false,
-    code: 'ERR_ASSERTION',
-    actual: 1,
-    expected: 0,
-    operator: 'strictEqual',
-    diff: 'simple'
-  }
+(node:26972) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ operator: fake signed normal action is single-use, durable and not verification (49.912ms)
+✔ operator: actor strings, direct agent approval, hooks and stolen unsigned receipts fail (25.785ms)
+✔ operator: current runId change invalidates approval (38.3913ms)
+✔ operator: current workItemId change invalidates approval (23.8552ms)
+✔ operator: current revision change invalidates approval (22.708ms)
+✔ operator: current contractHash change invalidates approval (29.4569ms)
+✔ operator: current repository change invalidates approval (35.859ms)
+✔ operator: current environment change invalidates approval (20.9946ms)
+✔ operator: current policyHash change invalidates approval (22.757ms)
+✔ operator: current leaseOwner change invalidates approval (29.4037ms)
+✔ operator: expiry, revoked/denied decisions, cancel, pause and lease expiration block dispatch (172.8115ms)
+✔ operator: command changes and signed decision tampering fail (37.7513ms)
+✔ operator: recheck after reservation rejects changed state without returning grant use (42.1348ms)
+✔ operator: concurrent dispatch and failed execution cannot duplicate or retry (32.3539ms)
+✔ operator: Fake Operator signs in a separate process and trusted executor performs bounded file write (181.318ms)
+✔ operator: same-account child CAN steal fake secret; production host execution stays blocked (82.6112ms)
+✖ operator: isolated Fake Agent and descendant cannot access broker files or Docker socket (958.8663ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 16
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1960.9521
+
+✖ failing tests:
+
+test at test\operator.test.mjs:139:1
+✖ operator: isolated Fake Agent and descendant cannot access broker files or Docker socket (958.8663ms)
+  AssertionError [ERR_ASSERTION]: [eval]:1
+  const fs=require('node:fs'),cp=require('node:child_process');const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync('/operator/operator.sqlite');db.exec('CREATE TABLE approval(state TEXT); INSERT INTO approval VALUES ("PENDING")');db.close();fs.writeFileSync('/operator/fake-key','FAKE_ONLY',{mode:0o600});const before=fs.readFileSync('/operator/operator.sqlite');const result=cp.spawnSync(process.execPath,['-e',"const cp=require('node:child_process');const code=\"const fs=require('node:fs');const paths=['/operator/operator.sqlite','/operator/fake-key'];const checks=paths.map(p=>{let read=false,write=false,readError,writeError;try{fs.readFileSync(p);read=true}catch(e){readError=e.code}try{fs.writeFileSync(p,'forged');write=true}catch(e){writeError=e.code}return {read,write,readError,writeError}});let elevate=false;try{process.setuid(0);elevate=true}catch{};console.log(JSON.stringify({uid:process.getuid(),checks,elevate,socket:fs.existsSync('/var/run/docker.sock')}));\";const parent=cp.spawnSync(process.execPath,['-e',code],{encoding:'utf8'});const child=cp.spawnSync(process.execPath,['-e',code],{encoding:'utf8'});console.log(JSON.stringify({parent:JSON.parse(parent.stdout),child:JSON.parse(child.stdout),exits:[parent.status,child.status]}));"],{uid:65534,gid:65534,encoding:'utf8'});if(result.status!==0)throw Error(result.stderr);console.log(JSON.stringify({agent:JSON.parse(result.stdout),unchanged:before.equals(fs.readFileSync('/operator/operator.sqlite'))&&fs.readFileSync('/operator/fake-key','utf8')==='FAKE_ONLY'}));
+                                                                                                                                                                     ^
+
+  Error: no such column: "PENDING" - should this be a string literal in single-quotes?
+      at [eval]:1:164
+      at runScriptInThisContext (node:internal/vm:219:10)
+      at node:internal/process/execution:451:12
+      at [eval]-wrapper:6:24
+      at runScriptInContext (node:internal/process/execution:449:60)
+      at evalFunction (node:internal/process/execution:283:30)
+      at evalTypeScript (node:internal/process/execution:295:3)
+      at node:internal/main/eval_string:71:3 {
+    code: 'ERR_SQLITE_ERROR',
+    errcode: 1,
+    errstr: 'SQL logic error'
+  }
+
+  Node.js v24.21.0
+
+
+  1 !== 0
+
+      at TestContext.<anonymous> (file:///<WORKTREE>/test/operator.test.mjs:148:12)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:787:18)
+      at Test.postRun (node:internal/test_runner/test:1247:19)
+      at Test.run (node:internal/test_runner/test:1175:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

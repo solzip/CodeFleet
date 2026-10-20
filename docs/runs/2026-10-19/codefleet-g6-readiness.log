@@ -4,7 +4,7 @@ node : (node:49664) ExperimentalWarning: SQLite is an experimental feature and m
 + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     + CategoryInfo          : NotSpecified: ((node:49664) Ex...nge at any time:String) [], RemoteException
     + FullyQualifiedErrorId : NativeCommandError
- 
+
 (Use `node --trace-warnings ...` to show where the warning was created)
 {
   "schemaVersion": 1,

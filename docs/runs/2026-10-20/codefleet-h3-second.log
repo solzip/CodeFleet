@@ -1,46 +1,46 @@
-(node:59672) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
-✔ H3: protected workflow cannot reopen through legacy actor approval or missing guard (107.8559ms)
-✔ H3: actual reserve denies risky work before inserting an attempt and consumes exact approved action (128.9992ms)
-✔ H3: revision, pause, lease change and unsupported effects invalidate execution (128.0858ms)
-✔ H3: confined actual Workflow and independent tests complete without per-action human grants (1672.1448ms)
-✖ H3: real Linux authenticated IPC, Operator and Agent UIDs, attacks and workflow assignments (3344.0263ms)
-ℹ tests 5
-ℹ suites 0
-ℹ pass 4
-ℹ fail 1
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 5477.4506
-
-✖ failing tests:
-
-test at test\operator-runtime.test.mjs:83:1
-✖ H3: real Linux authenticated IPC, Operator and Agent UIDs, attacks and workflow assignments (3344.0263ms)
-  AssertionError [ERR_ASSERTION]: Traceback (most recent call last):
-    File "/app/test/fixtures/operator-ipc-probe.py", line 108, in <module>
-      server.terminate(); server.wait(timeout=10)
-    File "/usr/local/lib/python3.10/subprocess.py", line 2117, in terminate
-      self.send_signal(signal.SIGTERM)
-    File "/usr/local/lib/python3.10/subprocess.py", line 2109, in send_signal
-      os.kill(self.pid, sig)
-  PermissionError: [Errno 1] Operation not permitted
-  
-  
-  1 !== 0
-  
-      at TestContext.<anonymous> (file:///<WORKTREE>/test/operator-runtime.test.mjs:88:10)
-      at Test.runInAsyncScope (node:async_hooks:228:14)
-      at Test.run (node:internal/test_runner/test:1118:25)
-      at Test.processPendingSubtests (node:internal/test_runner/test:787:18)
-      at Test.postRun (node:internal/test_runner/test:1247:19)
-      at Test.run (node:internal/test_runner/test:1175:12)
-      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
-    generatedMessage: false,
-    code: 'ERR_ASSERTION',
-    actual: 1,
-    expected: 0,
-    operator: 'strictEqual',
-    diff: 'simple'
-  }
+(node:59672) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ H3: protected workflow cannot reopen through legacy actor approval or missing guard (107.8559ms)
+✔ H3: actual reserve denies risky work before inserting an attempt and consumes exact approved action (128.9992ms)
+✔ H3: revision, pause, lease change and unsupported effects invalidate execution (128.0858ms)
+✔ H3: confined actual Workflow and independent tests complete without per-action human grants (1672.1448ms)
+✖ H3: real Linux authenticated IPC, Operator and Agent UIDs, attacks and workflow assignments (3344.0263ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 4
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5477.4506
+
+✖ failing tests:
+
+test at test\operator-runtime.test.mjs:83:1
+✖ H3: real Linux authenticated IPC, Operator and Agent UIDs, attacks and workflow assignments (3344.0263ms)
+  AssertionError [ERR_ASSERTION]: Traceback (most recent call last):
+    File "/app/test/fixtures/operator-ipc-probe.py", line 108, in <module>
+      server.terminate(); server.wait(timeout=10)
+    File "/usr/local/lib/python3.10/subprocess.py", line 2117, in terminate
+      self.send_signal(signal.SIGTERM)
+    File "/usr/local/lib/python3.10/subprocess.py", line 2109, in send_signal
+      os.kill(self.pid, sig)
+  PermissionError: [Errno 1] Operation not permitted
+
+
+  1 !== 0
+
+      at TestContext.<anonymous> (file:///<WORKTREE>/test/operator-runtime.test.mjs:88:10)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:787:18)
+      at Test.postRun (node:internal/test_runner/test:1247:19)
+      at Test.run (node:internal/test_runner/test:1175:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

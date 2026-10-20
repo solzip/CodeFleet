@@ -484,13 +484,13 @@ test at test\hybrid.test.mjs:214:1
 ✖ hybrid real Docker verifies parallel candidates and final combined tree (5692.0152ms)
   AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
   + actual - expected
-  
+
     [
   +   'src/b.js',
       'src/a.js',
   -   'src/b.js'
     ]
-  
+
       at TestContext.<anonymous> (file:///C:/Users/[redacted-local-profile]/Desktop/%EA%B0%9C%EC%9D%B8/sol/codeFleet/codeFleet/.codefleet/worktrees/alpha-g0/test/hybrid.test.mjs:220:12)
       at async Test.run (node:internal/test_runner/test:1125:7)
       at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {

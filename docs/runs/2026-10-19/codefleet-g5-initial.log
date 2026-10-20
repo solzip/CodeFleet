@@ -47,9 +47,9 @@
 test at test\hybrid.test.mjs:51:1
 ✖ hybrid independent work overlaps, isolates candidates and integrates deterministically (1992.2567ms)
   AssertionError [ERR_ASSERTION]: The input did not match the regular expression /a+b/. Input:
-  
+
   'module.exports = (a,b) => a+b;'
-  
+
       at TestContext.<anonymous> (file:///C:/Users/[redacted-local-profile]/Desktop/%EA%B0%9C%EC%9D%B8/sol/codeFleet/codeFleet/.codefleet/worktrees/alpha-g0/test/hybrid.test.mjs:64:12)
       at async Test.run (node:internal/test_runner/test:1125:7)
       at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
@@ -65,10 +65,10 @@ test at test\hybrid.test.mjs:82:1
 ✖ role messages are durable untrusted proposals, duplicate safe and cannot authorize (1783.5429ms)
   AssertionError [ERR_ASSERTION]: Child verification/approval failed; subsequent WorkItems blocked
   + actual - expected
-  
+
   + 'WAITING_HUMAN'
   - 'COMPLETED'
-  
+
       at TestContext.<anonymous> (file:///C:/Users/[redacted-local-profile]/Desktop/%EA%B0%9C%EC%9D%B8/sol/codeFleet/codeFleet/.codefleet/worktrees/alpha-g0/test/hybrid.test.mjs:97:12)
       at async Test.run (node:internal/test_runner/test:1125:7)
       at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {

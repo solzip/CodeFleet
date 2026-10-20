@@ -1,11 +1,11 @@
-H4 observations: {"status":"OFFLINE_VERIFIED","checks":["natural-goal-request-only","fixed-contract-and-role-plan","operator-impersonation-denied-1001","operator-impersonation-denied-1002","operator-human-input-unattested-denied","legacy-agent-interface-denied","body-actor-denied","arbitrary-command-denied","missing-proposals-denied","risk-execution-denied","approval-request-not-approval","key-ledger-repository-docker-child-denied","forged-evidence-fields-denied","bounded-execution-accepted","duplicate-request-no-execution","duplicate-id-conflict","real-docker-harness-and-judge","artifact-candidate-recheck","durable-replay-after-restart","durable-evidence-after-restart","cancel-request","cancelled-resume-denied","abrupt-crash-not-completion"],"modelCalls":0,"hostLive":"NOT_RUN","humanInput":"BLOCKED","tests":1}
-✔ H4: Host client has bounded data-only methods and fails closed off Linux (1.2318ms)
-✔ H4: separated Linux Host IPC reaches existing Docker Harness, evidence and Judge (10944.2668ms)
-ℹ tests 2
-ℹ suites 0
-ℹ pass 2
-ℹ fail 0
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 11034.2361
+H4 observations: {"status":"OFFLINE_VERIFIED","checks":["natural-goal-request-only","fixed-contract-and-role-plan","operator-impersonation-denied-1001","operator-impersonation-denied-1002","operator-human-input-unattested-denied","legacy-agent-interface-denied","body-actor-denied","arbitrary-command-denied","missing-proposals-denied","risk-execution-denied","approval-request-not-approval","key-ledger-repository-docker-child-denied","forged-evidence-fields-denied","bounded-execution-accepted","duplicate-request-no-execution","duplicate-id-conflict","real-docker-harness-and-judge","artifact-candidate-recheck","durable-replay-after-restart","durable-evidence-after-restart","cancel-request","cancelled-resume-denied","abrupt-crash-not-completion"],"modelCalls":0,"hostLive":"NOT_RUN","humanInput":"BLOCKED","tests":1}
+✔ H4: Host client has bounded data-only methods and fails closed off Linux (1.2318ms)
+✔ H4: separated Linux Host IPC reaches existing Docker Harness, evidence and Judge (10944.2668ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 11034.2361

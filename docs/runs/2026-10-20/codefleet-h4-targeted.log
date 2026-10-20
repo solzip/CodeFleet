@@ -1,116 +1,116 @@
-H4 observations: {"status":"OFFLINE_VERIFIED","checks":["natural-goal-request-only","fixed-contract-and-role-plan","operator-impersonation-denied-1001","operator-impersonation-denied-1002","operator-human-input-unattested-denied","legacy-agent-interface-denied","body-actor-denied","arbitrary-command-denied","missing-proposals-denied","risk-execution-denied","approval-request-not-approval","key-ledger-repository-docker-child-denied","server-message-bound","changed-graph-before-dispatch-denied","forged-evidence-fields-denied","bounded-execution-accepted","duplicate-request-no-execution","duplicate-id-conflict","real-docker-harness-and-judge","artifact-candidate-recheck","durable-replay-after-restart","durable-evidence-after-restart","cancel-request","cancelled-resume-denied","abrupt-crash-not-completion","crash-no-child-replay","uncertain-request-not-replayed","tampered-artifact-not-verified"],"modelCalls":0,"hostLive":"NOT_RUN","humanInput":"BLOCKED","tests":1}
-✔ H4: Host client has bounded data-only methods and fails closed off Linux (1.2802ms)
-✔ H4: separated Linux Host IPC reaches existing Docker Harness, evidence and Judge (13437.1267ms)
-(node:28380) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
-✔ codex: intent, approved DAG, fake-host proposals, actual tests, final integration (4402.3004ms)
-✖ codex: install, packaged CLI invocation, disable, enable, remove smoke (174.4795ms)
-✔ claude: intent, approved DAG, fake-host proposals, actual tests, final integration (4270.8912ms)
-✖ claude: install, packaged CLI invocation, disable, enable, remove smoke (158.4857ms)
-✔ host command cannot authorize, complete, invoke models or accept capability claims (1696.594ms)
-✔ duplicate, forged, foreign-host, extra evidence and out-of-scope responses fail closed (2247.8912ms)
-✔ concurrent issuance returns one durable request per item (2175.832ms)
-✔ unverified host success cannot replace failed Harness tests (2913.9651ms)
-✔ missing packets and revoked approval reserve no attempts (1923.693ms)
-✔ pause/resume uses staged input once and cancellation cannot replay (5729.9646ms)
-✔ request revision and artifact corruption cannot promote to execution (2037.3438ms)
-✔ state reopen preserves requests without migrating or rewriting existing rows (2243.6696ms)
-✔ fabricated attempt cannot consume a response (2081.1803ms)
-✔ old revision and unavailable mandatory capability are rejected (2724.5833ms)
-✔ failed consumed attempt is not replayed after reopen (3152.5966ms)
-✔ post-verification tree and evidence tampering invalidate reports (4071.2909ms)
-✔ modified installation is preserved and oversized response is rejected (132.4169ms)
-✔ installer refuses a redirected parent (2.4665ms)
-✔ Host-Native fake session with production Docker Harness (7475.86ms)
-(node:39704) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
-✔ H3: protected workflow cannot reopen through legacy actor approval or missing guard (126.222ms)
-✔ H3: actual reserve denies risky work before inserting an attempt and consumes exact approved action (180.018ms)
-✔ H3: revision, pause, lease change and unsupported effects invalidate execution (196.3886ms)
-H3 IPC observations: {"status":"OFFLINE_VERIFIED","checks":["unknown-uid-denied","agent-operator-impersonation-denied","unapproved-risk-assignment-denied","json-identity-fields-denied","operator-decision-accepted","approved-real-workflow-reservation","duplicate-assignment-denied","safe-open-without-human","safe-automatic-assignment","revoked-assignment-denied","expired-assignment-denied","resume-old-lease-grant-denied","graph-revision-reuse-denied","remote-command-denied","agent-store-access-denied","descendant-store-access-denied","same-uid-runtime-refused","writable-ancestor-runtime-refused"],"modelCalls":0,"humanPresence":"NOT_TESTED"}
-✔ H3: confined actual Workflow and independent tests complete without per-action human grants (2069.9579ms)
-✔ H3: real Linux authenticated IPC, Operator and Agent UIDs, attacks and workflow assignments (4255.0409ms)
-ℹ tests 26
-ℹ suites 0
-ℹ pass 24
-ℹ fail 2
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 49731.5562
-
-✖ failing tests:
-
-test at test\host.test.mjs:61:3
-✖ codex: install, packaged CLI invocation, disable, enable, remove smoke (174.4795ms)
-  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /operator/. Input:
-  
-  '---\n' +
-    'name: codefleet\n' +
-    'description: Plan, review and independently verify scoped development work through CodeFleet in the current host session.\n' +
-    '---\n' +
-    '\n' +
-    '# CodeFleet\n' +
-    '\n' +
-    "H4 Linux IPC path: use this skill's runtime/hosts/ipc-client.mjs with Node 24.14.1 or newer. Resolve CLIENT relative to this SKILL.md. A trusted administrator must supply SOCKET and RUN_ID for an already validated, fixed-scope workflow. Never start an Operator process as the Agent, change the catalog, or open trusted state. Windows Native, WSL2 deployment and live Host confinement remain BLOCKED/unverified. Do not use internal modules or legacy objective approve to bypass this gate.\n" +
-    '\n' +
-    'Call node CLIENT SOCKET METHOD PARAMS_JSON REQUEST_ID. Use a unique UUID for each action; retain the same ID and identical body on uncertain delivery. Quote each argument for the current shell. Both hosts use the same protocol; host below is codex. IPC authenticates kernel UID, not this label.\n' +
-    '\n' +
-    '1. propose {runId:RUN_ID,goal:"user goal"} records an untrusted request only. plan {runId:RUN_ID} returns the existing contract, hash, DAG and role assignments. New scope requires trusted provisioning; the Agent cannot activate its own task or grant.\n' +
-    '2. requests {runId:RUN_ID,host:"codex"} returns bounded WorkItem context. Using the current host model/session, propose edits only. Do not edit the repository, protected tests, Harness, keys or ledger. Do not copy host credentials, session IDs, transcripts or environment. Do not launch model subprocesses or direct APIs.\n' +
-    '3. submit {runId:RUN_ID,host:"codex",response:{requestId,bindingHash,proposal:{summary,edits:[{path,oldText,newText}]}}}. Host reports are PROVIDER_REPORTED_ONLY. Do not submit execution evidence or completion claims.\n' +
-    '4. approval-request {runId:RUN_ID,itemId:ITEM_ID} requests review only. H4 cannot attest human input: risky execution stays BLOCKED even when a process runs under an Operator UID. Never call approve/decide/revoke yourself.\n' +
-    '5. execute {runId:RUN_ID,host:"codex"} starts permitted confined work through the existing Harness. ACCEPTED is not completion. Poll result or status {runId:RUN_ID}. verify {runId:RUN_ID} rechecks existing evidence; it does not accept supplied evidence. Only complete=true with VERIFIED evidence may be reported as verified.\n' +
-    '6. pause/cancel {runId:RUN_ID}; resume {runId:RUN_ID,host:"codex"} rechecks the existing contract and Lease. Unconfirmed attempts require reconciliation, never replay.\n' +
-    '\n' +
-    'Single-agent reasoning is the default. Planner, Architect, Executor and Reviewer are WorkItem roles, not proof of separate agents. Automatic host delegation and Host Live execution are NOT_RUN. If independent UID, protected code/state or Harness capabilities are unavailable, report BLOCKED.\n' +
-    '\n' +
-    'Legacy local plan/review/prepare tooling remains preparation-only; public legacy requests/submit/run/resume remain blocked. No API key is needed by IPC. Host subscription limits apply; host session cost is unknown. Installing this Skill does not install or attest the trusted service. Do not bypass host permissions or CodeFleet approval gates.\n'
-  
-      at TestContext.<anonymous> (file:///<WORKTREE>/test/host.test.mjs:68:51)
-      at async Test.run (node:internal/test_runner/test:1125:7)
-      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
-    generatedMessage: true,
-    code: 'ERR_ASSERTION',
-    actual: `---\nname: codefleet\ndescription: Plan, review and independently verify scoped development work through CodeFleet in the current host session.\n---\n\n# CodeFleet\n\nH4 Linux IPC path: use this skill's runtime/hosts/ipc-client.mjs with Node 24.14.1 or newer. Resolve CLIENT relative to this SKILL.md. A trusted administrator must supply SOCKET and RUN_ID for an already validated, fixed-scope workflow. Never start an Operator process as the Agent, change the catalog, or open trusted state. Windows Native, WSL2 deployment and live Host confinement remain BLOCKED/unverified. Do not use internal modules or legacy objective approve to bypass this gate.\n\nCall node CLIENT SOCKET METHOD PARAMS_JSON REQUEST_ID. Use a unique UUID for each action; retain the same ID and identical body on uncertain delivery. Quote each argument for the current shell. Both hosts use the same protocol; host below is codex. IPC authenticates kernel UID, not this label.\n\n1. propose {runId:RUN_ID,goal:"user goal"} records an untrusted request only. plan {runId:RUN_ID} returns the existing contract, hash, DAG and role assignments. New scope requires trusted provisioning; the Agent cannot activate its own task or grant.\n2. requests {runId:RUN_ID,host:"codex"} returns bounded WorkItem context. Using the current host model/session, propose edits only. Do not edit the repository, protected tests, Harness, keys or ledger. Do not copy host credentials, session IDs, transcripts or environment. Do not launch model subprocesses or direct APIs.\n3. submit {runId:RUN_ID,host:"codex",response:{requestId,bindingHash,proposal:{summary,edits:[{path,oldText,newText}]}}}. Host reports are PROVIDER_REPORTED_ONLY. Do not submit execution evidence or completion claims.\n4. approval-request {runId:RUN_ID,itemId:ITEM_ID} requests review only. H4 cannot attest human input: risky execution stays BLOCKED even when a process runs under an Operator UID. Never call approve/decide/revoke yourself.\n5. execute {runId:RUN_ID,host:"codex"} starts permitted confined work through the existing Harness. ACCEPTED is not completion. Poll result or status {runId:RUN_ID}. verify {runId:RUN_ID} rechecks existing evidence; it does not accept supplied evidence. Only complete=true with VERIFIED evidence may be reported as verified.\n6. pause/cancel {runId:RUN_ID}; resume {runId:RUN_ID,host:"codex"} rechecks the existing contract and Lease. Unconfirmed attempts require reconciliation, never replay.\n\nSingle-agent reasoning is the default. Planner, Architect, Executor and Reviewer are WorkItem roles, not proof of separate agents. Automatic host delegation and Host Live execution are NOT_RUN. If independent UID, protected code/state or Harness capabilities are unavailable, report BLOCKED.\n\nLegacy local plan/review/prepare tooling remains preparation-only; public legacy requests/submit/run/resume remain blocked. No API key is needed by IPC. Host subscription limits apply; host session cost is unknown. Installing this Skill does not install or attest the trusted service. Do not bypass host permissions or CodeFleet approval gates.\n`,
-    expected: /operator/,
-    operator: 'match',
-    diff: 'simple'
-  }
-
-test at test\host.test.mjs:61:3
-✖ claude: install, packaged CLI invocation, disable, enable, remove smoke (158.4857ms)
-  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /operator/. Input:
-  
-  '---\n' +
-    'name: codefleet\n' +
-    'description: Plan, review and independently verify scoped development work through CodeFleet in the current host session.\n' +
-    '---\n' +
-    '\n' +
-    '# CodeFleet\n' +
-    '\n' +
-    "H4 Linux IPC path: use this skill's runtime/hosts/ipc-client.mjs with Node 24.14.1 or newer. Resolve CLIENT relative to this SKILL.md. A trusted administrator must supply SOCKET and RUN_ID for an already validated, fixed-scope workflow. Never start an Operator process as the Agent, change the catalog, or open trusted state. Windows Native, WSL2 deployment and live Host confinement remain BLOCKED/unverified. Do not use internal modules or legacy objective approve to bypass this gate.\n" +
-    '\n' +
-    'Call node CLIENT SOCKET METHOD PARAMS_JSON REQUEST_ID. Use a unique UUID for each action; retain the same ID and identical body on uncertain delivery. Quote each argument for the current shell. Both hosts use the same protocol; host below is claude. IPC authenticates kernel UID, not this label.\n' +
-    '\n' +
-    '1. propose {runId:RUN_ID,goal:"user goal"} records an untrusted request only. plan {runId:RUN_ID} returns the existing contract, hash, DAG and role assignments. New scope requires trusted provisioning; the Agent cannot activate its own task or grant.\n' +
-    '2. requests {runId:RUN_ID,host:"claude"} returns bounded WorkItem context. Using the current host model/session, propose edits only. Do not edit the repository, protected tests, Harness, keys or ledger. Do not copy host credentials, session IDs, transcripts or environment. Do not launch model subprocesses or direct APIs.\n' +
-    '3. submit {runId:RUN_ID,host:"claude",response:{requestId,bindingHash,proposal:{summary,edits:[{path,oldText,newText}]}}}. Host reports are PROVIDER_REPORTED_ONLY. Do not submit execution evidence or completion claims.\n' +
-    '4. approval-request {runId:RUN_ID,itemId:ITEM_ID} requests review only. H4 cannot attest human input: risky execution stays BLOCKED even when a process runs under an Operator UID. Never call approve/decide/revoke yourself.\n' +
-    '5. execute {runId:RUN_ID,host:"claude"} starts permitted confined work through the existing Harness. ACCEPTED is not completion. Poll result or status {runId:RUN_ID}. verify {runId:RUN_ID} rechecks existing evidence; it does not accept supplied evidence. Only complete=true with VERIFIED evidence may be reported as verified.\n' +
-    '6. pause/cancel {runId:RUN_ID}; resume {runId:RUN_ID,host:"claude"} rechecks the existing contract and Lease. Unconfirmed attempts require reconciliation, never replay.\n' +
-    '\n' +
-    'Single-agent reasoning is the default. Planner, Architect, Executor and Reviewer are WorkItem roles, not proof of separate agents. Automatic host delegation and Host Live execution are NOT_RUN. If independent UID, protected code/state or Harness capabilities are unavailable, report BLOCKED.\n' +
-    '\n' +
-    'Legacy local plan/review/prepare tooling remains preparation-only; public legacy requests/submit/run/resume remain blocked. No API key is needed by IPC. Host subscription limits apply; host session cost is unknown. Installing this Skill does not install or attest the trusted service. Do not bypass host permissions or CodeFleet approval gates.\n'
-  
-      at TestContext.<anonymous> (file:///<WORKTREE>/test/host.test.mjs:68:51)
-      at async Test.run (node:internal/test_runner/test:1125:7)
-      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
-    generatedMessage: true,
-    code: 'ERR_ASSERTION',
-    actual: `---\nname: codefleet\ndescription: Plan, review and independently verify scoped development work through CodeFleet in the current host session.\n---\n\n# CodeFleet\n\nH4 Linux IPC path: use this skill's runtime/hosts/ipc-client.mjs with Node 24.14.1 or newer. Resolve CLIENT relative to this SKILL.md. A trusted administrator must supply SOCKET and RUN_ID for an already validated, fixed-scope workflow. Never start an Operator process as the Agent, change the catalog, or open trusted state. Windows Native, WSL2 deployment and live Host confinement remain BLOCKED/unverified. Do not use internal modules or legacy objective approve to bypass this gate.\n\nCall node CLIENT SOCKET METHOD PARAMS_JSON REQUEST_ID. Use a unique UUID for each action; retain the same ID and identical body on uncertain delivery. Quote each argument for the current shell. Both hosts use the same protocol; host below is claude. IPC authenticates kernel UID, not this label.\n\n1. propose {runId:RUN_ID,goal:"user goal"} records an untrusted request only. plan {runId:RUN_ID} returns the existing contract, hash, DAG and role assignments. New scope requires trusted provisioning; the Agent cannot activate its own task or grant.\n2. requests {runId:RUN_ID,host:"claude"} returns bounded WorkItem context. Using the current host model/session, propose edits only. Do not edit the repository, protected tests, Harness, keys or ledger. Do not copy host credentials, session IDs, transcripts or environment. Do not launch model subprocesses or direct APIs.\n3. submit {runId:RUN_ID,host:"claude",response:{requestId,bindingHash,proposal:{summary,edits:[{path,oldText,newText}]}}}. Host reports are PROVIDER_REPORTED_ONLY. Do not submit execution evidence or completion claims.\n4. approval-request {runId:RUN_ID,itemId:ITEM_ID} requests review only. H4 cannot attest human input: risky execution stays BLOCKED even when a process runs under an Operator UID. Never call approve/decide/revoke yourself.\n5. execute {runId:RUN_ID,host:"claude"} starts permitted confined work through the existing Harness. ACCEPTED is not completion. Poll result or status {runId:RUN_ID}. verify {runId:RUN_ID} rechecks existing evidence; it does not accept supplied evidence. Only complete=true with VERIFIED evidence may be reported as verified.\n6. pause/cancel {runId:RUN_ID}; resume {runId:RUN_ID,host:"claude"} rechecks the existing contract and Lease. Unconfirmed attempts require reconciliation, never replay.\n\nSingle-agent reasoning is the default. Planner, Architect, Executor and Reviewer are WorkItem roles, not proof of separate agents. Automatic host delegation and Host Live execution are NOT_RUN. If independent UID, protected code/state or Harness capabilities are unavailable, report BLOCKED.\n\nLegacy local plan/review/prepare tooling remains preparation-only; public legacy requests/submit/run/resume remain blocked. No API key is needed by IPC. Host subscription limits apply; host session cost is unknown. Installing this Skill does not install or attest the trusted service. Do not bypass host permissions or CodeFleet approval gates.\n`,
-    expected: /operator/,
-    operator: 'match',
-    diff: 'simple'
-  }
+H4 observations: {"status":"OFFLINE_VERIFIED","checks":["natural-goal-request-only","fixed-contract-and-role-plan","operator-impersonation-denied-1001","operator-impersonation-denied-1002","operator-human-input-unattested-denied","legacy-agent-interface-denied","body-actor-denied","arbitrary-command-denied","missing-proposals-denied","risk-execution-denied","approval-request-not-approval","key-ledger-repository-docker-child-denied","server-message-bound","changed-graph-before-dispatch-denied","forged-evidence-fields-denied","bounded-execution-accepted","duplicate-request-no-execution","duplicate-id-conflict","real-docker-harness-and-judge","artifact-candidate-recheck","durable-replay-after-restart","durable-evidence-after-restart","cancel-request","cancelled-resume-denied","abrupt-crash-not-completion","crash-no-child-replay","uncertain-request-not-replayed","tampered-artifact-not-verified"],"modelCalls":0,"hostLive":"NOT_RUN","humanInput":"BLOCKED","tests":1}
+✔ H4: Host client has bounded data-only methods and fails closed off Linux (1.2802ms)
+✔ H4: separated Linux Host IPC reaches existing Docker Harness, evidence and Judge (13437.1267ms)
+(node:28380) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ codex: intent, approved DAG, fake-host proposals, actual tests, final integration (4402.3004ms)
+✖ codex: install, packaged CLI invocation, disable, enable, remove smoke (174.4795ms)
+✔ claude: intent, approved DAG, fake-host proposals, actual tests, final integration (4270.8912ms)
+✖ claude: install, packaged CLI invocation, disable, enable, remove smoke (158.4857ms)
+✔ host command cannot authorize, complete, invoke models or accept capability claims (1696.594ms)
+✔ duplicate, forged, foreign-host, extra evidence and out-of-scope responses fail closed (2247.8912ms)
+✔ concurrent issuance returns one durable request per item (2175.832ms)
+✔ unverified host success cannot replace failed Harness tests (2913.9651ms)
+✔ missing packets and revoked approval reserve no attempts (1923.693ms)
+✔ pause/resume uses staged input once and cancellation cannot replay (5729.9646ms)
+✔ request revision and artifact corruption cannot promote to execution (2037.3438ms)
+✔ state reopen preserves requests without migrating or rewriting existing rows (2243.6696ms)
+✔ fabricated attempt cannot consume a response (2081.1803ms)
+✔ old revision and unavailable mandatory capability are rejected (2724.5833ms)
+✔ failed consumed attempt is not replayed after reopen (3152.5966ms)
+✔ post-verification tree and evidence tampering invalidate reports (4071.2909ms)
+✔ modified installation is preserved and oversized response is rejected (132.4169ms)
+✔ installer refuses a redirected parent (2.4665ms)
+✔ Host-Native fake session with production Docker Harness (7475.86ms)
+(node:39704) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ H3: protected workflow cannot reopen through legacy actor approval or missing guard (126.222ms)
+✔ H3: actual reserve denies risky work before inserting an attempt and consumes exact approved action (180.018ms)
+✔ H3: revision, pause, lease change and unsupported effects invalidate execution (196.3886ms)
+H3 IPC observations: {"status":"OFFLINE_VERIFIED","checks":["unknown-uid-denied","agent-operator-impersonation-denied","unapproved-risk-assignment-denied","json-identity-fields-denied","operator-decision-accepted","approved-real-workflow-reservation","duplicate-assignment-denied","safe-open-without-human","safe-automatic-assignment","revoked-assignment-denied","expired-assignment-denied","resume-old-lease-grant-denied","graph-revision-reuse-denied","remote-command-denied","agent-store-access-denied","descendant-store-access-denied","same-uid-runtime-refused","writable-ancestor-runtime-refused"],"modelCalls":0,"humanPresence":"NOT_TESTED"}
+✔ H3: confined actual Workflow and independent tests complete without per-action human grants (2069.9579ms)
+✔ H3: real Linux authenticated IPC, Operator and Agent UIDs, attacks and workflow assignments (4255.0409ms)
+ℹ tests 26
+ℹ suites 0
+ℹ pass 24
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 49731.5562
+
+✖ failing tests:
+
+test at test\host.test.mjs:61:3
+✖ codex: install, packaged CLI invocation, disable, enable, remove smoke (174.4795ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /operator/. Input:
+
+  '---\n' +
+    'name: codefleet\n' +
+    'description: Plan, review and independently verify scoped development work through CodeFleet in the current host session.\n' +
+    '---\n' +
+    '\n' +
+    '# CodeFleet\n' +
+    '\n' +
+    "H4 Linux IPC path: use this skill's runtime/hosts/ipc-client.mjs with Node 24.14.1 or newer. Resolve CLIENT relative to this SKILL.md. A trusted administrator must supply SOCKET and RUN_ID for an already validated, fixed-scope workflow. Never start an Operator process as the Agent, change the catalog, or open trusted state. Windows Native, WSL2 deployment and live Host confinement remain BLOCKED/unverified. Do not use internal modules or legacy objective approve to bypass this gate.\n" +
+    '\n' +
+    'Call node CLIENT SOCKET METHOD PARAMS_JSON REQUEST_ID. Use a unique UUID for each action; retain the same ID and identical body on uncertain delivery. Quote each argument for the current shell. Both hosts use the same protocol; host below is codex. IPC authenticates kernel UID, not this label.\n' +
+    '\n' +
+    '1. propose {runId:RUN_ID,goal:"user goal"} records an untrusted request only. plan {runId:RUN_ID} returns the existing contract, hash, DAG and role assignments. New scope requires trusted provisioning; the Agent cannot activate its own task or grant.\n' +
+    '2. requests {runId:RUN_ID,host:"codex"} returns bounded WorkItem context. Using the current host model/session, propose edits only. Do not edit the repository, protected tests, Harness, keys or ledger. Do not copy host credentials, session IDs, transcripts or environment. Do not launch model subprocesses or direct APIs.\n' +
+    '3. submit {runId:RUN_ID,host:"codex",response:{requestId,bindingHash,proposal:{summary,edits:[{path,oldText,newText}]}}}. Host reports are PROVIDER_REPORTED_ONLY. Do not submit execution evidence or completion claims.\n' +
+    '4. approval-request {runId:RUN_ID,itemId:ITEM_ID} requests review only. H4 cannot attest human input: risky execution stays BLOCKED even when a process runs under an Operator UID. Never call approve/decide/revoke yourself.\n' +
+    '5. execute {runId:RUN_ID,host:"codex"} starts permitted confined work through the existing Harness. ACCEPTED is not completion. Poll result or status {runId:RUN_ID}. verify {runId:RUN_ID} rechecks existing evidence; it does not accept supplied evidence. Only complete=true with VERIFIED evidence may be reported as verified.\n' +
+    '6. pause/cancel {runId:RUN_ID}; resume {runId:RUN_ID,host:"codex"} rechecks the existing contract and Lease. Unconfirmed attempts require reconciliation, never replay.\n' +
+    '\n' +
+    'Single-agent reasoning is the default. Planner, Architect, Executor and Reviewer are WorkItem roles, not proof of separate agents. Automatic host delegation and Host Live execution are NOT_RUN. If independent UID, protected code/state or Harness capabilities are unavailable, report BLOCKED.\n' +
+    '\n' +
+    'Legacy local plan/review/prepare tooling remains preparation-only; public legacy requests/submit/run/resume remain blocked. No API key is needed by IPC. Host subscription limits apply; host session cost is unknown. Installing this Skill does not install or attest the trusted service. Do not bypass host permissions or CodeFleet approval gates.\n'
+
+      at TestContext.<anonymous> (file:///<WORKTREE>/test/host.test.mjs:68:51)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: `---\nname: codefleet\ndescription: Plan, review and independently verify scoped development work through CodeFleet in the current host session.\n---\n\n# CodeFleet\n\nH4 Linux IPC path: use this skill's runtime/hosts/ipc-client.mjs with Node 24.14.1 or newer. Resolve CLIENT relative to this SKILL.md. A trusted administrator must supply SOCKET and RUN_ID for an already validated, fixed-scope workflow. Never start an Operator process as the Agent, change the catalog, or open trusted state. Windows Native, WSL2 deployment and live Host confinement remain BLOCKED/unverified. Do not use internal modules or legacy objective approve to bypass this gate.\n\nCall node CLIENT SOCKET METHOD PARAMS_JSON REQUEST_ID. Use a unique UUID for each action; retain the same ID and identical body on uncertain delivery. Quote each argument for the current shell. Both hosts use the same protocol; host below is codex. IPC authenticates kernel UID, not this label.\n\n1. propose {runId:RUN_ID,goal:"user goal"} records an untrusted request only. plan {runId:RUN_ID} returns the existing contract, hash, DAG and role assignments. New scope requires trusted provisioning; the Agent cannot activate its own task or grant.\n2. requests {runId:RUN_ID,host:"codex"} returns bounded WorkItem context. Using the current host model/session, propose edits only. Do not edit the repository, protected tests, Harness, keys or ledger. Do not copy host credentials, session IDs, transcripts or environment. Do not launch model subprocesses or direct APIs.\n3. submit {runId:RUN_ID,host:"codex",response:{requestId,bindingHash,proposal:{summary,edits:[{path,oldText,newText}]}}}. Host reports are PROVIDER_REPORTED_ONLY. Do not submit execution evidence or completion claims.\n4. approval-request {runId:RUN_ID,itemId:ITEM_ID} requests review only. H4 cannot attest human input: risky execution stays BLOCKED even when a process runs under an Operator UID. Never call approve/decide/revoke yourself.\n5. execute {runId:RUN_ID,host:"codex"} starts permitted confined work through the existing Harness. ACCEPTED is not completion. Poll result or status {runId:RUN_ID}. verify {runId:RUN_ID} rechecks existing evidence; it does not accept supplied evidence. Only complete=true with VERIFIED evidence may be reported as verified.\n6. pause/cancel {runId:RUN_ID}; resume {runId:RUN_ID,host:"codex"} rechecks the existing contract and Lease. Unconfirmed attempts require reconciliation, never replay.\n\nSingle-agent reasoning is the default. Planner, Architect, Executor and Reviewer are WorkItem roles, not proof of separate agents. Automatic host delegation and Host Live execution are NOT_RUN. If independent UID, protected code/state or Harness capabilities are unavailable, report BLOCKED.\n\nLegacy local plan/review/prepare tooling remains preparation-only; public legacy requests/submit/run/resume remain blocked. No API key is needed by IPC. Host subscription limits apply; host session cost is unknown. Installing this Skill does not install or attest the trusted service. Do not bypass host permissions or CodeFleet approval gates.\n`,
+    expected: /operator/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at test\host.test.mjs:61:3
+✖ claude: install, packaged CLI invocation, disable, enable, remove smoke (158.4857ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /operator/. Input:
+
+  '---\n' +
+    'name: codefleet\n' +
+    'description: Plan, review and independently verify scoped development work through CodeFleet in the current host session.\n' +
+    '---\n' +
+    '\n' +
+    '# CodeFleet\n' +
+    '\n' +
+    "H4 Linux IPC path: use this skill's runtime/hosts/ipc-client.mjs with Node 24.14.1 or newer. Resolve CLIENT relative to this SKILL.md. A trusted administrator must supply SOCKET and RUN_ID for an already validated, fixed-scope workflow. Never start an Operator process as the Agent, change the catalog, or open trusted state. Windows Native, WSL2 deployment and live Host confinement remain BLOCKED/unverified. Do not use internal modules or legacy objective approve to bypass this gate.\n" +
+    '\n' +
+    'Call node CLIENT SOCKET METHOD PARAMS_JSON REQUEST_ID. Use a unique UUID for each action; retain the same ID and identical body on uncertain delivery. Quote each argument for the current shell. Both hosts use the same protocol; host below is claude. IPC authenticates kernel UID, not this label.\n' +
+    '\n' +
+    '1. propose {runId:RUN_ID,goal:"user goal"} records an untrusted request only. plan {runId:RUN_ID} returns the existing contract, hash, DAG and role assignments. New scope requires trusted provisioning; the Agent cannot activate its own task or grant.\n' +
+    '2. requests {runId:RUN_ID,host:"claude"} returns bounded WorkItem context. Using the current host model/session, propose edits only. Do not edit the repository, protected tests, Harness, keys or ledger. Do not copy host credentials, session IDs, transcripts or environment. Do not launch model subprocesses or direct APIs.\n' +
+    '3. submit {runId:RUN_ID,host:"claude",response:{requestId,bindingHash,proposal:{summary,edits:[{path,oldText,newText}]}}}. Host reports are PROVIDER_REPORTED_ONLY. Do not submit execution evidence or completion claims.\n' +
+    '4. approval-request {runId:RUN_ID,itemId:ITEM_ID} requests review only. H4 cannot attest human input: risky execution stays BLOCKED even when a process runs under an Operator UID. Never call approve/decide/revoke yourself.\n' +
+    '5. execute {runId:RUN_ID,host:"claude"} starts permitted confined work through the existing Harness. ACCEPTED is not completion. Poll result or status {runId:RUN_ID}. verify {runId:RUN_ID} rechecks existing evidence; it does not accept supplied evidence. Only complete=true with VERIFIED evidence may be reported as verified.\n' +
+    '6. pause/cancel {runId:RUN_ID}; resume {runId:RUN_ID,host:"claude"} rechecks the existing contract and Lease. Unconfirmed attempts require reconciliation, never replay.\n' +
+    '\n' +
+    'Single-agent reasoning is the default. Planner, Architect, Executor and Reviewer are WorkItem roles, not proof of separate agents. Automatic host delegation and Host Live execution are NOT_RUN. If independent UID, protected code/state or Harness capabilities are unavailable, report BLOCKED.\n' +
+    '\n' +
+    'Legacy local plan/review/prepare tooling remains preparation-only; public legacy requests/submit/run/resume remain blocked. No API key is needed by IPC. Host subscription limits apply; host session cost is unknown. Installing this Skill does not install or attest the trusted service. Do not bypass host permissions or CodeFleet approval gates.\n'
+
+      at TestContext.<anonymous> (file:///<WORKTREE>/test/host.test.mjs:68:51)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: `---\nname: codefleet\ndescription: Plan, review and independently verify scoped development work through CodeFleet in the current host session.\n---\n\n# CodeFleet\n\nH4 Linux IPC path: use this skill's runtime/hosts/ipc-client.mjs with Node 24.14.1 or newer. Resolve CLIENT relative to this SKILL.md. A trusted administrator must supply SOCKET and RUN_ID for an already validated, fixed-scope workflow. Never start an Operator process as the Agent, change the catalog, or open trusted state. Windows Native, WSL2 deployment and live Host confinement remain BLOCKED/unverified. Do not use internal modules or legacy objective approve to bypass this gate.\n\nCall node CLIENT SOCKET METHOD PARAMS_JSON REQUEST_ID. Use a unique UUID for each action; retain the same ID and identical body on uncertain delivery. Quote each argument for the current shell. Both hosts use the same protocol; host below is claude. IPC authenticates kernel UID, not this label.\n\n1. propose {runId:RUN_ID,goal:"user goal"} records an untrusted request only. plan {runId:RUN_ID} returns the existing contract, hash, DAG and role assignments. New scope requires trusted provisioning; the Agent cannot activate its own task or grant.\n2. requests {runId:RUN_ID,host:"claude"} returns bounded WorkItem context. Using the current host model/session, propose edits only. Do not edit the repository, protected tests, Harness, keys or ledger. Do not copy host credentials, session IDs, transcripts or environment. Do not launch model subprocesses or direct APIs.\n3. submit {runId:RUN_ID,host:"claude",response:{requestId,bindingHash,proposal:{summary,edits:[{path,oldText,newText}]}}}. Host reports are PROVIDER_REPORTED_ONLY. Do not submit execution evidence or completion claims.\n4. approval-request {runId:RUN_ID,itemId:ITEM_ID} requests review only. H4 cannot attest human input: risky execution stays BLOCKED even when a process runs under an Operator UID. Never call approve/decide/revoke yourself.\n5. execute {runId:RUN_ID,host:"claude"} starts permitted confined work through the existing Harness. ACCEPTED is not completion. Poll result or status {runId:RUN_ID}. verify {runId:RUN_ID} rechecks existing evidence; it does not accept supplied evidence. Only complete=true with VERIFIED evidence may be reported as verified.\n6. pause/cancel {runId:RUN_ID}; resume {runId:RUN_ID,host:"claude"} rechecks the existing contract and Lease. Unconfirmed attempts require reconciliation, never replay.\n\nSingle-agent reasoning is the default. Planner, Architect, Executor and Reviewer are WorkItem roles, not proof of separate agents. Automatic host delegation and Host Live execution are NOT_RUN. If independent UID, protected code/state or Harness capabilities are unavailable, report BLOCKED.\n\nLegacy local plan/review/prepare tooling remains preparation-only; public legacy requests/submit/run/resume remain blocked. No API key is needed by IPC. Host subscription limits apply; host session cost is unknown. Installing this Skill does not install or attest the trusted service. Do not bypass host permissions or CodeFleet approval gates.\n`,
+    expected: /operator/,
+    operator: 'match',
+    diff: 'simple'
+  }
