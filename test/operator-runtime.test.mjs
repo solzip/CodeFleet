@@ -9,7 +9,7 @@ import { seed } from './fixtures/operator-seed.mjs';
 import { Store } from '../src/alpha/store.mjs';
 import { WorkflowAuthorization, registerWorkflowGuard } from '../src/hosts/workflow-authorization.mjs';
 import { OfflineOperatorLedger, canonical, fingerprint } from '../src/hosts/operator.mjs';
-import { reserve, approval, approveWorkflow } from '../src/workflow/persistence.mjs';
+import { reserve, approval, approveWorkflow, createWorkflow, attempts } from '../src/workflow/persistence.mjs';
 import { execute } from '../src/alpha/controller.mjs';
 import { hybridDefinition } from '../src/workflow/definition.mjs';
 import { git, repository } from '../src/alpha/workspace.mjs';
@@ -88,4 +88,46 @@ test('H3: real Linux authenticated IPC, Operator and Agent UIDs, attacks and wor
   assert.equal(result.status,0,result.stderr); const evidence=JSON.parse(result.stdout.trim().split('\n').at(-1));
   assert.equal(evidence.status,'OFFLINE_VERIFIED'); assert.ok(evidence.checks.length>=17); assert.equal(evidence.modelCalls,0);
   console.log('H3 IPC observations: '+JSON.stringify(evidence));
+});
+test('Host Core: trusted Operator guard blocks risky item while independent Docker verification proceeds', async () => {
+  assert.equal(process.env.CODEFLEET_TEST_DOCKER, '1');
+  const f = setup();
+  try {
+    const repo = path.join(f.root, 'mixed');
+    mkdirSync(path.join(repo, 'src'), { recursive: true }); mkdirSync(path.join(repo, 'test'));
+    for (const id of ['a', 'b', 'c']) {
+      writeFileSync(path.join(repo, `src/${id}.js`), 'module.exports=(a,b)=>a+b;');
+      writeFileSync(path.join(repo, `test/${id}.test.js`), `const t=require('node:test'),a=require('node:assert/strict');t('${id}',()=>a.equal(require('../src/${id}.js')(5,2),3));`);
+    }
+    for (const args of [['init'], ['add', '.'], ['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','fixture']])
+      requireSuccess(await git(repo, args), 'fixture');
+    const selected = await repository(repo);
+    const source = { schemaVersion: 1, goal: 'Repair arithmetic', files: ['a','b','c'].map(id => `src/${id}.js`),
+      context: ['a','b','c'].map(id => `src/${id}.js`), tests: ['a','b','c'].map(id => `test/${id}.test.js`),
+      maxAttempts: 3, timeoutSeconds: 120, attemptBudgetUsd: 1, delivery: { mode: 'local' } };
+    const items = ['a','b','c'].map(id => ({ id, dependencies: id === 'c' ? ['a'] : [], priority: 0,
+      files: [`src/${id}.js`], tests: [`test/${id}.test.js`], acceptanceCriteria: ['Regression passes'], resources: [],
+      roles: Object.fromEntries(['Planner','Architect','Executor','Reviewer'].map(role => [role, id + role])) }));
+    const graph = hybridDefinition(source, { workflowId: 'mixed', base: selected.base, items });
+    const run = await createWorkflow(f.store, repo, graph, source, 'mixed');
+    run.authorizationMode = 'OS_OPERATOR_V1';
+    f.store.db.prepare('UPDATE runs SET body=? WHERE id=?').run(JSON.stringify(run), run.id);
+    f.guard.catalog.mixed = { workflowHash: graph.workflowHash, revision: run.revision, riskyItems: ['a'] };
+    const called = [];
+    const result = await execute(f.store, run.id, { hostExecution: {
+      select: async () => ({ providerId: 'fake-staged' }),
+      execute: async child => {
+        called.push(child.workflowItemId);
+        return { kind:'ProviderExecutionResult',status:'PROPOSED',mode:'PROPOSAL_ONLY',authority:'PROVIDER_REPORTED_ONLY',
+          proposal:{summary:'Subtract',edits:child.contract.files.map(p=>({path:p,oldText:'a+b',newText:'a-b'}))},cost:0 };
+      }
+    } });
+    assert.deepEqual(called, ['b']);
+    assert.equal(result.states.a, 'BLOCKED'); assert.equal(result.states.b, 'SUCCEEDED');
+    assert.equal(result.states.c, 'BLOCKED'); assert.equal(result.state, 'WAITING_HUMAN');
+    assert.equal(result.finalRunId, undefined); assert.equal(attempts(f.store, run.id).length, 1);
+    const child = f.store.get(attempts(f.store, run.id)[0].childId);
+    assert.equal(f.store.readArtifact(child.evidenceHash).verificationBackend, 'container');
+    assert.equal(f.store.readArtifact(child.evidenceHash).requiredGateResults.protectedVerification, 'SATISFIED');
+  } finally { f.close(); }
 });

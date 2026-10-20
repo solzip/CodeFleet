@@ -249,6 +249,22 @@ test('alpha persists verified evidence, completes locally and does not rerun com
     assert.ok(f.store.events(f.run.id).some(e => e.type === 'VERIFYING'));
   } finally { f.store.close(); }
 });
+test('Host Core: local success cannot complete an Alpha Run requiring protected evidence', async () => {
+  const f = await setup(); let calls = 0;
+  f.services.verify = async () => ++calls === 1 ? fail() : {
+    ...pass(), authority: 'LOCAL_EXECUTED', executionAuthority: 'LOCAL_EXECUTED',
+    verificationBackend: 'local', isolationCapabilities: [], verifierIndependence: 'UNPROTECTED',
+    evidenceIntegrity: 'UNBOUND', candidateTreeHash: null, requiredGateResults: { protectedVerification: 'UNSATISFIED' }
+  };
+  try {
+    const result = await execute(f.store, f.run.id, f.services);
+    assert.equal(result.state, 'WAITING_HUMAN'); assert.equal(result.acceptedHash, undefined);
+    assert.equal(result.evidenceHash, undefined); assert.equal(f.counts().proposals, 1);
+    const evidence = f.store.readArtifact(result.lastEvidenceHash);
+    assert.equal(evidence.requiredGateResults.protectedVerification, 'UNSATISFIED');
+    assert.equal(pureJudge(evidence).outcome, 'ESCALATE');
+  } finally { f.store.close(); }
+});
 
 test('alpha passing baseline cannot be bypassed by resume and never invokes provider', async () => {
   const f = await setup(); f.services.verify = async () => pass();

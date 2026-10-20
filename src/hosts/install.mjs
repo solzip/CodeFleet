@@ -37,6 +37,23 @@ description: Plan, review and independently verify scoped development work throu
 
 # CodeFleet
 
+Default Host-Native preparation (no Docker, WSL, separate OS account or API key):
+resolve CLI to runtime/alpha/cli.mjs relative to this Skill. Run node CLI --state
+STATE host ${host} plan "goal" REPOSITORY, then status TASK_ID. STATE is a local
+preparation directory, never the protected Operator state. Keep the existing Host
+model, authentication and session. Read/search only within actual Host permissions.
+Skill instructions do not enforce isolation. Host reports are untrusted proposals.
+
+Use review TASK_ID --files PATHS --tests PATHS --criterion TEXT for explicit scope,
+or draft TASK_ID FILE for {revision,proposal:{draft,references,inferences}}.
+Draft fields: schemaVersion:2, objective (original), base, files, tests, criteria,
+risks, unknowns, effects. Each criterion has description, method:"protected-tests",
+tests; each reference has path, one-based line, exact quote. No approval/evidence fields.
+Then prepare TASK_ID, workflow TASK_ID, explain TASK_ID, approval-request TASK_ID.
+These commands create/review plans and DAGs only, never execute or grant approval.
+The strict H6 codefleet-plan isolated profile remains a separate mode.
+
+Optional protected execution:
 H4 Linux IPC path: use this skill's runtime/hosts/ipc-client.mjs with Node 24.14.1 or newer. Resolve CLIENT relative to this SKILL.md. A trusted operator administrator must supply SOCKET and RUN_ID for an already validated, fixed-scope workflow. Never start an Operator process as the Agent, change the catalog, or open trusted state. Windows Native, WSL2 deployment and live Host confinement remain BLOCKED/unverified. Do not use internal modules or legacy objective approve to bypass this gate.
 
 Call node CLIENT SOCKET METHOD PARAMS_JSON REQUEST_ID. Use a unique UUID for each action; retain the same ID and identical body on uncertain delivery. Quote each argument for the current shell. Both hosts use the same protocol; host below is ${host}. IPC authenticates kernel UID, not this label.
@@ -48,7 +65,7 @@ Call node CLIENT SOCKET METHOD PARAMS_JSON REQUEST_ID. Use a unique UUID for eac
 5. execute {runId:RUN_ID,host:"${host}"} starts permitted confined work through the existing Harness. ACCEPTED is not completion. Poll result or status {runId:RUN_ID}. verify {runId:RUN_ID} rechecks existing evidence; it does not accept supplied evidence. Only complete=true with VERIFIED evidence may be reported as verified.
 6. pause/cancel {runId:RUN_ID}; resume {runId:RUN_ID,host:"${host}"} rechecks the existing contract and Lease. Unconfirmed attempts require reconciliation, never replay.
 
-Single-agent reasoning is the default. Planner, Architect, Executor and Reviewer are WorkItem roles, not proof of separate agents. Automatic host delegation and Host Live execution are NOT_RUN. If independent UID, protected code/state or Harness capabilities are unavailable, report BLOCKED.
+Single-agent reasoning is the default. Planner, Architect, Executor and Reviewer are WorkItem roles, not proof of separate agents. Automatic host delegation and Host Live execution are NOT_RUN. If independent UID, protected code/state or Harness capabilities are unavailable, report protected execution BLOCKED; preparation stays available.
 
 Legacy local plan/review/prepare tooling remains preparation-only; public legacy requests/submit/run/resume remain blocked. No API key is needed by IPC. Host subscription limits apply; host session cost is unknown. Installing this Skill does not install or attest the trusted service. Do not bypass host permissions or CodeFleet approval gates.
 `;

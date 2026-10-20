@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { hash, validateContract } from '../alpha/contract.mjs';
-import { semanticPlan } from '../intent/semantic.mjs';
+import { semanticPlan, readCodeContext, validateSemanticProposal } from '../intent/semantic.mjs';
 import { planIntent } from '../intent/engine.mjs';
 import { compile } from '../intent/contract.mjs';
+import { exact } from '../intent/contract.mjs';
 import { discover } from '../intent/discovery.mjs';
 import { hybridDefinition } from '../workflow/definition.mjs';
 import { createWorkflow, approveWorkflow, revokeWorkflow, attempts } from '../workflow/persistence.mjs';
@@ -66,6 +67,23 @@ export async function reviewTask(store, id, { files, tests, criterion, items, ma
   hybridDefinition(source, { workflowId: 'objective', base: discovery.base, items: enriched, maxParallel });
   if (current.runId) { revokeWorkflow(store, current.runId, 'scope-review'); store.control(current.runId, 'cancel'); }
   return update(store, current, { ...current, revision: current.revision + 1, planRef: store.artifact(plan), sourceRef: store.artifact(source), items: enriched, settings: { maxParallel, maxAttempts, timeoutSeconds, attemptBudgetUsd }, state: 'VALIDATED', runId: null }, 'TASK_REVIEWED');
+}
+// Host proposal intake: data only, never approval, evidence or model invocation.
+export async function submitTaskDraft(store, id, input) {
+  exact(input, ['revision', 'proposal'], 'Host draft');
+  const current = task(store, id), old = store.readArtifact(current.planRef);
+  if (current.runId || current.state === 'REJECTED' || input.revision !== current.revision)
+    throw Error('Draft revision closed or stale; create a new task');
+  const context = await readCodeContext(current.repo, old.intent.original);
+  if (context.discovery.dirty || context.discovery.base !== old.discovery?.base)
+    throw Error('Draft baseline changed');
+  const validation = validateSemanticProposal(input.proposal, context, old.intent.original);
+  const plan = { ...old, discovery: context.discovery, draft: input.proposal.draft, validation,
+    executable: false, providerResult: null,
+    analysis: { mode: 'HOST_PROPOSAL', authority: 'PROVIDER_REPORTED_ONLY',
+      references: input.proposal.references, inferences: input.proposal.inferences } };
+  return update(store, current, { ...current, revision: current.revision + 1,
+    planRef: store.artifact(plan), state: validation.status }, 'HOST_DRAFT_VALIDATED');
 }
 export async function prepareTask(store, id) {
   const current = task(store, id);

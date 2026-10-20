@@ -21,7 +21,7 @@ export function dockerArgs(directory, tests, name, timeoutMs = 120000) {
   if (directory.includes(',') || guardFile.includes(',')) throw Error('Docker mount paths cannot contain commas');
   return ['run', '--rm', '--pull=never', '--name', name, '--network=none', '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--pids-limit=128', '--memory=512m', '--cpus=1', '--user=1000:1000', '--tmpfs=/tmp:rw,nosuid,nodev,size=64m', '--mount', `type=bind,source=${directory},target=/work,readonly`, '--mount', `type=bind,source=${guardFile},target=/codefleet-guard.mjs,readonly`, '--workdir=/work', '--env=HOME=/tmp', '--env=NODE_OPTIONS=', '--entrypoint=timeout', IMAGE, '--kill-after=5s', `${Math.max(1, Math.ceil(timeoutMs / 1000))}s`, 'node', '--import=file:///codefleet-guard.mjs', '--test', '--test-reporter=tap', ...tests];
 }
-export function verificationResult(result) {
+export function parseTestResult(result) {
   const log = result.stdout.toString('utf8');
   const counts = {};
   for (const key of ['tests', 'pass', 'fail', 'skipped', 'todo']) {
@@ -29,7 +29,10 @@ export function verificationResult(result) {
     counts[key] = matches.length === 1 ? Number(matches[0][1]) : null;
   }
   const testNames = [...log.matchAll(/^( *)# Subtest: (.+)\r?$/gm)].map(m => `${m[1].length}:${m[2].trimEnd()}`).sort();
-  return { exitCode: result.exitCode, tests: counts.tests, passed: counts.pass, failed: counts.fail, skipped: counts.skipped, todo: counts.todo, testNames, interrupted: result.interrupted, truncated: result.truncated, log: log.slice(-16000), stderr: result.stderr.toString('utf8').slice(-4000), authority: 'HARNESS_EXECUTED', image: IMAGE };
+  return { exitCode: result.exitCode, tests: counts.tests, passed: counts.pass, failed: counts.fail, skipped: counts.skipped, todo: counts.todo, testNames, interrupted: result.interrupted, truncated: result.truncated, log: log.slice(-16000), stderr: result.stderr.toString('utf8').slice(-4000) };
+}
+export function verificationResult(result) {
+  return { ...parseTestResult(result), authority: 'HARNESS_EXECUTED', image: IMAGE };
 }
 // Counts alone mistake a file-level early exit for an executed test. Reject
 // missing/changed test identities; old evidence without identities fails closed.

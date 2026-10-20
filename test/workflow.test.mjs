@@ -15,10 +15,62 @@ import { createClaudeAdapter } from '../src/providers/claude.mjs';
 import { createCodexAdapter } from '../src/providers/codex.mjs';
 import { CAPABILITIES } from '../src/providers/capabilities.mjs';
 import { planIntent } from '../src/intent/engine.mjs';
+import { evaluateWorkItem } from '../src/workflow/capability-policy.mjs';
 
 const source = () => ({ schemaVersion: 1, goal: 'Repair arithmetic regressions with protected tests.', files: ['src/a.js', 'src/b.js'], context: ['src/a.js', 'src/b.js'], tests: ['test/a.test.js', 'test/b.test.js'], maxAttempts: 3, timeoutSeconds: 120, attemptBudgetUsd: 1, delivery: { mode: 'local' } });
 const item = (id, dependencies = []) => ({ id, dependencies, priority: 0, files: [`src/${id}.js`], tests: [`test/${id}.test.js`], acceptanceCriteria: ['Protected arithmetic regression passes'] });
 const supported = () => ({ installed: true, identity: { id: 'claude', version: 'fake' }, environment: Object.fromEntries(['filesystem_restriction', 'network_restriction', 'credential_isolation'].map(c => [c, { status: 'SUPPORTED', evidence: 'Fake host fixture only' }])), capabilities: Object.fromEntries(CAPABILITIES.map(c => [c, { status: 'SUPPORTED' }])) });
+test('B: work kinds require actual capabilities; risky actions require current approval', () => {
+  assert.equal(evaluateWorkItem('planning').status, 'AVAILABLE');
+  for (const kind of ['analysis', 'local-edit', 'local-verification', 'isolated-execution', 'protected-verification', 'external-effect', 'risky-action', 'invented'])
+    assert.equal(evaluateWorkItem(kind).status, 'BLOCKED', kind);
+  assert.equal(evaluateWorkItem('local-verification', { 'trusted-local-command': true }).status, 'AVAILABLE');
+  assert.equal(evaluateWorkItem('risky-action', { 'effect-enforcement': true, 'authenticated-approval': true }).status, 'BLOCKED');
+});
+test('B: capability-blocked item does not stop independent item, final gate stays pending', async () => {
+  const f = await setup([item('a'), item('b')]);
+  try {
+    f.approve();
+    f.dependencies.workItemPolicy = { workflowHash: f.graph.workflowHash, revision: 1,
+      capabilities: { 'protected-verifier': true, 'protected-evidence': true, 'protected-inputs': true },
+      items: { a: { kind: 'risky-action' }, b: { kind: 'protected-verification' } } };
+    const r = await execute(f.store, f.run.id, f.dependencies);
+    assert.equal(r.state, 'WAITING_HUMAN'); assert.equal(r.states.a, 'BLOCKED'); assert.equal(r.states.b, 'SUCCEEDED');
+    assert.deepEqual(f.calls, ['src/b.js']); assert.equal(r.finalRunId, undefined);
+    await execute(f.store, f.run.id, f.dependencies);
+    assert.equal(f.calls.length, 1);
+    delete f.dependencies.workItemPolicy;
+    const missing = await execute(f.store, f.run.id, f.dependencies);
+    assert.match(missing.reason, /policy missing/); assert.equal(f.calls.length, 1);
+  } finally { f.store.close(); }
+});
+test('B: blocked predecessor prevents descendants and stale policy cannot dispatch', async () => {
+  const f = await setup();
+  try {
+    f.approve();
+    f.dependencies.workItemPolicy = { workflowHash: f.graph.workflowHash, revision: 1,
+      capabilities: {}, items: { a: { kind: 'protected-verification' }, b: { kind: 'planning' } } };
+    let r = await execute(f.store, f.run.id, f.dependencies);
+    assert.equal(r.states.b, 'BLOCKED'); assert.equal(f.calls.length, 0);
+    f.dependencies.workItemPolicy.revision = 2;
+    r = await execute(f.store, f.run.id, f.dependencies);
+    assert.equal(r.state, 'WAITING_HUMAN'); assert.equal(attempts(f.store, f.run.id).length, 0);
+  } finally { f.store.close(); }
+});
+test('B: failed serial WorkItem preserves progress of later independent WorkItem', async () => {
+  const f = await setup([item('a'), item('b')]);
+  try {
+    f.approve(); const verify = f.dependencies.verify;
+    f.dependencies.verify = async request => {
+      const result = await verify(request);
+      return request.tests.includes('test/a.test.js') ? { ...result, exitCode: 1, passed: 0, failed: 1 } : result;
+    };
+    const r = await execute(f.store, f.run.id, f.dependencies);
+    assert.deepEqual(f.calls, ['src/a.js', 'src/b.js']);
+    assert.equal(r.states.a, 'BLOCKED'); assert.equal(r.states.b, 'SUCCEEDED');
+    assert.equal(r.state, 'WAITING_HUMAN'); assert.equal(r.finalRunId, undefined);
+  } finally { f.store.close(); }
+});
 async function setup(items = [item('a'), item('b', ['a'])]) {
   const root = await mkdtemp(path.join(tmpdir(), 'cf-workflow-')), repo = path.join(root, 'repo');
   await mkdir(path.join(repo, 'src'), { recursive: true }); await mkdir(path.join(repo, 'test'));

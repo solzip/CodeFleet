@@ -13,7 +13,14 @@ export async function runReport(store, id) {
   if (run.acceptedHash || run.state === 'COMPLETED') {
     try {
       const result = await verifiedEvidence(store, run);
-      verification = { status: 'VERIFIED', tests: result.evidence.tests, passed: result.evidence.passed, candidateHash: run.candidateHash, contractHash: result.contractHash, treeRechecked: result.treeRechecked };
+      verification = { status: 'VERIFIED', tests: result.evidence.tests, passed: result.evidence.passed, candidateHash: run.candidateHash, contractHash: result.contractHash, treeRechecked: result.treeRechecked,
+        verificationBackend: result.evidence.verificationBackend ?? 'LEGACY_UNRECORDED',
+        executionAuthority: result.evidence.executionAuthority ?? result.evidence.authority,
+        isolationCapabilities: result.evidence.isolationCapabilities ?? null,
+        verifierIndependence: result.evidence.verifierIndependence ?? 'LEGACY_CONTRACT',
+        evidenceIntegrity: result.evidence.evidenceIntegrity ?? 'LEGACY_RECHECKED',
+        candidateTreeHash: result.evidence.candidateTreeHash ?? result.evidence.candidateHash,
+        requiredGateResults: result.evidence.requiredGateResults ?? null };
     } catch (e) { verification = { status: 'INVALID', reason: e.message }; }
   } else if (observed.lastEvidenceHash) {
     try { const e = store.readArtifact(observed.lastEvidenceHash); verification = { status: judge(e).outcome === 'RETRY' && e.tests > 0 ? 'FAILED' : 'INCONCLUSIVE', reason: judge(e).reason }; }
@@ -26,7 +33,7 @@ export async function runReport(store, id) {
     activeAttempts = records.filter(a => a.status === 'STARTED').map(a => ({ ...a, state: store.get(a.childId).state }));
     workItems = run.contract.items.map(n => {
       const a = records.find(a => a.itemId === n.id), child = a ? store.get(a.childId) : null;
-      return { id: n.id, dependencies: n.dependencies, roles: n.roles ?? null, state: child && a.status === 'STARTED' ? child.state : run.states[n.id], attempt: a ?? null, reason: child?.reason ?? null };
+      return { id: n.id, dependencies: n.dependencies, roles: n.roles ?? null, state: child && a.status === 'STARTED' ? child.state : run.states[n.id], attempt: a ?? null, reason: child?.reason ?? run.workItemBlocks?.[n.id]?.join('; ') ?? null };
     });
   }
   const artifactPaths = Object.fromEntries(['acceptedHash', 'evidenceHash', 'integrationHash', 'graphRef', 'sourceRef'].filter(k => /^[a-f0-9]{64}$/.test(run[k] ?? '')).map(k => [k, path.join(store.directory, 'artifacts', run[k] + '.json')]));

@@ -62,6 +62,14 @@ export class WorkflowAuthorization {
     this.check(run);
     this.store.event(run.id, 'OS_AUTHORIZATION_ASSIGNMENT', { itemId, grantId, actionDigest: snapshot.binding.actionDigest, authority: this.catalog[run.id].riskyItems.includes(itemId) ? 'OPERATOR_GRANT' : 'CONFINED_AUTOMATIC_POLICY' });
   }
+  admission(run, itemId) {
+    this.check(run);
+    if (!this.catalog[run.id].riskyItems.includes(itemId)) return { status: 'AVAILABLE', missing: [] };
+    const id = this.pending.get(run.id + ':' + itemId);
+    return id && this.ledger.status(id).state === 'APPROVED'
+      ? { status: 'AVAILABLE', missing: [] }
+      : { status: 'BLOCKED', missing: ['Operator approval required for risky WorkItem'] };
+  }
   effect(run, kind) {
     this.check(run);
     const row = this.store.db.prepare('SELECT owner,leaseUntil FROM runs WHERE id=?').get(run.id);

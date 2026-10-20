@@ -53,7 +53,8 @@ export function createHarnessService(store, guard, config, operatorRequest) {
       return submitResponse(store,p.host,p.response);
     }
     if (['execute','resume'].includes(method)) {
-      if (config.catalog[run.id].riskyItems.length) throw Error('Human authorization input not attested; risky Harness dispatch BLOCKED');
+      // Risky items are denied individually by WorkflowAuthorization. Independent
+      // confined items may proceed; pending grants never authorize a reservation.
       if (jobs.has(run.id)) throw Error('Execution already active');
       if (run.control === 'cancel') throw Error('Cancelled run');
       const hostExecution = stagedExecution(store,run.id,p.host);

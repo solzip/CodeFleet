@@ -11,9 +11,12 @@ import { createRegistry, selectProvider } from '../providers/registry.mjs';
 import { readyBatch, validateWorkflow } from '../workflow/definition.mjs';
 import { delegate, sendMessage, receiveMessages } from '../workflow/collaboration.mjs';
 import * as workflowStore from '../workflow/persistence.mjs';
-import { verify, dockerReady, cleanupContainer, matchTestIdentity } from './verifier.mjs';
+import { matchTestIdentity } from './verifier.mjs';
 import { deliver } from './delivery.mjs';
 import { workflowGuard } from '../hosts/workflow-authorization.mjs';
+import { bindVerification } from './verification-evidence.mjs';
+import { policyAdmission } from '../workflow/capability-policy.mjs';
+import { containerBackend } from '../verification/backends.mjs';
 
 export async function createRun(store, repo, input) {
   const contract = validateContract(input);
@@ -39,7 +42,11 @@ export async function execute(store, id, dependencies = {}, options = {}) {
       if (initial.workflowFence !== options.workflowOwner || initial.workflowRevision !== current.revision || initial.workflowGraphHash !== current.contractHash || initial.state !== 'READY' || initial.attempts !== 0 || attempt?.status !== 'STARTED') throw Error('Stale or previously launched hybrid attempt');
     }
   }
-  const services = { snapshot, context, candidateHash, propose, verify, ready: dockerReady, cleanupContainer, deliver, ...dependencies };
+  const backend = dependencies.verificationBackend ?? containerBackend();
+  const services = { snapshot, context, candidateHash, propose,
+    verify: request => backend.verify(request),
+    ready: verification => backend.prepare(verification),
+    cleanupContainer: name => backend.cleanup(name), deliver, ...dependencies };
   const effect = kind => {
     if (initial.workflowParent) {
       const parent = store.get(initial.workflowParent), authorization = workflowGuard(store, parent);
@@ -165,10 +172,11 @@ export async function execute(store, id, dependencies = {}, options = {}) {
       effect('verify');
       const evidence = await services.verify({ directory, contract: run.contract, tests: run.contract.tests, timeoutMs: Math.min(remaining(), run.contract.verification ? 600000 : 120000), cancelled, containerName: run.containerName });
       guard();
-      evidence.candidateHash = run.candidateHash;
-      evidence.integrity = run.candidateHash === await services.candidateHash(directory, names);
-      evidence.contractHash = run.contractHash;
-      evidence.testIdentityMatch = matchTestIdentity(baseline, evidence);
+      bindVerification(evidence, {
+        candidateHash: run.candidateHash, contractHash: run.contractHash,
+        integrity: run.candidateHash === await services.candidateHash(directory, names),
+        testIdentityMatch: matchTestIdentity(baseline, evidence)
+      });
       run.lastEvidenceHash = store.artifact(evidence);
       const decision = judge(evidence); run.decisionHash = store.artifact(decision);
       if (decision.outcome === 'ESCALATE') { save('WAITING_HUMAN', decision.reason); return run; }
@@ -228,6 +236,8 @@ async function executeWorkflow(store, id, dependencies, options) {
   };
   const guard = () => {
     if (leaseLost || store.get(id).control !== 'run') throw Error('Coordinator lease lost or operator control');
+    if (run.workItemPolicyHash && (!dependencies.workItemPolicy ||
+        hash(dependencies.workItemPolicy) !== run.workItemPolicyHash)) throw Error('WorkItem policy missing or changed; new reviewed workflow required');
     validateWorkflow(run.contract, source); workflowStore.approval(store, run);
     if (run.contractHash !== run.contract.workflowHash || hash(store.readArtifact(run.graphRef)) !== hash(run.contract)) throw Error('Graph snapshot integrity mismatch');
     if (before + Date.now() - entered >= source.timeoutSeconds * 1000) throw Error('Workflow time budget exhausted');
@@ -255,6 +265,11 @@ async function executeWorkflow(store, id, dependencies, options) {
     if (['COMPLETED', 'CANCELLED'].includes(run.state)) return run;
     validateWorkflow(run.contract, source);
     if (hash(store.readArtifact(run.graphRef)) !== hash(run.contract)) throw Error('Graph snapshot integrity mismatch');
+    if (dependencies.workItemPolicy && !run.workItemPolicyHash) {
+      if (workflowStore.attempts(store, id).length) throw Error('Cannot replace policy after attempts');
+      run.workItemPolicyHash = store.artifact(dependencies.workItemPolicy);
+      save(run.state, 'Additional WorkItem policy pinned; omission cannot remove restrictions');
+    }
     // A STARTED record may be a launch window, live child or lost response. Never
     // replay it. Completed children can be reconciled solely from stored evidence.
     for (const attempt of workflowStore.attempts(store, id).filter(a => a.status === 'STARTED')) {
@@ -281,18 +296,29 @@ async function executeWorkflow(store, id, dependencies, options) {
       run.reportedCostUsd = records.reduce((s, a) => s + store.get(a.childId).reportedCostUsd, 0);
       run.unknownCostAttempts = records.reduce((s, a) => s + store.get(a.childId).unknownCostAttempts, 0);
       if (run.unknownCostAttempts || run.reportedCostUsd > source.maxAttempts * source.attemptBudgetUsd) return save('WAITING_HUMAN', 'Workflow cost unknown or exhausted');
-      if (records.some(a => a.status !== 'SUCCEEDED')) return save('WAITING_HUMAN', 'A previous attempt failed; descendants blocked');
       if (run.finalRunId) {
         const finalChild = store.get(run.finalRunId); accepted(finalChild);
         if (run.contract.schemaVersion === 2 && (!finalChild.candidatePaths || await candidateHash(finalChild.candidateDirectory, finalChild.candidatePaths) !== finalChild.candidateHash)) throw Error('Final candidate tree changed after verification');
         guard();
         return save('COMPLETED', 'All required WorkItems and integrated candidate independently verified; local artifacts only');
       }
-      for (const n of run.contract.items) if (run.states[n.id] !== 'SUCCEEDED') run.states[n.id] = n.dependencies.every(d => run.states[d] === 'SUCCEEDED') ? 'READY' : 'BLOCKED';
+      run.workItemBlocks = {};
+      for (const n of run.contract.items) if (run.states[n.id] !== 'SUCCEEDED') {
+        const prior = records.find(a => a.itemId === n.id);
+        const admission = policyAdmission(run, n.id, dependencies.workItemPolicy);
+        const operator = workflowGuard(store, run)?.admission(run, n.id);
+        const reasons = prior ? ['Previous attempt requires review; no replay'] :
+          operator?.status === 'BLOCKED' ? operator.missing : admission.missing;
+        const dependent = n.dependencies.some(d => run.states[d] !== 'SUCCEEDED');
+        if (reasons.length || dependent) {
+          run.states[n.id] = 'BLOCKED';
+          run.workItemBlocks[n.id] = reasons.length ? reasons : ['Dependencies not satisfied'];
+        } else run.states[n.id] = 'READY';
+      }
       const nodes = readyBatch(run.contract, run.states);
       const final = run.contract.items.every(n => run.states[n.id] === 'SUCCEEDED');
       run.workflowStagesComplete = final;
-      if (!nodes.length && !final) return save('WAITING_HUMAN', 'Dependencies not satisfied');
+      if (!nodes.length && !final) return save('WAITING_HUMAN', 'WorkItem capability, approval or dependency gates unsatisfied');
       const selection = await choose(); run.providerId ??= selection.providerId;
       const changes = {};
       if (final) for (const a of records) {
@@ -348,10 +374,7 @@ async function executeWorkflow(store, id, dependencies, options) {
         failed ||= !success;
       }
       guard();
-      if (failed) {
-        for (const n of run.contract.items) if (run.states[n.id] !== 'SUCCEEDED') run.states[n.id] = 'BLOCKED';
-        return save('WAITING_HUMAN', 'Child verification/approval failed; subsequent WorkItems blocked');
-      }
+      if (failed && final) return save('WAITING_HUMAN', 'Final verification failed; no automatic replay');
     }
   } catch (error) {
     if (leaseLost) throw error;

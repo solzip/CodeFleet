@@ -13,6 +13,9 @@ import { productCli } from '../product/cli.mjs';
 import { runReport } from '../product/report.mjs';
 import { planIntent } from '../intent/engine.mjs';
 import { hostCli, hostHelp } from '../hosts/cli.mjs';
+import { inspectLocalCommand, localBackend } from '../verification/backends.mjs';
+import { readResponse } from '../hosts/cli.mjs';
+import { exact } from '../intent/contract.mjs';
 
 const args = process.argv.slice(2);
 const index = args.indexOf('--state');
@@ -32,8 +35,22 @@ try {
     const result = await hostCli(values, directory); console.log(JSON.stringify(result.data, null, 2)); process.exitCode = result.exitCode;
   } else if (action === 'objective') {
     const result = await productCli(values, directory); console.log(JSON.stringify(result.data, null, 2)); process.exitCode = result.exitCode;
+  } else if (['inspect-local', 'verify-local'].includes(action)) {
+    if (action === 'inspect-local' ? values.length !== 1 :
+      values.length !== 4 || values[1] !== '--trust' || values[3] !== '--acknowledge-unisolated')
+      throw Error('inspect-local REQUEST.json; verify-local REQUEST.json --trust COMMAND_HASH --acknowledge-unisolated');
+    const request = await readResponse(values[0]);
+    exact(request, ['executable', 'args', 'directory', 'timeoutMs'], 'Local command');
+    if (action === 'inspect-local') console.log(JSON.stringify(await inspectLocalCommand(request), null, 2));
+    else {
+      const backend = localBackend();
+      const token = await backend.authorize(request, { reviewedCommandHash: values[2], acknowledgeUnisolatedExecution: true });
+      const result = await backend.verify({ ...request, token, cancelled: () => interrupted });
+      console.log(JSON.stringify(result, null, 2)); process.exitCode = result.status === 'LOCAL_PASSED' ? 0 : 2;
+    }
   } else if (!action || ['help', '--help'].includes(action)) {
     console.log(hostHelp + '\n');
+    console.log('Optional explicit-trust local diagnostics: inspect-local REQUEST.json; verify-local REQUEST.json --trust COMMAND_HASH --acknowledge-unisolated. Local success is never protected VERIFIED.');
     console.log(`CodeFleet experimental alpha — test-driven Node and Java changes\n\n  codefleet-alpha plan "objective" [repository] [--draft draft.json] (read-only, no model call)\n  codefleet-alpha doctor [contract.json]\n  codefleet-alpha prepare-java <contract.json> <trusted-repository>\n  codefleet-alpha run <contract.json> <repository>\n  codefleet-alpha resume <run-id>\n  codefleet-alpha pause|cancel <run-id>\n  codefleet-alpha status [run-id]\n  codefleet-alpha export <run-id> <directory>\n\nOptional: --state <local-state-directory>\n\nRun grants the explicit contract scope and delivery permission. Only named context/test files are sent to Claude. Requires a clean repository, an existing failing regression test, Claude authentication and a pinned Docker verifier image. Node uses ${IMAGE}. Java supports JDK 21 with Gradle 9.4.1 or Maven 3.9.9; prepare-java executes the trusted baseline with network to cache dependencies in a local image. Candidate verification is offline. Alpha never merges PRs, deploys, or edits the original repository. Cost is provider-reported, not an independent billing guarantee.`);
   } else if (action === 'plan') {
     // Planning never opens the Store or launches a model. Supplied drafts remain
@@ -60,6 +77,8 @@ try {
     if (values.length !== 2) throw Error('prepare-java requires contract.json and a clean trusted repository');
     console.log(JSON.stringify(await prepareJava(JSON.parse(await readFile(path.resolve(values[0]), 'utf8')), path.resolve(values[1]), { cancelled: () => interrupted }), null, 2));
   } else if (action === 'doctor') {
+    const noAuth = values.includes('--no-auth');
+    if (noAuth) values.splice(values.indexOf('--no-auth'), 1);
     if (values.length > 1) throw Error('doctor accepts one contract.json');
     const verification = values.length ? validateContract(JSON.parse(await readFile(path.resolve(values[0]), 'utf8'))).verification : undefined;
     const checks = [];
@@ -70,14 +89,15 @@ try {
     ]) {
       const r = await command(exe, argv, { env }); checks.push({ name, ok: r.exitCode === 0, detail: r.exitCode === 0 ? r.stdout.toString().split('\n')[0].trim() : 'Executable unavailable' });
     }
-    const auth = await command(process.platform === 'win32' ? 'claude.exe' : 'claude', ['auth', 'status'], { env: environment('provider') });
+    const auth = noAuth ? null : await command(process.platform === 'win32' ? 'claude.exe' : 'claude', ['auth', 'status'], { env: environment('provider') });
     let loggedIn = false;
     try { loggedIn = auth.exitCode === 0 && JSON.parse(auth.stdout.toString()).loggedIn === true; } catch {}
-    checks.push({ name: 'claude-authentication', ok: loggedIn, detail: loggedIn ? 'Authenticated; account identity omitted' : 'Run claude auth login before using the provider' });
+    checks.push({ name: 'claude-authentication', ok: noAuth ? null : loggedIn, detail: noAuth ? 'NOT_CHECKED: explicit --no-auth; full Alpha readiness not established' : loggedIn ? 'Authenticated; account identity omitted' : 'Run claude auth login before using the provider' });
     try { await dockerReady(verification); checks.push({ name: 'isolated-verifier', ok: true }); }
     catch (e) { checks.push({ name: 'isolated-verifier', ok: false, detail: e.message }); }
     console.log(JSON.stringify({ node: process.version, platform: process.platform, checks, githubAuthentication: 'Needed only for PR delivery; checked on delivery. This diagnostic never prints account identities or tokens.' }, null, 2));
-    if (checks.some(c => !c.ok)) process.exitCode = 1;
+    if (checks.some(c => c.ok === false)) process.exitCode = 1;
+    else if (noAuth) process.exitCode = 2;
   } else {
     store = new Store(directory);
     if (action === 'run') {
