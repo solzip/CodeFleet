@@ -2,7 +2,7 @@
 
 `docs/audits/`·`docs/runs/`·`docs/archive/`의 전 문서를 시간 역순으로 나열한다. 규약은 `docs/CONVENTIONS.md`, 결함 등재 현황은 `docs/REGISTER.md`.
 
-작성 기준: 2026-10-21. 전수 101개 문서 (감사 38 · 실행 56 · 아카이브 7). <!-- fact: docs-indexed = 101 --> <!-- fact: docs-on-disk = 101 -->
+작성 기준: 2026-10-21. 전수 112개 문서 (감사 38 · 실행 67 · 아카이브 7). <!-- fact: docs-indexed = 112 --> <!-- fact: docs-on-disk = 112 -->
 
 현재 공개 사용 제품 계획은 [제품 완성 문서](product-completion/README.md)에 있다. 기존 아카이브의 실측과 새 제품 계획을 구분하며, 구현 상태는 새 진행 현황에서 관리한다.
 
@@ -10,6 +10,17 @@
 
 | Date | Document | Type | Result | Follow-up |
 | --- | --- | --- | --- | --- |
+| 10-21 | `runs/2026-10-21/new-project-verify-repair-loop.md` | Local verification, repair and re-verification | objective verify, LOCAL_FAILED, hash-bound modify repair, stale invalidation; alpha 230 to 243 tests, same 5 Docker-env failures; 17/17 mutations detected | Owner approval: runtime reinstall, calendar, commit |
+| 10-21 | `runs/2026-10-21/new-project-verification-path-repro.md` | Verification/repair path reproduction | State copied and checked (9/9 tables, 12/12 artifacts); fixture reproduces no local-verification execution, unbound verify-local, failure reported INCONCLUSIVE, no modify path | Owner approval of fix scope; calendar approval |
+| 10-21 | `runs/2026-10-21/new-project-calendar-fileset-review.md` | Calendar fileset proposal and review | Codex direct CLI; 1-file fileset 801ce042 waiting approval; pure date functions 22/22 locally; DOM NOT_RUN | Owner approval of calendar fileset |
+| 10-21 | `runs/2026-10-21/new-project-todo-materialization.md` | Todo fileset materialization | Owner-approved v2 created exactly 7 files; hashes 7/7, rerun refused, HEAD and index unchanged; calendar unblocked | calendar fileset proposal |
+| 10-21 | `runs/2026-10-21/new-project-todo-fileset-v2.md` | Todo fileset fix and re-proposal | Same task revision 8 to 9; old fileset superseded and unapprovable; server traversal and link checks pass on a scratch copy | Owner approval of 74cdb273; supersede test gap |
+| 10-21 | `runs/2026-10-21/new-project-todo-fileset-review-v2.md` | Todo fileset final review recheck | State unchanged; first observed require_escalated (read-only probe); approvable, 4 low findings | Owner approval of todo fileset |
+| 10-21 | `runs/2026-10-21/new-project-todo-fileset-review.md` | Todo fileset proposal and review | Runtime reinstalled without baseline change; Codex called CLI directly; 7-file fileset statically reviewed, execution NOT_RUN | Owner approval of todo fileset |
+| 10-21 | `runs/2026-10-21/new-project-data-model-materialization.md` | Fileset materialization | Owner-approved data-model fileset created exactly two files; hashes match, rerun refused, Git HEAD and index unchanged | todo fileset proposal |
+| 10-21 | `runs/2026-10-21/new-project-objective-clarification.md` | Objective clarification | Operator clarify brings the real task to VALIDATED, DAG and fileset approval request; alpha 230 tests, same 5 Docker-env failures | Fileset approval and materialize on owner decision |
+| 10-21 | `runs/2026-10-21/new-project-bootstrap-host-acceptance.md` | Real Codex Host acceptance | Host CLI blocked by sandbox account and spawn EPERM; operator-mediated draft stops at unwaivable privileged-intent unknown | Owner decision on scope clarification |
+| 10-21 | `runs/2026-10-21/new-project-bootstrap.md` | NEW_PROJECT bootstrap | Probe, BootstrapDraft, bootstrap DAG and approved file creation; alpha 212 → 225 tests, same 5 Docker-env failures | Host Live trial; commit approval |
 | 10-21 | `runs/2026-10-21/h6-uid-resource-recovery.md` | Resource collision correction | Bounded UID pressure reproduction; hosted rerun pending | Push authorization and hosted observations |
 | 10-21 | `runs/2026-10-21/pr6-ci-environment.md` | CI environment correction | Explicit platform scope and real protected fixtures; remote rerun pending | Push authorization and hosted CI |
 
