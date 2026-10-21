@@ -2,10 +2,29 @@
 
 ## Active alpha development
 
-The owner has resumed product development under `docs/product-completion/`.
-That directory defines the active alpha scope; `progress.md` records current
-evidence and unresolved release decisions. The freeze notes below describe the
-legacy engine, not a prohibition on the newly authorized alpha work.
+CodeFleet is a Host-Native AI development orchestration extension for Codex CLI
+and Claude Code, using the existing Host's models, authentication and session.
+[Product principles](docs/PRODUCT_VISION.md) define the product invariants;
+[architecture](docs/product-completion/architecture.md) owns current structure,
+[progress](docs/product-completion/progress.md) owns implementation and verification
+status, and [roadmap](docs/product-completion/roadmap.md) owns next work and acceptance.
+The freeze notes below describe the legacy engine only.
+
+Natural-language goals become Task Drafts, pass through a Validator and form a
+Workflow/DAG. Single Agent is the default; role-based collaboration does not
+prove automatic Host delegation. Policy, Capability, approvals, state and recovery
+govern execution. Only independent Evidence and Judge can establish completion;
+an AI success claim is not verification evidence.
+
+Basic planning and DAG preparation do not require Docker, WSL, separate OS
+accounts or direct model API keys. Docker is an optional protected verification
+backend, required for contracts that need it. Explicit-trust Local Verification
+is not Protected Verification; Host Sandbox remains unverified. Do not promote
+offline tests to Host Live or automatic delegation certification.
+
+New-project Bootstrap without Git HEAD is under separate development and has no
+completion evidence on this main baseline. Preserve its separate worktree and
+distinguish the product goal from implemented existing-project behavior.
 
 `src/alpha/` is a separate test-driven Node and Java workflow. Run `npm test` for both
 legacy and alpha suites plus document checks. Legacy TAP and rule coverage stay
@@ -37,8 +56,13 @@ git config user.email "solarchive.dev@gmail.com"
 
 ## Where to start reading
 
-This repository was frozen on 2026-08-13 and is not being developed further. There is
-no next slice. The map below is for reading what is here, not a work queue.
+Start with the current product documents linked above and the
+[Host guide](docs/product-completion/host-native-guide.md) and
+[Core guide](docs/product-completion/host-core-guide.md).
+
+The legacy engine was frozen on 2026-08-13. The map below describes that historical
+baseline, not the resumed product's work queue. Legacy FINAL RULEs remain the
+machine-checked contract for that engine, not the current product architecture.
 
 ```
 README.md                             what this was, and what it actually measured
@@ -93,7 +117,7 @@ This matters because it already went wrong: a regex sweep missed `assert.rejects
 
 ### The design fixes the shape; the implementation conforms
 
-When `docs/concept-foundation.md` already fixes field names, phase order, or matcher syntax, match it rather than inventing a variant. The HarnessWorkspaceSnapshot field grouping was written differently once and had to be rewritten.
+For the legacy engine, when `docs/concept-foundation.md` already fixes field names, phase order, or matcher syntax, match it rather than inventing a variant. The HarnessWorkspaceSnapshot field grouping was written differently once and had to be rewritten. Current Host architecture is maintained in `docs/product-completion/architecture.md`; detailed implementation contracts remain under `docs/implementation/`.
 
 If the design is wrong, change the design first and say so. Do not diverge silently.
 

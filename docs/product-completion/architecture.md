@@ -1,4 +1,35 @@
-# 제품 완성 아키텍처
+# CodeFleet 공식 아키텍처
+
+현재 제품 정의는 [제품 원칙](../PRODUCT_VISION.md)을 따른다. CodeFleet은 기존 Codex CLI·Claude Code의 모델·인증·세션을 활용하는 Host-Native AI 개발 오케스트레이션 확장 도구다. 이 절이 현재 구조의 기준이며, 아래 초기 Alpha 설계는 당시 범위와 결정 근거로 보존한다. 구현·검증 상태는 [진행 현황](progress.md)에서 관리한다.
+
+## 현재 Host-Native 구조
+
+```text
+사용자 → 기존 Host 세션 / Skill
+       → 자연어 목표 → Task Draft → Validator → Workflow/DAG
+       → Policy / Capability / 승인 요청 → 허용된 실행
+       → 선택한 Verification Backend → Evidence → 독립 Judge → 결과 / 복구
+```
+
+Host는 모델·인증·세션·자체 도구 권한을 소유한다. CodeFleet은 Task와 계약, DAG, 역할, 승인 요청, 상태·복구, 검증 증거와 완료 판정을 관리한다. Host Adapter와 선택적 직접 API Provider는 별도 경로다. Host 경로에서 모델을 별도로 호출하거나 인증·세션을 복사하지 않는다.
+
+| 책임 | 현재 구현 경계 |
+| --- | --- |
+| 목표·Draft·Validator | `src/intent/`, `src/product/tasks.mjs`: 구조화 제안을 검사하고 계약을 준비한다. Draft 유효성은 실행 승인이 아니다. |
+| Host 연결 | `src/hosts/`: Skill 설치·준비·교환 계약. 공개 `requests/submit/run/resume`는 생산 격리 미검증으로 차단한다. |
+| DAG·협업·정책 | `src/workflow/`, 기존 Controller·Store: 단일 Agent 기본, 지원되는 병렬 후보와 직렬 통합. 역할 metadata는 실제 Live 위임의 증거가 아니다. |
+| 검증 Backend | `src/verification/backends.mjs`: Local, Container, 미검증 Host Sandbox를 구분한다. |
+| 증거·완료 | 기존 Alpha Evidence·Judge: 계약과 후보에 결합된 독립 증거를 판정한다. AI 자기 보고는 검증 성공이 아니다. |
+
+기본 계획·Draft·DAG 조회·승인 요청에는 Docker가 필요 없다. Docker는 선택적 보호 검증 Backend이며 이를 요구하는 계약의 검증에는 필요하다. Local Verification은 명시적으로 신뢰한 로컬 실행으로, 보호 격리나 Protected Verification과 동등하지 않다. Host Sandbox는 현재 `NOT_VERIFIED`다. Backend 부재를 Local 자동 대체나 완료 조건 완화로 처리하지 않는다. WSL·별도 OS 계정·직접 모델 API Key도 기본 준비 요구 사항이 아니다.
+
+실제 Host Live·자동 위임·생산 보호 실행 배포는 오프라인 시험과 구분한다. Git HEAD 없는 신규 프로젝트 Bootstrap은 별도 개발 중이며 이 기준선의 완료 기능이 아니다. 목표 흐름에 포함하되 구현·수용 기준은 [로드맵](roadmap.md)에 둔다.
+
+상세 계약은 [Host 연동](../implementation/host-native.md), [승인 경계](../implementation/operator-authorization.md), [IPC](../implementation/host-ipc.md)를 참조한다. [Core 안내](host-core-guide.md)는 현재 Backend 보장 범위, [Host 안내](host-native-guide.md)는 설치·사용을 담당한다. 상세 계약 원본이나 과거 검토를 이 문서의 최신 상태표로 해석하지 않는다.
+
+## 초기 Alpha 설계 기록
+
+이하의 첫 버전·초기 범위·목표 스키마·명령은 당시 설계다. Host-Native 기본 설치나 현재 모든 기능의 지원 여부를 정의하지 않는다. 책임 분리·독립 증거·정책·복구 원칙은 위 현재 구조에서도 유지한다.
 
 작성일: 2026-09-30. 상태: 제안. 아래 컴포넌트·스키마·명령은 목표 설계이며 구현된 API를 뜻하지 않는다.
 

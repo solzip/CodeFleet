@@ -1,5 +1,23 @@
 # 진행 현황과 결정 목록
 
+## 현재 공식 상태
+
+문서 정리 기준선은 `2a330bb3fdd8a9a9aec5934ffd64f63e7d3d5cba`의 main이다. [제품 원칙](../PRODUCT_VISION.md)과 [공식 아키텍처](architecture.md)를 적용하며, 이 갱신은 새 제품 실행이나 Live 검증 결과를 추가하지 않는다.
+
+| 영역 | 현재 상태 | 근거·한계 |
+| --- | --- | --- |
+| Host-Native 준비 | main 통합, 오프라인 검증 기록 있음 | [Host Core 기록](../runs/2026-10-20/host-native-core-verification.md). 기존 Host 모델·인증·세션을 활용하며 계획·Draft·DAG·승인 요청은 Docker 없이 준비 가능 |
+| Local / Container 검증 | 구현된 경로, 보장 범위 상이 | [Core 안내](host-core-guide.md). Local 성공은 Protected Verification을 만족시키지 않음 |
+| Host Sandbox | NOT_VERIFIED | `src/verification/backends.mjs`의 미검증 Backend. 정책 선언만으로 활성화하지 않음 |
+| 실제 Host Live | HOST_LIVE_NOT_VERIFIED | [설치·발견 및 차단 기록](../runs/2026-10-20/first-host-native-gate-resolution.md). 오프라인·설치 성공을 Live 수용으로 계산하지 않음 |
+| 역할별 협업 | 오프라인 통제형 협업 근거 있음, 자동 Host 위임 미검증 | [G5 기록](../runs/2026-10-19/alpha-g5-controlled-hybrid.md). 단일 Agent 기본 |
+| 공개 Host 보호 실행 | BLOCKED | `src/hosts/cli.mjs`의 공개 requests/submit/run/resume 차단 유지. 내부 시험 경로와 구분 |
+| Git HEAD 없는 신규 프로젝트 Bootstrap | 별도 개발 중, main 완료 근거 없음 | 기존 프로젝트 준비를 신규 프로젝트 지원으로 간주하지 않음. [다음 작업과 완료 기준](roadmap.md#현재-host-native-후속-작업) |
+
+다음 작업은 로드맵의 현재 Host-Native 후속 작업을 따른다. 아래 Alpha 배포·G/H 단계·파일럿 인계는 각 시점의 근거와 경과다. 과거 Alpha Live 성공은 현재 Host Live 검증을 대신하지 않는다.
+
+## 단계별 경과와 당시 검증 범위
+
 > **Host-Native Core:** [구현·검증 기록](../runs/2026-10-20/host-native-core-verification.md)과 [사용 안내](host-core-guide.md). 기본 계획·Draft·DAG·승인 요청과 선택적 검증 Backend를 분리했다. 기존 보호된 검증 게이트는 유지하며 Local 성공을 보호된 완료로 승격하지 않는다. 실제 Host Live는 별도 미검증 상태다.
 
 > **H4:** [Host IPC and existing Docker Harness](../runs/2026-10-20/alpha-h4-host-ipc-harness.md) connect in the separated Linux offline fixture. Human input and actual Host deployment remain BLOCKED.
@@ -12,10 +30,10 @@
 
 > **Host-Native 전환:** [설계](../implementation/host-native.md), [사용 안내](host-native-guide.md), [실행 기록](../runs/2026-10-20/alpha-host-native-transition.md). 기존 Host 세션의 구조화 제안과 CodeFleet Harness를 연결하며 직접 API는 선택 사항으로 유지한다. Live Host 권한 경계와 실제 세션 검증은 미완료다. 아래 기록은 각 작업 당시의 상태다.
 
-> [제한 HTTPS 전송과 Provider 호환성](../runs/2026-10-20/alpha-g7c-live-transport-compatibility.md): 로컬 TLS·가짜 키 및 전체 회귀를 검증했다. 실제 모델 호출·API 인증 검증은 하지 않았으며 Live 실행과 엄격한 비용 상한은 차단/미지원 상태다. 아래 오프라인 HTTP 경로에 HTTPS 준비 계약을 추가한 미커밋 후속 변경이다.
+> [제한 HTTPS 전송과 Provider 호환성](../runs/2026-10-20/alpha-g7c-live-transport-compatibility.md): 로컬 TLS·가짜 키 및 전체 회귀를 검증했다. 실제 모델 호출·API 인증 검증은 하지 않았으며 Live 실행과 엄격한 비용 상한은 차단/미지원 상태다. 당시 미커밋으로 기록했던 HTTPS 준비 계약은 현재 main에 포함되어 있다.
 
 
-> [도구 없는 모델 인터페이스의 오프라인 구현](../runs/2026-10-20/alpha-g7b-proposal-only-model-interface.md): Fake Server 기반 제안·Planner·Workflow 연결과 필수 환경 검사를 추가했다. 외부 모델 endpoint와 실제 인증 경로는 제공하지 않으며 Live 차단을 유지한다. 이 후속 변경은 미커밋 상태다.
+> [도구 없는 모델 인터페이스의 오프라인 구현](../runs/2026-10-20/alpha-g7b-proposal-only-model-interface.md): Fake Server 기반 제안·Planner·Workflow 연결과 필수 환경 검사를 추가했다. 이 기록 당시에는 외부 모델 endpoint와 실제 인증 경로를 제공하지 않았다. 후속 HTTPS 계약과 함께 현재 main에 포함되어 있으며 Live 차단은 유지한다.
 
 > G6 로컬 통합 구현·검증 완료 (2026-10-19): [통합 결과와 Live 차단 사항](../runs/2026-10-19/alpha-g6-product-integration.md), [CLI 안내](orchestration-guide.md). 목표 제품 전체의 Live 준비 상태는 BLOCKED_OR_UNSUPPORTED다. 실제 의미 Planner·Provider 협업을 검증 완료로 표시하지 않는다. 이후 사용자 승인으로 개발 브랜치에 커밋·푸시했으며 제품 배포는 하지 않았다.
 
@@ -37,6 +55,8 @@
 갱신일: 2026-09-30. 현재 단계: 제한된 알파 실행·검증·복구·PR 전달 구현 및 실측, MIT 공개 알파 배포, 외부 파일럿 대기.
 
 ## 현재 상태
+
+이 절의 Alpha 배포·단계 상태는 아래 실측 당시의 기록이다. 현재 Host-Native 전체 상태는 문서 상단의 **현재 공식 상태**를 따른다.
 
 ### alpha.4 병합·배포본 재검증 (2026-09-30)
 
@@ -84,6 +104,8 @@
 
 ## 결정 목록
 
+아래 결정은 초기 Alpha의 배경과 실행 범위를 보존한다. 특히 첫 지원 조합과 PR 중심 범위를 현재 Host 기본 설치 요건으로 확대하지 않는다. 현재 제품 방향은 [제품 원칙](../PRODUCT_VISION.md)을 따른다.
+
 | ID | 내용 | 상태 | 결정 시점·영향 |
 | --- | --- | --- | --- |
 | D01 | 공개하여 실제 사용자가 사용하는 제품 완성 | 사용자 확정 | 전체 목표 |
@@ -107,6 +129,8 @@
 미결정 항목은 관련 작업 직전에 해소한다. 현재 문서 작성과 M0의 읽기 전용 현 상태 조사까지 막는 항목은 아니다. 정책·라이선스·외부 게시 변경은 별도 구체 변경으로 검토한다.
 
 ## 다음 작업 패킷
+
+이 절은 아래 날짜의 Alpha 파일럿 인계 기록이다. 현재 Host-Native 작업 순서는 [로드맵](roadmap.md#현재-host-native-후속-작업)을 따른다. 당시의 “바로 수행할 작업”이나 배포 상태를 현재 Host 수용 상태로 해석하지 않는다.
 
 **M4 — 독립 사용자 온보딩과 실제 파일럿 (세션 종료 인계: 2026-09-30)**
 
