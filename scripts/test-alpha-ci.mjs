@@ -1,8 +1,30 @@
-// Preserve the package's complete Alpha test list. Run the fixed-UID H6
-// process-limit probe before other UID/IPC fixtures consume kernel resources.
+// Preserve the complete Alpha list. Keep H6's bounded pressure fixture exclusive;
+// ordering alone cannot isolate RLIMIT_NPROC from a hosted runner's UID tasks.
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
+
+if (process.platform === 'linux') {
+  // Numeric resource metadata only: no process names, argv, environment or auth.
+  const uids = [...new Set([1001, 61001, process.getuid()])];
+  const counts = Object.fromEntries(uids.map(uid => [uid, { processes: 0, threads: 0 }]));
+  let inspected = 0, unreadable = 0;
+  for (const pid of (await readdir('/proc')).filter(name => /^\d+$/.test(name))) {
+    try {
+      const status = await readFile(`/proc/${pid}/status`, 'utf8');
+      const uid = Number(status.match(/^Uid:\s+(\d+)/m)?.[1]);
+      if (counts[uid]) { counts[uid].processes++; counts[uid].threads += Number(status.match(/^Threads:\s+(\d+)/m)?.[1]); }
+      inspected++;
+    } catch (error) {
+      if (!['ENOENT', 'EACCES', 'ESRCH'].includes(error.code)) throw error;
+      unreadable++;
+    }
+  }
+  const limits = await readFile('/proc/self/limits', 'utf8');
+  console.log('H6 host resource observation: ' + JSON.stringify({ uid: process.getuid(), counts, inspected, unreadable,
+    nproc: limits.split('\n').find(line => line.startsWith('Max processes')),
+    scope: 'visible process snapshot; not an atomic kernel UID accounting query' }));
+}
 
 const pkg = JSON.parse(await readFile('package.json', 'utf8'));
 const words = pkg.scripts['test:alpha'].split(/\s+/);

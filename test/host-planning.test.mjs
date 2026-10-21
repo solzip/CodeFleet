@@ -106,6 +106,19 @@ test('H6 Linux UID/chroot/seccomp: real prohibited access and child escape attem
   assert.equal(r.status, 0, r.stderr + r.stdout);
   const e = JSON.parse(r.stdout.trim().split('\n').at(-1));
   assert.equal(e.status, 'OFFLINE_VERIFIED');
+  assert.equal(e.uid, 61001, 'Dedicated non-root test identity, not the runner/IPC UID');
+  assert.deepEqual(e.nproc, [8, 8], 'Production process ceiling is unchanged');
+  assert.equal(e.resourceChecks.pressureProcesses, 8);
+  assert.equal(e.resourceChecks.pressureChildrenReaped, true);
+  for (const observation of [e.resourceObservation, e.resourceChecks.collision, e.resourceChecks.bounded, e.resourceChecks.recovered]) {
+    assert.deepEqual(observation.nproc, [8, 8]);
+    assert.equal(observation.Seccomp, '2'); assert.equal(observation.NoNewPrivs, '1');
+    assert.equal(Number(observation['pids.max']), 32);
+    assert.ok(Number(observation['pids.current']) < 32, 'UID exhaustion must not be cgroup exhaustion');
+  }
+  assert.ok(e.resourceChecks.collision.visibleUidTasks >= 9);
+  assert.ok(e.resourceChecks.bounded.visibleUidTasks >= 9);
+  assert.equal(e.resourceChecks.recovered.visibleUidTasks, 1);
   assert.deepEqual(e.checks, ['read', 'search', 'outside-read', 'credentials', 'ledger',
     'source-mount', 'fixture-write', 'tool-command', 'symlink', 'traversal', 'replace-path',
     'internet-socket', 'operator-ipc', 'docker-socket', 'operator-socket-path',

@@ -5,6 +5,8 @@ import importlib.util
 import json
 import os
 import pathlib
+import resource
+import select
 import signal
 import socket
 import subprocess
@@ -15,13 +17,20 @@ spec = importlib.util.spec_from_file_location("isolation", "/input/src/hosts/pla
 isolation = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(isolation)
 
+# Test-only identity, distinct from common hosted runner / H3 / H4 UID 1001.
+# confine already supports a provisioner-selected UID; its limits stay unchanged.
+TEST_UID = 61001
+
 if len(sys.argv) > 1:
     libc = ctypes.CDLL(None, use_errno=True)
     # Import all runtime dependencies before root/UID restriction.
-    isolation.confine("/h6/jail")
+    isolation.confine("/h6/jail", uid=1001 if sys.argv[1] == "collision" else TEST_UID)
+    assert resource.getrlimit(resource.RLIMIT_NPROC) == (8, 8)
     if sys.argv[1] == "hang":
         time.sleep(60)
         raise AssertionError("Timeout not enforced")
+    print("CONFINED", flush=True)
+    assert sys.stdin.readline().strip() == "FAKE_MODEL_CHANNEL"
     checks = []
     def denied(name, action):
         try:
@@ -67,11 +76,10 @@ if len(sys.argv) > 1:
     assert os.waitpid(pid, 0)[1] == 0
     checks.append("descendant-inherits")
     # Fake transport uses only stdin/stdout pipes to a trusted supervisor.
-    assert sys.stdin.readline().strip() == "FAKE_MODEL_CHANNEL"
     checks.append("fake-pipe-transport-no-tool-network")
     observed = {p: isolation.tool({"method": "read", "path": p, "query": ""})
                 for p in ["src/math.js", "test/math.test.js"]}
-    print(json.dumps({"checks": checks, "uid": os.getuid(), "modelCalls": 0, "observed": observed}))
+    print(json.dumps({"checks": checks, "uid": os.getuid(), "nproc": list(resource.getrlimit(resource.RLIMIT_NPROC)), "modelCalls": 0, "observed": observed}))
     sys.exit(0)
 
 root = pathlib.Path("/h6")
@@ -103,19 +111,110 @@ def snapshot():
     return {str(p.relative_to(jail)): os.readlink(p) if p.is_symlink() else
             hashlib.sha256(p.read_bytes()).hexdigest() for p in jail.rglob("*") if not p.is_dir()}
 before = snapshot()
-worker = subprocess.Popen([sys.executable, "-B", __file__, "worker"],
-                          stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                          stderr=subprocess.PIPE, start_new_session=True)
-try:
-    stdout, stderr = worker.communicate(b"FAKE_MODEL_CHANNEL\n", timeout=10)
-    assert worker.returncode == 0, stderr.decode()
-finally:
+
+def pressure(uid):
+    """Eight bounded, supervised test processes; no change to any worker limit."""
+    children = []
+    rd, wr = os.pipe()
     try:
-        os.killpg(worker.pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
-    worker.wait()
-result = json.loads(stdout)
+        for _ in range(8):
+            pid = os.fork()
+            if pid == 0:
+                os.close(rd)
+                os.setgroups([])
+                os.setgid(uid)
+                os.setuid(uid)
+                os.write(wr, b"R")
+                os.close(wr)
+                time.sleep(30)
+                os._exit(0)
+            children.append(pid)
+        os.close(wr)
+        for _ in children:
+            assert select.select([rd], [], [], 5)[0], "Pressure child not ready"
+            assert os.read(rd, 1) == b"R"
+        return children
+    except BaseException:
+        reap(children)
+        raise
+    finally:
+        os.close(rd)
+
+def reap(children):
+    for pid in children:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    for pid in children:
+        os.waitpid(pid, 0)
+        assert not pathlib.Path(f"/proc/{pid}").exists(), "Residual pressure child"
+
+def run_worker(mode="worker", blocked=False):
+    worker = subprocess.Popen([sys.executable, "-B", __file__, mode],
+                              stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, start_new_session=True)
+    try:
+        assert select.select([worker.stdout], [], [], 10)[0], "Worker not ready"
+        assert worker.stdout.readline() == b"CONFINED\n"
+        status = dict(line.split(":", 1) for line in pathlib.Path(f"/proc/{worker.pid}/status").read_text().splitlines() if ":" in line)
+        observed = {k: status[k].strip() for k in ["Uid", "Threads", "NoNewPrivs", "Seccomp"]}
+        assert observed["Seccomp"] == "2" and observed["NoNewPrivs"] == "1"
+        limits = pathlib.Path(f"/proc/{worker.pid}/limits").read_text().splitlines()
+        observed["nproc"] = [int(v) for v in next(line for line in limits if line.startswith("Max processes")).split()[-3:-1]]
+        assert observed["nproc"] == [8, 8]
+        uid = int(observed["Uid"].split()[0])
+        observed["visibleUidTasks"] = 0
+        for p in pathlib.Path("/proc").glob("[0-9]*/task/[0-9]*/status"):
+            try:
+                task_uid = int(next(line for line in p.read_text().splitlines() if line.startswith("Uid:")).split()[1])
+                observed["visibleUidTasks"] += task_uid == uid
+            except (OSError, StopIteration):
+                pass  # An unrelated task can exit during observation.
+        for name in ["pids.current", "pids.max", "memory.current", "memory.max"]:
+            for base in ["/sys/fs/cgroup", "/sys/fs/cgroup/pids"]:
+                p = pathlib.Path(base, name)
+                if p.exists():
+                    observed[name] = p.read_text().strip()
+                    break
+        stdout, stderr = worker.communicate(b"FAKE_MODEL_CHANNEL\n", timeout=10)
+        if blocked:
+            assert worker.returncode != 0 and b"BlockingIOError: [Errno 11]" in stderr, stderr.decode()
+            assert b"OFFLINE_VERIFIED" not in stdout
+            return observed
+        assert worker.returncode == 0, stderr.decode()
+        result = json.loads(stdout)
+        result["resourceObservation"] = observed
+        return result
+    finally:
+        try:
+            os.killpg(worker.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        worker.wait()
+        assert not pathlib.Path(f"/proc/{worker.pid}").exists(), "Residual worker"
+        try:
+            os.killpg(worker.pid, 0)
+            raise AssertionError("Residual process group")
+        except ProcessLookupError:
+            pass
+
+children = pressure(1001)
+try:
+    collision = run_worker("collision", blocked=True)
+    result = run_worker()  # Normal descendant must run despite unrelated UID load.
+finally:
+    reap(children)
+children = pressure(TEST_UID)
+try:
+    bounded = run_worker(blocked=True)  # The dedicated identity still has a ceiling.
+finally:
+    reap(children)
+recovered = run_worker()
+assert recovered["checks"] == result["checks"] and recovered["uid"] == TEST_UID
+result["resourceChecks"] = {"pressureProcesses": 8, "collision": collision,
+                            "bounded": bounded, "recovered": recovered["resourceObservation"],
+                            "pressureChildrenReaped": True}
 for payload, label in [
     (b"x" * 2049, "request-byte-limit"),
     ((json.dumps({"method": "read", "path": "src/math.js", "query": ""}) + "\n").encode() * 17, "request-count-limit"),
@@ -142,11 +241,6 @@ except ProcessLookupError:
 for s in listeners:
     s.close()
 assert before == snapshot()
-try:
-    os.killpg(worker.pid, 0)
-    raise AssertionError("Residual process group")
-except ProcessLookupError:
-    pass
 result.update(status="OFFLINE_VERIFIED", scope="FAKE_READ_SEARCH_WORKER_ONLY",
               fileChanges=False, residualProcesses=False, hostLive="BLOCKED",
               authentication="UNVERIFIED", realModelTransport="UNVERIFIED",

@@ -2,7 +2,7 @@
 
 `docs/audits/`·`docs/runs/`·`docs/archive/`의 전 문서를 시간 역순으로 나열한다. 규약은 `docs/CONVENTIONS.md`, 결함 등재 현황은 `docs/REGISTER.md`.
 
-작성 기준: 2026-10-21. 전수 100개 문서 (감사 38 · 실행 55 · 아카이브 7). <!-- fact: docs-indexed = 100 --> <!-- fact: docs-on-disk = 100 -->
+작성 기준: 2026-10-21. 전수 101개 문서 (감사 38 · 실행 56 · 아카이브 7). <!-- fact: docs-indexed = 101 --> <!-- fact: docs-on-disk = 101 -->
 
 현재 공개 사용 제품 계획은 [제품 완성 문서](product-completion/README.md)에 있다. 기존 아카이브의 실측과 새 제품 계획을 구분하며, 구현 상태는 새 진행 현황에서 관리한다.
 
@@ -10,6 +10,7 @@
 
 | Date | Document | Type | Result | Follow-up |
 | --- | --- | --- | --- | --- |
+| 10-21 | `runs/2026-10-21/h6-uid-resource-recovery.md` | Resource collision correction | Bounded UID pressure reproduction; hosted rerun pending | Push authorization and hosted observations |
 | 10-21 | `runs/2026-10-21/pr6-ci-environment.md` | CI environment correction | Explicit platform scope and real protected fixtures; remote rerun pending | Push authorization and hosted CI |
 
 ## 2026-10-20
