@@ -8,6 +8,40 @@ import { git } from '../src/alpha/workspace.mjs';
 import { command, requireSuccess } from '../src/alpha/process.mjs';
 import { hostCli } from '../src/hosts/cli.mjs';
 import { planningSkill, requirePlanningLive } from '../src/hosts/planning.mjs';
+import { enableTasks } from '../src/product/tasks.mjs';
+import { installHost } from '../src/hosts/install.mjs';
+
+test('Codex blocked probe recovery is advisory, preserves task and grants no approval', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'cf-recovery-')), state = path.join(root, 'state');
+  const s = new Store(state); enableTasks(s);
+  for (const kind of ['GIT_OWNERSHIP', 'PROCESS_SPAWN_DENIED', 'GIT_ERROR']) {
+    const id = 'task-' + kind;
+    const value = { id, revision: 2, state: 'BLOCKED', runId: null,
+      planRef: s.artifact({ status: 'BLOCKED', probe: { error: { kind } } }) };
+    s.db.prepare('INSERT INTO product_tasks VALUES (?,?,?)').run(id, 2, JSON.stringify(value));
+    const before = s.db.prepare('SELECT body FROM product_tasks WHERE id=?').get(id).body;
+    for (const host of ['codex', 'claude']) {
+      const result = await hostCli([host, 'status', id], state);
+      assert.equal(result.data.state, 'BLOCKED');
+      const recovery = result.data.hostRecovery;
+      if (host === 'codex' && kind !== 'GIT_ERROR') {
+        assert.equal(recovery.reason, kind); assert.equal(recovery.authority, 'ADVISORY_ONLY');
+        assert.equal(recovery.grantsExecution, false); assert.equal(recovery.automaticRetry, false);
+        assert.equal(recovery.taskId, id); assert.equal(recovery.taskRevision, 2);
+        assert.match(result.data.nextAction, /command-specific approval/);
+      } else assert.equal(recovery, undefined);
+    }
+    assert.equal(s.db.prepare('SELECT body FROM product_tasks WHERE id=?').get(id).body, before);
+  }
+  assert.equal(s.db.prepare('SELECT count(*) n FROM workflow_approvals').get().n, 0);
+  assert.equal(s.db.prepare('SELECT count(*) n FROM workflow_attempts').get().n, 0);
+  s.close();
+  for (const host of ['codex', 'claude']) {
+    await installHost(root, host);
+    const skill = await readFile(path.join(root, host === 'codex' ? '.agents' : '.claude', 'skills/codefleet/SKILL.md'), 'utf8');
+    assert.equal(skill.includes('sandbox_permissions="require_escalated"'), host === 'codex');
+  }
+});
 
 async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), 'cf-core-')), repo = path.join(root, 'repo');

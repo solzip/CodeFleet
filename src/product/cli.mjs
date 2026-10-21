@@ -5,7 +5,7 @@ import { createRegistry } from '../providers/registry.mjs';
 import { createClaudePlanner } from '../providers/planner.mjs';
 import { createCodexAdapter } from '../providers/codex.mjs';
 import { probeProvider } from '../providers/capabilities.mjs';
-import { enableTasks, createTask, reviewTask, prepareTask, approveTask, rejectTask, task, tasks } from './tasks.mjs';
+import { enableTasks, createTask, reviewTask, prepareTask, approveTask, rejectTask, materializeTask, clarifyTask, objectiveUnknownsReport, task, tasks } from './tasks.mjs';
 import { runReport, taskReport } from './report.mjs';
 
 export const help = `codefleet-alpha objective plan|run "goal" [repository]
@@ -17,6 +17,10 @@ codefleet-alpha objective run|resume <task-id> --allow-model
 codefleet-alpha objective status [task-id] | report <task-or-run-id>
 codefleet-alpha objective reject|pause|cancel <task-id> [--actor <name>]
 codefleet-alpha objective readiness [--codex-executable native-path]
+codefleet-alpha objective materialize <task-id> <item-id> (NEW_PROJECT: create an approved fileset; never overwrites, never runs git)
+codefleet-alpha objective unknowns <task-id>
+codefleet-alpha objective clarify <task-id> --unknown <id> --scope "what the objective means" --actor <name> --revision <n>
+  (NEW_PROJECT only: records USER_DECLARED meaning for an objective-derived unknown; never approves execution)
 Planning is local by default. AI planning: --planner claude|codex --allow-model (capability checks still required).
 JSON stdout. Exit 0: requested read/control action succeeded; 2: input/approval/capability/verification pending; 1: invalid request/error.
 No command enables an unverified Provider or performs remote delivery.`;
@@ -24,7 +28,7 @@ No command enables an unverified Provider or performs remote delivery.`;
 function parse(values) {
   const positional = [], options = {};
   const flags = new Set(['allow-model', 'json']);
-  const allowed = new Set(['files', 'tests', 'criterion', 'item', 'parallel', 'attempts', 'timeout', 'budget', 'hash', 'actor', 'planner', 'codex-executable', 'claude-executable']);
+  const allowed = new Set(['files', 'tests', 'criterion', 'item', 'parallel', 'attempts', 'timeout', 'budget', 'hash', 'actor', 'planner', 'codex-executable', 'claude-executable', 'unknown', 'scope', 'revision']);
   for (let i = 0; i < values.length; i++) {
     const value = values[i];
     if (!value.startsWith('--')) { positional.push(value); continue; }
@@ -60,6 +64,11 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     const result = await report(); result.exitCode = created.state === 'VALIDATED' ? 0 : 2; return result;
   }
   if (action === 'status' && !id) return { exitCode: 0, data: { schemaVersion: 1, tasks: await Promise.all(tasks(store).map(t => taskReport(store, t.id))) } };
+  if (action === 'materialize') {
+    if (args.length !== 2) throw Error('materialize requires task id and WorkItem id');
+    const result = await materializeTask(store, args[0], args[1]);
+    return { exitCode: result.status === 'MATERIALIZED' ? 0 : 2, data: { ...await taskReport(store, args[0]), materialization: result } };
+  }
   if (args.length !== 1) throw Error('Exactly one task or run id required');
   if (action === 'report' && !id.startsWith('task-')) return { exitCode: 0, data: await runReport(store, id) };
   if (['status', 'report'].includes(action)) {
@@ -75,6 +84,11 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     await reviewTask(store, id, { files: list(o.files), tests: list(o.tests), criterion: o.criterion, items, maxParallel: number(o.parallel, 1), maxAttempts: number(o.attempts, 1), timeoutSeconds: number(o.timeout, 300), attemptBudgetUsd: number(o.budget, 1) });
     return report();
   }
+  if (action === 'unknowns') return { exitCode: 0, data: objectiveUnknownsReport(store, id) };
+  if (action === 'clarify') {
+    const updated = await clarifyTask(store, id, { unknownId: o.unknown, actor: o.actor, scope: o.scope, revision: number(o.revision, undefined) });
+    return { exitCode: updated.state === 'VALIDATED' ? 0 : 2, data: { ...await taskReport(store, id), clarification: objectiveUnknownsReport(store, id) } };
+  }
   if (action === 'approve') { approveTask(store, id, { actor: o.actor, workflowHash: o.hash, expiresAt: Date.now() + 3600000 }); return report(); }
   if (action === 'reject') { rejectTask(store, id, o.actor); return report(); }
   if (['pause', 'cancel'].includes(action)) {
@@ -85,6 +99,7 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     let current;
     try { current = await prepareTask(store, id); }
     catch (e) { if (['NEEDS_INPUT', 'CAPABILITY_GAP'].includes(e.message)) return { exitCode: 2, data: { ...await taskReport(store, id), blocked: e.message } }; throw e; }
+    if (current.bootstrap) return { exitCode: 2, data: { ...await taskReport(store, id), blocked: 'NEW_PROJECT has no executable Run; approved filesets are created only by materialize' } };
     const run = store.get(current.runId);
     if (!o['allow-model'] || run.state === 'WAITING_APPROVAL') return { exitCode: 2, data: { ...await taskReport(store, id), blocked: run.state === 'WAITING_APPROVAL' ? 'Explicit hash-bound approval required' : 'Explicit --allow-model consent required' } };
     const stop = () => store.control(current.runId, 'cancel');

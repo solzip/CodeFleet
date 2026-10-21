@@ -43,6 +43,26 @@ STATE host ${host} plan "goal" REPOSITORY, then status TASK_ID. STATE is a local
 preparation directory, never the protected Operator state. Keep the existing Host
 model, authentication and session. Read/search only within actual Host permissions.
 Skill instructions do not enforce isolation. Host reports are untrusted proposals.
+${host === 'codex' ? `
+Windows Codex command recovery (preparation only): start within normal Host permissions.
+For GIT_OWNERSHIP or PROCESS_SPAWN_DENIED, use the existing Codex execution tool's
+command-specific approval: sandbox_permissions="require_escalated" with a justification
+naming the exact node CLI command, explicit --state, repository/task and purpose.
+This is a Host tool argument, never a CLI flag. Do not grant yourself permission,
+change sandbox settings, safe.directory, ownership or ACLs, or request a blanket
+node/shell allow rule. The Host must approve execution; if its policy denies or
+does not expose that interface, stop and report BLOCKED with the tool error.
+Check the Task contract and requested action independently. Host permission is
+not CodeFleet fileset/workflow approval, a capability, or Local/Protected evidence.
+Use an explicit writable preparation STATE outside REPOSITORY, not the default
+home directory or protected Operator state. Keep the same STATE for every call.
+After a failure, retain stdout, stderr, exit code and any task id; query status
+before retrying. A recorded BLOCKED plan remains recorded: create a new plan only
+after confirming no execution/model attempt occurred. Never blindly replay a
+mutation or escalate requests/submit/run/resume, approve, clarify or materialize
+to bypass their gates. An objective unknown needs the user's explicit scope
+clarification through the existing operator contract, not a planner assertion.
+` : ''}
 
 Use review TASK_ID --files PATHS --tests PATHS --criterion TEXT for explicit scope,
 or draft TASK_ID FILE for {revision,proposal:{draft,references,inferences}}.
@@ -52,6 +72,17 @@ tests; each reference has path, one-based line, exact quote. No approval/evidenc
 Then prepare TASK_ID, workflow TASK_ID, explain TASK_ID, approval-request TASK_ID.
 These commands create/review plans and DAGs only, never execute or grant approval.
 The strict H6 codefleet-plan isolated profile remains a separate mode.
+
+If status shows contractKind NEW_PROJECT (unborn HEAD, README-only or non-Git
+directory), draft takes {revision,proposal:BootstrapDraft} instead: schemaVersion:1,
+kind:"BootstrapDraft", objective (original), probeRef (plan.probe.probeHash),
+requirements, openQuestions, decisions [{topic,choice,alternatives,rationale}],
+plannedFiles [{path,purpose}], plannedTests [{path,criteria}], criteria
+[{id,description,tests}], scope {includes,excludes}, risks, workItems
+[{id,kind,dependencies,acceptanceCriteria,files}]. Planned files do not exist yet:
+never cite lines or claim tests ran. After prepare, files TASK_ID FILE proposes
+{revision,itemId,files:[{path,content}]} for one local-edit item and only requests
+review. Never run git init, commit, approve or materialize yourself.
 
 Optional protected execution:
 H4 Linux IPC path: use this skill's runtime/hosts/ipc-client.mjs with Node 24.14.1 or newer. Resolve CLIENT relative to this SKILL.md. A trusted operator administrator must supply SOCKET and RUN_ID for an already validated, fixed-scope workflow. Never start an Operator process as the Agent, change the catalog, or open trusted state. Windows Native, WSL2 deployment and live Host confinement remain BLOCKED/unverified. Do not use internal modules or legacy objective approve to bypass this gate.

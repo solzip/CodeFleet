@@ -3,7 +3,15 @@ import { verifiedEvidence } from '../alpha/evidence.mjs';
 import { attempts, approval } from '../workflow/persistence.mjs';
 import { judge } from '../alpha/judge.mjs';
 import { messages } from '../workflow/collaboration.mjs';
-import { task } from './tasks.mjs';
+import { task, bootstrapView, clarifiableFor } from './tasks.mjs';
+
+function bootstrapNext(current, plan) {
+  if (current.state === 'REJECTED') return 'Create a new plan';
+  const open = clarifiableFor(current, plan).filter(u => u.status === 'OPEN').map(u => u.id);
+  if (!current.bootstrap && open.length) return `An operator must confirm the objective's meaning with objective clarify (${open.join(', ')}); a planner cannot clear it. Other unknowns need a BootstrapDraft`;
+  if (current.bootstrap) return 'Propose a fileset for a dependency-ready local-edit item, obtain objective approve on its filesetHash, then objective materialize; git init/commit stay user actions';
+  return current.state === 'VALIDATED' ? 'Prepare the bootstrap workflow' : 'Submit a BootstrapDraft; planned files are not existing code';
+}
 
 export async function runReport(store, id) {
   const run = store.get(id);
@@ -47,6 +55,11 @@ export async function runReport(store, id) {
 export async function taskReport(store, id) {
   const current = task(store, id), plan = store.readArtifact(current.planRef);
   const run = current.runId ? await runReport(store, current.runId) : null;
+  if (plan.contractKind === 'NEW_PROJECT') {
+    return { schemaVersion: 1, kind: 'TaskReport', taskId: id, revision: current.revision, contractKind: 'NEW_PROJECT', state: current.state, reviewState: current.state, plannerAttempt: current.plannerAttempt ?? null, plan, settings: current.settings, run: null,
+      bootstrap: current.bootstrap && current.state !== 'REJECTED' ? bootstrapView(store, id) : null, nextAction: bootstrapNext(current, plan), workflowHash: current.bootstrap?.workflowHash ?? null,
+      verification: 'NOT_RUN', complete: false };
+  }
   return { schemaVersion: 1, kind: 'TaskReport', taskId: id, revision: current.revision, state: current.state === 'REJECTED' ? 'REJECTED' : run?.state ?? current.state, reviewState: current.state, plannerAttempt: current.plannerAttempt ?? null, plan, settings: current.settings, run,
     nextAction: current.state === 'REJECTED' ? 'Create a new plan' : !current.runId ? 'Review scope, then run to prepare a workflow' : 'Approve the exact workflow hash, then run with explicit model consent',
     workflowHash: current.runId ? store.get(current.runId).contractHash : null };

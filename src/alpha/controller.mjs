@@ -31,6 +31,7 @@ export async function createRun(store, repo, input) {
 // Keep lease, budget and reconciliation guards here when replacing a service.
 export async function execute(store, id, dependencies = {}, options = {}) {
   const initial = store.get(id);
+  if (initial.kind === 'bootstrap-fileset') throw Error('Bootstrap filesets are materialized after approval, never executed as a Run');
   if (initial.kind === 'workflow') return executeWorkflow(store, id, dependencies, options);
   if (initial.workflowParent) {
     const parent = store.db.prepare('SELECT owner,leaseUntil FROM runs WHERE id=?').get(initial.workflowParent);
