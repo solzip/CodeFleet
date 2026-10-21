@@ -9,7 +9,9 @@ import { hash, judge } from '../src/alpha/contract.mjs';
 import { verify, matchTestIdentity } from '../src/alpha/verifier.mjs';
 
 const contract = { schemaVersion: 1, goal: 'Repair subtraction with protected regression tests.', files: ['src/math.js'], context: ['src/math.js'], tests: ['test/math.test.js'], maxAttempts: 1, timeoutSeconds: 60, attemptBudgetUsd: 1, delivery: { mode: 'local' } };
-const pass = { exitCode: 0, tests: 1, passed: 1, failed: 0, skipped: 0, todo: 0, testNames: ['0:subtract'], testIdentityMatch: true, interrupted: false, truncated: false, integrity: true };
+// Injected Harness fixture, as in alpha.test.mjs; not an actual execution claim.
+// Missing authority must still be rejected by the unchanged production Judge.
+const pass = { authority: 'HARNESS_EXECUTED', exitCode: 0, tests: 1, passed: 1, failed: 0, skipped: 0, todo: 0, testNames: ['0:subtract'], testIdentityMatch: true, interrupted: false, truncated: false, integrity: true };
 const fail = { ...pass, exitCode: 1, passed: 0, failed: 1 };
 const proposal = { summary: 'Repair subtraction', edits: [{ path: 'src/math.js', oldText: 'a + b', newText: 'a - b' }] };
 const results = [];
