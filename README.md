@@ -1,324 +1,179 @@
-# CodeFleet — 에이전트가 했다고 말한 일을 어떻게 검증하나
+# CodeFleet
 
-> **기본 Host-Native 사용:** 기존 Codex·Claude Code 세션과 로컬 Node·Git으로 계획·Draft·Workflow/DAG·승인 요청을 사용할 수 있습니다. Docker·WSL·별도 OS 계정은 공통 설치 요건이 아닙니다. Docker는 기존 Alpha의 보호된 검증에 필요하며, Local 검증 성공은 보호된 완료 판정이 아닙니다. [기본 사용과 Backend 보장](docs/product-completion/host-core-guide.md). Host Live는 미검증입니다.
+**Autonomous Execution. Controlled Process. Verified Results.**
 
-> **Host-Native 전환:** Codex·Claude Code의 기존 세션에서 제안을 만들고 CodeFleet이 계약·검증을 관리합니다. [설치와 사용](docs/product-completion/host-native-guide.md) · [전환 기록](docs/runs/2026-10-20/alpha-host-native-transition.md). 별도 모델 API는 선택 사항이며 실제 Host Live 검증은 아직 수행하지 않았습니다.
+CodeFleet은 **기존 Codex CLI와 Claude Code 안에서 사용하는 AI 개발 오케스트레이션 확장 도구**입니다. Host의 인증·모델·세션·도구를 활용하면서 자연어 목표를 Task와 Workflow/DAG로 정리하고, 역할·정책·승인·복구·독립 검증을 관리합니다.
 
-> **미배포 개발 브랜치:** [통합 오케스트레이션 CLI 안내](docs/product-completion/orchestration-guide.md). 로컬 통합 검증과 Live 운영 준비 상태를 구분한다.
+기본 계획·분석에는 **Node.js와 Git, 사용하는 Host**가 필요합니다. Docker·WSL·별도 Linux 계정·직접 모델 API Key는 기본 설치 요건이 아닙니다. Docker는 기존 Alpha의 보호된 검증 Backend로 유지합니다.
 
-> **Java 지원:** alpha.4에 Gradle·Maven 검증 어댑터를 추가했다. 사용자 지정 Gradle 프로젝트의 실제 AI 수정→테스트→draft PR과 Maven 샘플의 로컬 완주를 확인했다. 지원 버전과 실행 방법은 [Java 실행 안내](docs/product-completion/alpha-quickstart.md#java-gradlemaven)를 따른다.
+Host-Native Core는 main에 통합되어 오프라인 회귀 검증을 거쳤습니다. **실제 Host 세션의 수용 상태는 `HOST_LIVE_NOT_VERIFIED`입니다.** 설치·계획 경로와 보호 실행 경로의 준비 상태를 구분합니다.
 
-> **Quality scope:** The reproduced acceptance, cost, cancellation and recovery defects have regression fixes. Independent code review remains required; arbitrary hostile JavaScript is outside the verified scope. See [remediation evidence](docs/runs/2026-09-30/alpha-reconciliation-fixes.md).
+[Host 설치·사용](docs/product-completion/host-native-guide.md) · [Core와 검증 Backend](docs/product-completion/host-core-guide.md) · [문서 색인](docs/INDEX.md) · [English archive](README.en.md)
 
-> **현재 개발:** [알파 실행 안내](docs/product-completion/alpha-quickstart.md) · [진행 현황](docs/product-completion/progress.md). 제한된 Node·Java 작업의 편집 제안·격리 검증·복구·draft PR 전달을 구현하고 검증 중이다. MIT 라이선스의 [공개 알파](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.4)를 배포한다. 독립 외부 사용자의 자가 온보딩 검증은 아직 미완료다. 아래 본문은 기존 엔진의 아카이브 기록이다.
+## 해결하려는 문제
 
-> 에이전트가 "테스트 통과했다"고 보고할 때, **그 말이 판정에 닿지 못하게 하는** 구조를 시험했다.
-> 통제된 조건에서 **한 번 완주했고, 실제 프로젝트에서는 하지 못했다.** 결함 77건을 등재해 판정했으며 근거는 전부 파일:라인으로 남아 있다. <!-- fact: registered-findings = 77 -->
-> 2026-08-13 아카이브 — 유지보수하지 않으며 이슈와 PR을 받지 않는다.
+AI가 코드를 작성하는 것과 합의한 범위 안에서 작업을 끝내고 검증하는 것은 다릅니다. CodeFleet은 목표·변경 범위·완료 기준을 계약으로 고정하고, 진행 가능한 작업과 아직 검증되지 않은 항목을 드러냅니다.
 
-[English](README.en.md) | 한국어
+**AI의 자기 보고는 독립 검증 증거가 아닙니다.** “테스트가 통과했다”는 응답만으로 승인이나 완료 상태를 만들 수 없습니다. 실행 권한은 Policy·Capability·승인으로 제한하고, 완료 여부는 계약과 실제 증거를 대조하는 Judge가 판단합니다.
 
-## 질문
+## 주요 기능
 
-에이전트가 저장소를 고친 뒤 "테스트 통과했습니다"라고 보고한다. 이때 손에 쥔 것은 사실이 아니라 **주장**이다. 그 주장을 `verified: true`로 저장하는 순간, 게이트를 움직이는 그 값은 **자기를 만든 것이 관측이었는지 주장이었는지 더 이상 기억하지 못한다.**
-
-이 간극을 구조로 닫을 수 있을까. 에이전트를 덜 믿는 방식이 아니라, **그 보고가 애초에 판정에 닿지 못하게 만드는** 방식으로. CodeFleet은 그걸 시험한 프로젝트였다.
-
-에이전트에 관심이 없어도 가져갈 게 셋 있다 — **멱등 키를 호출자가 아니라 의미에서 뽑는 것**, **아무것도 안 본 검사를 통과가 아니라 실패로 다루는 것**, **상태 변경에서 커밋하는 지점을 하나만 두고 이름을 붙이는 것.** 셋 다 아래 「무엇을 알아냈나」에 근거와 함께 있다 — 첫째는 코드로, 둘째는 그 원칙이 잡아낸 조용한 초록 세 건으로 — **그중 하나가 이 저장소 자신이다** — 셋째는 여덟 단계의 이름으로. 이 프로젝트가 아니었어도 성립하는 이야기다.
-
-## 답 — 같은 커맨드, 두 파일
-
-한 번 완주한 Run이 남긴 기록에 파일 두 개가 있다. **둘 다 같은 셸 커맨드를 담고 있다.**
-
-| 파일 | 무엇인가 | 무게 |
-| --- | --- | --- |
-| `provider-commands.json` | `node test/check.js` — 에이전트가 자기 입으로 돌렸다고 한 기록 | `PROVIDER_REPORTED_ONLY`, `notCommandTruth: true`. **아무것도 움직이지 못한다** |
-| `verification/verify-001.json` | `node test/check.js` — Harness가 직접 다시 실행한 기록 | `HARNESS_EXECUTED`, `exitCode: 0`. **게이트를 움직인 건 이쪽** |
-
-에이전트의 보고를 버리지는 않는다. 저장하되 등급을 매기고, 그 등급으로 판정에서 밀어낸다. 등급은 플래그가 아니라 **타입**이다.
-
-```ts
-type VerificationAuthority =
-  "NONE" | "PROVIDER_REPORTED_ONLY" | "HARNESS_OBSERVED" | "HARNESS_EXECUTED" | "WAIVED_BY_POLICY";
-
-// 게이트 계산은 무엇을 읽기 전에 먼저 걸러낸다:
-const executed = attempts.filter((a) => a.authority === "HARNESS_EXECUTED");
-```
-
-`boolean` 하나와 `source` 필드를 따로 두면 언젠가 둘이 어긋난다. 등급 하나로 표현하면 어긋날 자리가 없다. **주장이 관측으로 읽히는 상태 자체가 만들어지지 않는다.**
-
-이 프로젝트가 내세운 건 이것 하나였고, 완주한 그 한 번에서는 지켜졌다. 아래는 그 실물과, 거기서 남은 것과, 그 대가다.
-
-한 바퀴는 이렇게 돈다. **두 경로가 갈라지고 한쪽이 게이트 앞에서 끊기는 것**이 이 그림의 전부다.
-
-```mermaid
-flowchart TB
-    T["Task 계약<br/>scope · verification · doneCriteria"]
-    AP1["승인 — 실행 전에 고정<br/>sha256(revisionHash, guardrailHash)"]
-    T --> AP1
-    AP1 --> PR["prompt.md<br/>해석된 계약"]
-    PR --> AG["에이전트<br/>격리된 git worktree"]
-
-    AG -->|"자기 보고"| PC["provider-commands.json<br/>PROVIDER_REPORTED_ONLY<br/>notCommandTruth: true"]
-    AG -->|"파일 변경"| WS["워크스페이스 변경"]
-
-    WS --> HO["harness-observation.json<br/>변경 파일 · 경로/커맨드 정책"]
-    WS --> VE["verification/verify-001.json<br/>HARNESS_EXECUTED<br/>Harness가 커맨드를 직접 재실행"]
-
-    PC --> X["게이트에 닿지 못한다"]
-
-    HO --> GT{"게이트 계산<br/>authority === HARNESS_EXECUTED 만 읽는다"}
-    VE --> GT
-    GT --> RW["리뷰<br/>CAPABILITY_GAP은 사람이 이름을 걸고 서명"]
-    RW --> LD[("원장 · append-only<br/>patchRef.hash")]
-    LD --> AY["apply<br/>관측된 패치를 워크스페이스에"]
-
-    classDef dead stroke-dasharray:4,fill:#eeeeee,color:#666666
-    class PC,X dead
-```
-
-### 그 파일들이 나온 계약
-
-"계약"이 이 문서에서 제일 많이 쓰이는 말이니, 실물을 하나 그대로 보인다. 위 Run을 만든 Task다.
-
-```yaml
-id: add-subtract
-goal: "Add a subtract(a, b) function to src/math.js that returns a - b, and export it."
-agentRole: INFRA_OPERATOR          # 분류일 뿐이다. 상한을 기여하고 권한을 주지 않는다
-scope:
-  include: ["src/**"]              # 관측된 변경 파일 목록에 대해 강제된다
-  exclude: ["test/**"]             # 자기를 채점하는 파일은 못 건드린다
-verification:
-  commands:
-    - commandId: fixture-check
-      command: ["node", "test/check.js"]    # 셸 문자열이 아니라 argv
-doneCriteria:
-  - "src/math.js defines subtract(a, b) returning a - b."
-  - "node test/check.js exits 0."
-```
-
-설계의 절반이 두 줄에 들어 있다. `command`가 **셸 문자열이 아니라 argv 배열**인 건, 셸 문자열은 커맨드 정책과 대조할 수가 없어서다. 그걸 받는 순간 정책은 장식이 된다. 그리고 `scope.exclude`가 에이전트를 자기 채점 파일에서 떼어놓는데, 판정 기준은 에이전트가 건드렸다고 말한 목록이 아니라 **Harness가 관측한 변경 목록**이다.
-
-이 Task를 승인하면 그대로 얼어붙는다. `sha256(revisionHash, guardrailHash)`가 위 본문과 **그 시점의 워크스페이스 정책까지** 함께 덮는다.
-
-### Run
-
-검증 커맨드는 `subtract`가 없거나 값이 틀리면 실패하도록 짰고, **시작 전에 실제로 실패하는 것부터 확인했다.** 파일을 안 고쳐도 통과하는 검증은 아무것도 증명하지 못하니까.
-
-```
-task approve       → 계약이 sha256(revisionHash, guardrailHash)로 고정된다
-objective attach   → 승인된 revision이 큐에 등록된다
-objective run-next → git worktree 생성, 에이전트는 거기서만 작업한다
-                     Harness가 `node test/check.js`를 직접 실행 → exit 0
-                     worktree 폐기
-review             → 거부됨: 면제되지 않은 capability gap
-review --waive-gap → 수락, DEGRADED / WAIVED_INCOMPLETE로 기록
-objective import-review → 결정이 원장에 적재된다
-apply              → 관측된 패치를 워크스페이스에 적용
-```
-
-`git diff HEAD`가 Harness가 기록한 패치와 바이트 단위로 같았고, 원장의 `patchRef.hash`를 다시 계산해 일치를 확인했다. 그 적용 시점에 worktree는 디스크에서도 `git worktree list`에서도 이미 지워진 뒤였다. **패치가 디렉터리가 아니라 증거로 남아 있었기 때문에** 반영이 가능했다.
-
-### 여기서 "증거"가 실제로 뭘 말하나
-
-Run이 디렉터리 하나를 남긴다. 그 안에 든 것이 곧 **"반년 뒤에 이 판정에 반박하려면 무엇이 필요한가"**에 대한 답이다.
-
-```
-run-plan.json            해석된 계약: 승인 해시, effective policy, 게이트
-prompt.md                에이전트에게 실제로 준 내용
-adapter-request.json     어댑터에 허용한 범위
-harness-observation.json 변경 파일, 경로·커맨드 정책 검사, 워크스페이스 스냅샷
-provider-commands.json   에이전트가 돌렸다고 말한 것       ← 등급 매겨 배제
-verification/verify-001.json  Harness가 직접 돌린 것       ← 게이트를 움직인 쪽
-adapter-result.json      종료 상태, 절삭된 바이트 수
-git-diff.patch           관측된 변경
-run-summary.json         파생물. 판정의 진실이 아니라고 스스로 적는다
-run-record.md            사람이 읽는 단 하나의 파일
-```
-
-목록보다 중요한 성질이 둘 있다. **모든 산출물이 자기가 속한 계약을 이름으로 적는다**(`taskId` + `taskRevision`). 그래서 하나를 잃어도 나머지가 미아가 되지 않는다. 그리고 각 파일이 수집하지 못한 것에 대해 `unavailableReason`을 남긴다. **증거의 구멍이 짧아진 파일이 아니라 파일 안의 값으로 존재한다.**
-
-결정 자체는 다른 데 있다. 원장에 한 줄 덧붙는 것이고, 그게 "append-only"의 실물이다.
-
-```json
-{ "seq": 4, "eventId": "evt_000004_fa210ced", "type": "RUN_RESULT_APPLIED",
-  "actorId": "sol", "at": "2026-08-13T01:06:55.478Z",
-  "reason": "accepted review 2026-08-13_001-review-002; bring the isolated tree's change into the workspace",
-  "payload": {
-    "runId": "2026-08-13_001", "taskId": "add-subtract", "taskRevision": 1,
-    "reviewDecisionId": "2026-08-13_001-review-002",
-    "patchRef": { "path": ".codefleet/runs/.../git-diff.patch",
-                  "hash": "7ee840706a78708ed4b527dd6d21fb688e9b5c2eee968be5102201c49595d0c8" } } }
-```
-
-`reason`은 자유 텍스트이고 필수다. `seq`와 `eventId`가 있어 빠진 줄을 찾아낼 수 있다. 그리고 `patchRef.hash`가 있어서, 몇 달 뒤에도 **워크스페이스에 들어간 변경이 승인된 그 변경인지 다시 계산해 확인할 수 있다.** 위에서 말한 바이트 단위 일치도 실은 이 해시를 다시 계산해서 확인한 것이다.
-
-## 무엇을 알아냈나
-
-결론은 열 가지다. 그중 **둘**(아래 표의 2번과 7번)은 에이전트와 아무 상관 없이 **어떤 백엔드에나 그대로 쓸 수 있고**, 2번이 두 갈래여서 실제로 가져갈 것은 셋이 된다. 그것부터 적는다.
-
-**멱등 키를 호출자가 아니라 의미에서 뽑는다.** 흔히 쓰는 멱등은 클라이언트가 보내주는 request id인데, 그건 **클라이언트가 협조할 때만** 동작한다. 여기서는 결과 상태를 실제로 바꾸는 값만 해시하고 사유 텍스트와 시각은 일부러 뺐다. 그래서 같은 결정을 두 번 보내도 한 번으로 처리된다.
-
-```ts
-export function computeMutationId(intent: MutationIntent): string {
-  const canonical = JSON.stringify([
-    intent.mutationKind,
-    intent.targetId,
-    intent.targetHash ?? "",
-    canonicalize(intent.semanticPayload)   // 상태를 바꾸는 필드만
-  ]);
-  return `mut_${createHash("sha256").update(canonical).digest("hex").slice(0, 16)}`;
-}
-```
-
-`apply`를 두 번 실행해보니 같은 `mut_fa210cedffe0ce00`이 나왔고 원장에 이벤트가 늘지 않았다.
-
-**모든 검사가 판정만이 아니라 무엇을 봤는지도 함께 보고한다.** 그러지 않으면 `violations: []` 하나가 *다 봤는데 없다*와 *아무것도 안 봤다*를 동시에 뜻하게 된다. 두 사실이 같은 값으로 수렴하는 것이다. 그래서 **0건 검사는 통과가 아니라 실패로 다룬다.** 이 원칙이 여기서 조용한 초록 **세 건**을 잡아냈다. CRLF 때문에 규칙 블록을 0개 읽고도 성공을 보고한 파서, 주장을 하나도 기록하지 못한 커버리지 실행, 그리고 **이 저장소 자신**이다.
-
-세 번째가 제일 오래 걸렸다. 문서의 숫자가 낡는 것을 막으려고 만든 검사기가 이렇게만 출력했다.
-
-```
-declarations checked   34
-mismatches             0
-```
-
-같은 문서들 안의 **다른 숫자 533개는 검사 대상이 아니었는데**, 저 출력은 "여기 숫자는 다 맞다"로 읽혔다. `violations: []`와 같은 결함이다 — *다 봤는데 없다*와 *내가 가리킨 것만 봤다*가 같은 값으로 수렴한 것이다. **원칙을 결론으로 적어둔 저장소가, 그 결론을 강제하려고 만든 도구에서 그것을 어겼고**, 하루 동안 초록이었다. 지금은 분모와 미검사 잔여를 함께 출력하고, 그 비율에 기준선이 걸려 있다.
-
-**모든 상태 변경이 여덟 단계를 지나고, 커밋하는 단계는 딱 하나다.**
-
-```
-M0_RESOLVE      의미에서 mutation id를 뽑는다
-M1_ACQUIRE      락을 잡고 누가 잡았는지 남긴다
-M2_PRECHECK     거부는 여기서. 아직 영구적인 건 아무것도 없다
-M3_IDEMPOTENCY  이 id가 이미 원장에 있나? 있으면 멈추고 보고하고 아무것도 안 바꾼다
-M4_APPEND       ← 커밋 지점
-M5_REBUILD      read model을 다시 만든다
-M6_POSTCHECK    다시 만든 상태가 유효한가
-M7_RELEASE      락을 놓는다
-```
-
-M4 전에 실패하면 남는 게 없다. M4 **뒤에** 실패하면 **롤백하지 않는다.** 이벤트는 남기고, 어느 단계에서 죽었는지를 결과로 보고한다. 조용한 롤백은 무언가 일어났다는 사실 자체를 지우기 때문이다. 흔한 본능과 반대인데 의도한 것이다 — **조용히 append를 되무르는 원장은 append-only가 아니다.**
-
-열 가지 전부를 번호와 함께 적는다. 번호는 [`DESIGN-NOTES.md`](docs/archive/2026-08-13/DESIGN-NOTES.md)의 것과 같고, 거기에 결론마다 문제·구현·근거가 붙어 있다.
-
-| | 결론 | 상태 |
-| --- | --- | --- |
-| 1 | 출처를 플래그가 아니라 타입으로 — **위의 권한 등급** | 관측됨 |
-| 2 | 상태 변경 창구를 하나로 두고 커밋 지점에 이름을 붙인다 — **위의 멱등 키와 여덟 단계** | 관측됨 |
-| 3 | 결정은 append-only, 상태는 replay. 스냅샷은 권위 없는 read model이다 | 관측됨 |
-| 4 | 승인은 계약과 그 계약이 놓인 조건을 함께 덮는다 | 관측됨 |
-| 5 | 권한은 오직 좁혀지는 방향으로만 합성된다. 좁혀지는 건 관측됐지만, 넓히려는 시도를 거부하는 건 테스트에만 있다 | **코드만** |
-| 6 | 확인 못 한 것을 두 종류로 가른다. 사람이 서명할 수 있는 갭과, 아무도 대신할 수 없는 증거 결함. 이 구분이 판단이 아니라 데이터에 있다 | 관측됨 |
-| 7 | 모든 검사가 "무엇을 봤는지"를 함께 보고한다 — **위의 0건 검사** | 관측됨 |
-| 8 | 결정과 부수효과를 갈라둔다. `apply`는 별개의 사람 행위이고, 그새 변했을지 모르는 디렉터리가 아니라 **관측된 패치**를 적용한다 | 관측됨 |
-| 9 | 자식 프로세스에 allowlist 환경과 종류별 상한을 준다. 부모에 export한 시크릿이 자식에서 없음으로 실측됐다 | 관측됨 |
-| 10 | 사람이 읽는 기록을 산출물로 취급한다. **두 번 실패했기 때문에** 목록에 넣었다. 처음엔 어떤 커맨드가 게이트를 만족시켰는지 침묵했고, 그걸 고치자 자기가 링크한 증거를 두고 "없다"고 적었다 | **실패** |
-
-정리하다 보니 **둘이 사실 같은 이야기**였다. 권한 등급과 gap/defect 구분은 둘 다 **"모른다는 것을 데이터로 어떻게 표현하나"**에 대한 답이다. `LESSONS.md`에 정리한 결함 유형 일곱 가지 중 셋도 뿌리가 같다 — **없음과 값을 구분하지 않은 것.** 이 프로젝트가 실제로 힘을 쓴 문제는 AI 검증이 아니라 **부재를 어떻게 표현하느냐**였다. 처음부터 그걸 풀려던 게 아니라, **열 개를 다 적고 나서야 그게 하나였다는 걸 알았다.**
-
-→ 결론마다 문제·구현·근거·가져갈 것을 붙인 전문: [`docs/archive/2026-08-13/DESIGN-NOTES.md`](docs/archive/2026-08-13/DESIGN-NOTES.md)
-
-## "그거 그냥 CI 아니야?"
-
-누구나 제일 먼저 묻는 질문이고, **9할은 맞는 말이다.** 에이전트가 끝난 뒤에 테스트를 직접 돌리면 여기서 얻는 것의 대부분을 거의 공짜로 가져간다. 그게 필요한 전부라면 그렇게 하면 된다.
-
-그렇게 해서는 못 얻는 나머지 1할이 있다. 따져볼 만한 건 그 네 가지다.
-
-- **계약이 실행 후가 아니라 실행 전에 고정된다.** 승인은 Task뿐 아니라 **그 Task가 놓인 정책까지** 묶어서 해시한다 — `sha256(revisionHash, guardrailHash)`. 나중에 워크스페이스 정책을 바꾸면 그 Run은 거부된다. 승인이 덮고 있던 조건이 더는 성립하지 않기 때문이다. 조건이 바뀐 뒤에 CI를 다시 돌려봐야, **애초에 무엇을 합의했는지는 알 수 없다.**
-- **에이전트가 자기를 채점하는 파일을 못 건드린다.** 스코프가 `include: src/**`, `exclude: test/**`이고, 관측된 변경 파일 목록에 대해 강제된다. 완주한 Run의 기록에는 `1 path(s) checked against 1 allowed and 1 denied pattern(s)`이 남아 있다. CI가 초록이라는 건 테스트가 통과했다는 뜻이지, **에이전트가 그 테스트를 손대지 않았다는 뜻은 아니다.**
-- **확인하지 못한 것이 누락이 아니라 기록으로 남는다.** CI에서 건너뛴 단계는 대개 로그가 조금 짧아질 뿐이다. 여기서는 관측할 수 없었던 채널이 `CAPABILITY_GAP`이라는 이름을 달고 남고, 사람이 그 이름을 지목해 서명하기 전까지 수락을 막는다. 서명은 사유와 함께 원장에 들어간다.
-- **결정이 append-only다.** 조용히 참으로 바뀔 수 있는 `approved` 필드가 아예 없다. 상태는 이벤트에서 재생하고, 스냅샷이 원장과 어긋나면 원장이 이긴다.
-
-정리하면 이렇다. **CI는 "테스트가 통과했나"에 답한다.** 이 프로젝트가 답하려던 건 **"이 작업의 기록을 나중에 믿을 수 있나"**였다. 일한 쪽과 보고하는 쪽이 같아지는 순간, 이 둘은 서로 다른 질문이 된다.
-
-## 다시는 이렇게 안 한다
-
-결함을 만든 모양이 다섯인데, 앞의 셋은 **보면 바로 알아볼 만큼 작다.** 마지막 하나는 코드가 아니라 기록에서 났다.
-
-**사실은 옵셔널이 아닌 걸 옵셔널 인자로 받는다.** Run 기록 렌더러가 증거를 이렇게 받았다.
-
-```ts
-export interface RunRecordInput {
-  // ...
-  verificationEvidence?: Record<string, unknown> | null;   // ← 결함의 전부
-}
-```
-
-Run은 항상 검증 증거를 만든다. 그러니 이건 애초에 옵셔널이 아니었고, **호출부 하나가 안 넘겼기 때문에** 옵셔널이 됐다. 그러면 `undefined`가 들어와 *"검증 증거가 생산되지 않았다"*를 출력하는 분기를 고른다. **사람이 읽는 단 하나의 문서에 물음표 하나 때문에 거짓 문장이 생긴 것이다.**
-
-고치는 관용구는 바로 옆 파일에 이미 있었다. `verificationEvidenceRef: FileRef | null`은 모든 호출부가 무언가를 명시하도록 강제한다. **산출물이 무언가를 주장하게 될 값이라면 `?:`보다 `| null`을 써라.** 타입 검사기는 "이게 없으면 무슨 뜻이냐"를 묻지 않는다. 물음표 하나가 조용히 대신 답해버린다.
-
-**렌더러가 증거를 읽지 않고 인자로 받는다.** 같은 결함의 다른 얼굴이다. 렌더러가 증거를 **건네받는** 구조인 한, 안 건네는 호출부가 생길 수 있다. 렌더러가 증거 저장소에서 직접 읽으면 그 실패 자체가 성립하지 않는다. 포매터에 상태를 넘기는 쪽이 더 깔끔해 보이는데, 그게 **진실이 틀릴 수 있는 자리를 하나 더 만든다.**
-
-**기본값이 부재를 값으로 날조한다.**
-
-```ts
-workspaceRootRef: input.workspaceRootRef ?? ".",
-selectedWorkspaceRootRealPath: input.selectedWorkspaceRootRealPath ?? "",
-```
-
-`?? "."`은 부재 표시가 아니라 **"작업 디렉터리는 저장소 루트다"라는 주장**이다. 같은 산출물의 다른 필드는 전부 `{ value, unavailableReason }` 형태로 부재를 표현하는데 이 셋만 슬쩍 빠져나갔다. `??`와 `||`는 타입 검사를 통과시키는 가장 짧은 길이고, **타입 검사기는 그 기본값이 무슨 뜻인지 묻지 않는다.**
-
-**한 축에 서로 다른 권한 둘을 매단다.** 역할이 파일 편집과 커맨드 실행의 상한을 **동시에** 정하는 바람에, 기본 역할 일곱 중 커맨드를 돌릴 수 있는 건 둘뿐이고 그 둘 중에 애플리케이션 코드를 쓰는 역할이 없다. 좁히기만 한다는 규칙은 옳았고, **독립된 능력 둘을 하나의 순서에 얹은 것**이 틀렸다. 완주에 역할 바꿔치기가 필요했던 이유가 순전히 이것이다.
-
-**고친 사람이 등재부를 안 고친다.** 이건 코드가 아니라 기록의 결함인데, 셋을 합친 것보다 자주 일어났다. 방치된 결함 11건을 열어보니 **8건이 이미 고쳐져 있었고** 등재부만 모르고 있었다. 동결 뒤 미확인 27건을 판정했을 때도 그중 하나는 **이틀 전에 이미 [무효화됨] 판정이 나 있던 항목**이었다. 결함을 고치는 일과 그 판정을 옮기는 일이 서로 다른 작업이면, 둘째는 안 하게 된다.
-
-**이건 아직 안 고쳤다.** 문서 검사기 셋(링크·산문 숫자·파일:라인 인용)이 `npm test`에 붙어 있지만, 그것들이 잡는 건 **낡은 숫자·깨진 링크·어긋난 인용**이지 판정 미동기화가 아니다. 판정이 옮겨졌는지는 여전히 사람이 봐야 한다. 근원은 같다 — **한 사실에 사본이 여럿이고 단일 출처가 없다.** 검사기는 그 위에 얹은 탐지기이고, 복제 자체는 줄이지 못했다.
-
-앞의 셋은 위에서 말한 그 뿌리를 공유한다. **부재와 값을 구분하지 않은 것.** 안 넘긴 인자, 날조된 기본값, 선언만 되고 생산되지 않는 필드는 옷만 갈아입은 같은 실수다. 그래서 고치는 방법도 하나로 모인다 — **여기서 부재가 무슨 뜻인지 누가 말하기 전까지는 컴파일이 안 되게 만드는 것.**
-
-## 이 중 얼마나 확인됐나
-
-솔직히 **위 목록이 풍기는 인상보다 적다.** "관측됨"은 대개 **한 번 관측됐다**는 뜻이다.
-
-- **파이프라인은 딱 한 번 완주했다.** 통제된 fixture에서였고, **우회 4건을 얹은 채였다.** 그중 하나가 역할 바꿔치기다. 기본 역할 일곱 중 커맨드 실행이 가능한 건 둘뿐인데, 그 둘 중에 애플리케이션 코드를 쓰는 역할이 없다.
-- **실제 Spring Boot 프로젝트에서는 완주하지 못했다.** 열다섯 단계 중 넷이 막히고 하나가 실패했다. 결국 검증 게이트를 만족시킨 커맨드는 `gradle --version`이었다. 우리 구현은 Windows에서 Gradle·Maven wrapper를 부르지 못했다. 셸 인터프리터를 금지하는 규칙 자체는 옳았고, 다만 그 규칙 아래로 배치 파일에 닿을 길을 만들어두지 않았다.
-- **등재된 결함 77건** — 해소 25, 부분해소 8, 재현안됨 1, 미해소 15, 수용된 한계 1, 그리고 **미확인 27**. 등재부는 그 27건을 미확인인 채로 동결했지만, 이후 전부 판정했다 — **유효 21 / 해소 3 / 무효화됨 1 / 부분해소 2** ([판정 기록](docs/runs/2026-08-14/unchecked-27-adjudication.md)). 위 건수와 상태 칸은 동결 규칙에 따라 그대로 두었으므로 **이 표만 읽으면 "아무도 안 봤다"로 읽히는데, 그건 더 이상 사실이 아니다.** <!-- fact: registered-findings = 77 --> <!-- fact: findings-resolved = 25 --> <!-- fact: findings-partial = 8 --> <!-- fact: findings-not-reproduced = 1 --> <!-- fact: findings-open = 15 --> <!-- fact: findings-accepted-limit = 1 --> <!-- fact: findings-unchecked = 27 -->
-- 아카이브 엔진의 `npm run test:legacy`는 **Windows에서 종료 코드 0**이다(324 통과, 0 실패). 알파 스위트는 별도로 실행하며, 현재 `npm test`는 두 스위트와 문서 검사를 포함한다. <!-- fact: tests-passing = 324 --> <!-- fact: tests-failing = 0 --> **CI를 한 번 돌렸을 때는 양쪽 플랫폼이 모두 실패했다** — Linux 6건, Windows 2건. Linux 6건 중 하나는 이 아카이브가 예측만 하고 실측하지 못했던 POSIX 거동이고, Windows 2건은 **동결 직전에 추가된 테스트 자신**이다. **워크플로는 그 뒤 제거했다** — 아카이브에는 빨간 체크를 읽고 조치할 사람이 없기 때문이고, 실행 id는 기록에 남겼다([기록](docs/runs/2026-08-13/ci-first-run.md)). 조건 커버리지는 545줄 중 345줄, 63.3%인데, 이건 통과한 테스트가 그만큼을 인용했다는 뜻이지 **그 조건들이 제대로 구현됐다는 뜻이 아니다.** <!-- fact: conditions-covered = 345 --> <!-- fact: condition-lines = 545 --> <!-- fact: coverage-percent = 63.3 -->
-- **반복 실행·동시성·다중 사용자에서 시험한 것은 하나도 없다.**
-
-> 실행 가능 여부를 보증하지 않는다. 위는 관측이지, 무엇이 동작한다는 주장이 아니다.
-> **테스트 수와 CI 결과는 동결 이후에 측정한 값이고**, 나머지는 동결 시점의 값이다.
-
-## 왜 여기서 멈췄나
-
-부분 수정으로는 닫히지 않는 구조적인 이유가 둘이다.
-
-**설계가 두 달 앞섰는데, 그 설계에 구속력을 주는 장치가 마지막에 왔다.** 설계 문서 90커밋 중 68건이 5~6월에 쓰였고 그때 이미 최종 분량의 4분의 3이었다. **그런데 그중 기계가 검사할 수 있는 형태는 하나도 없었다.** 규칙 블록은 8월 7일에 처음 나타나 8월 10일에 다 채워졌는데, 그 엿새가 `src/` 51커밋 중 49건이 쏟아진 바로 그 기간이다. 규칙과 코드를 대조하는 도구는 그 마지막 날에야 도착했다. 설계를 갖는 일과 설계가 코드를 구속하게 만드는 일은 서로 다른 작업이다. 이 저장소는 앞의 일에 두 달을, 뒤의 일에 엿새를 썼다. **63.3%가 그렇게 남은 간격의 크기다.**
-
-**판정과 관측을 끝내 갈라놓지 못했다.** 한 파일이 3,000줄을 넘기며 Run 계획, 어댑터 기동, 증거 수집, 정책 평가, 게이트 산출을 모두 떠안았다. 이런 모양에서는 "관측이 맞나"와 "판정이 맞나"를 따로 시험할 수 없다. 증상이 가장 또렷하게 드러난 자리는 이렇다. 리뷰를 기록하면 사람이 읽는 Run 기록을 다시 렌더링하는데, 그 호출부가 검증 증거를 넘기지 않았다. 그래서 **문서가 "검증 증거가 생산되지 않았다"고 적으면서 두 줄 아래에서 바로 그 증거를 링크했다.** 마지막 날 고친 세 건이 전부 같은 모양이었다.
-
-→ 측정한 연대까지 담은 전문: [`docs/archive/2026-08-13/ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md)
-
-## 더 읽을 것
-
-| | |
+| 기능 | 현재 제공하는 범위 |
 | --- | --- |
-| [`DESIGN-NOTES.md`](docs/archive/2026-08-13/DESIGN-NOTES.md) | 결론 열 가지 전문. 각각 문제, 구현, 근거, 그리고 후속 프로젝트가 가져갈 것과 버릴 것 |
-| [`LESSONS.md`](docs/archive/2026-08-13/LESSONS.md) | 판정된 50건을 되풀이된 일곱 유형으로 묶고 구조적 원인을 붙였다. 가장 많은 건 스키마에 선언만 되고 아무도 읽지 않는 필드다 |
-| [`ENVIRONMENT.md`](docs/archive/2026-08-13/ENVIRONMENT.md) | Windows에서 에이전트 도구를 만드는 사람에게 그대로 쓸모 있는 실측 기록. CP949 콘솔과 자식 출력 UTF-8 디코딩, 셸 인터프리터 규칙에 막혀 닿지 않는 배치 wrapper, 프로세스가 정규화하지 말고 git에게 물어야 하는 worktree 경로, Windows가 `TerminateProcess`로 매핑해주는 덕에만 확실한 `SIGTERM`, 그리고 `PATH`만 남긴 spawn 환경 탓에 자식 프로세스에 홈 디렉터리가 없었던 일. 항목마다 재현 조건을 붙였고 해결 미확정 3 / 미검증 4 / 미실측 1로 표시했다 |
-| [`ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md) | 종료 시점의 상태와 사유, 자산 목록. 이 페이지에 나오는 모든 숫자의 출처다 |
+| 목표와 Task | 자연어 목표 접수, 구조화된 Draft, 파일·테스트·기준 검토, 기존 Contract Validator 검사 |
+| Workflow/DAG | 작업 분해, 의존 관계, 조회, 실행 가능성 설명, 승인 요청 |
+| 역할과 협업 | Planner·Architect·Executor·Reviewer 역할, 단일 Agent 기본, 기존 Hybrid Scheduler의 제한된 병렬 후보 검증 |
+| 실행 제어 | Policy·Capability·승인 Revision, Lease, 재시도 예산, 취소·복구·중복 요청 처리 |
+| 검증 | Local / Container Backend, 계약·후보 Tree에 결합된 Evidence, 독립 Judge |
+| Host 연동 | Codex·Claude 프로젝트 Skill 설치와 로컬 준비 경로. 실제 Live 호출과 자동 Host Agent 위임은 미검증 |
 
-이 저장소의 판정에는 전부 파일:라인 근거가 붙어 있다. 감사·실행 기록 94편의 색인은 [`docs/INDEX.md`](docs/INDEX.md), <!-- fact: audit-run-records = 94 --> 동결된 결함 등재부는 [`docs/REGISTER.md`](docs/REGISTER.md), 규칙마다 그것이 필요해진 사건을 함께 적어둔 작업 규약은 [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)에 있다.
+일반 목표를 접수할 수 있지만 실행 가능한 계약은 현재의 **제한된 Node·Java 수정 범위**를 따릅니다. 지원하지 않는 목표는 `NEEDS_INPUT` 또는 `CAPABILITY_GAP`으로 남습니다. 역할 이름이 있다는 사실은 여러 독립 Agent가 실제 실행됐다는 증거가 아닙니다.
 
-공개 사용 제품을 위한 새 [제품 완성 계획](docs/product-completion/README.md)을 별도로 작성했다. 기존 아카이브의 성과·한계와 구분하며, 제한된 알파 경로를 MIT로 배포한다. 외부 파일럿 결과와 전체 로드맵 완성은 아직 남아 있다.
+## 작동 원리
 
-## 후속
+```text
+Host에서 목표 분석 → Task Draft → Validator → Workflow/DAG
+ → 정책·Capability 확인 → 승인 요청 → 허용된 실행 경로
+ → 검증 Backend → Evidence → Judge
+```
 
-**제품은 미완이고, 종료는 완결했다.** 그 둘은 다른 이야기다.
+Draft 작성과 DAG 준비는 실행 승인이 아닙니다. 필요한 Capability가 없는 WorkItem은 차단되고 후속 의존 작업은 기다립니다. 독립적으로 실행 가능한 작업은 계속 진행할 수 있지만 필수 검증이 남으면 전체 Workflow를 완료하지 않습니다.
 
-파이프라인은 실제 프로젝트에서 완주하지 못했다. 그건 위에 적은 그대로다. 반면 닫는 일은 끝까지 했다 — 등재된 결함을 **하나도 남기지 않고 판정했고**(유효로 남은 것은 새 프로젝트가 조사할 목록으로 넘겼다), 자산을 이관과 폐기로 갈라 각각 이유를 적었고, "설계가 코드보다 앞섰나"를 감으로 쓰지 않고 커밋 연대를 실측해 종료 사유로 세웠다. 그리고 이 문서들의 숫자·링크·파일:라인 인용은 지금도 `npm test`가 검사한다. **여기서 배운 것을 다음에 쓸 수 있는 형태로 만들어 두는 것까지가 이 저장소의 마지막 작업이었다.**
+## 기본 설치
 
-**그 다음에 무엇이 남았나.** 세 가지는 이 프로젝트가 아니었어도 성립한다 — 멱등 키를 호출자가 아니라 의미에서 뽑는 것, 아무것도 안 본 검사를 통과가 아니라 실패로 다루는 것, 상태 변경의 커밋 지점을 하나만 두고 이름을 붙이는 것. 근거는 위 「무엇을 알아냈나」에 있다.
+Node.js **24.14.1 이상**, Git, 기존 Codex CLI 또는 Claude Code를 준비합니다. 아래는 소스 checkout 기준이며 npm 레지스트리 배포를 가정하지 않습니다. 런타임 의존성 설치를 위한 `npm install`은 필요하지 않습니다.
 
-**지금 다시 만든다면 만들 필요가 없는 것.** 격리된 worktree를 직접 만들고 치우는 코드, 그리고 에이전트가 무엇을 했는지 알아내려고 자식 프로세스 출력을 긁어모으던 코드다. 하네스가 네이티브 worktree와 훅 이벤트로 둘 다 준다. [`ENVIRONMENT.md`](docs/archive/2026-08-13/ENVIRONMENT.md)가 Windows에서 실측한 다섯 주제 가운데 **둘 안에 정확히 그 둘이 들어 있다** — 자식 프로세스 출력 디코딩(§1-2), 그리고 프로세스가 정규화하지 말고 git에게 물어야 하는 worktree 경로와 그 폐기 순서(§3-1, §3-3).
+```sh
+git clone https://github.com/solzip/CodeFleet.git
+cd CodeFleet
+node --version
+node src/alpha/cli.mjs host codex doctor
+```
 
-**그래도 남는 것.** 하네스가 가져간 것은 **관측 수단**이지 판정 계층이 아니다. 이벤트가 와도 그것이 관측인지 주장인지 등급으로 갈라주지 않고, 확인하지 못한 것을 사람이 서명할 수 있는 갭과 아무도 대신할 수 없는 증거 결함으로 나눠주지 않고, 결정을 append-only 원장에 적어 반년 뒤 다시 계산하게 해주지도 않는다. 승인이 계약과 그 계약이 놓인 정책을 함께 덮는 것도 그렇다. **이 프로젝트가 실제로 힘을 쓴 문제는 배관이 아니라 그쪽이었고, 그건 아직 아무도 주지 않는다.**
+신뢰할 수 있는 checkout에서 사용할 프로젝트 경로를 지정합니다. `PROJECT`는 이미 존재하는 프로젝트 디렉터리로 바꾸고 사용하는 Host의 설치 명령을 선택하세요.
 
-제품 정의는 다시 세워 **Warrant**라는 이름으로 시작했다 — 바로 그 판정 계층이다. 실행 엔진을 소유하지 않고, 판정과 관측을 갈라놓는다. **그것도 멈췄다.** 표지에 적은 대로 하네스가 worktree와 세션 관측을 네이티브로 가져가면서 전제 둘이 무효화됐고, 기존 구현(agentsd, Bernstein)을 코드 레벨로 조사한 뒤 재설계를 보류했다. 공개 저장소는 없다.
+```text
+node scripts/host-install.mjs install codex PROJECT
+node scripts/host-install.mjs install claude PROJECT
+node scripts/host-install.mjs status codex PROJECT
+```
 
-## 라이선스
+| Host | 설치 위치 | 세션에서 호출 |
+| --- | --- | --- |
+| Codex | `PROJECT/.agents/skills/codefleet/SKILL.md` | `$codefleet` |
+| Claude Code | `PROJECT/.claude/skills/codefleet/SKILL.md` | `/codefleet` |
 
-MIT 라이선스로 공개한다. 실행·수정·배포·상업적 사용을 허용하며, 배포 시 저작권과 라이선스 고지를 유지해야 한다. 자세한 조건은 [`LICENSE`](LICENSE)를 따른다.
+설치기는 프로젝트 내부에 Skill·런타임 snapshot·라이선스를 추가합니다. 전역 설정을 변경하지 않으며 기존 설치를 덮어쓰지 않습니다. 필요시 Host 세션을 다시 열어 Skill을 발견하게 하세요. 발견과 실제 모델을 통한 Skill 수행은 별개의 검증입니다.
 
-권리자의 승인으로 종전 사용 금지 정책을 대체했다. 과거 커밋과 감사 기록의 정책은 당시 기록이며, 현재 배포본에는 MIT가 적용된다. 사용 허용은 제품 품질이나 운영 적합성을 보증하지 않는다.
+설치 파일을 검토하고 프로젝트의 추적·제외 정책을 정한 뒤 깨끗한 Git 기준선을 준비하세요. 계획 대상 저장소에는 기존 HEAD가 필요합니다. 상태 DB와 응답 JSON은 대상 저장소 밖에 둡니다. 인증정보를 복사하지 않습니다.
+
+Windows Fixture는 LF 줄바꿈으로 준비하세요. CodeFleet은 Git을 `core.autocrlf=false`로 관측하므로 일반 `git status`가 깨끗해도 줄바꿈 차이로 기준선 검사가 차단될 수 있습니다. 정책을 우회하지 말고 Fixture의 줄바꿈과 기준선을 확인합니다.
+
+관리 명령은 `status`, `disable`, `enable`, `remove`이며 두 Host 모두 지원합니다. 수정된 설치 파일은 자동 삭제하지 않습니다. 업데이트는 기존 설치를 검토한 뒤 재설치하며 snapshot은 자동 갱신되지 않습니다.
+
+## Quick Start: 먼저 계획만 만들기
+
+공개 가능한 작은 Fixture 프로젝트의 새 Host 세션에서 `$codefleet` 또는 `/codefleet`을 호출하고 다음과 같이 요청합니다.
+
+```text
+중복 이벤트가 두 번 처리되는 원인을 분석해 주세요.
+파일을 수정하거나 명령으로 테스트를 실행하지 말고,
+Task Draft와 Workflow/DAG를 작성한 뒤 미검증 항목을 표시해 주세요.
+```
+
+이 예시는 첫 Live 수용 시나리오이며 실제 성공 기록이 아닙니다. Host 도구 권한과 허용된 상태 기록 경로를 먼저 정하세요. Skill의 자연어 지침 자체는 보안 Sandbox가 아닙니다.
+
+모델 호출 없이 준비 경로를 직접 확인할 수도 있습니다. 아래 명령은 신뢰할 수 있는 CodeFleet checkout에서 실행합니다. `STATE`는 대상 저장소 밖의 준비 상태 디렉터리, `REPO`는 깨끗한 Fixture Git 저장소, `TASK`는 `plan` 결과의 taskId로 바꾸세요. 파일 경로와 기준은 실제 Fixture에 맞게 검토합니다.
+
+```text
+node src/alpha/cli.mjs --state STATE host codex plan "Fix duplicate event handling" REPO
+node src/alpha/cli.mjs --state STATE host codex status TASK
+node src/alpha/cli.mjs --state STATE host codex review TASK --files src/events.js --tests test/events.test.js --criterion "Duplicate event is handled once"
+node src/alpha/cli.mjs --state STATE host codex prepare TASK
+node src/alpha/cli.mjs --state STATE host codex workflow TASK
+node src/alpha/cli.mjs --state STATE host codex explain TASK
+node src/alpha/cli.mjs --state STATE host codex approval-request TASK
+```
+
+Claude에는 `codex` 대신 `claude`를 사용합니다. 위 준비 명령은 모델을 호출하거나 소스를 수정하지 않으며 `STATE`에 준비 상태를 기록합니다. `plan`은 입력 보완이 필요할 때, `prepare`와 `approval-request`는 승인 대기 상태에서 exit 2를 반환할 수 있습니다. 이는 검증된 완료가 아닙니다.
+
+Host가 작성한 의미 기반 Draft는 `host codex draft TASK proposal.json`으로 제출합니다. 필수 schema·revision·base·정확한 파일 인용은 [Draft 계약 안내](docs/product-completion/host-core-guide.md)에 있습니다. 임의의 승인·Evidence 필드를 제출할 수 없습니다.
+
+## Skills와 Single-Agent / Hybrid
+
+- **일반 `codefleet`**: Docker 없는 계획·분석·Draft·DAG 조회와 승인 요청의 기본 경로입니다.
+- **엄격한 H6 `codefleet-plan`**: 별도의 격리 프로필입니다. 일반 Skill과 혼동하지 마세요. [H6 구현과 자원 검증](docs/runs/2026-10-21/h6-uid-resource-recovery.md)을 참고하세요.
+- **Single-Agent / Hybrid**: 기본은 하나의 Host Agent가 역할을 나눠 추론하는 방식입니다. Hybrid는 계약에 명시된 WorkItem·의존성·예산에 따라 제한된 병렬 실행을 관리합니다. [오케스트레이션 안내](docs/product-completion/orchestration-guide.md)에 세부 계약이 있습니다.
+
+현재 공개 Host 경로의 `requests`·`submit`·`run`·`resume`은 보호 실행 게이트에 의해 차단됩니다. 내부 오프라인 Fixture에서 검증한 H4 Linux IPC 경로를 일반 사용자 Live 실행 지원으로 해석하지 마세요. [Host 설치·실행 경계](docs/product-completion/host-native-guide.md)를 따르며 내부 모듈이나 Legacy 명령으로 우회하지 않습니다.
+
+## Verification Backend와 Evidence
+
+| Backend | 용도와 보장 | 한계 |
+| --- | --- | --- |
+| Local Verification | 명시적으로 신뢰한 정확한 명령·인자·snapshot의 실행 결과 수집 | 동일 사용자 권한의 실행. OS 격리·네트워크 차단·보호된 독립 검증을 보장하지 않음 |
+| Container Verification | 기존 Alpha Docker Harness, 고정 이미지·보호 테스트 입력·네트워크 제한·자원 제한 | Docker 필요. 검증된 범위와 신뢰 경계 안에서만 보장하며 임의의 적대적 코드를 모두 안전하게 실행한다는 뜻이 아님 |
+| Host Sandbox | 플랫폼·도구별 보안 검증이 필요한 확장 지점 | 현재 `NOT_VERIFIED`, 활성화되지 않음 |
+
+저장소의 테스트·빌드도 부작용을 일으킬 수 있습니다. 명령 이름만 보고 Local 실행을 안전하다고 판단하지 않습니다. Container가 필요한 계약에서 Docker가 없으면 해당 검증을 차단하며 Local로 자동 대체하지 않습니다.
+
+Evidence는 Backend 이름뿐 아니라 실행 권한, 격리 Capability, 검증자 독립성, 무결성, Contract Hash, Candidate Tree Hash, 필수 게이트 결과를 구분합니다. `PROVIDER_REPORTED_ONLY`는 AI의 보고, `LOCAL_EXECUTED`는 로컬 관측, 기존 `HARNESS_EXECUTED`는 보호된 Harness 실행 의미를 유지합니다. **Local 성공은 Protected VERIFIED로 승격되지 않습니다.**
+
+보호된 Judge는 실제 실패 기준선과 후보 테스트, 일치하는 테스트 식별자, 후보·산출물 무결성 및 모든 필수 게이트를 요구합니다. 누락·실패·변조된 증거를 AI의 설명으로 대체할 수 없습니다. 자세한 보장과 한계는 [Core 안내](docs/product-completion/host-core-guide.md), 기존 Node·[Java Gradle/Maven 안내](docs/product-completion/alpha-quickstart.md#java-gradlemaven)를 참고하세요.
+
+## 개발과 테스트
+
+```sh
+npm run test:host-core
+npm run test:host
+npm run check:links
+npm run check:citations
+npm run check:facts
+npm run alpha:package-smoke
+```
+
+Host Core 테스트에는 Docker 없는 실제 준비 경로·Local 실행과 명시적인 Fake Backend 반증 시험이 포함됩니다. Host 테스트의 Docker 조건부 시험을 미실행했다면 보호 검증 통과로 계산하지 않습니다. 패키지 Smoke는 기본 옵션에서 모델을 호출하지 않습니다.
+
+전체 회귀는 `npm test`입니다. Legacy·Alpha·Host Core와 문서/규칙 검사를 실행하며 보호 시험에 필요한 Docker 이미지와 JDK/Java fixture 구성을 먼저 준비해야 합니다. Docker 없는 계획 사용자에게 이 전체 개발 검증 환경을 요구하지 않습니다. 정확한 플랫폼별 준비·실행 계약은 [.github/workflows/alpha.yml](.github/workflows/alpha.yml), [CI 준비 스크립트](scripts/prepare-alpha-ci.mjs), [Alpha 실행기](scripts/test-alpha-ci.mjs)에 있습니다. 환경 변수만 켜는 것으로 검증 준비가 끝나지 않습니다.
+
+`node src/alpha/cli.mjs host codex doctor`는 기본 Host 준비 상태를 확인합니다. 기존 `doctor --no-auth`는 Alpha 인증 검사를 생략하며 나머지 검사가 통과해도 exit 2입니다. 전체 사용 준비 성공으로 읽지 않습니다.
+
+## 현재 상태와 다음 수용 검증
+
+Host-Native 계획·DAG·검증 계약의 오프라인 시험과 기존 Legacy·Alpha 경로를 유지합니다. 실제 Host Live, 자동 Host 위임, 일반 사용자 환경의 보호 실행 배포는 별도 수용 검증이 필요합니다. Linux Legacy 탐색 실패는 미해결이며 현재 Linux 필수 CI의 시험 범위와 구분합니다. Alpha 인증 확인도 오프라인 CI 성공에 포함되지 않습니다.
+
+첫 Live 수용은 Codex `$codefleet` 또는 Claude `/codefleet`에서 공개 Fixture를 **분석만** 하고 Draft→Validator→DAG→상태·Evidence 조회를 확인하는 범위입니다. 소스 무변경, 승인·실행 권한 미생성, 미검증 항목 표기가 수용 조건입니다. 실행 전에 Host 버전·모델·Fixture/Skill Hash·읽기와 상태 쓰기 권한·네트워크·예산을 확정하고 별도 승인을 받아야 합니다. [기존 사전 점검](docs/runs/2026-10-20/first-host-native-acceptance-preflight.md)은 당시 기록이며 실행 전 조건을 다시 확인합니다.
+
+## 설계 자료와 역사적 기록
+
+현재 제품 안내와 과거 실험의 결론을 구분합니다. 기존 README 전문과 링크는 [main 통합 시점의 README](https://github.com/solzip/CodeFleet/blob/cd31fdb3810a48b2ae42dc05d1f1e461eb9822bc/README.md)에 보존돼 있습니다. 과거의 종료·미지원 설명을 현재 제품 전체의 상태로 해석하지 마세요.
+
+- [제품 계획](docs/product-completion/README.md) · [진행 기록](docs/product-completion/progress.md) · [Alpha Quick Start](docs/product-completion/alpha-quickstart.md) · [공개 Alpha 릴리스](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.4)
+- [문서·실행 기록 색인](docs/INDEX.md) · [결함 등재부](docs/REGISTER.md) · [작업 규약](docs/CONVENTIONS.md)
+- [설계에서 배운 점](docs/archive/2026-08-13/DESIGN-NOTES.md) · [결함 유형](docs/archive/2026-08-13/LESSONS.md) · [환경 기록](docs/archive/2026-08-13/ENVIRONMENT.md) · [아카이브](docs/archive/2026-08-13/ARCHIVE.md)
+- [초기 CI 기록](docs/runs/2026-08-13/ci-first-run.md) · [문서 검사 보완](docs/runs/2026-08-14/unchecked-27-adjudication.md) · [Alpha 검증 보완](docs/runs/2026-09-30/alpha-reconciliation-fixes.md) · [Host-Native 전환 기록](docs/runs/2026-10-20/alpha-host-native-transition.md)
+
+## 기여와 라이선스
+
+<details>
+<summary>기존 문서의 기계 검사 대상 수치와 역사적 범위</summary>
+
+기존 문서 검사의 기준을 낮추지 않기 위해 아래 선언을 보존합니다. 동결된 결함 등재부의 77건은 현재 제품의 미해결 결함 수가 아닙니다. <!-- fact: registered-findings = 77 --> 이후 재판정은 위 역사적 기록을 참고하세요.
+
+| 검사 대상 | 수치와 범위 |
+| --- | --- |
+| 동결된 등재부 전체 | 77건 <!-- fact: registered-findings = 77 --> |
+| 당시 해소 / 부분해소 | 25 / 8건 <!-- fact: findings-resolved = 25 --> <!-- fact: findings-partial = 8 --> |
+| 당시 재현 안 됨 / 미해소 | 1 / 15건 <!-- fact: findings-not-reproduced = 1 --> <!-- fact: findings-open = 15 --> |
+| 당시 수용된 한계 / 미확인 | 1 / 27건 <!-- fact: findings-accepted-limit = 1 --> <!-- fact: findings-unchecked = 27 --> |
+| Legacy 테스트 기준 | 통과 324 / 실패 0 <!-- fact: tests-passing = 324 --> <!-- fact: tests-failing = 0 --> |
+| 규칙 조건 인용 커버리지 | 545줄 중 345줄, 63.3%. 구현 완성률이 아님 <!-- fact: condition-lines = 545 --> <!-- fact: conditions-covered = 345 --> <!-- fact: coverage-percent = 63.3 --> |
+| 동결 아카이브 감사·실행 기록 | 94편 <!-- fact: audit-run-records = 94 --> |
+
+테스트 수치 선언은 문서 검사에서 생성된 Legacy 결과와 대조하며, 새 환경에서 시험을 실행했다는 증거를 대신하지 않습니다.
+
+</details>
+
+문제 보고에는 재현 조건, 실행한 명령, 실제 결과와 미실행 항목을 포함하세요. 인증정보·개인 경로·세션 대화·런타임 DB는 공개하지 마세요. 변경 제안은 기존 계약·보호 테스트를 유지하고 관련 회귀와 문서 검사를 함께 확인합니다. 저장소 작업 규칙은 [CLAUDE.md](CLAUDE.md), 보안 안내는 [SECURITY.md](SECURITY.md)에 있습니다.
+
+[MIT License](LICENSE). 배포 시 저작권과 라이선스 고지를 유지해야 하며 사용 허용은 품질이나 운영 적합성을 보증하지 않습니다. 과거 아카이브의 사용 금지 정책은 현재 배포본에 적용되지 않습니다.
