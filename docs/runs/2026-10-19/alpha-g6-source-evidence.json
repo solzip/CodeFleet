@@ -1,0 +1,36 @@
+{
+  "base": "c61e9b829b62dd41336a7225bf3b9165136484db",
+  "scope": "G6 local integration; Live product BLOCKED_OR_UNSUPPORTED",
+  "files": {
+    "src/alpha/cli.mjs": "85918211dbefb9396910fbc6685fb50f114ac2ffd8ebd9bddae505c1f640fd86",
+    "src/alpha/evidence.mjs": "124e08838b0ca821caf685f6753aaa8a3a15b421ee742616c4fab8bbe3af626a",
+    "src/intent/semantic.mjs": "ec988aa0f96ff282692bf46d09db00f1345daa0c190b97d4bb19324c77577391",
+    "src/providers/planner.mjs": "dc803188b4341a1804b1d1db47fcc5b70e2c368d71c344375726c40802b5b5e5",
+    "src/product/cli.mjs": "6a8aa65ff108f0b454c15327843717d5c1569fc5d2e00cbafaed8a4e2ce03bff",
+    "src/product/tasks.mjs": "10f0008ecbeb41afdcfae827b60ddaf33580669a7d3a405a7623ef3c6490fc51",
+    "src/product/report.mjs": "5745ebb63166cba9427cc1709977896c95b6ea09b4551acc32395afa5a16f160",
+    "test/product.test.mjs": "ac40215f03407b20db5605a21ae82c81dbe573b10f54022f0578473ffafccfdc",
+    "scripts/alpha-package-smoke.mjs": "551f1e09d5806be8d5ae5b222058d4fecac37b65af20a19b27a390ce736a9799",
+    "package.json": "1257228a228be6d32b18d069977e740c33a0652ba1c2c105b7641a8cf5f415c5"
+  },
+  "priorG5Comparison": {
+    "src/alpha/controller.mjs": true,
+    "src/alpha/store.mjs": true,
+    "src/workflow/definition.mjs": true,
+    "src/workflow/persistence.mjs": true,
+    "src/workflow/collaboration.mjs": true,
+    "test/hybrid.test.mjs": true,
+    "test/workflow.test.mjs": true,
+    "package.json": false
+  },
+  "verification": {
+    "fullExit": 0,
+    "legacy": 324,
+    "alphaAndExtensions": 125,
+    "total": 449,
+    "skipped": 0,
+    "doctorExit": 0,
+    "packageExit": 0,
+    "liveCalls": 0
+  }
+}

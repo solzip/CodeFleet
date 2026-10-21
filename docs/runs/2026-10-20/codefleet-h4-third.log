@@ -1,0 +1,47 @@
+✔ H4: Host client has bounded data-only methods and fails closed off Linux (1.2657ms)
+✖ H4: separated Linux Host IPC reaches existing Docker Harness, evidence and Judge (1842.6391ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1920.5897
+
+✖ failing tests:
+
+test at test\host-ipc.test.mjs:14:1
+✖ H4: separated Linux Host IPC reaches existing Docker Harness, evidence and Judge (1842.6391ms)
+  AssertionError [ERR_ASSERTION]: Traceback (most recent call last):
+    File "/var/lib/docker/volumes/codefleet-h4-def5a775-70ce-46ba-9299-b733aa9db178/_data/code/src/hosts/operator-ipc.py", line 150, in <module>
+      serve(*sys.argv[1:])
+    File "/var/lib/docker/volumes/codefleet-h4-def5a775-70ce-46ba-9299-b733aa9db178/_data/code/src/hosts/operator-ipc.py", line 64, in serve
+      raise RuntimeError('Agent-writable runtime code')
+  RuntimeError: Agent-writable runtime code
+  Traceback (most recent call last):
+    File "/input/test/fixtures/host-ipc-probe.py", line 97, in <module>
+      server=start()
+    File "/input/test/fixtures/host-ipc-probe.py", line 67, in start
+      assert server.stdout.readline().strip()=='OPERATOR_IPC_READY'
+  AssertionError
+
+
+
+  1 !== 0
+
+      at docker (file:///<WORKTREE>/test/host-ipc.test.mjs:18:122)
+      at TestContext.<anonymous> (file:///<WORKTREE>/test/host-ipc.test.mjs:22:16)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:787:18)
+      at Test.postRun (node:internal/test_runner/test:1247:19)
+      at Test.run (node:internal/test_runner/test:1175:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

@@ -1,0 +1,39 @@
+✔ H4: Host client has bounded data-only methods and fails closed off Linux (2.1538ms)
+✖ H4: separated Linux Host IPC reaches existing Docker Harness, evidence and Judge (94020.4907ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 94134.3167
+
+✖ failing tests:
+
+test at test\host-ipc.test.mjs:14:1
+✖ H4: separated Linux Host IPC reaches existing Docker Harness, evidence and Judge (94020.4907ms)
+  AssertionError [ERR_ASSERTION]: Traceback (most recent call last):
+    File "/input/test/fixtures/host-ipc-probe.py", line 110, in <module>
+      final=report['result'];assert final['complete'],final
+  AssertionError: {'schemaVersion': 1, 'kind': 'RunReport', 'runId': 'safe', 'state': 'WAITING_HUMAN', 'recordedState': 'WAITING_HUMAN', 'complete': False, 'verification': {'status': 'NOT_RUN', 'reason': 'No accepted evidence'}, 'authorization': 'AUTHORIZED', 'provider': 'host-codex-staged', 'workItems': [{'id': 'repair', 'dependencies': [], 'roles': {'Planner': 'planner', 'Architect': 'architect', 'Executor': 'executor', 'Reviewer': 'reviewer'}, 'state': 'BLOCKED', 'attempt': {'runId': 'safe', 'itemId': 'repair', 'childId': '25180ba4-c78d-4ba8-9a94-d2546d60716b', 'revision': 1, 'status': 'FAILED'}, 'reason': 'Docker engine failed (1): permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get "http://%2Fvar%2Frun%2Fdocker.sock/v1.45/version": dial unix /var/run/docker.sock: connect: permission denied\n'}], 'activeAttempts': [], 'attempts': 0, 'cost': {'reportedUsd': 0, 'unknownAttempts': 0, 'authority': 'PROVIDER_REPORTED_ONLY'}, 'reason': 'Child verification/approval failed; subsequent WorkItems blocked', 'artifactPaths': {'graphRef': '/var/lib/docker/volumes/codefleet-h4-c046aab8-aa1c-41da-93a4-f8b1bd9e80aa/_data/private/state/artifacts/73016a0e5180ec7661aaafc755066e38157b5878be175c43e5a7e1058159588d.json', 'sourceRef': '/var/lib/docker/volumes/codefleet-h4-c046aab8-aa1c-41da-93a4-f8b1bd9e80aa/_data/private/state/artifacts/68c4c4d82cba0c5c82407f07ab01e563d6ec8bd2b6327c73f3caaa9360e00157.json'}, 'messages': [], 'retry': 'NEW_REVIEWED_TASK_REQUIRED', 'readiness': 'BLOCKED_OR_UNSUPPORTED', 'liveProviderVerification': 'NOT_ESTABLISHED_BY_THIS_REPORT', 'events': [{'seq': 1, 'at': '2026-10-20T04:16:46.650Z', 'type': 'WORKFLOW_CREATED', 'body': {'graphRef': '73016a0e5180ec7661aaafc755066e38157b5878be175c43e5a7e1058159588d', 'sourceRef': '68c4c4d82cba0c5c82407f07ab01e563d6ec8bd2b6327c73f3caaa9360e00157'}}, {'seq': 5, 'at': '2026-10-20T04:16:46.918Z', 'type': 'HOST_INTENT_PROPOSED', 'body': {'ref': '6384240e2ad6882186cbe4566cd93e8a19a0d6f8392430459ab5d04af0c61126'}}, {'seq': 7, 'at': '2026-10-20T04:16:47.568Z', 'type': 'CLAIMED', 'body': {'recovered': False, 'resumed': False, 'readOnly': False}}, {'seq': 8, 'at': '2026-10-20T04:16:47.585Z', 'type': 'WORKFLOW_RUNNING', 'body': {'state': 'RUNNING', 'attempts': 0, 'reason': 'Dependency-ready batch'}}, {'seq': 9, 'at': '2026-10-20T04:16:47.593Z', 'type': 'OS_AUTHORIZATION_ASSIGNMENT', 'body': {'itemId': 'repair', 'grantId': None, 'actionDigest': 'd7f8247c7e59bdebe680373b4f6d3f02c823bb3642acb716db4ea7d78469ad8c', 'authority': 'CONFINED_AUTOMATIC_POLICY'}}, {'seq': 11, 'at': '2026-10-20T04:16:47.593Z', 'type': 'ATTEMPT_RESERVED', 'body': {'itemId': 'repair', 'childId': '25180ba4-c78d-4ba8-9a94-d2546d60716b'}}, {'seq': 14, 'at': '2026-10-20T04:16:47.715Z', 'type': 'ATTEMPT_RECONCILED', 'body': {'itemId': 'repair', 'status': 'FAILED'}}, {'seq': 15, 'at': '2026-10-20T04:16:47.719Z', 'type': 'WORKFLOW_WAITING_HUMAN', 'body': {'state': 'WAITING_HUMAN', 'attempts': 0, 'reason': 'Child verification/approval failed; subsequent WorkItems blocked'}}]}
+
+
+
+  1 !== 0
+
+      at docker (file:///<WORKTREE>/test/host-ipc.test.mjs:18:122)
+      at TestContext.<anonymous> (file:///<WORKTREE>/test/host-ipc.test.mjs:22:16)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:787:18)
+      at Test.postRun (node:internal/test_runner/test:1247:19)
+      at Test.run (node:internal/test_runner/test:1175:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

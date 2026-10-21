@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-20",
+  "head": "9dc429835fd272253f8efac60ac0f76bf7188de5",
+  "offlineStatus": "OFFLINE_VERIFIED",
+  "hostProductStatus": "BLOCKED",
+  "hostLive": "NOT_RUN",
+  "physicalHumanPresence": "NOT_TESTED",
+  "ipcChecks": 18,
+  "tests": {
+    "exit": 0,
+    "legacy": 324,
+    "alpha": 196,
+    "h3": 5,
+    "failed": 0,
+    "skipped": 0
+  },
+  "operatorImage": "sha256:26c04a69d0bb84a2ed1cb865c36a0f690bbe772197ee41d914563bea5236200d",
+  "sourceFiles": [
+    {
+      "file": "src/hosts/operator.mjs",
+      "sha256": "2ebf54554cf10cf941f471ca8dcc0dad7d4ae426bfe843bd4c5e00dc0cffdeb1"
+    },
+    {
+      "file": "src/hosts/operator-ipc.py",
+      "sha256": "b4d3b41772fd7413aced536ab566958d484a3a45630f2c5a3b597e799ba462c2"
+    },
+    {
+      "file": "src/hosts/operator-runtime.mjs",
+      "sha256": "abddfcddfed559dec07808c0d8bf58e32f7d31e51dfffe56813bb8c21b47182f"
+    },
+    {
+      "file": "src/hosts/workflow-authorization.mjs",
+      "sha256": "cb117de2ad1f3d931e70789c47a3df760e3b1782e0bc8cabc9874311fa2c83bd"
+    },
+    {
+      "file": "src/workflow/persistence.mjs",
+      "sha256": "e0280e5c6a223146b937b9d09fe7e5711972ea6f63942ef33fe0f433bc5b9d4e"
+    },
+    {
+      "file": "src/alpha/controller.mjs",
+      "sha256": "c960a3df06ea6b437010b71bd54269651d3402624bbf90b9af574bd3927bd668"
+    },
+    {
+      "file": "test/operator-runtime.test.mjs",
+      "sha256": "8684381d429c8634c359d59bfbf0204620e4d03e293f03938e56678106d5ad33"
+    },
+    {
+      "file": "test/fixtures/operator-runtime.Dockerfile",
+      "sha256": "b8e2bddec25a7a8f8ce697933baf47de133607814142efa53f9a4509a0daad79"
+    },
+    {
+      "file": "test/fixtures/operator-ipc-probe.py",
+      "sha256": "6794dcce69da276699a468b46d2a71f270c2f8b43a18e975807be80a91733b30"
+    },
+    {
+      "file": "test/fixtures/operator-seed.mjs",
+      "sha256": "8abb61e173bef59e4f6748bdc1bd0a3c37d41209a74427f5a5c3a9530c8aed18"
+    },
+    {
+      "file": "package.json",
+      "sha256": "1992ceaaae0f4750cc8ea31efbe492d750954801200431c383860fcf83bd6d51"
+    }
+  ]
+}

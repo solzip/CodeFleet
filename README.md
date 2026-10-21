@@ -1,5 +1,11 @@
 # CodeFleet — 에이전트가 했다고 말한 일을 어떻게 검증하나
 
+> **기본 Host-Native 사용:** 기존 Codex·Claude Code 세션과 로컬 Node·Git으로 계획·Draft·Workflow/DAG·승인 요청을 사용할 수 있습니다. Docker·WSL·별도 OS 계정은 공통 설치 요건이 아닙니다. Docker는 기존 Alpha의 보호된 검증에 필요하며, Local 검증 성공은 보호된 완료 판정이 아닙니다. [기본 사용과 Backend 보장](docs/product-completion/host-core-guide.md). Host Live는 미검증입니다.
+
+> **Host-Native 전환:** Codex·Claude Code의 기존 세션에서 제안을 만들고 CodeFleet이 계약·검증을 관리합니다. [설치와 사용](docs/product-completion/host-native-guide.md) · [전환 기록](docs/runs/2026-10-20/alpha-host-native-transition.md). 별도 모델 API는 선택 사항이며 실제 Host Live 검증은 아직 수행하지 않았습니다.
+
+> **미배포 개발 브랜치:** [통합 오케스트레이션 CLI 안내](docs/product-completion/orchestration-guide.md). 로컬 통합 검증과 Live 운영 준비 상태를 구분한다.
+
 > **Java 지원:** alpha.4에 Gradle·Maven 검증 어댑터를 추가했다. 사용자 지정 Gradle 프로젝트의 실제 AI 수정→테스트→draft PR과 Maven 샘플의 로컬 완주를 확인했다. 지원 버전과 실행 방법은 [Java 실행 안내](docs/product-completion/alpha-quickstart.md#java-gradlemaven)를 따른다.
 
 > **Quality scope:** The reproduced acceptance, cost, cancellation and recovery defects have regression fixes. Independent code review remains required; arbitrary hostile JavaScript is outside the verified scope. See [remediation evidence](docs/runs/2026-09-30/alpha-reconciliation-fixes.md).
@@ -293,7 +299,7 @@ selectedWorkspaceRootRealPath: input.selectedWorkspaceRootRealPath ?? "",
 | [`ENVIRONMENT.md`](docs/archive/2026-08-13/ENVIRONMENT.md) | Windows에서 에이전트 도구를 만드는 사람에게 그대로 쓸모 있는 실측 기록. CP949 콘솔과 자식 출력 UTF-8 디코딩, 셸 인터프리터 규칙에 막혀 닿지 않는 배치 wrapper, 프로세스가 정규화하지 말고 git에게 물어야 하는 worktree 경로, Windows가 `TerminateProcess`로 매핑해주는 덕에만 확실한 `SIGTERM`, 그리고 `PATH`만 남긴 spawn 환경 탓에 자식 프로세스에 홈 디렉터리가 없었던 일. 항목마다 재현 조건을 붙였고 해결 미확정 3 / 미검증 4 / 미실측 1로 표시했다 |
 | [`ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md) | 종료 시점의 상태와 사유, 자산 목록. 이 페이지에 나오는 모든 숫자의 출처다 |
 
-이 저장소의 판정에는 전부 파일:라인 근거가 붙어 있다. 감사·실행 기록 66편의 색인은 [`docs/INDEX.md`](docs/INDEX.md), <!-- fact: audit-run-records = 66 --> 동결된 결함 등재부는 [`docs/REGISTER.md`](docs/REGISTER.md), 규칙마다 그것이 필요해진 사건을 함께 적어둔 작업 규약은 [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)에 있다.
+이 저장소의 판정에는 전부 파일:라인 근거가 붙어 있다. 감사·실행 기록 94편의 색인은 [`docs/INDEX.md`](docs/INDEX.md), <!-- fact: audit-run-records = 94 --> 동결된 결함 등재부는 [`docs/REGISTER.md`](docs/REGISTER.md), 규칙마다 그것이 필요해진 사건을 함께 적어둔 작업 규약은 [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)에 있다.
 
 공개 사용 제품을 위한 새 [제품 완성 계획](docs/product-completion/README.md)을 별도로 작성했다. 기존 아카이브의 성과·한계와 구분하며, 제한된 알파 경로를 MIT로 배포한다. 외부 파일럿 결과와 전체 로드맵 완성은 아직 남아 있다.
 

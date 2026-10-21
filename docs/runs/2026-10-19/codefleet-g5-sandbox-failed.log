@@ -1,0 +1,48 @@
+(node:50144) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ hybrid independent work overlaps, isolates candidates and integrates deterministically (1778.7358ms)
+✔ dependency edges and shared resources serialize; limits and overlap fail closed (2170.8037ms)
+✔ role messages are durable untrusted proposals, duplicate safe and cannot authorize (1647.1095ms)
+✔ parallel failure preserves unrelated verified success; no final integration (1468.9214ms)
+✔ semantic conflict fails combined verification despite disjoint accepted files (1699.8741ms)
+✔ cancel and approval revocation stop both children without replay (2774.842ms)
+✔ reservation duplicates, stale messages and hybrid revision mixing are rejected (669.1631ms)
+✔ graph revision compare-and-swap invalidates approval; late revision rejected (793.1144ms)
+✔ provider claims and out-of-scope proposals never integrate (2531.9073ms)
+✔ final tree tampering invalidates workflow completion (1621.0836ms)
+✖ hybrid real Docker verifies parallel candidates and final combined tree (884.5529ms)
+✔ unverified Codex remains blocked for hybrid scheduling (795.3797ms)
+✔ message insert and event roll back together (631.789ms)
+✔ old coordinator cannot commit late worker results after fencing replacement (1426.6745ms)
+✔ one local process timeout leaves unrelated verified work intact (1410.8502ms)
+✔ real coordinator process exit during parallel work and integration never replays attempts (3056.4007ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 15
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 25446.6365
+
+✖ failing tests:
+
+test at test\hybrid.test.mjs:213:1
+✖ hybrid real Docker verifies parallel candidates and final combined tree (884.5529ms)
+  AssertionError [ERR_ASSERTION]: Child verification/approval failed; subsequent WorkItems blocked
+  + actual - expected
+
+  + 'WAITING_HUMAN'
+  - 'COMPLETED'
+
+      at TestContext.<anonymous> (file:///C:/Users/[redacted-local-profile]/Desktop/%EA%B0%9C%EC%9D%B8/sol/codeFleet/codeFleet/.codefleet/worktrees/alpha-g0/test/hybrid.test.mjs:218:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'WAITING_HUMAN',
+    expected: 'COMPLETED',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

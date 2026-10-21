@@ -1,0 +1,31 @@
+(node:49300) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"diagnostic":"phase-skew","state":"COMPLETED","peak":1,"admitted":["a","b"],"attempts":[{"itemId":"a","status":"SUCCEEDED"},{"itemId":"b","status":"SUCCEEDED"},{"itemId":"final","status":"SUCCEEDED"}]}
+✖ hybrid independent work overlaps, isolates candidates and integrates deterministically (2612.1963ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2717.8056
+
+✖ failing tests:
+
+test at .trials\host-core-checkpoint\hybrid-phase-skew.mjs:52:1
+✖ hybrid independent work overlaps, isolates candidates and integrates deterministically (2612.1963ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  1 !== 2
+
+      at TestContext.<anonymous> (file:///<USER_HOME>/Desktop/%EA%B0%9C%EC%9D%B8/sol/codeFleet/codeFleet/.codefleet/worktrees/alpha-g0/.trials/host-core-checkpoint/hybrid-phase-skew.mjs:62:218)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 2,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

@@ -1,0 +1,200 @@
+{
+  "overall": "BLOCKED",
+  "hostVersion": "codex-cli 0.162.1",
+  "modelCalls": 0,
+  "fixture": {
+    "relativePath": ".trials/host-core-checkpoint/first-host-acceptance/fixture",
+    "commitHash": null,
+    "head": {
+      "exitCode": 128,
+      "stdout": ""
+    },
+    "status": {
+      "exitCode": 0,
+      "stdout": "?? README.md\n?? package.json\n?? src/events.js\n?? test/events.test.js"
+    },
+    "staged": {
+      "exitCode": 0,
+      "stdout": ""
+    },
+    "commitCandidates": [
+      {
+        "path": "README.md",
+        "bytes": 660,
+        "sha256": "45bd6395ad8029bb4763b843202315e27aae6f99502556add6ba514d8f856c5b"
+      },
+      {
+        "path": "package.json",
+        "bytes": 145,
+        "sha256": "dafa9a28303ab8485ae40f76bce0009e3df9f239e0aa235832e63e5bb34c75b8"
+      },
+      {
+        "path": "src/events.js",
+        "bytes": 103,
+        "sha256": "b441d162e2e7525d89ba354be47bfe6735dc64001d3ed2bcb2e968a79ef35a41"
+      },
+      {
+        "path": "test/events.test.js",
+        "bytes": 1243,
+        "sha256": "2823b2bdfd0d3b3f66a2a35837ced1d8f6ef901e473bd950657b9ae4d5c64ab9"
+      }
+    ],
+    "manifestSha256": "2acf1e4f203fb23c3627a36a3e7d862ad7c76d25caa2ad15d57da7c841c34aca",
+    "unchanged": true,
+    "prospectiveGitTreeSha1": "492527e8cee6f46c0602825e729ce14bed31f079",
+    "treeScope": "four candidates, raw bytes, mode 100644, no index/object writes; not a commit",
+    "localExcludes": [
+      "/.agents/",
+      "/.acceptance/"
+    ],
+    "independentRepositoryRoot": true,
+    "remotesCount": 0,
+    "blobHashesVerified": true
+  },
+  "installation": {
+    "status": "RESOLVED",
+    "relativePath": ".agents/skills/codefleet",
+    "skillSha256": "a57b669e9e183875e9c588f2b40db9a3173a9557f5e8cdd774aa113233106924",
+    "receiptSha256": "2e72961ef91c11a080c9702a189c7835bfd6b3df25b3be6f491b367c20128a83",
+    "receiptFiles": 81,
+    "matchedFiles": 81,
+    "actualRegularFiles": 82,
+    "totalEntries": 91
+  },
+  "discovery": {
+    "host": "codex",
+    "protocol": "LOCAL_APP_SERVER",
+    "methods": [
+      "initialize",
+      "skills/list",
+      "skills/list",
+      "skills/list"
+    ],
+    "modelTurnsRequested": 0,
+    "authenticationUsed": false,
+    "configScope": "TEMPORARY_CLEAN_HOME",
+    "states": [
+      {
+        "state": "enabled",
+        "exactLocalSkillMatches": 1,
+        "enabled": true,
+        "scope": "repo",
+        "errors": 0
+      },
+      {
+        "state": "disabled",
+        "exactLocalSkillMatches": 0,
+        "enabled": false,
+        "scope": null,
+        "errors": 0
+      },
+      {
+        "state": "enabled-again",
+        "exactLocalSkillMatches": 1,
+        "enabled": true,
+        "scope": "repo",
+        "errors": 0
+      }
+    ],
+    "status": "HOST_DISCOVERY_VERIFIED_NO_MODEL"
+  },
+  "selectedUserSettings": {
+    "source": "active CODEX_HOME/config.toml or default user config",
+    "exists": true,
+    "scope": "selected non-secret settings only; no auth/session files",
+    "settings": {
+      "model": "gpt-6-astra"
+    },
+    "windowsSandbox": "elevated",
+    "permissionProfileNames": [],
+    "effectiveSessionPolicy": "NOT_ESTABLISHED_BY_USER_CONFIG; CLI/session/managed overrides may differ"
+  },
+  "sandboxInsideParent": {
+    "profile": ":read-only",
+    "home": "fixture/.acceptance/sandbox-probe-home",
+    "control": {
+      "exitCode": 0,
+      "interrupted": false,
+      "stdout": "{\"read\":true,\"write\":\"ALLOWED\",\"childCommand\":{\"exit\":0,\"error\":null},\"loopback\":\"ALLOWED\"}\n",
+      "stderr": ""
+    },
+    "sandbox": {
+      "exitCode": 1,
+      "interrupted": false,
+      "stdout": "",
+      "stderr": "windows sandbox failed: CreateRestrictedToken failed: 87\n"
+    },
+    "sentinelAfter": "unchanged",
+    "modelCalls": 0,
+    "authentication": "EMPTY_TEMPORARY_HOME"
+  },
+  "sandboxOutsideParent": {
+    "profile": ":read-only",
+    "control": {
+      "exitCode": 0,
+      "stdout": "{\"read\":true,\"write\":\"ALLOWED\",\"childCommand\":{\"exit\":0,\"error\":null},\"loopback\":\"ALLOWED\"}\n",
+      "stderr": ""
+    },
+    "sandbox": {
+      "exitCode": 0,
+      "stdout": "{\"read\":true,\"write\":\"EPERM\",\"childCommand\":{\"exit\":null,\"error\":\"EPERM\"},\"loopback\":\"ALLOWED\"}\n",
+      "stderr": ""
+    },
+    "sentinelAfter": "unchanged",
+    "modelCalls": 0
+  },
+  "security": {
+    "files": 86,
+    "findings": [],
+    "scope": "four fixture candidates and installed package; bounded patterns, manual four-file review; no auth files"
+  },
+  "sessionSupport": {
+    "method": "new CLI conversation in fixture without resume/fork, or /new in same fixture CLI",
+    "runtime": "NOT_RUN",
+    "authentication": "existing Host-owned cache; NOT_INSPECTED",
+    "modelConfigured": "gpt-6-astra",
+    "modelEffectiveAndEntitled": "NOT_RUN"
+  },
+  "productPreservation": {
+    "files": 20,
+    "mismatches": []
+  },
+  "gates": {
+    "fixtureCandidates": "RESOLVED",
+    "commitBaseline": "BLOCKED",
+    "manifestAndTree": "RESOLVED",
+    "skillInstalled": "RESOLVED",
+    "skillDiscovery": "RESOLVED",
+    "skillInvocation": "NOT_RUN",
+    "fileWriteDeny": "PARTIALLY_VERIFIED",
+    "commandAllowlist": "BLOCKED",
+    "generalToolNetworkDeny": "BLOCKED",
+    "liveStateWriteProfile": "NOT_RUN",
+    "effectiveApprovalPolicy": "NOT_RUN",
+    "freshConversationMethod": "RESOLVED",
+    "authReuseRuntime": "NOT_RUN",
+    "modelIdentity": "PARTIALLY_VERIFIED",
+    "liveApproval": "BLOCKED"
+  },
+  "checks": {
+    "posttestExitCode": 0,
+    "diffCheckExitCode": 0,
+    "fullRegression": "NOT_RERUN",
+    "finalLinkCheck": {
+      "command": "node scripts/check-links.mjs",
+      "firstExitCode": 1,
+      "firstReason": "command-local safe.directory omitted; Git file listing exited 128",
+      "retryExitCode": 0,
+      "retryConfiguration": "command-local GIT_CONFIG safe.directory; no global config change",
+      "markdownFiles": 144,
+      "links": 467,
+      "missingTargets": 0,
+      "caseMismatches": 0,
+      "missingAnchors": 0
+    },
+    "publicPatternScan": {
+      "files": 6,
+      "matches": 0
+    }
+  }
+}

@@ -1,5 +1,34 @@
 # 진행 현황과 결정 목록
 
+> **Host-Native Core:** [구현·검증 기록](../runs/2026-10-20/host-native-core-verification.md)과 [사용 안내](host-core-guide.md). 기본 계획·Draft·DAG·승인 요청과 선택적 검증 Backend를 분리했다. 기존 보호된 검증 게이트는 유지하며 Local 성공을 보호된 완료로 승격하지 않는다. 실제 Host Live는 별도 미검증 상태다.
+
+> **H4:** [Host IPC and existing Docker Harness](../runs/2026-10-20/alpha-h4-host-ipc-harness.md) connect in the separated Linux offline fixture. Human input and actual Host deployment remain BLOCKED.
+
+> **H3 런타임:** [Linux UID·IPC와 Workflow 연결](../runs/2026-10-20/alpha-h3-operator-runtime.md). 오프라인 권한 반증과 제한된 자동화를 검증한다. 실제 Host client·격리·실행 서비스는 미완료이며 H2/전체 제품의 BLOCKED를 해제하지 않는다.
+
+> **H2 승인 경계:** [오프라인 구현과 반증](../runs/2026-10-20/alpha-h2-operator-isolation.md). 서명된 승인 원장과 Fake Agent UID 격리를 검증하며 공개 Host 실행은 차단한다. 실제 Operator 인증·Host OS/IPC·위험 효과별 집행은 미완료이며 전체 상태 BLOCKED다.
+
+> **H1 준비:** [실제 설치·발견 결과](../runs/2026-10-20/alpha-h1-host-acceptance-readiness.md), [Live 수용 패킷](host-live-acceptance.md). 양쪽 로컬 설치와 Codex 실제 로더 발견을 확인했다. 실제 Skill 호출·단일 Agent Live 실행·승인 권한 격리는 미검증/차단 상태다.
+
+> **Host-Native 전환:** [설계](../implementation/host-native.md), [사용 안내](host-native-guide.md), [실행 기록](../runs/2026-10-20/alpha-host-native-transition.md). 기존 Host 세션의 구조화 제안과 CodeFleet Harness를 연결하며 직접 API는 선택 사항으로 유지한다. Live Host 권한 경계와 실제 세션 검증은 미완료다. 아래 기록은 각 작업 당시의 상태다.
+
+> [제한 HTTPS 전송과 Provider 호환성](../runs/2026-10-20/alpha-g7c-live-transport-compatibility.md): 로컬 TLS·가짜 키 및 전체 회귀를 검증했다. 실제 모델 호출·API 인증 검증은 하지 않았으며 Live 실행과 엄격한 비용 상한은 차단/미지원 상태다. 아래 오프라인 HTTP 경로에 HTTPS 준비 계약을 추가한 미커밋 후속 변경이다.
+
+
+> [도구 없는 모델 인터페이스의 오프라인 구현](../runs/2026-10-20/alpha-g7b-proposal-only-model-interface.md): Fake Server 기반 제안·Planner·Workflow 연결과 필수 환경 검사를 추가했다. 외부 모델 endpoint와 실제 인증 경로는 제공하지 않으며 Live 차단을 유지한다. 이 후속 변경은 미커밋 상태다.
+
+> G6 로컬 통합 구현·검증 완료 (2026-10-19): [통합 결과와 Live 차단 사항](../runs/2026-10-19/alpha-g6-product-integration.md), [CLI 안내](orchestration-guide.md). 목표 제품 전체의 Live 준비 상태는 BLOCKED_OR_UNSUPPORTED다. 실제 의미 Planner·Provider 협업을 검증 완료로 표시하지 않는다. 이후 사용자 승인으로 개발 브랜치에 커밋·푸시했으며 제품 배포는 하지 않았다.
+
+> G5 완료 (2026-10-19): [통제형 협업·병렬 통합 검증](../runs/2026-10-19/alpha-g5-controlled-hybrid.md). 기존 순차 경로를 유지하면서 역할 메시징·격리된 병렬 후보·직렬 통합·복구 차단을 검증했다. Live Provider와 Live Planner는 미검증이며 실행 차단을 유지한다. G6 결과는 별도 기록으로 관리한다.
+
+> G4 완료 (2026-10-19): [순차 Workflow·DAG 검증](../runs/2026-10-19/alpha-g4-workflow-dag.md). 기존 Controller에 순차 조정과 최종 통합 검증을 연결하고 추가 SQLite 마이그레이션·영속 승인을 검증했다. Live Provider는 차단 상태이며 겹치는 수정·병렬 실행은 지원하지 않는다. G5 결과는 별도 기록으로 관리한다.
+
+> G3 완료 (2026-10-19): [Intent·Draft·승인 계약 검증](../runs/2026-10-19/alpha-g3-intent-contract.md). 읽기 전용 plan CLI와 V1 컴파일, 프로세스 내부 승인·고정 API를 추가했다. Live Planner·Codex는 미검증이며 자동 실행·영속 승인은 제공하지 않는다. G4 결과는 별도 기록으로 관리한다.
+
+> G2 완료 (2026-10-19): [Provider 공통 계약·회귀 검증](../runs/2026-10-19/alpha-g2-provider-integration.md). Legacy 324·Alpha 39·Provider 15건 통과, 제외 0. Live Provider 미검증, Codex 실행 차단, 신규 strict Routing은 미확인 capability를 거절한다. 기존 Claude 호환 경로 유지. G3 결과는 별도 기록으로 관리한다.
+
+> G1 완료 (2026-10-19): [Alpha 계약 보호·판정 경계 검증](../runs/2026-10-19/alpha-g1-contract-preservation.md). 아래 배포·파일럿 기록과 구분하며 전체 필수 게이트 exit 0, Legacy 324건·Alpha 39건 통과(제외 0). Node/Maven 격리 검증과 JDK 검사를 포함하며 실제 모델·원격 전달의 재검증은 아니다. G2 후속 결과는 별도 기록으로 관리한다.
+
 > **최종 검토 후 수정 완료.** 취소·resume 원자성과 읽기 전용 PR 복구의 회귀 검증을 완료했다. [수정 근거](../runs/2026-09-30/alpha-reconciliation-fixes.md)를 따른다.
 
 > **품질 범위: 독립 검토를 유지하는 제한된 알파.** 재현된 조기 종료·비용 기록·검증 복구 결함의 수정과 회귀 검증을 완료했다. 임의의 적대적 JS에 대한 무인 수락은 보증하지 않는다. [수정 근거](../runs/2026-09-30/alpha-quality-remediation.md)를 따른다.
@@ -129,3 +158,13 @@
 | 사람의 수고가 계약 작성으로 이동 | 준비·질문·확인까지 개입 시간에 포함 | 파일럿 비교 |
 | 공개했지만 설치·유지가 어려움 | 깨끗한 환경 설치·이슈 대응 준비 | 외부 사용자 완주 |
 | 과거 상태와 현재 상태 혼동 | 이 문서를 현재 진행의 단일 출처로 사용 | 근거 링크와 상태 일치 |
+
+H5 acceptance audit: see [environment, usability and live gates](../runs/2026-10-20/alpha-h5-host-acceptance.md). Codex discovery without model execution is verified; full Host Live remains BLOCKED. H4 IPC/Harness implementation is preserved.
+
+H5 limited Codex pilot authorization was subsequently received, but the pre-execution security gate remained **BLOCKED** and no model call was made. This supersedes the earlier pending-authorization wording for that pilot only. See the [separate Live preflight record](../runs/2026-10-20/alpha-h5-codex-live-preflight.md). No full execution or fixture commit was authorized.
+
+H6 adds [planning-only Skills and offline isolation](../implementation/host-planning.md). See the [H6 evidence record](../runs/2026-10-20/alpha-h6-host-planning-isolation.md). Real Host confinement and authentication/model transport remain BLOCKED.
+
+H7 [actual Host isolation qualification](../runs/2026-10-20/alpha-h7-real-host-qualification.md) remains BLOCKED: the installed Windows binaries did not load inside the proposed restricted boundary. Codex discovery outside that boundary and existing regression passed; authenticated execution and model/tool network separation remain unverified.
+
+H8 [Linux environment preparation](../runs/2026-10-20/alpha-h8-linux-host-preparation.md) installed the approved native binaries and verified offline startup plus bounded confinement probes in the measured WSL environment. Live remains BLOCKED pending transport, authentication, tool-policy and Claude discovery qualification.

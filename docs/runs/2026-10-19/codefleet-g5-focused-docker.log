@@ -1,0 +1,26 @@
+(node:59040) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ hybrid independent work overlaps, isolates candidates and integrates deterministically (1687.4647ms)
+✔ dependency edges and shared resources serialize; limits and overlap fail closed (1985.1934ms)
+✔ role messages are durable untrusted proposals, duplicate safe and cannot authorize (1513.438ms)
+✔ parallel failure preserves unrelated verified success; no final integration (1342.167ms)
+✔ semantic conflict fails combined verification despite disjoint accepted files (1578.2202ms)
+✔ cancel and approval revocation stop both children without replay (2561.0416ms)
+✔ reservation duplicates, stale messages and hybrid revision mixing are rejected (578.6449ms)
+✔ graph revision compare-and-swap invalidates approval; late revision rejected (742.533ms)
+✔ provider claims and out-of-scope proposals never integrate (2051.5527ms)
+✔ final tree tampering invalidates workflow completion (1516.6227ms)
+✔ hybrid real Docker verifies parallel candidates and final combined tree (5989.5583ms)
+✔ unverified Codex remains blocked for hybrid scheduling (835.3369ms)
+✔ message insert and event roll back together (626.0685ms)
+✔ old coordinator cannot commit late worker results after fencing replacement (1170.2069ms)
+✔ one local process timeout leaves unrelated verified work intact (1662.7833ms)
+✔ real coordinator process exit during parallel work and integration never replays attempts (3120.6322ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 29061.6892

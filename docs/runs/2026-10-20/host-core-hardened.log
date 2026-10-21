@@ -1,0 +1,24 @@
+(node:47644) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ H3: protected workflow cannot reopen through legacy actor approval or missing guard (96.0073ms)
+✔ H3: actual reserve denies risky work before inserting an attempt and consumes exact approved action (173.3085ms)
+✔ H3: revision, pause, lease change and unsupported effects invalidate execution (134.9434ms)
+H3 IPC observations: {"status":"OFFLINE_VERIFIED","checks":["unknown-uid-denied","agent-operator-impersonation-denied","unapproved-risk-assignment-denied","json-identity-fields-denied","operator-decision-accepted","approved-real-workflow-reservation","duplicate-assignment-denied","safe-open-without-human","safe-automatic-assignment","revoked-assignment-denied","expired-assignment-denied","resume-old-lease-grant-denied","graph-revision-reuse-denied","remote-command-denied","agent-store-access-denied","descendant-store-access-denied","same-uid-runtime-refused","writable-ancestor-runtime-refused"],"modelCalls":0,"humanPresence":"NOT_TESTED"}
+✔ H3: confined actual Workflow and independent tests complete without per-action human grants (2010.3289ms)
+✔ H3: real Linux authenticated IPC, Operator and Agent UIDs, attacks and workflow assignments (4254.8034ms)
+✔ Host Core: trusted Operator guard blocks risky item while independent Docker verification proceeds (3559.9997ms)
+✔ A: legacy evidence remains compatible; partial/new evidence fails closed (0.9011ms)
+✔ A: local success and backend names cannot establish protected authority (0.1561ms)
+✔ D: Container missing capability never falls back; Host Sandbox cannot self-certify (0.7715ms)
+✔ D: actual local Node test needs exact one-use trust and cannot pass protected Judge (481.1058ms)
+✔ D: changed script, unreviewed trust and concurrent grant replay are rejected (725.3312ms)
+✔ D: actual local cancellation and self-modification never report local success (1377.0862ms)
+✔ D: local operator CLI refuses missing trust and records only LOCAL_PASSED (1096.4329ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10331.969

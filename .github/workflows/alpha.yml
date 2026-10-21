@@ -18,9 +18,16 @@ jobs:
         with:
           node-version: 24.14.1
           package-manager-cache: false
-      - run: npm test
-        env:
-          CODEFLEET_TEST_JAVA: java
+      # Native Windows scope only. The mandatory linux-alpha job runs the
+      # unchanged Alpha suite, including every Docker/UID/IPC/seccomp test.
+      - run: npm run pretest
+      - run: npm run test:legacy
+      - run: npm run test:host-core
+      - name: Windows Host installation and offline exchange
+        run: npm run test:host
+        # host.test.mjs explicitly skips its one Docker Harness case here;
+        # linux-alpha enables and executes that same case.
+      - run: npm run posttest
       - name: Package installation smoke
         shell: pwsh
         run: |
@@ -36,19 +43,36 @@ jobs:
           exit $LASTEXITCODE
   linux-alpha:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
           node-version: 24.14.1
           package-manager-cache: false
-      - run: npm run test:alpha
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Prepare real Linux Docker and immutable verification images
+        run: node scripts/prepare-alpha-ci.mjs "$GITHUB_ENV"
+      - name: Prepare Git-only directory for Docker-free PATH fixture
+        run: |
+          mkdir "$RUNNER_TEMP/codefleet-git-only"
+          ln -s "$(command -v git)" "$RUNNER_TEMP/codefleet-git-only/git"
+          echo "$RUNNER_TEMP/codefleet-git-only" >> "$GITHUB_PATH"
+      # Legacy remains mandatory on Windows, its existing supported CI platform.
+      # Do not filter the Alpha suite: all protected tests must actually run.
+      # Fixed-UID probes share kernel resource accounting. H6 runs first,
+      # then all remaining Alpha files; Hybrid's own concurrency is unchanged.
+      - name: Full Alpha regression including mandatory protected verification
+        run: node scripts/test-alpha-ci.mjs
         env:
           CODEFLEET_TEST_JAVA: java
-      - run: docker pull node@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
+      - run: npm run test:host-core
       - run: node scripts/alpha-verifier-smoke.mjs
       - run: node scripts/alpha-quality-audit.mjs
       - run: node scripts/alpha-final-review.mjs

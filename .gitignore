@@ -11,3 +11,6 @@ node_modules/
 .codefleet/config.json
 .codefleet/local.json
 .agent-diary/
+.codefleet/host-native-checkpoint/
+.trials/host-core-checkpoint/
+.trials/host-core-docker-config/

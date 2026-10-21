@@ -1,0 +1,66 @@
+
+> codefleet@0.2.0-alpha.4 posttest
+> node ./scripts/check-rule-coverage.mjs && node ./scripts/check-links.mjs && node ./scripts/check-doc-citations.mjs && node ./scripts/check-doc-facts.mjs
+
+
+=== FINAL RULE coverage by condition line ===
+  rules                  83
+  condition lines        545
+  claims recorded        352
+  conditions covered     345  (63.3%)
+  rules touched at all   75 of 83
+  rules fully covered    28 of 83
+  rules with no claim    8
+
+  Why the unclaimed rules are unclaimed:
+    IMPLEMENTED_UNTESTED   5
+    NOT_CODE_VERIFIABLE    3
+
+  A claim means a passing test quoted that condition. It does not
+  mean the condition is correctly implemented.
+
+
+link check
+  markdown files examined   140
+  links collected           425  (inline, image, reference)
+    repo-relative paths     320
+    same-document anchors   2
+    external URLs           103  (not fetched; this check is offline)
+    mailto                  0
+  skipped as quotations     9  (inside code fences or spans)
+
+  missing target          0
+  case mismatch           0
+  missing anchor          0
+
+
+file:line citation check
+  citations examined        527
+  skipped as quotations     8  (marked <!-- cite: quoted -->)
+  unresolved (no commit)    10  in 1 document(s)
+      -  docs/runs/2026-10-19/alpha-g7a-live-provider-readiness.md  (10)
+  unverifiable (dead commit) 0  (history rewrite; no edit can fix these)
+  broken in living docs     0
+  suspect in dated records  13  (wrong at their own commit; no edit fixes these)
+      ~  docs/audits/2026-08-11/fixes/stage1-isolation.md:19: test/isolation.test.ts:281-450 is past the end of the file at 754acea (303 lines)
+      ~  docs/audits/2026-08-11/fixes/stage1-isolation.md:167: src/isolation.ts:120 is "}"
+      ~  docs/audits/2026-08-11/fixes/stage1-isolation.md:171: src/isolation.ts:125 is "}"
+      ~  docs/audits/2026-08-11/fixes/stage1-isolation.md:173: test/isolation.test.ts:417-450 is past the end of the file at 754acea (303 lines)
+      ~  docs/audits/2026-08-11/fixes/stage1-isolation.md:189: src/run.ts:634 is "},"
+      ~  docs/audits/2026-08-11/fixes/stage1-isolation.md:270: test/isolation.test.ts:394-400 is past the end of the file at 754acea (303 lines)
+      ~  docs/audits/2026-08-13/12-waiver-conformance.md:418: src/review.ts:723 is "}"
+      ~  docs/runs/2026-08-14/citation-and-denominator-checks.md:155: src/run.ts:1388 is ");"
+      ~  docs/runs/2026-10-19/alpha-g1-contract-preservation.md:45: src/alpha/judge.mjs does not exist at c61e9b829b62dd41336a7225bf3b9165136484db
+      ~  docs/runs/2026-10-19/alpha-g1-contract-preservation.md:45: src/alpha/judge.mjs does not exist at c61e9b829b62dd41336a7225bf3b9165136484db
+      ~  docs/runs/2026-10-19/alpha-g1-contract-preservation.md:45: test/alpha.test.mjs:116 is a blank line
+      ~  docs/runs/2026-10-20/alpha-g7b-proposal-only-model-interface.md:49: src/providers/model-api.mjs does not exist at effb42b501c25865b19d955cea828cc5a7eb4b08
+      ~  docs/runs/2026-10-20/alpha-g7b-proposal-only-model-interface.md:49: src/providers/model-api.mjs does not exist at effb42b501c25865b19d955cea828cc5a7eb4b08
+
+
+declared-fact check
+  declarations checked      42
+  numbers stated in living docs  581  (rough count)
+  of those, anchored             42  =  7.2%
+  UNCHECKED NUMBERS             539  <- not defended by this check  (baseline 539)
+  measurable facts          17
+  mismatches                0

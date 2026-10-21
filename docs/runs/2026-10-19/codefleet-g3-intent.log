@@ -1,0 +1,22 @@
+✔ natural-language planning preserves original intent and requires test coverage confirmation (892.0475ms)
+✔ validated draft compiles to unchanged V1 but does not authorize itself (846.6669ms)
+✔ hash-bound human grant pins once, without starting execution (1091.9004ms)
+✔ contract changes, expiry, invalid actor and mismatched digest invalidate approval (831.1371ms)
+✔ dirty workspace and forged discovery never cross pin boundary (2022.1678ms)
+✔ parallel pin attempts consume a grant at most once and other repositories are refused (1951.0859ms)
+✔ discovery refuses symlink entries without reading their target and ignores regular dot metadata (919.8642ms)
+✔ scope escapes, new files and protected-test edits cannot compile (806.8758ms)
+✔ missing acceptance methods and risky effects never silently become executable (1154.8079ms)
+✔ planner uses G2 envelope but provider schema/status claims never grant authority (3637.8525ms)
+✔ provider outage, nonzero, interruption and truncation stop planning safely (3154.7766ms)
+✔ Codex stays capability-blocked and existing edit adapters cannot plan (1410.2157ms)
+✔ CLI plans in non-TTY JSON without opening state or executing a provider (1089.6207ms)
+✔ CLI validates supplied drafts but never auto-authorizes or executes (1403.8898ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 21297.9451

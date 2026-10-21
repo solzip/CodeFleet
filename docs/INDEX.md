@@ -2,9 +2,52 @@
 
 `docs/audits/`·`docs/runs/`·`docs/archive/`의 전 문서를 시간 역순으로 나열한다. 규약은 `docs/CONVENTIONS.md`, 결함 등재 현황은 `docs/REGISTER.md`.
 
-작성 기준: 2026-09-30. 전수 73개 문서 (감사 38 · 실행 28 · 아카이브 7). <!-- fact: docs-indexed = 73 --> <!-- fact: docs-on-disk = 73 -->
+작성 기준: 2026-10-21. 전수 101개 문서 (감사 38 · 실행 56 · 아카이브 7). <!-- fact: docs-indexed = 101 --> <!-- fact: docs-on-disk = 101 -->
 
 현재 공개 사용 제품 계획은 [제품 완성 문서](product-completion/README.md)에 있다. 기존 아카이브의 실측과 새 제품 계획을 구분하며, 구현 상태는 새 진행 현황에서 관리한다.
+
+## 2026-10-21
+
+| Date | Document | Type | Result | Follow-up |
+| --- | --- | --- | --- | --- |
+| 10-21 | `runs/2026-10-21/h6-uid-resource-recovery.md` | Resource collision correction | Bounded UID pressure reproduction; hosted rerun pending | Push authorization and hosted observations |
+| 10-21 | `runs/2026-10-21/pr6-ci-environment.md` | CI environment correction | Explicit platform scope and real protected fixtures; remote rerun pending | Push authorization and hosted CI |
+
+## 2026-10-20
+
+| 날짜 | 문서 | 유형 | 결론(한 줄) | 후속 |
+| --- | --- | --- | --- | --- |
+| 10-20 | `runs/2026-10-20/main-integration-gate-a.md` | Git integration preparation | Offline regression passed; exact checkpoint allowlist ready | Gate A, then separate main and deletion approvals |
+| 10-20 | `runs/2026-10-20/first-host-native-gate-resolution.md` | 설치·발견·권한 확인 | Default Skill discovered; read-only denial bounded; Live BLOCKED | Fixture Commit and effective Live permissions |
+| 10-20 | `runs/2026-10-20/first-host-native-acceptance-preflight.md` | 기본 Host 수용 사전 점검 | Synthetic fixture prepared; Live blocked on fixed baseline, model and Skill binding | Separate bounded approval |
+| 10-20 | `runs/2026-10-20/hybrid-concurrency-checkpoint.md` | 동시성 조사·체크포인트 | Verifier timing oracle corrected; production scheduler unchanged | Review exact commit candidates; separate Live approval |
+| 10-20 | `runs/2026-10-20/host-native-baseline-readiness.md` | 기준선 감사·수용 준비 | Offline baseline and commit inventory; strict planning Live remains blocked | Fixture binding and separate Host authorization |
+| 10-20 | `runs/2026-10-20/host-native-core-verification.md` | Host core / verification | Offline core and backend regression passed; protected gates retained | Host Live remains separate |
+| 10-20 | `runs/2026-10-20/alpha-h8-linux-host-preparation.md` | Linux Host preparation | Offline native startup and bounded denials; Live BLOCKED | Model transport, tool allowlist and Claude discovery |
+| 10-20 | `runs/2026-10-20/alpha-h7-real-host-qualification.md` | Real Host qualification | BLOCKED: Windows backend and Linux binary loading | Provision qualified Host boundary |
+| 10-20 | `runs/2026-10-20/alpha-h6-host-planning-isolation.md` | Planning / isolation | Offline worker and draft intake; real Host blocked | Host runtime and auth transport attestation |
+| 10-20 | `runs/2026-10-20/alpha-h5-codex-live-preflight.md` | Approved Live preflight | BLOCKED before model invocation; 0 calls | Prove no-tool and fixture-only isolation |
+| 10-20 | `runs/2026-10-20/alpha-h5-host-acceptance.md` | Host acceptance | Offline checks; live blocked | Isolated deployment and bounded live approval |
+| 10-20 | `runs/2026-10-20/alpha-h4-host-ipc-harness.md` | Host IPC / Harness | Linux process E2E; Host Live blocked | Human input and real Host isolation |
+| 10-20 | `runs/2026-10-20/alpha-h3-operator-runtime.md` | IPC·Workflow 반증 | Linux UID 승인 IPC와 실제 예약 연결, Host 수용 차단 유지 | Host 격리·IPC client·Harness 서비스 |
+| 10-20 | `runs/2026-10-20/alpha-h2-operator-isolation.md` | 승인·격리 반증 | 오프라인 서명 원장과 UID 반증, 생산 Host 실행 차단 | Operator 인증·OS/IPC·위험 효과 집행 |
+| 10-20 | `runs/2026-10-20/alpha-h1-host-acceptance-readiness.md` | 설치·발견 검증 | Codex 실제 로더 확인, 양쪽 호출·Live 권한 격리 미검증 | 승인 경계 및 제한된 Live 수용 |
+| 10-20 | `runs/2026-10-20/alpha-host-native-transition.md` | 설계·오프라인 통합 | Host 제안과 독립 Harness 연결, Live 미검증 | Host 권한 경계와 실제 세션 승인 테스트 |
+| 10-20 | `runs/2026-10-20/alpha-g7c-live-transport-compatibility.md` | 구현·오프라인 검증 | 제한 HTTPS·인증·응답 계약, Live 차단 유지 | 승인·활성 모델·비용·Live attestation |
+| 10-20 | `runs/2026-10-20/alpha-g7b-proposal-only-model-interface.md` | 구현·오프라인 검증 | 도구 없는 모델 프로토콜·필수 환경 검사, Live 차단 유지 | Live 전송·인증·비용 검증 |
+
+## 2026-10-19
+
+| 날짜 | 문서 | 유형 | 결론(한 줄) | 후속 |
+| --- | --- | --- | --- | --- |
+| 10-19 | `runs/2026-10-19/alpha-g7a-live-provider-readiness.md` | 감사·오프라인 검증 | 외부 Sandbox 경계와 no-tool 미충족 재현, Live 차단 유지 | 보안 집행 경로 구현·반증 |
+| 10-19 | `runs/2026-10-19/alpha-g6-product-integration.md` | 구현·검증 | 통합 CLI·보고·계획 계약·패키지 검증, Live 운영 차단 | Provider 안전성 실증 대기 |
+| 10-19 | `runs/2026-10-19/alpha-g5-controlled-hybrid.md` | 구현·검증 | 통제형 병렬 협업·메시지·격리·통합·복구, Live 차단 유지 | G6 지시 대기 |
+| 10-19 | `runs/2026-10-19/alpha-g4-workflow-dag.md` | 구현·검증 | 순차 DAG·영속 승인·통합 검증, Live Provider 차단 유지 | G5 지시 대기 |
+| 10-19 | `runs/2026-10-19/alpha-g3-intent-contract.md` | 구현·검증 | 읽기 전용 Intent·Draft·승인 계약 검증, Live Planner 미검증 | G4 지시 대기 |
+| 10-19 | `runs/2026-10-19/alpha-g2-provider-integration.md` | 구현·검증 | Provider 공통 계약·회귀 통과, Live 미검증·Codex 차단 | G3 지시 대기 |
+| 10-19 | `runs/2026-10-19/alpha-g1-contract-preservation.md` | 수정·검증 | 알파 판정 책임 분리와 증거 권한 반증·필수 검증 통과 | 후속 구현 보류 |
+| 10-19 | `runs/2026-10-19/alpha-baseline-refresh.md` | 실행·검증 | 최신 원격 알파를 별도 작업 공간에 확보하고 기본 검증 완료 | 구현 보류 |
 
 ## 2026-09-30
 

@@ -1,0 +1,19 @@
+{
+  "scope": "Uncommitted G1+G2 source at c61e9b829b62dd41336a7225bf3b9165136484db; no live provider validation",
+  "files": {
+    "src/alpha/controller.mjs": "6a083eb238715d92855c92afcb8b5e799d146eedc0fc92fbf0963483939e7278",
+    "src/alpha/provider.mjs": "451f2bb2e2a7582dedce121b1a658f2409b2603da1c380ecccf69d44d4d69add",
+    "src/alpha/contract.mjs": "473769034a4a7af63f6013fbf8c5df6ed0304a6a3a8c5d7adb681c380b30a54a",
+    "src/alpha/judge.mjs": "001b40526a6853a0c12920e65465997bd3443cf7a200f817eadd5312ef09fbe6",
+    "test/alpha.test.mjs": "82f3bc7502aa481a2fafef2412982d8effd99b6a0227a0e9a1f6cd7ec82653bd",
+    "docs/runs/2026-10-19/alpha-g1-contract-preservation.md": "3eab5d990a6e5181250de535eefa23c3d9d96b0553866888eabaf7f05de20e34",
+    "test/providers.test.mjs": "f617bd372faf98f7f5f4b55506caff2b6d4baeecf5d0c4b700e915767e6f13df",
+    "scripts/provider-probe.mjs": "73914944d9658a49f3b07228e6f10493353a4c9dcde47f3fc953d6a40ab57dea",
+    "package.json": "36b9a6e841993ccfbb39b8b5f969cefc998ec39294f0afb93c4b34a58c86b4f1",
+    "src/providers/capabilities.mjs": "410b00d6e4941059f40fb78c4e5f6bc60ebd98a459b97ac670900408c65a2e94",
+    "src/providers/claude.mjs": "6fc4d7b1ded148a7dae5d699df271c29e7c8d9f7d460be5817276b7a1c2ebeb4",
+    "src/providers/codex.mjs": "8842c32ea4e92ac3e0be9d10eee94c6ed26bb2f39685d74d92f6e0066ce97d63",
+    "src/providers/interface.mjs": "64a36ce4db354e80ee97ecfb722ccce27cbb9ba373faae96a5392ba16788ce2b",
+    "src/providers/registry.mjs": "36acb23175e3b692e2aff05164d61c1422a8e08e0820196c6f37fc217aad6256"
+  }
+}

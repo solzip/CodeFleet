@@ -1,0 +1,666 @@
+{
+  "scope": "OFFLINE_DIAGNOSTIC_NOT_PROVIDER_CERTIFICATION",
+  "checks": [
+    {
+      "name": "Codex adapter has no launch path",
+      "passed": true,
+      "detail": {
+        "code": "CAPABILITY_UNVERIFIED",
+        "message": "Codex PROPOSAL_ONLY tool/credential isolation is not proven; execution disabled"
+      }
+    },
+    {
+      "name": "Codex JSONL completion parsed",
+      "passed": true,
+      "detail": "Synthetic events; not a live fixture"
+    },
+    {
+      "name": "Codex parser rejects tool event",
+      "passed": true,
+      "detail": "Post-output rejection cannot prevent prior tool effects"
+    },
+    {
+      "name": "Codex parser rejects reasoning event",
+      "passed": true,
+      "detail": "Post-output rejection cannot prevent prior tool effects"
+    },
+    {
+      "name": "Codex parser rejects after completion",
+      "passed": true,
+      "detail": "Post-output rejection cannot prevent prior tool effects"
+    },
+    {
+      "name": "Codex parser rejects invalid JSON",
+      "passed": true,
+      "detail": "Post-output rejection cannot prevent prior tool effects"
+    },
+    {
+      "name": "Existing process envelope counterexample",
+      "passed": true,
+      "detail": {
+        "read": true,
+        "write": true,
+        "spawn": true
+      }
+    },
+    {
+      "name": "Provider env omits unrelated token",
+      "passed": true,
+      "detail": "No actual secret inspected"
+    },
+    {
+      "name": "Offline external sandbox diagnostic",
+      "passed": true,
+      "detail": "[{\"name\":\"readonly context readable\",\"pass\":true},{\"name\":\"allowed scratch write\",\"pass\":true},{\"name\":\"context write denied\",\"pass\":true,\"detail\":\"EROFS\"},{\"name\":\"outside root write denied\",\"pass\":true,\"detail\":\"EROFS\"},{\"name\":\"parent traversal denied\",\"pass\":true,\"detail\":\"EROFS\"},{\"name\":\"symlink write escape denied\",\"pass\":true,\"detail\":\"EROFS\"},{\"name\":\"unmounted host fake credential inaccessible\",\"pass\":true,\"detail\":\"ENOENT\"},{\"name\":\"unrelated credentials absent\",\"pass\":true},{\"name\":\"no Docker socket\",\"pass\":true},{\"name\":\"no capabilities\",\"pass\":true},{\"name\":\"no new privileges\",\"pass\":true},{\"name\":\"remount bypass denied\",\"pass\":true,\"detail\":{\"status\":32}},{\"name\":\"COUNTEREXAMPLE shell execution remains possible\",\"pass\":true,\"detail\":\"Container isolation is not no-tool enforcement\"},{\"name\":\"loopback positive control\",\"pass\":true},{\"name\":\"external route denied\",\"pass\":true,\"detail\":\"ENETUNREACH\"}]"
+    },
+    {
+      "name": "Host readonly context preserved",
+      "passed": true
+    },
+    {
+      "name": "Product sources and tests preserved",
+      "passed": true,
+      "detail": 121
+    }
+  ],
+  "commands": [
+    {
+      "executable": "codex.exe",
+      "args": [
+        "exec",
+        "--help"
+      ],
+      "exitCode": 0,
+      "interrupted": false,
+      "error": null,
+      "stdout": "Run Codex non-interactively\n\nUsage: codex exec [OPTIONS] [PROMPT]\n       codex exec [OPTIONS] <COMMAND> [ARGS]\n\nCommands:\n  resume  Resume a previous session by id or pick the most recent with --last\n  fork    Fork a previous session by id into a new session\n  review  Run a code review against the current repository\n  help    Print this message or the help of the given subcommand(s)\n\nArguments:\n  [PROMPT]\n          Initial instructions for the agent. If not provided as an argument (or if `-` is used),\n          instructions are read from stdin. If stdin is piped and a prompt is also provided, stdin\n          is appended as a `<stdin>` block\n\nOptions:\n  -c, --config <key=value>\n          Override a configuration value that would otherwise be loaded from `~/.codex/config.toml`.\n          Use a dotted path (`foo.bar.baz`) to override nested values. The `value` portion is parsed\n          as TOML. If it fails to parse as TOML, the raw string is used as a literal.\n          \n          Examples: - `-c model=\"o3\"` - `-c 'sandbox_permissions=[\"disk-full-read-access\"]'` - `-c\n          shell_environment_policy.inherit=all`\n\n      --enable <FEATURE>\n          Enable a feature (repeatable). Equivalent to `-c features.<name>=true`\n\n      --disable <FEATURE>\n          Disable a feature (repeatable). Equivalent to `-c features.<name>=false`\n\n      --strict-config\n          Error out when config.toml contains fields that are not recognized by this version of\n          Codex\n\n  -i, --image <FILE>...\n          Optional image(s) to attach to the initial prompt\n\n  -m, --model <MODEL>\n          Model the agent should use\n\n      --oss\n          Use open-source provider\n\n      --local-provider <OSS_PROVIDER>\n          Specify which local provider to use (lmstudio or ollama). If not specified with --oss,\n          will use config default or show selection\n\n  -p, --profile <CONFIG_PROFILE_V2>\n          Layer $CODEX_HOME/<name>.config.toml on top of the base user config\n\n  -s, --sandbox <SANDBOX_MODE>\n          Select the sandbox policy to use when executing model-generated shell commands\n          \n          [possible values: read-only, workspace-write, danger-full-access]\n\n      --approve-for-me\n          Route approval requests through automatic review using the workspace-write sandbox\n\n      --dangerously-bypass-approvals-and-sandbox\n          Skip all confirmation prompts and execute commands without sandboxing. EXTREMELY\n          DANGEROUS. Intended solely for running in environments that are externally sandboxed\n\n      --dangerously-bypass-hook-trust\n          Run enabled hooks without requiring persisted hook trust for this invocation. DANGEROUS.\n          Intended only for automation that already vets hook sources\n\n  -C, --cd <DIR>\n          Tell the agent to use the specified directory as its working root\n\n      --worktree\n          Run the session in a new managed Git worktree\n\n      --add-dir <DIR>\n          Additional directories that should be writable alongside the primary workspace\n\n      --thread-source <SOURCE>\n          Source classification for newly created or forked threads\n\n      --cyber-access-program <PROGRAM>\n          Request an experimental Cyber access program for this turn (OpenAI provider only). Omit to\n          use server defaults. Not supported with review; fork requires a prompt\n          \n          [possible values: standard, daybreak_blue, daybreak_red]\n\n      --skip-git-repo-check\n          Allow running Codex outside a Git repository\n\n      --ephemeral\n          Run without persisting session files to disk\n\n      --ignore-user-config\n          Do not load `$CODEX_HOME/config.toml`; auth still uses `CODEX_HOME`\n\n      --ignore-rules\n          Do not load user or project execpolicy `.rules` files\n\n      --output-schema <FILE>\n          Path to a JSON Schema file describing the model's final response shape\n\n      --color <COLOR>\n          Specifies color settings for use in the output\n          \n          [default: auto]\n          [possible values: always, never, auto]\n\n      --json\n          Print events to stdout as JSONL\n\n  -o, --output-last-message <FILE>\n          Specifies file where the last message from the agent should be written\n\n  -h, --help\n          Print help (see a summary with '-h')\n\n  -V, --version\n          Print version\n",
+      "stderr": ""
+    },
+    {
+      "executable": "codex.exe",
+      "args": [
+        "sandbox",
+        "--help"
+      ],
+      "exitCode": 0,
+      "interrupted": false,
+      "error": null,
+      "stdout": "Run commands within a Codex-provided sandbox\n\nUsage: codex sandbox [OPTIONS] [COMMAND]... [COMMAND]\n\nCommands:\n  uninstall  Remove the legacy Windows sandbox's machine-wide accounts and network rules\n  help       Print this message or the help of the given subcommand(s)\n\nArguments:\n  [COMMAND]...\n          Full command args to run under Windows restricted token sandbox\n\nOptions:\n  -c, --config <key=value>\n          Override a configuration value that would otherwise be loaded from `~/.codex/config.toml`.\n          Use a dotted path (`foo.bar.baz`) to override nested values. The `value` portion is parsed\n          as TOML. If it fails to parse as TOML, the raw string is used as a literal.\n          \n          Examples: - `-c model=\"o3\"` - `-c 'sandbox_permissions=[\"disk-full-read-access\"]'` - `-c\n          shell_environment_policy.inherit=all`\n\n      --sandbox-state-json <JSON>\n          JSON value from `codex/sandbox-state-meta` to apply directly\n\n      --enable <FEATURE>\n          Enable a feature (repeatable). Equivalent to `-c features.<name>=true`\n\n      --sandbox-state-readable-root <SANDBOX_STATE_READABLE_ROOT>\n          Add a readable root to the supplied sandbox state. Repeat for multiple roots\n\n      --disable <FEATURE>\n          Disable a feature (repeatable). Equivalent to `-c features.<name>=false`\n\n      --sandbox-state-disable-network\n          Disable direct network access in the supplied sandbox state\n\n  -P, --permission-profile <NAME>\n          Named permissions profile to apply from the active configuration stack\n\n  -p, --profile <CONFIG_PROFILE>\n          Layer $CODEX_HOME/<name>.config.toml on top of the base user config\n\n  -C, --cd <DIR>\n          Working directory used for profile resolution and command execution\n\n      --include-managed-config\n          Include managed requirements while resolving an explicit permissions profile\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
+      "stderr": ""
+    },
+    {
+      "executable": "claude.exe",
+      "args": [
+        "--help"
+      ],
+      "exitCode": 0,
+      "interrupted": false,
+      "error": null,
+      "stdout": "Usage: claude [options] [command] [prompt]\n\nClaude Code - starts an interactive session by default, use -p/--print for\nnon-interactive output\n\nArguments:\n  prompt                                Your prompt\n\nOptions:\n  --add-dir <directories...>            Additional directories to allow tool\n                                        access to\n  --agent <agent>                       Agent for the current session. Overrides\n                                        the 'agent' setting.\n  --agents <json-or-file>               JSON object defining custom agents, or\n                                        with --print the path to a file that\n                                        holds one (e.g. '{\"reviewer\":\n                                        {\"description\": \"Reviews code\",\n                                        \"prompt\": \"You are a code reviewer\"}}')\n  --allow-dangerously-skip-permissions  Enable bypassing all permission checks\n                                        as an option, without it being enabled\n                                        by default. Recommended only for\n                                        sandboxes with no internet access.\n  --allowedTools, --allowed-tools <tools...>\n      Comma or space-separated list of tool names to allow (e.g. \"Bash(git *)\n      Edit\")\n  --append-system-prompt <prompt>       Append a system prompt to the default\n                                        system prompt\n  --autocompact <auto|tokens>           Auto-compact window size (auto, or\n                                        100k–1M tokens)\n  --ax-screen-reader                    Render screen-reader friendly output\n                                        (flat text, no decorative borders or\n                                        animations).\n  --bg, --background                    Start the session in the background and\n                                        return immediately. Prints the id that\n                                        `claude attach`, `logs`, `stop` and `rm`\n                                        take; `claude agents` lists them. With\n                                        --resume <session-id>, continues that\n                                        session in the background under the same\n                                        ID, or starts a copy and says so when\n                                        the session is already running\n  --bare                                Minimal mode: skip hooks (those defined\n                                        in settings and by installed plugins;\n                                        features built into Claude Code are\n                                        unaffected), LSP, plugin sync,\n                                        attribution, auto-memory, background\n                                        prefetches, keychain reads, and\n                                        CLAUDE.md auto-discovery. Sets\n                                        CLAUDE_CODE_SIMPLE=1. Anthropic auth is\n                                        strictly ANTHROPIC_API_KEY or\n                                        apiKeyHelper via --settings (OAuth and\n                                        keychain are never read). 3P providers\n                                        (Bedrock/Vertex/Foundry) use their own\n                                        credentials. Skills still resolve via\n                                        /skill-name. Explicitly provide context\n                                        via: --system-prompt[-file],\n                                        --append-system-prompt[-file], --add-dir\n                                        (CLAUDE.md dirs), --mcp-config,\n                                        --settings, --agents, --plugin-dir.\n  --betas <betas...>                    Beta headers to include in API requests\n                                        (API key users only)\n  --brief                               Enable SendUserMessage tool for\n                                        agent-to-user communication\n  --chrome                              Enable Claude in Chrome integration\n  --cloud [description|session_id|url]  Create a cloud session with the given\n                                        description, or attach to an existing\n                                        one by session ID or claude.ai/code URL\n  -c, --continue                        Continue the most recent conversation in\n                                        the current directory\n  --dangerously-skip-permissions        Bypass all permission checks.\n                                        Recommended only for sandboxes with no\n                                        internet access.\n  -d, --debug [filter]                  Enable debug mode with optional category\n                                        filtering (e.g., \"api,hooks\" or\n                                        \"!1p,!file\")\n  --debug-file <path>                   Write debug logs to a specific file path\n                                        (implicitly enables debug mode)\n  --desktop                             Open in the Claude Desktop app instead\n                                        of the terminal (with --continue or\n                                        --resume <id> to pick the session)\n  --disable-slash-commands              Disable all skills\n  --disallowedTools, --disallowed-tools <tools...>\n      Comma or space-separated list of tool names to deny (e.g. \"Bash(git *)\n      Edit\")\n  --effort <level>                      Effort level for the current session\n                                        (low, medium, high, xhigh, max)\n  --environment <environment_id>        Create a new cloud session that runs on\n                                        the given self-hosted environment\n                                        (ccpool_...).\n  --exclude-dynamic-system-prompt-sections\n      Move per-machine sections (cwd, env info, memory paths, git status) from\n      the system prompt into the first user message. Improves cross-user\n      prompt-cache reuse. Only applies with the default system prompt (ignored\n      with --system-prompt). (default: false)\n  --fallback-model <model>              Enable automatic fallback to specified\n                                        model(s) when the default model is\n                                        overloaded or not available. Accepts a\n                                        comma-separated list to try each in\n                                        order. Re-tries the primary at the start\n                                        of each user turn.\n  --file <specs...>                     File resources to download at startup.\n                                        Format: file_id:relative_path (e.g.,\n                                        --file file_abc:doc.txt\n                                        file_def:img.png)\n  --fork-session                        When resuming, create a new session ID\n                                        instead of reusing the original (use\n                                        with --resume or --continue)\n  --forward-subagent-text               Forward subagent text and thinking\n                                        blocks as assistant/user messages with\n                                        parent_tool_use_id set (only works with\n                                        --print and --output-format=stream-json)\n  --from-pr [value]                     Resume a session linked to a PR by PR\n                                        number/URL, or open interactive picker\n                                        with optional search term\n  -h, --help                            Display help for command\n  --ide                                 Automatically connect to IDE on startup\n                                        if exactly one valid IDE is available\n  --include-hook-events                 Include all hook lifecycle events in the\n                                        output stream (only works with\n                                        --output-format=stream-json)\n  --include-partial-messages            Include partial message chunks as they\n                                        arrive (only works with --print and\n                                        --output-format=stream-json)\n  --input-format <format>               Input format (only works with --print):\n                                        \"text\" (default), or \"stream-json\"\n                                        (realtime streaming input) (choices:\n                                        \"text\", \"stream-json\")\n  --json-schema <schema>                JSON Schema for structured output\n                                        validation. Example:\n                                        {\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"]}\n  --max-budget-usd <amount>             Maximum dollar amount to spend on API\n                                        calls (only works with --print)\n  --mcp-config <configs...>             Load MCP servers from JSON files or\n                                        strings (space-separated)\n  --model <model>                       Model for the current session. Provide\n                                        an alias for the latest model (e.g.\n                                        'fable', 'opus', or 'sonnet') or a\n                                        model's full name.\n  -n, --name <name>                     Set a display name for this session\n                                        (shown in the prompt box, /resume\n                                        picker, and terminal title)\n  --no-chrome                           Disable Claude in Chrome integration\n  --no-session-persistence              Disable session persistence - sessions\n                                        will not be saved to disk and cannot be\n                                        resumed (only works with --print)\n  --output-format <format>              Output format (only works with --print):\n                                        \"text\" (default), \"json\" (single\n                                        result), or \"stream-json\" (realtime\n                                        streaming) (choices: \"text\", \"json\",\n                                        \"stream-json\")\n  --permission-mode <mode>              Permission mode to use for the session\n                                        (choices: \"acceptEdits\", \"auto\",\n                                        \"bypassPermissions\", \"manual\",\n                                        \"dontAsk\", \"plan\")\n  --permission-prompts <target>         Who answers permission prompts with\n                                        --print: \"host\" (the SDK host or\n                                        --permission-prompt-tool) or \"none\"\n                                        (nobody: anything that would prompt is\n                                        denied automatically; the permission\n                                        mode still decides everything else)\n                                        (choices: \"host\", \"none\", default:\n                                        \"host\")\n  --plugin-dir <path>                   Load a plugin from a directory or .zip\n                                        for this session only; a folder of\n                                        plugins loads each child (repeatable:\n                                        --plugin-dir A --plugin-dir B.zip)\n                                        (default: [])\n  --plugin-url <url>                    Fetch a plugin .zip from a URL for this\n                                        session only (repeatable: --plugin-url A\n                                        --plugin-url B) (default: [])\n  -p, --print                           Print response and exit (useful for\n                                        pipes). Note: The workspace trust dialog\n                                        is skipped when Claude is run in\n                                        non-interactive mode (via -p, or when\n                                        stdout is not a TTY, e.g. piped or\n                                        redirected output). Only use this in\n                                        directories you trust. Settings files\n                                        that fail validation are silently\n                                        ignored in this mode (no error dialog is\n                                        shown).\n  --prompt-suggestions [value]          Enable prompt suggestions. In print/SDK\n                                        mode, emits a prompt_suggestion message\n                                        after each turn with a predicted next\n                                        user prompt (choices: \"true\", \"false\",\n                                        \"1\", \"0\", \"yes\", \"no\", \"on\", \"off\",\n                                        preset: \"true\")\n  --remote-control [name]               Start an interactive session with Remote\n                                        Control enabled (optionally named)\n  --remote-control-session-name-prefix <prefix>\n      Prefix for auto-generated Remote Control session names (default: hostname)\n  --replay-user-messages                Re-emit user messages from stdin back on\n                                        stdout for acknowledgment (only works\n                                        with --input-format=stream-json and\n                                        --output-format=stream-json)\n  --restricted                          Restricted mode: removes the built-in\n                                        tools that run commands or code (Bash,\n                                        PowerShell and the other code-running\n                                        tools) and WebFetch unless --tools names\n                                        them, and ignores user, project and\n                                        local settings files (managed settings\n                                        and --settings still apply; add\n                                        --strict-mcp-config to skip MCP servers\n                                        too). Also confines the file tools to\n                                        the working directories (--add-dir\n                                        included), refuses bypassPermissions,\n                                        and lets only a person or the configured\n                                        permission handler approve writes to\n                                        settings, git and tool-configuration\n                                        files.\n  -r, --resume [value]                  Resume a conversation by session ID, or\n                                        open interactive picker with optional\n                                        search term\n  --safe-mode                           Start with all customizations\n                                        (CLAUDE.md, skills, installed plugins,\n                                        hooks, MCP servers, custom commands and\n                                        agents, output styles, workflows, custom\n                                        themes, keybindings, and more) disabled\n                                        — useful for troubleshooting a broken\n                                        configuration. Admin-managed (policy)\n                                        settings still apply. Auth, model\n                                        selection, built-in tools and plugins,\n                                        and permissions work normally. Sets\n                                        CLAUDE_CODE_SAFE_MODE=1.\n  --session-id <uuid>                   Use a specific session ID for the\n                                        conversation (must be a valid UUID)\n  --setting-sources <sources>           Comma-separated list of setting sources\n                                        to load (user, project, local).\n  --settings <file-or-json>             Path to a settings JSON file or a JSON\n                                        string to load additional settings from\n  --strict-mcp-config                   Only use MCP servers from --mcp-config,\n                                        ignoring all other MCP configurations\n  --system-prompt <prompt>              System prompt to use for the session\n  --system-prompt-snapshot <on|off>     Record the system prompt once per\n                                        conversation and reuse it verbatim on\n                                        every request and resume. on (the\n                                        default): the prompt is rendered on the\n                                        conversation's first request — a\n                                        --system-prompt or\n                                        --append-system-prompt included — sent,\n                                        and recorded; every later request and\n                                        resume sends the record as-is, even when\n                                        a later launch passes different text,\n                                        until the conversation is compacted.\n                                        off: never record; the prompt is\n                                        rendered fresh every request (for\n                                        iterating on prompt text). No effect\n                                        where system-prompt recording is not yet\n                                        enabled. (choices: \"on\", \"off\")\n  --teleport [session]                  Resume a teleport session, optionally\n                                        specify session ID\n  --tmux                                Create a tmux session for the worktree\n                                        (requires --worktree). Uses iTerm2\n                                        native panes when available; use\n                                        --tmux=classic for traditional tmux.\n  --tools <tools...>                    Specify the list of available tools from\n                                        the built-in set. Use \"\" to disable all\n                                        tools, \"default\" to use all tools, or\n                                        specify tool names (e.g.\n                                        \"Bash,Edit,Read\").\n  --verbose                             Override verbose mode setting from\n                                        config\n  -v, --version                         Output the version number\n  -w, --worktree [name]                 Create a new git worktree for this\n                                        session (optionally specify a name)\n\nCommands:\n  agents [options]                      Manage background agents\n  attach <id|name>                      Open a background session in this\n                                        terminal. <id> is the short id that\n                                        `claude --bg` prints and `claude agents`\n                                        lists. Part of the session name works\n                                        too\n  auth                                  Manage authentication\n  auto-mode                             Inspect or reset auto mode classifier\n                                        configuration\n  doctor                                Check the health of your Claude Code\n                                        installation. Reads settings files in\n                                        the current directory without a trust\n                                        prompt. For a full checkup that can also\n                                        fix issues, run /doctor in a session.\n  gateway [options]                     Run the enterprise auth/telemetry\n                                        gateway\n  import [options] [source]             Import config from another AI coding\n                                        agent into Claude Code\n  install [options] [target]            Install Claude Code native build. Use\n                                        [target] to specify version (stable,\n                                        latest, or specific version)\n  logs <id|name>                        Print a background session's recent\n                                        terminal output\n  mcp                                   Configure and manage MCP servers\n  plugin|plugins                        Manage Claude Code plugins\n  purge [options] [path]                Delete all Claude Code state for a\n                                        project (transcripts, tasks, file\n                                        history, config entry)\n  respawn [options] [id]                Restart a background session, or all of\n                                        them with --all, so it runs the current\n                                        Claude Code version\n  rm <id>                               Delete a background session, and its\n                                        worktree when that is safe. Works on\n                                        sessions that have already exited\n  setup-token                           Set up a long-lived authentication token\n                                        (requires Claude subscription)\n  stop|kill <id>                        Stop a background session. Its\n                                        conversation is kept: `claude attach\n                                        <id>` opens it again, `claude --resume`\n                                        works once it is stopped\n  ultrareview [options] [target]        Run a cloud-hosted multi-agent code\n                                        review of the current branch (or a PR\n                                        number / base branch) and print the\n                                        findings\n  update|upgrade                        Check for updates and install if\n                                        available\n",
+      "stderr": ""
+    },
+    {
+      "executable": "node.exe",
+      "args": [
+        "-e",
+        "const fs=require('fs'),cp=require('child_process'),p=require('path');const home=process.env.HOME;fs.writeFileSync(p.join(home,'outside-write.txt'),'fake');console.log(JSON.stringify({read:fs.readFileSync(p.join(home,'fake-credential.txt'),'utf8')==='G7A_FAKE_SECRET',write:fs.existsSync(p.join(home,'outside-write.txt')),spawn:cp.spawnSync(process.execPath,['-e','process.exit(0)']).status===0}));"
+      ],
+      "exitCode": 0,
+      "interrupted": false,
+      "error": null,
+      "stdout": "{\"read\":true,\"write\":true,\"spawn\":true}\n",
+      "stderr": ""
+    },
+    {
+      "executable": "docker",
+      "args": [
+        "image",
+        "inspect",
+        "node:24-bookworm-slim",
+        "--format",
+        "{{.Id}}"
+      ],
+      "exitCode": 0,
+      "interrupted": false,
+      "error": null,
+      "stdout": "sha256:e8c4de1e2519b4f34de27a595df6c2a32df28baa90db80bfaf2e038889d94390\n",
+      "stderr": ""
+    },
+    {
+      "executable": "docker",
+      "args": [
+        "version",
+        "--format",
+        "{{.Server.Os}} {{.Server.Version}}"
+      ],
+      "exitCode": 0,
+      "interrupted": false,
+      "error": null,
+      "stdout": "linux 24.0.6\n",
+      "stderr": ""
+    },
+    {
+      "executable": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "--pull=never",
+        "--network=none",
+        "--read-only",
+        "--cap-drop=ALL",
+        "--security-opt=no-new-privileges:true",
+        "--user=65534:65534",
+        "--pids-limit=32",
+        "--memory=128m",
+        "--cpus=1",
+        "--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=16m",
+        "--mount",
+        "type=bind,source=[REDACTED]\\AppData\\Local\\Temp\\codefleet-g7a-YOhV3S\\workspace,target=/context,readonly",
+        "--workdir=/tmp",
+        "sha256:e8c4de1e2519b4f34de27a595df6c2a32df28baa90db80bfaf2e038889d94390",
+        "node",
+        "-e",
+        "\nconst fs=require('fs'),cp=require('child_process'),net=require('net');\nconst rows=[];const check=(name,pass,detail)=>rows.push({name,pass,detail});\nconst deny=(name,fn)=>{try{fn();check(name,false,'unexpected success');}catch(e){check(name,true,e.code);}};\ncheck('readonly context readable',fs.readFileSync('/context/input.txt','utf8')==='readonly input');\nfs.writeFileSync('/tmp/allowed','ok');check('allowed scratch write',true);\ndeny('context write denied',()=>fs.writeFileSync('/context/input.txt','bad'));\ndeny('outside root write denied',()=>fs.writeFileSync('/outside-write','bad'));\ndeny('parent traversal denied',()=>fs.writeFileSync('/tmp/../outside-write','bad'));\nfs.symlinkSync('/outside-write','/tmp/escape');deny('symlink write escape denied',()=>fs.writeFileSync('/tmp/escape','bad'));\ndeny('unmounted host fake credential inaccessible',()=>fs.readFileSync('/host-fake-home/fake-credential.txt'));\ncheck('unrelated credentials absent',!process.env.GITHUB_TOKEN&&!process.env.ANTHROPIC_API_KEY&&!process.env.CLAUDE_CODE_OAUTH_TOKEN);\ncheck('no Docker socket',!fs.existsSync('/var/run/docker.sock'));\nconst status=fs.readFileSync('/proc/self/status','utf8');check('no capabilities',/CapEff:\\s+0+\\n/.test(status));check('no new privileges',/NoNewPrivs:\\s+1/.test(status));\nconst mount=cp.spawnSync('/bin/mount',['-o','remount,rw','/'],{encoding:'utf8'});check('remount bypass denied',mount.status!==0,{status:mount.status});\nconst child=cp.spawnSync('/bin/sh',['-c','exit 0']);check('COUNTEREXAMPLE shell execution remains possible',child.status===0,'Container isolation is not no-tool enforcement');\nconst server=net.createServer(s=>s.end());server.listen(0,'127.0.0.1',()=>{\nconst local=net.connect(server.address().port,'127.0.0.1');local.on('connect',()=>{check('loopback positive control',true);local.destroy();server.close();\nconst out=net.connect(9,'192.0.2.1');out.setTimeout(1500);const done=(ok,d)=>{if(out.done)return;out.done=true;out.destroy();check('external route denied',ok,d);console.log(JSON.stringify(rows));process.exitCode=rows.every(x=>x.pass)?0:1;};out.on('connect',()=>done(false,'unexpected connection'));out.on('error',e=>done(e.code==='ENETUNREACH'||e.code==='EHOSTUNREACH',e.code));out.on('timeout',()=>done(false,'timeout is not enforcement proof'));});});\n"
+      ],
+      "exitCode": 0,
+      "interrupted": false,
+      "error": null,
+      "stdout": "[{\"name\":\"readonly context readable\",\"pass\":true},{\"name\":\"allowed scratch write\",\"pass\":true},{\"name\":\"context write denied\",\"pass\":true,\"detail\":\"EROFS\"},{\"name\":\"outside root write denied\",\"pass\":true,\"detail\":\"EROFS\"},{\"name\":\"parent traversal denied\",\"pass\":true,\"detail\":\"EROFS\"},{\"name\":\"symlink write escape denied\",\"pass\":true,\"detail\":\"EROFS\"},{\"name\":\"unmounted host fake credential inaccessible\",\"pass\":true,\"detail\":\"ENOENT\"},{\"name\":\"unrelated credentials absent\",\"pass\":true},{\"name\":\"no Docker socket\",\"pass\":true},{\"name\":\"no capabilities\",\"pass\":true},{\"name\":\"no new privileges\",\"pass\":true},{\"name\":\"remount bypass denied\",\"pass\":true,\"detail\":{\"status\":32}},{\"name\":\"COUNTEREXAMPLE shell execution remains possible\",\"pass\":true,\"detail\":\"Container isolation is not no-tool enforcement\"},{\"name\":\"loopback positive control\",\"pass\":true},{\"name\":\"external route denied\",\"pass\":true,\"detail\":\"ENETUNREACH\"}]\n",
+      "stderr": ""
+    }
+  ],
+  "sourceBefore": {
+    "src/agent-role.ts": "817745e1410e0511b41e7dbc327d16c4a61951ca40e3bc00ac82a48cd070d5f1",
+    "src/agent.ts": "61694d091ba1258d70b5d26baf006a35b893132ce34e4cbe15e7f4158a63c410",
+    "src/alpha/cli.mjs": "85918211dbefb9396910fbc6685fb50f114ac2ffd8ebd9bddae505c1f640fd86",
+    "src/alpha/contract.mjs": "473769034a4a7af63f6013fbf8c5df6ed0304a6a3a8c5d7adb681c380b30a54a",
+    "src/alpha/controller.mjs": "e2690d9208f3fd0cf3b84def3e508a7e899d61cb3b932093dab297dc78272eef",
+    "src/alpha/delivery.mjs": "c0ac8c6d38171ae23063808a5c874cb80775e9003dcc15a3fa411fd3643fa03b",
+    "src/alpha/evidence.mjs": "124e08838b0ca821caf685f6753aaa8a3a15b421ee742616c4fab8bbe3af626a",
+    "src/alpha/java/JunitReport.java": "6116071fae0240c87b2bf22dd5e2b9a8c1daeb90780bcc576ced4b249cc52a05",
+    "src/alpha/java-prepare.mjs": "63806f6be1ada56d68b7a18b99ced055deb790a89957862aaecbd5c7742de4bf",
+    "src/alpha/java-verifier.mjs": "a1f0c5b26c9257ccbcfa543b467c45d92ebd767ef4a6b2ee6d94259cd9725927",
+    "src/alpha/judge.mjs": "001b40526a6853a0c12920e65465997bd3443cf7a200f817eadd5312ef09fbe6",
+    "src/alpha/process.mjs": "b1f283dbf2ba601f5617edf8e4c0d9b10e3f3c1cac07a0e977ef3be55907318c",
+    "src/alpha/provider.mjs": "451f2bb2e2a7582dedce121b1a658f2409b2603da1c380ecccf69d44d4d69add",
+    "src/alpha/store.mjs": "3ed9948ad5e8c6eb8e40622bb2c34473141a3be048a7ab6e70d0a87f4a55fec7",
+    "src/alpha/verification-guard.mjs": "2ffd77f163c73d2b6420b601eabdf8e8e02aa66181e6ab587378dce7bb52eb5c",
+    "src/alpha/verifier.mjs": "ffc638732fab52f467e3c5893b9ddf284c6afbfcfab91f891705307f65d35191",
+    "src/alpha/workspace.mjs": "b7524e5811471b19e69bb27fb17053de2603425cc3c7f8979a6fe2ec76a814bf",
+    "src/apply.ts": "7f7ab249d3b8380a74a97d4ddf71590bcf845d6e6e03d324018e93edbf91afd0",
+    "src/auto-review.ts": "fd02774d43dad2360ede07f0d93453ae6590a418074e21fdbe245521c208c0f6",
+    "src/cli.ts": "05b9a8a952a57558f4b945cc38673a10c51870e34c0892474f79cf81406cb94a",
+    "src/command-policy.ts": "7501f6c0043320e65facdb411d47fdf49e04247fadb9a1923c5b033f76a57205",
+    "src/config.ts": "4747e88577ccbac0f996e0f264f96a573e135410eb7b60adb9b44c21611b6f04",
+    "src/export.ts": "c25732c1434090d16f6b4ee22ec5d80275d8493923daea51bd6989599c5492d6",
+    "src/intent/contract.mjs": "fddf062d08f4d6f843b3c76be54ba976a3115bbe37efbac28ad6f2d6e7a88c19",
+    "src/intent/discovery.mjs": "fb305ac3c383a9d401c8e639d588702a0cc63807c86be437e7520cf82ef7da2a",
+    "src/intent/engine.mjs": "2684abf9cf3580686c112efe9eef6b7fdaf0f0789a48445244762e5370e3de5a",
+    "src/intent/semantic.mjs": "ec988aa0f96ff282692bf46d09db00f1345daa0c190b97d4bb19324c77577391",
+    "src/isolation.ts": "4350c02cd87bc9aa2351a929c64801d5e143bd3dfee17e1592cb1908aa7b69f1",
+    "src/ledger.ts": "35538fb573b626587a2c68716b8a59717c871eb28055480218bcc50b0c6443fa",
+    "src/mutation.ts": "f892cc5d28350ad3d0443d82cc97cd5cc88621096c5a2e7d22ef701a5fc0af1a",
+    "src/path-policy.ts": "fe41669fc292d354c231bc7ff3d620dfa18b4a4e975a4336843e4457efaa88ed",
+    "src/policy-rule-id.ts": "da9e20c65ef0cc9ef2194417fa8fb5ae7d84c1eb28b81a6530c9d6ac51e41ff3",
+    "src/product/cli.mjs": "6a8aa65ff108f0b454c15327843717d5c1569fc5d2e00cbafaed8a4e2ce03bff",
+    "src/product/report.mjs": "5745ebb63166cba9427cc1709977896c95b6ea09b4551acc32395afa5a16f160",
+    "src/product/tasks.mjs": "10f0008ecbeb41afdcfae827b60ddaf33580669a7d3a405a7623ef3c6490fc51",
+    "src/profile.ts": "ef3b6e4e369625a382411174f4302d08f7936aab6cd2f60060f92ea76d9590f0",
+    "src/prompt.ts": "20b8210af3df7ae3981600bba87680f2b2a8cc96ae88f8830ca40aa34b95c801",
+    "src/providers/capabilities.mjs": "410b00d6e4941059f40fb78c4e5f6bc60ebd98a459b97ac670900408c65a2e94",
+    "src/providers/claude.mjs": "6fc4d7b1ded148a7dae5d699df271c29e7c8d9f7d460be5817276b7a1c2ebeb4",
+    "src/providers/codex.mjs": "8842c32ea4e92ac3e0be9d10eee94c6ed26bb2f39685d74d92f6e0066ce97d63",
+    "src/providers/interface.mjs": "64a36ce4db354e80ee97ecfb722ccce27cbb9ba373faae96a5392ba16788ce2b",
+    "src/providers/planner.mjs": "dc803188b4341a1804b1d1db47fcc5b70e2c368d71c344375726c40802b5b5e5",
+    "src/providers/registry.mjs": "36acb23175e3b692e2aff05164d61c1422a8e08e0820196c6f37fc217aad6256",
+    "src/README.md": "1b7dcb5dc90a4e6a381463ef51613b4d3f2570262275ac68174eda0c672fa19d",
+    "src/redaction.ts": "ab789e0a2f19e5a81c2ee03f36f96e5bd0f6a3fec09271e91e86688554a664c6",
+    "src/required-gates.ts": "4e9fc068cba9e9ac4a10c239c62db82498ec8ecd7627e99e8ba713d423078ae5",
+    "src/review.ts": "1a5f411d1165f0ff8cb781357879ee41c141191023999dce9dc12cd28dbf94b5",
+    "src/risk.ts": "58ef850598918c2c2551c95f89dcb6f88e9d3a21617474d525ddf1c0cbc72595",
+    "src/run-record.ts": "3169e4cc8286617d6e33b87fda12932994aff7d8823360c38f2aa65860111bd1",
+    "src/run.ts": "7f48a29a14c76c6539627e7f6b3a96ce384ab0f39aa7e1c1417591d07c5c46f1",
+    "src/task-events.ts": "39a8a558c27ee223420b68e7d71ff744cb90d35aa2a69e5e1604b4111040cb7f",
+    "src/task-ledger.ts": "4e6b0da9d6065a35872e9f033a617e3d24350d4341475c2a664bd7a3ad08e8be",
+    "src/task-revision.ts": "5c71f93ce1dbfd7ff3cdbd12fc91461de524bccf83f7a6d367a74e7f14221936",
+    "src/task.ts": "7da7a53b20966f74fb4315aac2477b3f73917b1a3660bed8321cc203057ccf64",
+    "src/types.ts": "04fa1b9d84ea3724f7ef55f70ba62437458fcf8458a382057d9dbc278dbcfa9c",
+    "src/workflow/collaboration.mjs": "602b0cff018d25a5f5b69a1e269e1b5a31ff71a2f89a84da570bca24504c49a1",
+    "src/workflow/definition.mjs": "c21cc8b56488b7c0d723c5a4e091f6243da9dd021f9e0cea667b82ad46e068dd",
+    "src/workflow/persistence.mjs": "e267b1ce7bdb6736593a71783649cbd2aa525dda7b3e57627b542a362c046117",
+    "src/workspace-snapshot.ts": "9d3c98cecb0dbe187b0574092f88786469ae35b4d3dc17bccc37a0f016d047b8",
+    "src/workspace.ts": "fe436f1aa58597823c5a62f1ac8fa1e00f967c59466de6f5584aa57adbdf1908",
+    "src/yaml.ts": "a4fdcbe5ca913531afeb7cd34daf7a18d3ffb3b6f78484bd94b7909cfb81931c",
+    "test/adapter-resolution.test.ts": "55072f5cd1a4dbdcd2532afaa065b41055687729e9cfb0db42eb02e756f0a927",
+    "test/agent-role.test.ts": "0d210e37fdcc493e78c06fe4d9483ebeb9aee3694a8eee3a925b1ee66c8b78c1",
+    "test/alpha-java.test.mjs": "5f0bd265942bd12e11b265797c3ed7edda2a830e6de7ec2f3003a51930d03bf0",
+    "test/alpha.test.mjs": "82f3bc7502aa481a2fafef2412982d8effd99b6a0227a0e9a1f6cd7ec82653bd",
+    "test/apply.test.ts": "a70aab8491288fae25ad57b0daf2c5089f4450771df66027135e53ebd54a881f",
+    "test/approval-contract.test.ts": "39687b9fd347bbbda6b2aaa6774667edc2c5188cfa11223e861943b1ad811802",
+    "test/auto-advance.test.ts": "9fa5311e0cfd26021d82b300031655c4511e74675c83a05fd1f34211fe7d0519",
+    "test/auto-review.test.ts": "8bdb2d990a401939a6e241709e231c2ea835a22f593664c89213b814ec43a1e1",
+    "test/cli.test.ts": "b712c903180924ccf760e6cde30b8a89fab8cff006e2cae3d54a41b021f6f048",
+    "test/command-policy.test.ts": "640151c82ac9bb9b325db0942673973e2faa1f282ba1e6290bca30f8f3dca3e5",
+    "test/config.test.ts": "66281afbcb8fc7f902637dfc26598aec5f1c7760ea54460c664dfc2e5d5cb34f",
+    "test/defect-repro.test.ts": "13f994ff03a5471d77a9d413299998fff484155be098dfc90cd32abbed298f5c",
+    "test/design-rules.test.ts": "0cd85c1184366161cc252b855b312be5b921bad543bc0db37cd9fff6c1b1aa19",
+    "test/doc-citations.test.ts": "761e3e16e3c6de3a4f505e7634a6cb6da2b22465a216651070b2b95a79b380b2",
+    "test/doc-facts.test.ts": "9e1592fe9f2126daed3107ae962236fdd211b18018e149bf67736934ab874977",
+    "test/export.test.ts": "844a9c9de327c0bf737d9aa2391b4a942ce70c7d227cba938bd5b0f8b8a4f855",
+    "test/fixtures.test.ts": "1669dd6dce74a0170f56f6a8bc7ef99517265c73a2c0546f927ccd1a6290b519",
+    "test/hybrid.test.mjs": "9e439782dcc703c56bc9b90dc45c1251241318130433c50a8c83b136b5a8953a",
+    "test/intent.test.mjs": "70986d43dc500121235dc0e2ff8831d92c48f4ef205a672fa62ea651b689d527",
+    "test/isolation.test.ts": "e5366007c62b5dd8db7ba0f2790077affdcbc21467fb2108e8aee6ea06fb04c1",
+    "test/ledger.test.ts": "5b909ce077f84b228bdef17b7e6f355438c01fae85dc5bd83d82475df47c5e47",
+    "test/link-check.test.ts": "fbdec2333021f836f8da399bf2c03836bbb482784f6f30522371f6ef447dde5f",
+    "test/path-policy.test.ts": "5eadff162abeec3fc4feecf4e3061ad9bc1387f4b6c2e8e4c5607d733e986c6e",
+    "test/policy-rule-id.test.ts": "913e0fe7d6824ad439fcd6a73688a976f30ded35eab417065b78198be05b527c",
+    "test/process-boundaries.test.ts": "fd9132f897e8bf14d0ef920d36f5150e715b1b059beef0843ffe7faa9f8fd791",
+    "test/product.test.mjs": "ac40215f03407b20db5605a21ae82c81dbe573b10f54022f0578473ffafccfdc",
+    "test/profile-fixture.ts": "e7c46552f2a08a3ba45486c04dfd31ee0097c2b7b235b374c4bacbbd0218e7b6",
+    "test/profile.test.ts": "8922667c681cb8d2423f82839cd88ef7a7c150869c63cde7e6ec6261a26c1351",
+    "test/prompt.test.ts": "b585eb3aeb5c2df3f80c3ff11268540279b23bd3771f045e8ef6ab4305ceb510",
+    "test/provider-transcript.test.ts": "58051950289baf20784a92d0fef65b872885da6ce7627e0d86b99b4818a82815",
+    "test/providers.test.mjs": "f617bd372faf98f7f5f4b55506caff2b6d4baeecf5d0c4b700e915767e6f13df",
+    "test/required-gates.test.ts": "d360d1e99416ca43fec24ce828286880b4add8a299a9fa7e53c54fa9bc6f441f",
+    "test/review.test.ts": "6ac8dc4274d039106e9fffeeb3247589db29e13fa3dcf6797429d5ac3b2be1be",
+    "test/risk.test.ts": "ddfcd52c4dafd0c8ee2c54bfc1ecfbfddfe8713bc4e66e3ce6aeabf631203748",
+    "test/rule-coverage.test.ts": "0867fae018eb86c53773feb95716f953c8fb5e4139d4affafe671c931ba2df37",
+    "test/rule-coverage.ts": "13b766320ae1bd9113fa92b07ea34fc45d08a392c352d7699b62cbf74bf9d360",
+    "test/run.test.ts": "f595e4c6ffc1e5c8d9418847e993a5618815838d4d94b512aa49cf6a94f521f3",
+    "test/second-adapter.test.ts": "7862fbe5cdb35ebdad61e5766165d73e339ef86e7ac894fc5dba536cbf43ed5f",
+    "test/task-ledger-fixture.ts": "96de1cfb1bf1e7a3d639249fce0cbb5632e5c84561df2477ee42f607fac7e72b",
+    "test/task-revision.test.ts": "1cb78a781f17a51999c366a01a22a42c280be37e6f2ec556ddea40c82ea65019",
+    "test/workflow.test.mjs": "7d3d5aeabe42dd32f05265e8db880b20c58c3f89299fd83b7df0ab5c689e255e",
+    "test/workspace-snapshot.test.ts": "7489658eecc8839b57322a2b73c4da2ecff8ed9ec9902b2648db6986a6b909a6",
+    "test/workspace.test.ts": "c90e001a516006885c4e90dbf7ed0bd831f933c5cd1c44cd2e022452795ad5b2",
+    "test/yaml.test.ts": "0450fee76960eefc3371c48c2a4fcccbe07868c88cb1a6316b3788ab34360af5",
+    "scripts/alpha-delivery-smoke.mjs": "a43ff807b96c84b228d36362ca983075ac627c907a3f4eda75a507d8312c3998",
+    "scripts/alpha-final-review.mjs": "b3ab204e5b9b5301e247d913118e2abd3b6f523eddde37ab36cea8096cc60811",
+    "scripts/alpha-java-verifier-smoke.mjs": "e61c6c1e1942754d14485155b5fbc13746d7021c5508f4485ec1e83a0293b4c1",
+    "scripts/alpha-package-smoke.mjs": "551f1e09d5806be8d5ae5b222058d4fecac37b65af20a19b27a390ce736a9799",
+    "scripts/alpha-quality-audit.mjs": "791ac70dd372b18dd0d471df326464f5cc0c4a73de444e858f4b6af2cd4a1bf5",
+    "scripts/alpha-smoke.mjs": "57057a6a42fea1b451aae5a81934ad9790beb9b97df6566e3a8d183124afb92e",
+    "scripts/alpha-verifier-smoke.mjs": "6ed7735a523869f8bb27ce12d5fd5191aa4ca41823557dbf55e4edfea7bfde31",
+    "scripts/check-doc-citations.mjs": "1bc1b78f9918f99dbbb074b77d738543812ee36b006570b8fbe28455a0cc1397",
+    "scripts/check-doc-facts.mjs": "ff346388099b27c8c1ed19a171063ad9ad33a7ae5d108860297273530996294a",
+    "scripts/check-links.mjs": "cc141dcb986b48d4dcd65ee1cfc2611f180659b915735178fc753e71d9007e2a",
+    "scripts/check-rule-coverage.mjs": "333595d7e3259a70e2deb9ad0d7f060bb5cbac9132d30c1d73ae969c982435e0",
+    "scripts/design-doc.mjs": "c5d52bfbd0349e849626d81c96cd351ca759d7f4c9f8b25880b7ee44823a125c",
+    "scripts/m0-baseline.mjs": "a0d8ecb8d4c1aa2e1d47ad79d4531f3bf9284f376ba0af973d392e3e10a7b138",
+    "scripts/provider-probe.mjs": "73914944d9658a49f3b07228e6f10493353a4c9dcde47f3fc953d6a40ab57dea",
+    "scripts/reset-rule-coverage.mjs": "843877f3bd8558992cb476dd68628480976457904db639496e3c3f37538b17ae",
+    "package.json": "1257228a228be6d32b18d069977e740c33a0652ba1c2c105b7641a8cf5f415c5"
+  },
+  "providers": [
+    {
+      "identity": {
+        "id": "claude",
+        "version": "2.1.303 (Claude Code)",
+        "platform": "win32",
+        "executable": "claude.exe"
+      },
+      "installed": true,
+      "observedAt": "2026-10-19T08:43:06.025Z",
+      "capabilities": {
+        "non_interactive_execution": {
+          "status": "UNVERIFIED",
+          "advertised": true,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "structured_output": {
+          "status": "UNVERIFIED",
+          "advertised": true,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "proposal_only": {
+          "status": "UNVERIFIED",
+          "advertised": true,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "session_support": {
+          "status": "UNVERIFIED",
+          "advertised": true,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "streaming_output": {
+          "status": "UNVERIFIED",
+          "advertised": true,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "cancellation": {
+          "status": "UNVERIFIED",
+          "advertised": false,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "usage_reporting": {
+          "status": "UNVERIFIED",
+          "advertised": false,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "approval_integration": {
+          "status": "UNVERIFIED",
+          "advertised": true,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "filesystem_restriction": {
+          "status": "UNVERIFIED",
+          "advertised": false,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "network_restriction": {
+          "status": "UNVERIFIED",
+          "advertised": false,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        }
+      },
+      "environment": {
+        "filesystem_restriction": {
+          "status": "UNVERIFIED"
+        },
+        "network_restriction": {
+          "status": "UNVERIFIED"
+        },
+        "credential_isolation": {
+          "status": "UNVERIFIED"
+        }
+      },
+      "diagnostics": {
+        "versionExit": 0,
+        "helpExit": 0,
+        "helpHash": "223ec71c6e89368ce9d8d4b36118ec535a3af755728b7868fd60f69f6af7c64e",
+        "helpBytes": 22110
+      },
+      "liveValidation": "NOT_RUN",
+      "executionBlocked": null
+    },
+    {
+      "identity": {
+        "id": "codex",
+        "version": null,
+        "platform": "win32",
+        "executable": "codex.exe"
+      },
+      "installed": false,
+      "observedAt": "2026-10-19T08:43:06.032Z",
+      "capabilities": {
+        "non_interactive_execution": {
+          "status": "UNAVAILABLE",
+          "advertised": false,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "structured_output": {
+          "status": "UNAVAILABLE",
+          "advertised": false,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "proposal_only": {
+          "status": "UNAVAILABLE",
+          "advertised": false,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "session_support": {
+          "status": "UNAVAILABLE",
+          "advertised": false,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "streaming_output": {
+          "status": "UNAVAILABLE",
+          "advertised": false,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "cancellation": {
+          "status": "UNAVAILABLE",
+          "advertised": false,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "usage_reporting": {
+          "status": "UNAVAILABLE",
+          "advertised": false,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "approval_integration": {
+          "status": "UNAVAILABLE",
+          "advertised": false,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "filesystem_restriction": {
+          "status": "UNAVAILABLE",
+          "advertised": false,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "network_restriction": {
+          "status": "UNAVAILABLE",
+          "advertised": false,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        }
+      },
+      "environment": {
+        "filesystem_restriction": {
+          "status": "UNVERIFIED"
+        },
+        "network_restriction": {
+          "status": "UNVERIFIED"
+        },
+        "credential_isolation": {
+          "status": "UNVERIFIED"
+        }
+      },
+      "diagnostics": {
+        "versionExit": null,
+        "helpExit": null,
+        "helpHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "helpBytes": 0
+      },
+      "liveValidation": "NOT_RUN",
+      "executionBlocked": "No proven no-tool envelope"
+    },
+    {
+      "identity": {
+        "id": "codex",
+        "version": "codex-cli 0.162.1",
+        "platform": "win32",
+        "executable": "[REDACTED]\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\node_modules\\@openai\\codex-win32-x64\\vendor\\x86_64-pc-windows-msvc\\bin\\codex.exe"
+      },
+      "installed": true,
+      "observedAt": "2026-10-19T08:43:06.146Z",
+      "capabilities": {
+        "non_interactive_execution": {
+          "status": "UNVERIFIED",
+          "advertised": true,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "structured_output": {
+          "status": "UNVERIFIED",
+          "advertised": true,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "proposal_only": {
+          "status": "UNVERIFIED",
+          "advertised": false,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "session_support": {
+          "status": "UNVERIFIED",
+          "advertised": true,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "streaming_output": {
+          "status": "UNVERIFIED",
+          "advertised": true,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "cancellation": {
+          "status": "UNVERIFIED",
+          "advertised": false,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "usage_reporting": {
+          "status": "UNVERIFIED",
+          "advertised": false,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "approval_integration": {
+          "status": "UNVERIFIED",
+          "advertised": false,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "filesystem_restriction": {
+          "status": "UNVERIFIED",
+          "advertised": true,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        },
+        "network_restriction": {
+          "status": "UNVERIFIED",
+          "advertised": false,
+          "evidence": "Local version/help probe only; no live enforcement test"
+        }
+      },
+      "environment": {
+        "filesystem_restriction": {
+          "status": "UNVERIFIED"
+        },
+        "network_restriction": {
+          "status": "UNVERIFIED"
+        },
+        "credential_isolation": {
+          "status": "UNVERIFIED"
+        }
+      },
+      "diagnostics": {
+        "versionExit": 0,
+        "helpExit": 0,
+        "helpHash": "df0d864ca2076f7654288c6a1e3394e3eaa2ea8f15021df2524efdd90c70986c",
+        "helpBytes": 4331
+      },
+      "liveValidation": "NOT_RUN",
+      "executionBlocked": "No proven no-tool envelope"
+    }
+  ],
+  "image": "sha256:e8c4de1e2519b4f34de27a595df6c2a32df28baa90db80bfaf2e038889d94390",
+  "sourceAfter": {
+    "src/agent-role.ts": "817745e1410e0511b41e7dbc327d16c4a61951ca40e3bc00ac82a48cd070d5f1",
+    "src/agent.ts": "61694d091ba1258d70b5d26baf006a35b893132ce34e4cbe15e7f4158a63c410",
+    "src/alpha/cli.mjs": "85918211dbefb9396910fbc6685fb50f114ac2ffd8ebd9bddae505c1f640fd86",
+    "src/alpha/contract.mjs": "473769034a4a7af63f6013fbf8c5df6ed0304a6a3a8c5d7adb681c380b30a54a",
+    "src/alpha/controller.mjs": "e2690d9208f3fd0cf3b84def3e508a7e899d61cb3b932093dab297dc78272eef",
+    "src/alpha/delivery.mjs": "c0ac8c6d38171ae23063808a5c874cb80775e9003dcc15a3fa411fd3643fa03b",
+    "src/alpha/evidence.mjs": "124e08838b0ca821caf685f6753aaa8a3a15b421ee742616c4fab8bbe3af626a",
+    "src/alpha/java/JunitReport.java": "6116071fae0240c87b2bf22dd5e2b9a8c1daeb90780bcc576ced4b249cc52a05",
+    "src/alpha/java-prepare.mjs": "63806f6be1ada56d68b7a18b99ced055deb790a89957862aaecbd5c7742de4bf",
+    "src/alpha/java-verifier.mjs": "a1f0c5b26c9257ccbcfa543b467c45d92ebd767ef4a6b2ee6d94259cd9725927",
+    "src/alpha/judge.mjs": "001b40526a6853a0c12920e65465997bd3443cf7a200f817eadd5312ef09fbe6",
+    "src/alpha/process.mjs": "b1f283dbf2ba601f5617edf8e4c0d9b10e3f3c1cac07a0e977ef3be55907318c",
+    "src/alpha/provider.mjs": "451f2bb2e2a7582dedce121b1a658f2409b2603da1c380ecccf69d44d4d69add",
+    "src/alpha/store.mjs": "3ed9948ad5e8c6eb8e40622bb2c34473141a3be048a7ab6e70d0a87f4a55fec7",
+    "src/alpha/verification-guard.mjs": "2ffd77f163c73d2b6420b601eabdf8e8e02aa66181e6ab587378dce7bb52eb5c",
+    "src/alpha/verifier.mjs": "ffc638732fab52f467e3c5893b9ddf284c6afbfcfab91f891705307f65d35191",
+    "src/alpha/workspace.mjs": "b7524e5811471b19e69bb27fb17053de2603425cc3c7f8979a6fe2ec76a814bf",
+    "src/apply.ts": "7f7ab249d3b8380a74a97d4ddf71590bcf845d6e6e03d324018e93edbf91afd0",
+    "src/auto-review.ts": "fd02774d43dad2360ede07f0d93453ae6590a418074e21fdbe245521c208c0f6",
+    "src/cli.ts": "05b9a8a952a57558f4b945cc38673a10c51870e34c0892474f79cf81406cb94a",
+    "src/command-policy.ts": "7501f6c0043320e65facdb411d47fdf49e04247fadb9a1923c5b033f76a57205",
+    "src/config.ts": "4747e88577ccbac0f996e0f264f96a573e135410eb7b60adb9b44c21611b6f04",
+    "src/export.ts": "c25732c1434090d16f6b4ee22ec5d80275d8493923daea51bd6989599c5492d6",
+    "src/intent/contract.mjs": "fddf062d08f4d6f843b3c76be54ba976a3115bbe37efbac28ad6f2d6e7a88c19",
+    "src/intent/discovery.mjs": "fb305ac3c383a9d401c8e639d588702a0cc63807c86be437e7520cf82ef7da2a",
+    "src/intent/engine.mjs": "2684abf9cf3580686c112efe9eef6b7fdaf0f0789a48445244762e5370e3de5a",
+    "src/intent/semantic.mjs": "ec988aa0f96ff282692bf46d09db00f1345daa0c190b97d4bb19324c77577391",
+    "src/isolation.ts": "4350c02cd87bc9aa2351a929c64801d5e143bd3dfee17e1592cb1908aa7b69f1",
+    "src/ledger.ts": "35538fb573b626587a2c68716b8a59717c871eb28055480218bcc50b0c6443fa",
+    "src/mutation.ts": "f892cc5d28350ad3d0443d82cc97cd5cc88621096c5a2e7d22ef701a5fc0af1a",
+    "src/path-policy.ts": "fe41669fc292d354c231bc7ff3d620dfa18b4a4e975a4336843e4457efaa88ed",
+    "src/policy-rule-id.ts": "da9e20c65ef0cc9ef2194417fa8fb5ae7d84c1eb28b81a6530c9d6ac51e41ff3",
+    "src/product/cli.mjs": "6a8aa65ff108f0b454c15327843717d5c1569fc5d2e00cbafaed8a4e2ce03bff",
+    "src/product/report.mjs": "5745ebb63166cba9427cc1709977896c95b6ea09b4551acc32395afa5a16f160",
+    "src/product/tasks.mjs": "10f0008ecbeb41afdcfae827b60ddaf33580669a7d3a405a7623ef3c6490fc51",
+    "src/profile.ts": "ef3b6e4e369625a382411174f4302d08f7936aab6cd2f60060f92ea76d9590f0",
+    "src/prompt.ts": "20b8210af3df7ae3981600bba87680f2b2a8cc96ae88f8830ca40aa34b95c801",
+    "src/providers/capabilities.mjs": "410b00d6e4941059f40fb78c4e5f6bc60ebd98a459b97ac670900408c65a2e94",
+    "src/providers/claude.mjs": "6fc4d7b1ded148a7dae5d699df271c29e7c8d9f7d460be5817276b7a1c2ebeb4",
+    "src/providers/codex.mjs": "8842c32ea4e92ac3e0be9d10eee94c6ed26bb2f39685d74d92f6e0066ce97d63",
+    "src/providers/interface.mjs": "64a36ce4db354e80ee97ecfb722ccce27cbb9ba373faae96a5392ba16788ce2b",
+    "src/providers/planner.mjs": "dc803188b4341a1804b1d1db47fcc5b70e2c368d71c344375726c40802b5b5e5",
+    "src/providers/registry.mjs": "36acb23175e3b692e2aff05164d61c1422a8e08e0820196c6f37fc217aad6256",
+    "src/README.md": "1b7dcb5dc90a4e6a381463ef51613b4d3f2570262275ac68174eda0c672fa19d",
+    "src/redaction.ts": "ab789e0a2f19e5a81c2ee03f36f96e5bd0f6a3fec09271e91e86688554a664c6",
+    "src/required-gates.ts": "4e9fc068cba9e9ac4a10c239c62db82498ec8ecd7627e99e8ba713d423078ae5",
+    "src/review.ts": "1a5f411d1165f0ff8cb781357879ee41c141191023999dce9dc12cd28dbf94b5",
+    "src/risk.ts": "58ef850598918c2c2551c95f89dcb6f88e9d3a21617474d525ddf1c0cbc72595",
+    "src/run-record.ts": "3169e4cc8286617d6e33b87fda12932994aff7d8823360c38f2aa65860111bd1",
+    "src/run.ts": "7f48a29a14c76c6539627e7f6b3a96ce384ab0f39aa7e1c1417591d07c5c46f1",
+    "src/task-events.ts": "39a8a558c27ee223420b68e7d71ff744cb90d35aa2a69e5e1604b4111040cb7f",
+    "src/task-ledger.ts": "4e6b0da9d6065a35872e9f033a617e3d24350d4341475c2a664bd7a3ad08e8be",
+    "src/task-revision.ts": "5c71f93ce1dbfd7ff3cdbd12fc91461de524bccf83f7a6d367a74e7f14221936",
+    "src/task.ts": "7da7a53b20966f74fb4315aac2477b3f73917b1a3660bed8321cc203057ccf64",
+    "src/types.ts": "04fa1b9d84ea3724f7ef55f70ba62437458fcf8458a382057d9dbc278dbcfa9c",
+    "src/workflow/collaboration.mjs": "602b0cff018d25a5f5b69a1e269e1b5a31ff71a2f89a84da570bca24504c49a1",
+    "src/workflow/definition.mjs": "c21cc8b56488b7c0d723c5a4e091f6243da9dd021f9e0cea667b82ad46e068dd",
+    "src/workflow/persistence.mjs": "e267b1ce7bdb6736593a71783649cbd2aa525dda7b3e57627b542a362c046117",
+    "src/workspace-snapshot.ts": "9d3c98cecb0dbe187b0574092f88786469ae35b4d3dc17bccc37a0f016d047b8",
+    "src/workspace.ts": "fe436f1aa58597823c5a62f1ac8fa1e00f967c59466de6f5584aa57adbdf1908",
+    "src/yaml.ts": "a4fdcbe5ca913531afeb7cd34daf7a18d3ffb3b6f78484bd94b7909cfb81931c",
+    "test/adapter-resolution.test.ts": "55072f5cd1a4dbdcd2532afaa065b41055687729e9cfb0db42eb02e756f0a927",
+    "test/agent-role.test.ts": "0d210e37fdcc493e78c06fe4d9483ebeb9aee3694a8eee3a925b1ee66c8b78c1",
+    "test/alpha-java.test.mjs": "5f0bd265942bd12e11b265797c3ed7edda2a830e6de7ec2f3003a51930d03bf0",
+    "test/alpha.test.mjs": "82f3bc7502aa481a2fafef2412982d8effd99b6a0227a0e9a1f6cd7ec82653bd",
+    "test/apply.test.ts": "a70aab8491288fae25ad57b0daf2c5089f4450771df66027135e53ebd54a881f",
+    "test/approval-contract.test.ts": "39687b9fd347bbbda6b2aaa6774667edc2c5188cfa11223e861943b1ad811802",
+    "test/auto-advance.test.ts": "9fa5311e0cfd26021d82b300031655c4511e74675c83a05fd1f34211fe7d0519",
+    "test/auto-review.test.ts": "8bdb2d990a401939a6e241709e231c2ea835a22f593664c89213b814ec43a1e1",
+    "test/cli.test.ts": "b712c903180924ccf760e6cde30b8a89fab8cff006e2cae3d54a41b021f6f048",
+    "test/command-policy.test.ts": "640151c82ac9bb9b325db0942673973e2faa1f282ba1e6290bca30f8f3dca3e5",
+    "test/config.test.ts": "66281afbcb8fc7f902637dfc26598aec5f1c7760ea54460c664dfc2e5d5cb34f",
+    "test/defect-repro.test.ts": "13f994ff03a5471d77a9d413299998fff484155be098dfc90cd32abbed298f5c",
+    "test/design-rules.test.ts": "0cd85c1184366161cc252b855b312be5b921bad543bc0db37cd9fff6c1b1aa19",
+    "test/doc-citations.test.ts": "761e3e16e3c6de3a4f505e7634a6cb6da2b22465a216651070b2b95a79b380b2",
+    "test/doc-facts.test.ts": "9e1592fe9f2126daed3107ae962236fdd211b18018e149bf67736934ab874977",
+    "test/export.test.ts": "844a9c9de327c0bf737d9aa2391b4a942ce70c7d227cba938bd5b0f8b8a4f855",
+    "test/fixtures.test.ts": "1669dd6dce74a0170f56f6a8bc7ef99517265c73a2c0546f927ccd1a6290b519",
+    "test/hybrid.test.mjs": "9e439782dcc703c56bc9b90dc45c1251241318130433c50a8c83b136b5a8953a",
+    "test/intent.test.mjs": "70986d43dc500121235dc0e2ff8831d92c48f4ef205a672fa62ea651b689d527",
+    "test/isolation.test.ts": "e5366007c62b5dd8db7ba0f2790077affdcbc21467fb2108e8aee6ea06fb04c1",
+    "test/ledger.test.ts": "5b909ce077f84b228bdef17b7e6f355438c01fae85dc5bd83d82475df47c5e47",
+    "test/link-check.test.ts": "fbdec2333021f836f8da399bf2c03836bbb482784f6f30522371f6ef447dde5f",
+    "test/path-policy.test.ts": "5eadff162abeec3fc4feecf4e3061ad9bc1387f4b6c2e8e4c5607d733e986c6e",
+    "test/policy-rule-id.test.ts": "913e0fe7d6824ad439fcd6a73688a976f30ded35eab417065b78198be05b527c",
+    "test/process-boundaries.test.ts": "fd9132f897e8bf14d0ef920d36f5150e715b1b059beef0843ffe7faa9f8fd791",
+    "test/product.test.mjs": "ac40215f03407b20db5605a21ae82c81dbe573b10f54022f0578473ffafccfdc",
+    "test/profile-fixture.ts": "e7c46552f2a08a3ba45486c04dfd31ee0097c2b7b235b374c4bacbbd0218e7b6",
+    "test/profile.test.ts": "8922667c681cb8d2423f82839cd88ef7a7c150869c63cde7e6ec6261a26c1351",
+    "test/prompt.test.ts": "b585eb3aeb5c2df3f80c3ff11268540279b23bd3771f045e8ef6ab4305ceb510",
+    "test/provider-transcript.test.ts": "58051950289baf20784a92d0fef65b872885da6ce7627e0d86b99b4818a82815",
+    "test/providers.test.mjs": "f617bd372faf98f7f5f4b55506caff2b6d4baeecf5d0c4b700e915767e6f13df",
+    "test/required-gates.test.ts": "d360d1e99416ca43fec24ce828286880b4add8a299a9fa7e53c54fa9bc6f441f",
+    "test/review.test.ts": "6ac8dc4274d039106e9fffeeb3247589db29e13fa3dcf6797429d5ac3b2be1be",
+    "test/risk.test.ts": "ddfcd52c4dafd0c8ee2c54bfc1ecfbfddfe8713bc4e66e3ce6aeabf631203748",
+    "test/rule-coverage.test.ts": "0867fae018eb86c53773feb95716f953c8fb5e4139d4affafe671c931ba2df37",
+    "test/rule-coverage.ts": "13b766320ae1bd9113fa92b07ea34fc45d08a392c352d7699b62cbf74bf9d360",
+    "test/run.test.ts": "f595e4c6ffc1e5c8d9418847e993a5618815838d4d94b512aa49cf6a94f521f3",
+    "test/second-adapter.test.ts": "7862fbe5cdb35ebdad61e5766165d73e339ef86e7ac894fc5dba536cbf43ed5f",
+    "test/task-ledger-fixture.ts": "96de1cfb1bf1e7a3d639249fce0cbb5632e5c84561df2477ee42f607fac7e72b",
+    "test/task-revision.test.ts": "1cb78a781f17a51999c366a01a22a42c280be37e6f2ec556ddea40c82ea65019",
+    "test/workflow.test.mjs": "7d3d5aeabe42dd32f05265e8db880b20c58c3f89299fd83b7df0ab5c689e255e",
+    "test/workspace-snapshot.test.ts": "7489658eecc8839b57322a2b73c4da2ecff8ed9ec9902b2648db6986a6b909a6",
+    "test/workspace.test.ts": "c90e001a516006885c4e90dbf7ed0bd831f933c5cd1c44cd2e022452795ad5b2",
+    "test/yaml.test.ts": "0450fee76960eefc3371c48c2a4fcccbe07868c88cb1a6316b3788ab34360af5",
+    "scripts/alpha-delivery-smoke.mjs": "a43ff807b96c84b228d36362ca983075ac627c907a3f4eda75a507d8312c3998",
+    "scripts/alpha-final-review.mjs": "b3ab204e5b9b5301e247d913118e2abd3b6f523eddde37ab36cea8096cc60811",
+    "scripts/alpha-java-verifier-smoke.mjs": "e61c6c1e1942754d14485155b5fbc13746d7021c5508f4485ec1e83a0293b4c1",
+    "scripts/alpha-package-smoke.mjs": "551f1e09d5806be8d5ae5b222058d4fecac37b65af20a19b27a390ce736a9799",
+    "scripts/alpha-quality-audit.mjs": "791ac70dd372b18dd0d471df326464f5cc0c4a73de444e858f4b6af2cd4a1bf5",
+    "scripts/alpha-smoke.mjs": "57057a6a42fea1b451aae5a81934ad9790beb9b97df6566e3a8d183124afb92e",
+    "scripts/alpha-verifier-smoke.mjs": "6ed7735a523869f8bb27ce12d5fd5191aa4ca41823557dbf55e4edfea7bfde31",
+    "scripts/check-doc-citations.mjs": "1bc1b78f9918f99dbbb074b77d738543812ee36b006570b8fbe28455a0cc1397",
+    "scripts/check-doc-facts.mjs": "ff346388099b27c8c1ed19a171063ad9ad33a7ae5d108860297273530996294a",
+    "scripts/check-links.mjs": "cc141dcb986b48d4dcd65ee1cfc2611f180659b915735178fc753e71d9007e2a",
+    "scripts/check-rule-coverage.mjs": "333595d7e3259a70e2deb9ad0d7f060bb5cbac9132d30c1d73ae969c982435e0",
+    "scripts/design-doc.mjs": "c5d52bfbd0349e849626d81c96cd351ca759d7f4c9f8b25880b7ee44823a125c",
+    "scripts/m0-baseline.mjs": "a0d8ecb8d4c1aa2e1d47ad79d4531f3bf9284f376ba0af973d392e3e10a7b138",
+    "scripts/provider-probe.mjs": "73914944d9658a49f3b07228e6f10493353a4c9dcde47f3fc953d6a40ab57dea",
+    "scripts/reset-rule-coverage.mjs": "843877f3bd8558992cb476dd68628480976457904db639496e3c3f37538b17ae",
+    "package.json": "1257228a228be6d32b18d069977e740c33a0652ba1c2c105b7641a8cf5f415c5"
+  },
+  "liveCalls": 0,
+  "nativeWindowsSandbox": "NOT_RUN: no account/firewall setup or repair authorized; sandbox launcher reported error 1909"
+}

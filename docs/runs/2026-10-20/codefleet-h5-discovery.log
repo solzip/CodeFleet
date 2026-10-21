@@ -1,0 +1,39 @@
+{
+  "host": "codex",
+  "protocol": "LOCAL_APP_SERVER",
+  "methods": [
+    "initialize",
+    "skills/list",
+    "skills/list",
+    "skills/list"
+  ],
+  "modelTurnsRequested": 0,
+  "authenticationUsed": false,
+  "configScope": "TEMPORARY_CLEAN_HOME",
+  "states": [
+    {
+      "state": "enabled",
+      "exactLocalSkillMatches": 1,
+      "enabled": true,
+      "scope": "repo",
+      "errors": 0
+    },
+    {
+      "state": "disabled",
+      "exactLocalSkillMatches": 0,
+      "enabled": false,
+      "scope": null,
+      "errors": 0
+    },
+    {
+      "state": "enabled-again",
+      "exactLocalSkillMatches": 1,
+      "enabled": true,
+      "scope": "repo",
+      "errors": 0
+    }
+  ],
+  "status": "HOST_DISCOVERY_VERIFIED_NO_MODEL"
+}
+(node:16816) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)

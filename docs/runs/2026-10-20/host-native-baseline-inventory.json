@@ -1,0 +1,341 @@
+{
+  "head": "c3bca1e8b3481a1a3e6dff1cc7e1e8ef5c72bc03",
+  "branch": "feature/alpha-g0-refresh",
+  "stagedPaths": [],
+  "entries": [
+    {
+      "path": ".gitignore",
+      "classification": "configuration",
+      "status": "modified",
+      "sha256": "ece0add92f336c65ac7334d6ce59ebb024f071a4f834cd0c2550682fa698e227"
+    },
+    {
+      "path": "README.en.md",
+      "classification": "design-and-guidance",
+      "status": "modified",
+      "sha256": "de3821b84ee43111063f579adb1ab1cdee4d65cf649dc9761eb65a0b17ea99bd"
+    },
+    {
+      "path": "README.md",
+      "classification": "design-and-guidance",
+      "status": "modified",
+      "sha256": "488bd0806af18ce5265b23483b19d528af1f9c1560148f5305a4c4d1da70ad17"
+    },
+    {
+      "path": "docs/INDEX.md",
+      "classification": "design-and-guidance",
+      "status": "modified",
+      "sha256": "5a1697205bc6b6cae4ba00db96e996d9dc5c470c0db741939684d3c63847ef24"
+    },
+    {
+      "path": "docs/product-completion/host-core-guide.md",
+      "classification": "design-and-guidance",
+      "status": "untracked",
+      "sha256": "6c74ffa6c62d39bfe9f6480f4c171bd1660acff612116a82ed6444f49e2fbb18"
+    },
+    {
+      "path": "docs/product-completion/host-native-guide.md",
+      "classification": "design-and-guidance",
+      "status": "modified",
+      "sha256": "7f5ea3d419344504c16a9ba3fda4df482454b80f77294ad71aa988178134ca8c"
+    },
+    {
+      "path": "docs/product-completion/progress.md",
+      "classification": "design-and-guidance",
+      "status": "modified",
+      "sha256": "33dc834de7c8a3420906489922906e08c2a4abbc0dcdc047659a0b21c01f2158"
+    },
+    {
+      "path": "docs/runs/2026-10-20/alpha-h7-doctor.log",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "ef9da481931665d4fa601aca0174b26fdbed2dc13d3b6e5d3ded1704d0dac18c"
+    },
+    {
+      "path": "docs/runs/2026-10-20/alpha-h7-full.log",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "c9fda0a96c8c399d3fb4d040b71c40a1485b49270a6d5c981e944be144f446d3"
+    },
+    {
+      "path": "docs/runs/2026-10-20/alpha-h7-real-host-qualification.md",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "44a64efd671da4e15ce231365ce6ee80184baf6836024d24c11465de1a7134d0"
+    },
+    {
+      "path": "docs/runs/2026-10-20/alpha-h7-source-evidence.json",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "4be1401c5e3a1b81470620e5e1f0db5489ef98b4a0e2bf76ca4923d9a127fb6a"
+    },
+    {
+      "path": "docs/runs/2026-10-20/alpha-h8-environment-evidence.json",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "01c6ebe2199869c59fe529ef4373d094405c7c869224e1b48cd5ea4072a63edf"
+    },
+    {
+      "path": "docs/runs/2026-10-20/alpha-h8-installed-evidence.json",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "a336a3a24da148ed67af92a05b31482cdb6726e72b9b19af041b7eb235f5fd88"
+    },
+    {
+      "path": "docs/runs/2026-10-20/alpha-h8-linux-host-preparation.md",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "5430544099beece07047e7353bbe448b7ae2bdad2af369d99b9a84be2b468de0"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-alpha-doctor.log",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "c8f357e29f82644c4452be8b0379b02d0d894381bd656c7e93e998a7718951a1"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-backend-regression.log",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "1b5e2440079a9ae8e89764149fc3e569c745f4725b5d84ec5a8374a56d5cf452"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-baseline-negative.log",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "6ebaa0f77b960fa3cecc8d60d458f884a3cb7fe17020a17fb24141a3f43a0d07"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-final-docs.log",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "bf16a7c2d91749ccbf1e65fdbc70960ddfca34c5c17ef030a156140b64c04cb1"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-full-final-v2.log",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "2fbc7ce7e7a36d7cda5fbeec603baafa6c86c9e2d3f9206b264ffe181ad917cd"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-full-final.log",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "8a00d9ba519a0972b73c49cf89d7522eff4151c31b47def57012382d56660c5f"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-full-first.log",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "444179f82d9c9a01b0509dbaef0946313367867961e249fdea38250b7cc134d6"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-hardened.log",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "5daed760b32a83bcded9ae7f385b909de9b2f5e4da17b5fba1f58323c8822178"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-host-doctor.log",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "97d5185f933996dfa50358bb8667942683a4bbafb9d6889aa5b9c69d28789da8"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-core-security.json",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "c910f50f5a0fe59d1a8c0a3ecb0e859a2d4ff917cc1567293183fe0a77b13482"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-baseline-doctor.log",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "a91228e3f2af4aa9139fc5830159e74cba9a372ca4214013380ad5518a7a6179"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-baseline-host-doctor.log",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "a7bbf439313f35b4e2f071d96ff1c9f721b14f34146116fdc5fece091d90685b"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-baseline-hybrid.log",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "4f2d26a905f397b73d89aae7f10417d2fbbc3e2b0fc7ca278abcab509dde99f2"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-baseline-test-first.log",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "d0be0a6ea49e6586d291a5ff591fd904da3a013be405aeac1e303b9189cca125"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-baseline-test.log",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "9b8cdc4d30741d164c3e2edb9a82080cbf3c30ae5063dd4cea943ddbde6f58df"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-core-source-evidence.json",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "70ae9e7066c8275c2b364a592cf1fbc55ae090ef66f6cc9e7f2e452d274833e7"
+    },
+    {
+      "path": "docs/runs/2026-10-20/host-native-core-verification.md",
+      "classification": "execution-evidence",
+      "status": "untracked",
+      "sha256": "1c2b2ce0266182896d188e3ed616f305d2e58e17fc5b757bafb538d760c05d32"
+    },
+    {
+      "path": "package.json",
+      "classification": "configuration",
+      "status": "modified",
+      "sha256": "93afb77cf2c3168f68613dcfcbf64fe6991acea942b4a02010d19905b6d86864"
+    },
+    {
+      "path": "src/alpha/cli.mjs",
+      "classification": "source",
+      "status": "modified",
+      "sha256": "f4c6eb16cb14b9e5495b65bc18bbce2c47faacf53f8aac451bbf3055017a5abf"
+    },
+    {
+      "path": "src/alpha/controller.mjs",
+      "classification": "source",
+      "status": "modified",
+      "sha256": "5e18d9e61361fdaaa1761bc67aae73e4ada3f343e1d5af9428b16e13a59c9ab7"
+    },
+    {
+      "path": "src/alpha/judge.mjs",
+      "classification": "source",
+      "status": "modified",
+      "sha256": "420ebefc42809d0c341fb7b14a81a84b01afd21f917714e5e8beea1324bd9ee5"
+    },
+    {
+      "path": "src/alpha/verification-evidence.mjs",
+      "classification": "source",
+      "status": "untracked",
+      "sha256": "6cb3d531428fdc7c463d967087fea77e3e424f16abe137e66b52a1e450fe0ffc"
+    },
+    {
+      "path": "src/alpha/verifier.mjs",
+      "classification": "source",
+      "status": "modified",
+      "sha256": "976ce2321f4483fc925d46ac489653d63359f06e194b73a221efb5ca7c8bf41d"
+    },
+    {
+      "path": "src/hosts/cli.mjs",
+      "classification": "source",
+      "status": "modified",
+      "sha256": "5e53017157ec3e2f71806f5b47318dab1eb6c07526ca72726219de258a7f59d3"
+    },
+    {
+      "path": "src/hosts/doctor.mjs",
+      "classification": "source",
+      "status": "untracked",
+      "sha256": "539845622c18baf49fb50f42c47d44e3ec08aecd46f9b2e883d7851da3f559c4"
+    },
+    {
+      "path": "src/hosts/harness-service.mjs",
+      "classification": "source",
+      "status": "modified",
+      "sha256": "93c377b17ad426dfcde13317262cd632aa0aa94dda54a427c38e26ed17e32d39"
+    },
+    {
+      "path": "src/hosts/install.mjs",
+      "classification": "source",
+      "status": "modified",
+      "sha256": "3f9a6fb3aeac72a4474a4f80110e8d68fe1e0e173f173cb7680998695b570fdb"
+    },
+    {
+      "path": "src/hosts/workflow-authorization.mjs",
+      "classification": "source",
+      "status": "modified",
+      "sha256": "aa16a2d6a2a075729a5c280407539c53b895d5f9281291b49fb045c722bc5477"
+    },
+    {
+      "path": "src/product/report.mjs",
+      "classification": "source",
+      "status": "modified",
+      "sha256": "14e8bb0a1c8448eb359c5c4def8202e613f12d3d8dd6f05d5e426a78f66d074b"
+    },
+    {
+      "path": "src/product/tasks.mjs",
+      "classification": "source",
+      "status": "modified",
+      "sha256": "a80c41112167933ec932a2c901d7ae3b7c762129901925fbb628f739cb83a6c0"
+    },
+    {
+      "path": "src/verification/backends.mjs",
+      "classification": "source",
+      "status": "untracked",
+      "sha256": "18e40a7f6f212b4b0085b6956c69d544e7564b71176b237e9f04d27f7e2ad04f"
+    },
+    {
+      "path": "src/workflow/capability-policy.mjs",
+      "classification": "source",
+      "status": "untracked",
+      "sha256": "94c63ca69098aded3c677eae58d39d2f5e3a1216c96b814c826ffc05f8281be3"
+    },
+    {
+      "path": "test/alpha.test.mjs",
+      "classification": "test",
+      "status": "modified",
+      "sha256": "2d740bf535364a65a9a56b4b17fdc06da4fef13463dd491034ca4daa68e2616c"
+    },
+    {
+      "path": "test/host-core.test.mjs",
+      "classification": "test",
+      "status": "untracked",
+      "sha256": "e3c33fe8bc7a25b1aa6a611319d1bc8afd00615d814e661772d311623fba0e69"
+    },
+    {
+      "path": "test/operator-runtime.test.mjs",
+      "classification": "test",
+      "status": "modified",
+      "sha256": "a7edfe70307105759c51bd2c514b14a2b3867acb35fc8301fe2e2abf82d41a9a"
+    },
+    {
+      "path": "test/verification-backends.test.mjs",
+      "classification": "test",
+      "status": "untracked",
+      "sha256": "9fd1f1d8e9f6392e23e068a20584f4ae334e4eed8e25f2af99a0b27d53d7a2a3"
+    },
+    {
+      "path": "test/workflow.test.mjs",
+      "classification": "test",
+      "status": "modified",
+      "sha256": "37ceb472865ec6054c8cbb32fe333e693962f80db7575b9cc3b2c1fc2120c9a4"
+    }
+  ],
+  "counts": {
+    "configuration": 2,
+    "design-and-guidance": 6,
+    "execution-evidence": 24,
+    "source": 14,
+    "test": 5
+  },
+  "excludedLocalUntrackedCount": 8,
+  "selfAndFinalRecordExcluded": [
+    "docs/runs/2026-10-20/host-native-baseline-inventory.json",
+    "docs/runs/2026-10-20/host-native-baseline-readiness.md",
+    "docs/runs/2026-10-20/host-native-baseline-docs.log",
+    "docs/runs/2026-10-20/host-native-baseline-results.json"
+  ],
+  "securityScan": {
+    "files": 51,
+    "findings": [],
+    "scope": "bounded patterns; not exhaustive secret detection"
+  },
+  "legacyTypeScriptChanged": [],
+  "priorSourceTestComparison": {
+    "files": 144,
+    "mismatches": []
+  },
+  "priorG1H8RecordsComparison": {
+    "files": 39,
+    "mismatches": []
+  }
+}

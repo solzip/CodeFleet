@@ -10,10 +10,13 @@ import { command, environment } from '../src/alpha/process.mjs';
 import { verificationResult, dockerArgs, matchTestIdentity } from '../src/alpha/verifier.mjs';
 import { deliver } from '../src/alpha/delivery.mjs';
 import { providerArgs } from '../src/alpha/provider.mjs';
+import { judge as pureJudge, isFailingBaseline } from '../src/alpha/judge.mjs';
+import { verify, dockerReady } from '../src/alpha/verifier.mjs';
+import { context, candidateHash } from '../src/alpha/workspace.mjs';
 
 const input = () => ({ schemaVersion: 1, goal: 'Return the correct value for subtraction.', files: ['src/math.js'], context: ['src/math.js'], tests: ['test/math.test.js'], maxAttempts: 2, timeoutSeconds: 60, attemptBudgetUsd: 1, delivery: { mode: 'local' } });
 const proposal = (value = 'a - b') => ({ summary: 'Correct subtraction', edits: [{ path: 'src/math.js', oldText: 'a + b', newText: value }] });
-const pass = () => ({ exitCode: 0, tests: 1, passed: 1, failed: 0, skipped: 0, todo: 0, testNames: ['0:subtract'], testIdentityMatch: true, interrupted: false, truncated: false, integrity: true });
+const pass = () => ({ authority: 'HARNESS_EXECUTED', exitCode: 0, tests: 1, passed: 1, failed: 0, skipped: 0, todo: 0, testNames: ['0:subtract'], testIdentityMatch: true, interrupted: false, truncated: false, integrity: true });
 const fail = () => ({ ...pass(), exitCode: 1, passed: 0, failed: 1 });
 
 test('alpha contracts reject scope escalation, test edits, ambiguous paths and unknown grants', () => {
@@ -41,6 +44,168 @@ test('alpha never accepts zero, skipped, missing, truncated or nonzero-exit veri
   assert.equal(judge({ ...r, integrity: true }).outcome, 'ESCALATE');
   const empty = verificationResult({ exitCode: 0, stdout: Buffer.from('version 24'), stderr: Buffer.alloc(0), interrupted: false, truncated: false });
   assert.notEqual(judge({ ...empty, integrity: true }).outcome, 'ACCEPT');
+});
+
+test('alpha judgment rejects absent and provider-only authority even with passing counts', () => {
+  assert.equal(judge, pureJudge, 'v1 compatibility export must use the same verdict function');
+  for (const authority of [undefined, null, 'PROVIDER_REPORTED_ONLY', 'NONE', 'HARNESS_OBSERVED', 'WAIVED_BY_POLICY']) {
+    assert.equal(judge({ ...pass(), authority }).outcome, 'ESCALATE', String(authority));
+  }
+  for (const evidence of [null, undefined, {}]) assert.equal(judge(evidence).outcome, 'ESCALATE');
+  const evidence = Object.freeze(pass());
+  assert.deepEqual(judge(evidence), judge(evidence));
+  assert.equal(judge(evidence).outcome, 'ACCEPT');
+});
+
+test('alpha baseline predicate preserves executed regression requirements without mutation', () => {
+  assert.equal(isFailingBaseline(Object.freeze(fail())), true);
+  for (const patch of [{ authority: undefined }, { authority: 'PROVIDER_REPORTED_ONLY' }, { exitCode: 0 }, { tests: 0 }, { failed: 0 }, { interrupted: true }, { truncated: true }]) {
+    assert.equal(isFailingBaseline({ ...fail(), ...patch }), false);
+  }
+  assert.equal(isFailingBaseline(null), false);
+});
+
+for (const adapter of ['node', 'java-maven']) {
+  test(`alpha ${adapter} v1 contract completes with real isolated verification and a fixed proposal`, {
+    skip: adapter === 'node' ? !process.env.CODEFLEET_TEST_DOCKER : !process.env.CODEFLEET_TEST_MAVEN_IMAGE
+  }, async () => {
+    const java = adapter === 'java-maven';
+    const source = java ? 'src/main/java/example/Page.java' : 'src/math.js';
+    const testFile = java ? 'src/test/java/example/PageTest.java' : 'test/math.test.js';
+    const files = java ? Object.fromEntries(await Promise.all([source, testFile, 'pom.xml'].map(async name => [name, await readFile(new URL(`../examples/java-maven/${name}`, import.meta.url), 'utf8')]))) : {
+      [source]: 'export const sub = (a,b) => a + b;',
+      [testFile]: "import test from 'node:test'; import assert from 'node:assert/strict'; import { sub } from '../src/math.js'; test('subtract', () => assert.equal(sub(3,2),1));"
+    };
+    const contract = validateContract({ ...input(), files: [source], context: [source], tests: [testFile], timeoutSeconds: 300,
+      ...(java ? { verification: { kind: adapter, image: process.env.CODEFLEET_TEST_MAVEN_IMAGE } } : {}) });
+    const f = await setup(contract); let calls = 0;
+    // Only source acquisition and the provider are fixtures. All candidate IO,
+    // Docker verification, evidence binding, Store and verdicts are real.
+    const services = {
+      snapshot: async (_repo, _base, directory) => {
+        for (const [name, body] of Object.entries(files)) {
+          await mkdir(path.dirname(path.join(directory, name)), { recursive: true });
+          await writeFile(path.join(directory, name), body);
+        }
+        return Object.keys(files);
+      }, context, candidateHash, verify, ready: dockerReady,
+      propose: async () => { calls++; return { cost: null, proposal: { summary: 'Fixed regression fixture', edits: [{ path: source,
+        oldText: java ? '(long) (page + 1)' : 'a + b', newText: java ? '((long) page + 1)' : 'a - b' }] } }; }
+    };
+    try {
+      const result = await execute(f.store, f.run.id, services);
+      assert.equal(result.state, 'COMPLETED', result.reason);
+      const baseline = f.store.readArtifact(result.baselineHash);
+      const evidence = f.store.readArtifact(result.evidenceHash);
+      assert.equal(baseline.authority, 'HARNESS_EXECUTED');
+      assert.ok(baseline.failed > 0);
+      assert.equal(evidence.authority, 'HARNESS_EXECUTED');
+      assert.equal(evidence.tests, java ? 2 : 1);
+      assert.equal(evidence.passed, evidence.tests);
+      assert.equal(evidence.integrity, true); assert.equal(evidence.testIdentityMatch, true);
+      assert.equal(evidence.contractHash, hash(contract));
+      assert.equal(f.store.readArtifact(result.decisionHash).outcome, 'ACCEPT');
+      assert.deepEqual(Object.keys(f.store.readArtifact(result.acceptedHash).changedFiles), [source]);
+      assert.equal(await readFile(path.join(result.candidateDirectory, testFile), 'utf8'), files[testFile]);
+      assert.equal((await execute(f.store, result.id, services)).state, 'COMPLETED');
+      assert.equal(calls, 1); assert.equal(result.unknownCostAttempts, 1);
+    } finally { f.store.close(); }
+  });
+}
+
+test('alpha refuses an unobserved baseline before spending a provider attempt', async () => {
+  for (const authority of [undefined, 'PROVIDER_REPORTED_ONLY']) {
+    const f = await setup();
+    f.services.verify = async () => ({ ...fail(), authority });
+    try {
+      const result = await execute(f.store, f.run.id, f.services);
+      assert.equal(result.state, 'WAITING_HUMAN');
+      assert.equal(result.attempts, 0);
+      assert.equal(f.counts().proposals, 0);
+      assert.equal(result.acceptedHash, undefined);
+    } finally { f.store.close(); }
+  }
+});
+
+test('alpha does not complete or deliver on provider-only candidate evidence', async () => {
+  const f = await setup({ ...input(), delivery: { mode: 'pull-request', repository: 'owner/repo', base: 'main' } });
+  let checks = 0, deliveries = 0;
+  f.services.verify = async () => ++checks === 1 ? fail() : { ...pass(), authority: 'PROVIDER_REPORTED_ONLY' };
+  f.services.deliver = async () => { deliveries++; return {}; };
+  try {
+    const result = await execute(f.store, f.run.id, f.services);
+    assert.equal(result.state, 'WAITING_HUMAN');
+    assert.equal(f.store.readArtifact(result.decisionHash).outcome, 'ESCALATE');
+    assert.equal(deliveries, 0);
+    assert.equal(result.acceptedHash, undefined);
+  } finally { f.store.close(); }
+});
+
+test('alpha provider success claims cannot replace failed Harness verification', async () => {
+  const f = await setup({ ...input(), maxAttempts: 1 });
+  f.services.propose = async () => ({ proposal: proposal(), cost: 0, evidence: pass(), state: 'COMPLETED', outcome: 'ACCEPT' });
+  f.services.verify = async () => fail();
+  try {
+    const result = await execute(f.store, f.run.id, f.services);
+    assert.equal(result.state, 'WAITING_HUMAN');
+    assert.equal(result.acceptedHash, undefined);
+    assert.equal(f.store.readArtifact(result.decisionHash).outcome, 'RETRY');
+  } finally { f.store.close(); }
+});
+
+test('alpha malformed provider output and verification loss never produce accepted artifacts', async () => {
+  for (const failure of ['provider-error', 'malformed-proposal', 'verification-error', 'tree-changed']) {
+    const f = await setup(); let checks = 0, hashes = 0;
+    if (failure === 'provider-error') f.services.propose = async () => { throw Error('provider failed'); };
+    if (failure === 'malformed-proposal') f.services.propose = async () => ({ proposal: { summary: 'PASS', edits: [] }, cost: 0.2 });
+    if (failure === 'verification-error') f.services.verify = async () => { if (++checks === 1) return fail(); throw Error('verification unavailable'); };
+    if (failure === 'tree-changed') f.services.candidateHash = async () => String(++hashes);
+    try {
+      const result = await execute(f.store, f.run.id, f.services);
+      assert.equal(result.state, 'WAITING_HUMAN', failure);
+      assert.equal(result.acceptedHash, undefined, failure);
+      assert.equal(result.evidenceHash, undefined, failure);
+      assert.equal(f.store.db.prepare('SELECT owner FROM runs WHERE id=?').get(result.id).owner, null);
+      assert.equal(result.unknownCostAttempts, failure === 'provider-error' ? 1 : 0);
+    } finally { f.store.close(); }
+  }
+});
+
+test('alpha stale worker cannot save, heartbeat or release a replacement lease', async () => {
+  const f = await setup();
+  try {
+    const oldOwner = f.store.claim(f.run.id);
+    f.store.db.prepare('UPDATE runs SET leaseUntil=0 WHERE id=?').run(f.run.id);
+    const newOwner = f.store.claim(f.run.id);
+    const eventCount = f.store.events(f.run.id).length;
+    assert.throws(() => f.store.save({ ...f.run, state: 'COMPLETED' }, oldOwner, 'STALE'), /lease lost/);
+    assert.equal(f.store.heartbeat(f.run.id, oldOwner), false);
+    f.store.release(f.run.id, oldOwner);
+    assert.equal(f.store.db.prepare('SELECT owner FROM runs WHERE id=?').get(f.run.id).owner, newOwner);
+    assert.equal(f.store.events(f.run.id).length, eventCount);
+    assert.equal(f.store.get(f.run.id).state, 'READY');
+    f.store.release(f.run.id, newOwner);
+  } finally { f.store.close(); }
+});
+
+test('alpha reconciliation refuses missing or tampered evidence before delivery', async () => {
+  for (const mode of ['missing', 'tampered', 'provider-only']) {
+    const f = await pendingDelivery(); let deliveries = 0;
+    try {
+      const run = f.store.get(f.run.id);
+      if (mode === 'tampered') await writeFile(path.join(f.store.directory, 'artifacts', `${run.evidenceHash}.json`), '{}');
+      else {
+        const owner = f.store.claim(run.id);
+        run.evidenceHash = mode === 'missing' ? '0'.repeat(64) : f.store.artifact({ ...f.store.readArtifact(run.evidenceHash), authority: 'PROVIDER_REPORTED_ONLY' });
+        f.store.save(run, owner, 'FAULT_INJECTION'); f.store.release(run.id, owner);
+      }
+      f.services.deliver = async () => { deliveries++; return {}; };
+      const result = await execute(f.store, run.id, f.services, { resume: true });
+      assert.equal(result.state, 'RECONCILING', mode);
+      assert.equal(deliveries, 0, mode);
+      assert.equal(f.counts().proposals, 1);
+    } finally { f.store.close(); }
+  }
 });
 
 test('alpha process boundaries limit output and time; provider receives no GitHub token', async () => {
@@ -82,6 +247,22 @@ test('alpha persists verified evidence, completes locally and does not rerun com
     assert.equal(f.store.readArtifact(result.acceptedHash).changedFiles['src/math.js'], 'a - b');
     await execute(f.store, f.run.id, f.services); assert.deepEqual(f.counts(), { proposals: 1, verifications: 2 });
     assert.ok(f.store.events(f.run.id).some(e => e.type === 'VERIFYING'));
+  } finally { f.store.close(); }
+});
+test('Host Core: local success cannot complete an Alpha Run requiring protected evidence', async () => {
+  const f = await setup(); let calls = 0;
+  f.services.verify = async () => ++calls === 1 ? fail() : {
+    ...pass(), authority: 'LOCAL_EXECUTED', executionAuthority: 'LOCAL_EXECUTED',
+    verificationBackend: 'local', isolationCapabilities: [], verifierIndependence: 'UNPROTECTED',
+    evidenceIntegrity: 'UNBOUND', candidateTreeHash: null, requiredGateResults: { protectedVerification: 'UNSATISFIED' }
+  };
+  try {
+    const result = await execute(f.store, f.run.id, f.services);
+    assert.equal(result.state, 'WAITING_HUMAN'); assert.equal(result.acceptedHash, undefined);
+    assert.equal(result.evidenceHash, undefined); assert.equal(f.counts().proposals, 1);
+    const evidence = f.store.readArtifact(result.lastEvidenceHash);
+    assert.equal(evidence.requiredGateResults.protectedVerification, 'UNSATISFIED');
+    assert.equal(pureJudge(evidence).outcome, 'ESCALATE');
   } finally { f.store.close(); }
 });
 

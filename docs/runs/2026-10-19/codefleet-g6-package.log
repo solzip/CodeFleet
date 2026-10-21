@@ -1,0 +1,22 @@
+
+> codefleet@0.2.0-alpha.4 alpha:package-smoke
+> node scripts/alpha-package-smoke.mjs
+
+{
+  "filename": "codefleet-0.2.0-alpha.4.tgz",
+  "integrity": "sha512-M7O8J91xaXURT0iYq2MJM4ErmDxgq/5d9r2xPKBvx78hjX5LUbzsOIx4xa85VZBZwqFRt80gh7JkGX4BNhiWVw==",
+  "packedFiles": 223,
+  "install": "passed",
+  "help": "passed",
+  "product": {
+    "plan": "passed",
+    "review": "passed",
+    "approval": "passed",
+    "modelConsentBlock": "passed",
+    "report": "passed",
+    "live": "NOT_RUN"
+  },
+  "workflow": "not requested",
+  "uninstall": "passed",
+  "artifactDirectory": "[LOCAL_PROFILE]\\AppData\\Local\\Temp\\codefleet-packaged-v6GlO7"
+}

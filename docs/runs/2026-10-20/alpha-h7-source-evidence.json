@@ -1,0 +1,201 @@
+{
+  "date": "2026-10-20",
+  "head": "c3bca1e8b3481a1a3e6dff1cc7e1e8ef5c72bc03",
+  "branch": "feature/alpha-g0-refresh",
+  "qualification": "BLOCKED",
+  "hostLive": "NOT_RUN",
+  "actualModelCalls": 0,
+  "versions": {
+    "codex": "0.162.1",
+    "claude": "2.1.304"
+  },
+  "windowsUnelevated": [
+    {
+      "host": "codex",
+      "binarySha256": "dd13bdb162a184fa04039488b234a8258ef9b76f84e926c505d5742b19249a6a",
+      "format": "PE",
+      "machine": "0x8664",
+      "sandboxExit": 1,
+      "output": "windows sandbox failed: Restricted read-only access requires the elevated Windows sandbox backend\n"
+    },
+    {
+      "host": "claude",
+      "binarySha256": "019e5174d5d954585edb1a946fe280e44a973050b4897034adf0e16306f85fdd",
+      "format": "PE",
+      "machine": "0x8664",
+      "sandboxExit": 1,
+      "output": "windows sandbox failed: Restricted read-only access requires the elevated Windows sandbox backend\n"
+    }
+  ],
+  "windowsMxcPreference": [
+    {
+      "host": "codex",
+      "exit": 1,
+      "output": "MXC launcher: cannot locate required Windows platform directory: HRESULT 0x80070003\n"
+    },
+    {
+      "host": "claude",
+      "exit": 1,
+      "output": "MXC launcher: cannot locate required Windows platform directory: HRESULT 0x80070003\n"
+    }
+  ],
+  "wslPathProbe": {
+    "kernel": "6.6.114.1-microsoft-standard-WSL2",
+    "uid": 1002,
+    "tools": {
+      "node": {
+        "found": false,
+        "windowsMount": false
+      },
+      "codex": {
+        "found": true,
+        "windowsMount": true
+      },
+      "claude": {
+        "found": false,
+        "windowsMount": false
+      },
+      "bwrap": {
+        "found": false,
+        "windowsMount": false
+      },
+      "socat": {
+        "found": false,
+        "windowsMount": false
+      }
+    }
+  },
+  "linuxLoader": {
+    "uid": 1001,
+    "results": [
+      {
+        "host": "codex",
+        "fileExists": true,
+        "magic": "MZ",
+        "sha256": "dd13bdb162a184fa04039488b234a8258ef9b76f84e926c505d5742b19249a6a",
+        "loaded": false,
+        "errno": 2,
+        "error": "No such file or directory"
+      },
+      {
+        "host": "claude",
+        "fileExists": true,
+        "magic": "MZ",
+        "sha256": "019e5174d5d954585edb1a946fe280e44a973050b4897034adf0e16306f85fdd",
+        "loaded": false,
+        "errno": 2,
+        "error": "No such file or directory"
+      }
+    ],
+    "modelCalls": 0
+  },
+  "scratchObservation": {
+    "files": [
+      "config.toml",
+      ".sandbox/sandbox.2026-10-20.log",
+      "tmp/arg0/codex-arg0yMhfHt/.lock",
+      "tmp/arg0/codex-arg0yMhfHt/applypatch.bat",
+      "tmp/arg0/codex-arg0yMhfHt/apply_patch.bat"
+    ],
+    "scope": "failed launcher startup only; not real Host session write requirements"
+  },
+  "codexDiscoveryOutsideQualifiedBoundary": {
+    "host": "codex",
+    "protocol": "LOCAL_APP_SERVER",
+    "methods": [
+      "initialize",
+      "skills/list",
+      "skills/list",
+      "skills/list"
+    ],
+    "modelTurnsRequested": 0,
+    "authenticationUsed": false,
+    "configScope": "TEMPORARY_CLEAN_HOME",
+    "states": [
+      {
+        "state": "enabled",
+        "exactLocalSkillMatches": 1,
+        "enabled": true,
+        "scope": "repo",
+        "errors": 0
+      },
+      {
+        "state": "disabled",
+        "exactLocalSkillMatches": 0,
+        "enabled": false,
+        "scope": null,
+        "errors": 0
+      },
+      {
+        "state": "enabled-again",
+        "exactLocalSkillMatches": 1,
+        "enabled": true,
+        "scope": "repo",
+        "errors": 0
+      }
+    ],
+    "status": "HOST_DISCOVERY_VERIFIED_NO_MODEL"
+  },
+  "matchedEnvironmentNegativeTests": "NOT_RUN_HOST_LOADING_BLOCKED",
+  "authenticationInIsolation": "NOT_RUN",
+  "modelToolNetworkSeparation": "UNVERIFIED",
+  "tests": {
+    "exit": 0,
+    "legacy": 324,
+    "alpha": 205,
+    "total": 529,
+    "failed": 0,
+    "skipped": 0,
+    "doctorExit": 0
+  },
+  "h6SourceHashesPreserved": true,
+  "sourceFiles": [
+    {
+      "file": "src/hosts/planning.mjs",
+      "sha256": "fe469f398ae64d7b0a799f173d8c66154f9f99430421f571afb6cf39f1eaea9e"
+    },
+    {
+      "file": "src/hosts/planning-cli.mjs",
+      "sha256": "7a75e4a04771e925a28af4d92486fc5c06e319e3f611e546159cd05475c9757f"
+    },
+    {
+      "file": "src/hosts/planning-isolation.py",
+      "sha256": "7b1434943c4570179d4aa02732a04f03159734888023ee510e910ddf175bf476"
+    },
+    {
+      "file": "src/hosts/install.mjs",
+      "sha256": "134e94ce884d65e50f6363f53934f0a62d8afc42d8bfbfaf651117c7d078a52c"
+    },
+    {
+      "file": "scripts/host-codex-discovery.mjs",
+      "sha256": "5073d4f45b3a604b3d616389c12a4b1c124048ca7f4ac2e979824512fde68305"
+    },
+    {
+      "file": "test/host-planning.test.mjs",
+      "sha256": "feab23a074611ec529ec25bbfcd2cc66f7b807503e22904926e05e99884edb8b"
+    },
+    {
+      "file": "test/fixtures/planning-isolation-probe.py",
+      "sha256": "90a2261cbee63d18e73a9d855f81d2d04ec2b0f6ea3a223dfdd59a8bcc02cc3f"
+    },
+    {
+      "file": "package.json",
+      "sha256": "8ed166212dea357e5959612e162b7b582fb64c0557532e40767877465979f532"
+    }
+  ],
+  "finalDocumentChecks": {
+    "linksExit": 0,
+    "citationsExit": 0,
+    "factsExit": 0,
+    "declaredFacts": 42,
+    "uncheckedNumbers": 539,
+    "historicalUnresolvedCitations": 10,
+    "historicalSuspectCitations": 13
+  },
+  "publicPatternScan": {
+    "files": 4,
+    "patterns": 3,
+    "matches": 0,
+    "scope": "Limited path/private-key/API-key patterns; not proof of absence of all secrets"
+  }
+}

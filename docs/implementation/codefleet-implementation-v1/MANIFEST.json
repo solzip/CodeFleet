@@ -1,0 +1,15 @@
+{
+  "name": "CodeFleet implementation v1.0",
+  "generated": "2026-10-19",
+  "files": {
+    "README.md": "34e82b0916ab79a4cc56a7c18400ef475ab2b9266c768abb5e6952e3c7881824",
+    "01-product/PRODUCT_CONTRACT.md": "13348d460e28dd2b35e0875a48eaf653b473894005e4a00eac6acaa43ae0496c",
+    "02-repository/BASELINE_AND_GAP.md": "9b1945b0bb4bcc900c6120b2762591c210842fbc3fb2d72c269738e1fc02c092",
+    "03-architecture/INTEGRATION_DECISIONS.md": "0c63ab38e824efd28a1d8bf26755cac4b495234605faecad8cac023a41ef90b6",
+    "04-contracts/EXECUTION_CONTRACTS.md": "107fdcb1b3dd8a44ee87b3b6f33ca95ae939e12b2cd08044f451e4f9a94d287b",
+    "05-implementation/PHASED_WORK.md": "131e2814ff6e69da554511b4b30052d320c2eafd828d7cc44100721f12d63240",
+    "06-verification/ACCEPTANCE_MATRIX.md": "3ca3350d82ad522f6f9eed3965e1f7983a40752939a626afb6b1d5eeeef6b3f5",
+    "MASTER_IMPLEMENTATION_PROMPT.md": "e0f26804ba737da5179375bb56220ea67a7a2b9be59776cf2af9308b8dd7174f",
+    "07-handoff/DELIVERY_AND_DECISIONS.md": "0c1f71a007ec31064301c0f2077b1edd022907f0cd9d714e4d19291cd93b713c"
+  }
+}

@@ -16,6 +16,26 @@ const pack = JSON.parse(await npm(['pack', '--ignore-scripts', '--pack-destinati
 await npm(['install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', path.join(temp, pack.filename)], install);
 const cli = path.join(install, 'node_modules/codefleet/src/alpha/cli.mjs');
 requireSuccess(await command(process.execPath, [cli, '--help']), 'installed CLI help');
+// Installed product commands must work without editing JSON or invoking models.
+const planningRepo = path.join(temp, 'planning-repository');
+await mkdir(path.join(planningRepo, 'src'), { recursive: true }); await mkdir(path.join(planningRepo, 'test'));
+await writeFile(path.join(planningRepo, 'src/math.js'), 'module.exports = function subtract(a,b) { return a+b; };');
+await writeFile(path.join(planningRepo, 'test/math.test.js'), "const test=require('node:test'),assert=require('node:assert/strict');test('subtract',()=>assert.equal(require('../src/math.js')(5,2),3));");
+for (const args of [['init'], ['add', '.'], ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-m', 'local packaged planning fixture']]) requireSuccess(await git(planningRepo, args), 'planning fixture');
+async function objective(args, expected = 0) {
+  const result = await command(process.execPath, [cli, '--state', path.join(temp, 'product-state'), 'objective', ...args], { timeoutMs: 30000 });
+  if (result.exitCode !== expected || result.interrupted || result.truncated) throw Error('Installed objective command failed: ' + result.stderr.toString());
+  return JSON.parse(result.stdout.toString());
+}
+await objective(['help']);
+const planned = await objective(['plan', 'Fix subtract behavior', planningRepo], 2);
+await objective(['review', planned.taskId, '--files', 'src/math.js', '--tests', 'test/math.test.js', '--criterion', 'Protected subtraction regression passes']);
+const waiting = await objective(['run', planned.taskId], 2);
+await objective(['approve', planned.taskId, '--hash', waiting.workflowHash, '--actor', 'package-fixture']);
+const consent = await objective(['run', planned.taskId], 2);
+if (consent.run.complete || consent.run.activeAttempts.length) throw Error('Installed approval unexpectedly launched a model');
+await objective(['report', planned.taskId]);
+const product = { plan: 'passed', review: 'passed', approval: 'passed', modelConsentBlock: 'passed', report: 'passed', live: 'NOT_RUN' };
 let workflow = 'not requested';
 if (process.argv.includes('--real-provider')) {
   const repo = path.join(temp, 'repository'); await mkdir(path.join(repo, 'src'), { recursive: true }); await mkdir(path.join(repo, 'test'));
@@ -32,4 +52,4 @@ if (process.argv.includes('--real-provider')) {
   workflow = { state: result.state, attempts: result.attempts, runId: result.id, reportedCostUsd: result.reportedCostUsd };
 }
 await npm(['uninstall', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', 'codefleet'], install);
-console.log(JSON.stringify({ filename: pack.filename, integrity: pack.integrity, packedFiles: pack.files.length, install: 'passed', help: 'passed', workflow, uninstall: 'passed', artifactDirectory: temp }, null, 2));
+console.log(JSON.stringify({ filename: pack.filename, integrity: pack.integrity, packedFiles: pack.files.length, install: 'passed', help: 'passed', product, workflow, uninstall: 'passed', artifactDirectory: temp }, null, 2));

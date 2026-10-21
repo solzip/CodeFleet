@@ -1,0 +1,12 @@
+{
+  "base": "c61e9b829b62dd41336a7225bf3b9165136484db",
+  "scope": "Uncommitted G3 source; live provider NOT VERIFIED",
+  "files": {
+    "src/alpha/cli.mjs": "562b46d97165a143f483e10d765d3de620311a990ce3a22a3615318c4cefcd74",
+    "src/intent/discovery.mjs": "fb305ac3c383a9d401c8e639d588702a0cc63807c86be437e7520cf82ef7da2a",
+    "src/intent/contract.mjs": "fddf062d08f4d6f843b3c76be54ba976a3115bbe37efbac28ad6f2d6e7a88c19",
+    "src/intent/engine.mjs": "2684abf9cf3580686c112efe9eef6b7fdaf0f0789a48445244762e5370e3de5a",
+    "test/intent.test.mjs": "70986d43dc500121235dc0e2ff8831d92c48f4ef205a672fa62ea651b689d527",
+    "package.json": "de74f0e77a9ee58980f544be9a54e3bad51db5a575f41944df0e309f1cda0179"
+  }
+}

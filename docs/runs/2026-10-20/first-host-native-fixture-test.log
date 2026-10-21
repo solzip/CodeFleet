@@ -1,0 +1,37 @@
+✖ duplicate event ID produces one effect (1.3849ms)
+✔ different event IDs are processed (0.2833ms)
+✔ a failed effect can be retried (0.7632ms)
+✔ processor instances have independent event history (0.0832ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 3
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 66.3107
+
+✖ failing tests:
+
+test at .trials\host-core-checkpoint\first-host-acceptance\fixture\test\events.test.js:5:1
+✖ duplicate event ID produces one effect (1.3849ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    [
+      'fake-event-a',
+  +   'fake-event-a'
+    ]
+
+      at TestContext.<anonymous> (file:///<WORKTREE>/.trials/host-core-checkpoint/first-host-acceptance/fixture/test/events.test.js:10:10)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.start (node:internal/test_runner/test:1015:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:358:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 'fake-event-a', 'fake-event-a' ],
+    expected: [ 'fake-event-a' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

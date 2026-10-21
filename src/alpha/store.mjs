@@ -9,11 +9,33 @@ export class Store {
     this.directory = path.resolve(directory); mkdirSync(this.directory, { recursive: true });
     this.db = new DatabaseSync(path.join(this.directory, 'state.sqlite'));
     const version = this.db.prepare('PRAGMA user_version').get().user_version;
-    if (version !== 0 && version !== 1) { this.db.close(); throw Error('Unsupported state schema; restore a compatible version or use a new state directory'); }
-    this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
+    if (![0, 1, 2].includes(version)) { this.db.close(); throw Error('Unsupported state schema; restore a compatible version or use a new state directory'); }
+    this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;
       CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, body TEXT NOT NULL, owner TEXT, leaseUntil INTEGER NOT NULL DEFAULT 0, pid INTEGER, control TEXT NOT NULL DEFAULT 'run');
       CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY AUTOINCREMENT, runId TEXT NOT NULL, at TEXT NOT NULL, type TEXT NOT NULL, body TEXT NOT NULL);`);
-    this.db.exec('PRAGMA user_version=1');
+    if (version === 0) this.db.exec('PRAGMA user_version=1');
+  }
+  // Opt-in additive migration: ordinary V1 use stays V1; no historical rows change.
+  enableWorkflows() {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      this.db.exec(`CREATE TABLE IF NOT EXISTS graph_revisions (runId TEXT NOT NULL REFERENCES runs(id), revision INTEGER NOT NULL, digest TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(runId,revision));
+        CREATE TABLE IF NOT EXISTS workflow_approvals (runId TEXT NOT NULL REFERENCES runs(id), revision INTEGER NOT NULL, digest TEXT NOT NULL, actor TEXT NOT NULL, expires INTEGER NOT NULL, PRIMARY KEY(runId,revision));
+        CREATE TABLE IF NOT EXISTS workflow_attempts (runId TEXT NOT NULL REFERENCES runs(id), itemId TEXT NOT NULL, childId TEXT NOT NULL UNIQUE REFERENCES runs(id), revision INTEGER NOT NULL, status TEXT NOT NULL, PRIMARY KEY(runId,itemId));
+        PRAGMA user_version=2;`);
+      this.db.exec('COMMIT');
+    } catch (e) { this.db.exec('ROLLBACK'); throw e; }
+  }
+  enableCollaboration() {
+    this.enableWorkflows();
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      this.db.exec(`CREATE TABLE IF NOT EXISTS workflow_extensions (name TEXT PRIMARY KEY, version INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS agent_messages (seq INTEGER PRIMARY KEY AUTOINCREMENT, runId TEXT NOT NULL REFERENCES runs(id), messageId TEXT NOT NULL, digest TEXT NOT NULL, body TEXT NOT NULL, UNIQUE(runId,messageId));
+        INSERT OR IGNORE INTO workflow_extensions VALUES ('controlled-hybrid',1);`);
+      if (this.db.prepare("SELECT version FROM workflow_extensions WHERE name='controlled-hybrid'").get().version !== 1) throw Error('Unsupported collaboration schema');
+      this.db.exec('COMMIT');
+    } catch (e) { this.db.exec('ROLLBACK'); throw e; }
   }
   create(run) {
     this.db.exec('BEGIN IMMEDIATE');

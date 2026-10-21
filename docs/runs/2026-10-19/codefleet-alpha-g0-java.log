@@ -1,0 +1,12 @@
+✔ Java contracts pin image and module; no test/build edits, selectors or shell grants (1.8584ms)
+✔ Java tool adapters use exact declared classes, offline execution and force fresh Gradle tests (0.2641ms)
+✔ Java isolation keeps source read-only, network disabled and build output ephemeral (8.1269ms)
+✔ real JDK parser rejects missing, forged, skipped and undeclared reports (5233.082ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5308.9465

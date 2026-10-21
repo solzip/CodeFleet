@@ -1,0 +1,25 @@
+(node:55444) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ Claude v1 flags/schema/context/environment remain bounded through the adapter (4.1478ms)
+✔ Claude and Codex normalize the same edit envelope without sharing sessions (0.4148ms)
+✔ both adapters reject malformed JSON, schema mismatch, extra fields and out-of-scope edits (0.8992ms)
+✔ Codex JSONL requires one completed message and refuses tools, errors and truncated turns (0.1915ms)
+✔ nonzero exit, interruption, output limits and unavailable execution never parse as success (0.1744ms)
+✔ Claude cancellation and invalid request stop before any child launch (0.2548ms)
+✔ unknown, negative or missing usage is never a zero cost (0.2294ms)
+✔ help and version probes cannot promote live or OS capabilities (1.6724ms)
+✔ Codex remains blocked even when called directly; no model/process fallback (0.194ms)
+✔ Balanced selection hard-filters before preference and uses deterministic ties (0.4941ms)
+✔ missing OS enforcement and post-attempt failover are denied without trusting preferences (0.1853ms)
+✔ strict routing uses fresh probes and never silently falls back after launch failure (0.3276ms)
+✔ native process timeout/cancellation are failures with no credentials or shell wrapper escape (1133.0878ms)
+✔ provider failures persist raw/schema/process records without altering SQLite v1 or claiming success (61.7369ms)
+✔ normalized proposal completes only after harness evidence and completed runs do not relaunch (72.6844ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1476.3109

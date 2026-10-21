@@ -1,0 +1,24 @@
+(node:45968) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ code-context planning reads code and test references, never treats matching as semantic proof (1276.6381ms)
+✔ Intent to reviewed Contract to Workflow to Run to Verification completes with fake provider (3235.3908ms)
+✔ CLI parallel options bind to approved workflow; independent candidates integrate (3217.2823ms)
+✔ task review invalidates old approval and prevents scope expansion and unsafe settings (4074.0746ms)
+✔ approval rejection persists and cannot resume; risk intent cannot be waived by review (2400.1857ms)
+✔ pause resume cancellation flow preserves pinned contract and refuses cancelled replay (4855.9333ms)
+✔ report and legacy export reject altered final tree without new model execution (3302.2067ms)
+✔ actual CLI JSON/non-TTY plan review approve capability block status and report (3573.6601ms)
+✔ product migration is additive and task/event update is atomic (1292.1707ms)
+✔ actual Docker integrated product flow verifies original tests and preserves repository (7540.628ms)
+✔ semantic Claude planner uses no-tool envelope, validates code citations and keeps raw output untrusted (1884.5521ms)
+✔ semantic planner rejects malformed JSON, fake citations, schema or acceptance gaps (1850.9048ms)
+✔ semantic Codex remains blocked even with explicit model consent (1152.8504ms)
+✔ forged accepted artifacts never produce a completed report or export (3096.6212ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 42871.8615

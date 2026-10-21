@@ -1,0 +1,29 @@
+{
+  "status": "TEST_ORACLE_FIXED_OFFLINE_REGRESSION_PASSED",
+  "modelCalls": 0,
+  "originalRepeats": {"executions":5,"testsPerExecution":1,"exitCodes":[0,0,0,0,0]},
+  "phaseSkew": {"executions":1,"exitCode":1,"expectedFailure":true,"runState":"COMPLETED","peak":1},
+  "fixedHybrid": {"command":"node --test test/hybrid.test.mjs","exitCode":0,"tests":20,"passed":19,"skipped":1,"failed":0,"skipReason":"Docker gate not enabled for standalone diagnostic"},
+  "fixedRepeats": {"executions":5,"testsPerExecution":2,"exitCodes":[0,0,0,0,0]},
+  "serialNegative": {"executions":2,"testsPerExecution":1,"exitCodes":[1,1],"expectedFailure":true},
+  "fullSuite": {
+    "command": "npm.cmd test",
+    "exitCode": 0,
+    "legacyPassed": 324,
+    "alphaPassed": 212,
+    "hostCorePassed": 12,
+    "totalPassed": 548,
+    "failed": 0,
+    "skipped": 0,
+    "posttest": "PASSED",
+    "dockerEnabled": true,
+    "javaEnabled": true,
+    "mavenImage": "sha256:3d973625f53be3251044b54baa9d7a990debf9f6a728caf03f3ac0312371df45",
+    "operatorImage": "sha256:26c04a69d0bb84a2ed1cb865c36a0f690bbe772197ee41d914563bea5236200d",
+    "hostIpcImage": "sha256:47e30452abb8ab756bf3c09ad729f4a3469f3babb5b4c602912fdb88ec153f8a",
+    "dockerConfiguration": "empty isolated configuration; explicit local engine; no credential inspection"
+  },
+  "documents": {"command":"npm.cmd run posttest","exitCode":0,"declaredFacts":42,"mismatches":0,"uncheckedNumbers":539},
+  "diffCheck": {"command":"git diff --check","exitCode":0},
+  "limitations": ["Original OS/I/O delay source not identified", "Natural reproduction 0 of 5", "No Host Live or model calls", "No staging or commit"]
+}

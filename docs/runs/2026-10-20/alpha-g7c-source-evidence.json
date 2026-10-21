@@ -1,0 +1,36 @@
+{
+  "base": "effb42b501c25865b19d955cea828cc5a7eb4b08",
+  "files": {
+    "src/providers/model-api.mjs": "072774cf04edb31be1101d0d1380977b0b983da08c65e51a87e26c2d9165872c",
+    "src/providers/model-transport.mjs": "ddd058bfb9abce90af92bdafd1b568ed0ac2b03cce602caa7142fcceadc53abe",
+    "test/model-transport.test.mjs": "f1bc1f14f62abcd896c7a142f671216322dcef701212c73e85458e17847720fb",
+    "package.json": "867e3baaea79486de7cbce6fbbffb7b47cc0d35b00d0e5b24e3bdf30c9d24b5c",
+    "test/fixtures/model-tls/README.txt": "a849b23697d4601ef46ed1f6958ea383f335f78ba6088acd14f054b78f8274a5",
+    "test/fixtures/model-tls/fake-key.pem": "1b13b896aee5dd497d43b3a8cb0936070ee03916c75948d953f301d625da8d26",
+    "test/fixtures/model-tls/localhost.pem": "5d1b61415e545fec65503f2b1d09c10437cc3f8eae4a0e4b78aa974c78b80461",
+    "test/fixtures/model-tls/wrong-key.pem": "9aa5ac9718316c7ace18ec152139fdaeb941dd02a97a2d6b62fd629eb5be69f2",
+    "test/fixtures/model-tls/wrong-host.pem": "65c9b03505df3f73f09a908dea76cd73a4e1888cf9a269eb24c0f06cfa1009b7"
+  },
+  "preserved": {
+    "src/alpha/judge.mjs": true,
+    "src/alpha/controller.mjs": true,
+    "src/alpha/store.mjs": true,
+    "src/alpha/provider.mjs": true,
+    "src/providers/codex.mjs": true,
+    "src/providers/claude.mjs": true,
+    "src/intent/contract.mjs": true,
+    "src/workflow/definition.mjs": true,
+    "src/workflow/persistence.mjs": true,
+    "src/workflow/collaboration.mjs": true,
+    "src/product/cli.mjs": true
+  },
+  "priorG7BPreserved": {
+    "src/providers/registry.mjs": true,
+    "test/model-api.test.mjs": true,
+    "test/providers.test.mjs": true,
+    "test/intent.test.mjs": true,
+    "test/workflow.test.mjs": true,
+    "test/hybrid.test.mjs": true,
+    "test/product.test.mjs": true
+  }
+}

@@ -1,0 +1,42 @@
+
+> codefleet@0.2.0-alpha.4 posttest
+> node ./scripts/check-rule-coverage.mjs && node ./scripts/check-links.mjs && node ./scripts/check-doc-citations.mjs && node ./scripts/check-doc-facts.mjs
+
+
+=== FINAL RULE coverage by condition line ===
+  rules                  83
+  condition lines        545
+  claims recorded        352
+  conditions covered     345  (63.3%)
+  rules touched at all   75 of 83
+  rules fully covered    28 of 83
+  rules with no claim    8
+
+  Why the unclaimed rules are unclaimed:
+    IMPLEMENTED_UNTESTED   5
+    NOT_CODE_VERIFIABLE    3
+
+  A claim means a passing test quoted that condition. It does not
+  mean the condition is correctly implemented.
+
+npm.cmd : file:///C:/Users/[LOCAL_USER]/Desktop/%EA%B0%9C%EC%9D%B8/sol/codeFleet/codeFleet/.codefleet/worktrees/a
+lpha-g0/scripts/check-links.mjs:237
+위치 줄:11 문자:1
++ npm.cmd run posttest > .trials/g7c-docs-final.log 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (file:///C:/User...k-links.mjs:237:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+    throw new Error(
+          ^
+
+Error: could not list tracked files: git exited 128
+    at repositoryMarkdown (file:///C:/Users/[LOCAL_USER]/Desktop/%EA%B0%9C%EC%9D%B8/sol/codeFleet/codeFleet/.code
+fleet/worktrees/alpha-g0/scripts/check-links.mjs:237:11)
+    at file:///C:/Users/[LOCAL_USER]/Desktop/%EA%B0%9C%EC%9D%B8/sol/codeFleet/codeFleet/.codefleet/worktrees/alph
+a-g0/scripts/check-links.mjs:283:17
+    at ModuleJob.run (node:internal/modules/esm/module_job:430:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:661:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.14.1

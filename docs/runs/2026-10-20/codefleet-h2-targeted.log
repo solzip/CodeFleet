@@ -1,0 +1,48 @@
+(node:3576) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ codex: intent, approved DAG, fake-host proposals, actual tests, final integration (4137.3552ms)
+✔ codex: install, packaged CLI invocation, disable, enable, remove smoke (466.5127ms)
+✔ claude: intent, approved DAG, fake-host proposals, actual tests, final integration (3731.3093ms)
+✔ claude: install, packaged CLI invocation, disable, enable, remove smoke (462.98ms)
+✔ host command cannot authorize, complete, invoke models or accept capability claims (1621.5636ms)
+✔ duplicate, forged, foreign-host, extra evidence and out-of-scope responses fail closed (2434.7211ms)
+✔ concurrent issuance returns one durable request per item (2476.1523ms)
+✔ unverified host success cannot replace failed Harness tests (3364.5535ms)
+✔ missing packets and revoked approval reserve no attempts (3180.0427ms)
+✔ pause/resume uses staged input once and cancellation cannot replay (10936.5656ms)
+✔ request revision and artifact corruption cannot promote to execution (4012.8872ms)
+✔ state reopen preserves requests without migrating or rewriting existing rows (4726.3183ms)
+✔ fabricated attempt cannot consume a response (3096.036ms)
+✔ old revision and unavailable mandatory capability are rejected (3732.3507ms)
+✔ failed consumed attempt is not replayed after reopen (4671.6787ms)
+✔ post-verification tree and evidence tampering invalidate reports (7809.648ms)
+✔ modified installation is preserved and oversized response is rejected (354.3658ms)
+✔ installer refuses a redirected parent (3.7504ms)
+✔ Host-Native fake session with production Docker Harness (10279.4157ms)
+(node:51824) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ operator: fake signed normal action is single-use, durable and not verification (65.6578ms)
+✔ operator: actor strings, direct agent approval, hooks and stolen unsigned receipts fail (22.9265ms)
+✔ operator: current runId change invalidates approval (37.8369ms)
+✔ operator: current workItemId change invalidates approval (46.945ms)
+✔ operator: current revision change invalidates approval (48.1622ms)
+✔ operator: current contractHash change invalidates approval (22.8465ms)
+✔ operator: current repository change invalidates approval (35.2464ms)
+✔ operator: current environment change invalidates approval (43.2396ms)
+✔ operator: current policyHash change invalidates approval (49.8841ms)
+✔ operator: current leaseOwner change invalidates approval (22.2475ms)
+✔ operator: expiry, revoked/denied decisions, cancel, pause and lease expiration block dispatch (255.6357ms)
+✔ operator: command changes and signed decision tampering fail (29.0499ms)
+✔ operator: recheck after reservation rejects changed state without returning grant use (45.6441ms)
+✔ operator: concurrent dispatch and failed execution cannot duplicate or retry (61.9327ms)
+✔ operator: Fake Operator signs in a separate process and trusted executor performs bounded file write (199.3058ms)
+✔ operator: same-account child CAN steal fake secret; production host execution stays blocked (97.793ms)
+✔ operator: isolated Fake Agent and descendant cannot access broker files or Docker socket (598.3447ms)
+ℹ tests 36
+ℹ suites 0
+ℹ pass 36
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 71605.4157

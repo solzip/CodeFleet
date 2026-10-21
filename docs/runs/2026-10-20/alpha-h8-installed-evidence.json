@@ -1,0 +1,551 @@
+{
+  "installation.json": [
+    {
+      "name": "node",
+      "source": "https://nodejs.org/dist/v24.22.0/node-v24.22.0-linux-x64.tar.xz",
+      "integrity": "cc2f601cee82d9a5a233302fe307abc600727035fd7d2c3a3571755989e95008",
+      "verified": true,
+      "elfBinaries": [
+        {
+          "path": "<H8_ROOT>/packages/node/node-v24.22.0-linux-x64/bin/node",
+          "sha256": "67ca5783febb8bf85736c79fcdd92c8d6d465a0eb2a082672bcdfa76a506751c",
+          "elfMachine": 62
+        }
+      ]
+    },
+    {
+      "name": "codex",
+      "source": "https://registry.npmjs.org/@openai/codex/-/codex-0.162.1-linux-x64.tgz",
+      "integrity": "sha512-cjK2mdHIfEepZ1lQ1MX3aTQC+8ncIsvnacl/6vI2dIIcfP8/MrhTQ2+qRlkXFNDzJSj1d36quIszP+3/4CUJWQ==",
+      "verified": true,
+      "elfBinaries": [
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/bin/codex-code-mode-host",
+          "sha256": "ec71830690a7c0024916ee0c99fbdc635bc6e747ff665ea4f03a8389bbcb6b30",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/bin/codex",
+          "sha256": "628e35487d888a28f0427fc37501da529dd3d81fcbad7a2c3421c1e8670d92e1",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/bwrap",
+          "sha256": "01fb705f067bd5365b63d8ad2323a61c8d007733ca5e649437e086f3fb9935d8",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-path/rg",
+          "sha256": "e62198eb19b136b88c330af83647b5a962cb99b6b1f066758568f12de1974849",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/zsh/bin/zsh",
+          "sha256": "67faaaa89242c4a332e16e508a1977cffc24bf7fca31d4411cdfd101f3831ef3",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/bin/codex-voice-host",
+          "sha256": "f0e6d22a2f5f3f838ac3b214ba1a119b5ef94e98dc50e3feac4e7d6e8e835f2c",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/libgstbase-1.0.so.0",
+          "sha256": "95e7daa2acf3601381f5fc1db3ae538a134a560db96c3975bb297ae9f4b8ca89",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/libffi.so.8",
+          "sha256": "6ef5db59b2e4b1eb63032fa6c8afb1669bc09b073789233c379efda85b1353db",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/libpcre2-8.so.0",
+          "sha256": "e39519b242f40686734ed8d0218f68cac24f0e956ec64c8c1b49b9da5cc9788b",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/libintl.so.8",
+          "sha256": "f50f3ab34be7b3392f2db82bd67d50e133b35fa41d352dc3b3a97b70b0ffd960",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/libgstapp-1.0.so.0",
+          "sha256": "24bab83165e8c91103dcfe93fde6d0a8699357fa19aa048879b9d568eb64523d",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/libz.so.1",
+          "sha256": "6c5d765f42d9368cc4bdbd11f725c1bcf6b14b78322033d3c94f787fc6261f5e",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/libgio-2.0.so.0",
+          "sha256": "98552e680dddc3d2b787a90134cd9aaf32b08fd71ac6169c24d6195a09e7688f",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/libgstnet-1.0.so.0",
+          "sha256": "2a7de504b29620a45474245c31dcf073d1d8552be97a00dd5b84b1231a6da9f3",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/libgstaudio-1.0.so.0",
+          "sha256": "c97b764a8250fcea66d30748c8dc9b07399418246a4aa73c929ef97c9e2f63f4",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/libopus.so.0",
+          "sha256": "1fe4d27a500e6997922cde8299c1622ddc014de1ea5149326479fda68a64f8d3",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/libgstallocators-1.0.so.0",
+          "sha256": "e2dda36281736a343fef03e24aeb57d133fa3ea9ec16f501d4fa0d4e807c9a69",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/libgstpbutils-1.0.so.0",
+          "sha256": "e519d2ae58143819d2ff0397f3729b4e210a75a9e79ffcf90c332108beebe8ae",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/libgstrtp-1.0.so.0",
+          "sha256": "e9a3ca31710729065e48f7fbf5a7a6dd53d3235e382967b0c62306a164f757c2",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/libgobject-2.0.so.0",
+          "sha256": "abac8b58013a7c8b5d85a5a1de0d48d3b1071e6d8fee0c05e52c97da121fb3a0",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/libgstvideo-1.0.so.0",
+          "sha256": "1e16a7c3d8e8b37f12e40a08a572bd19232cd4e9f278dcac72493037d092c4cc",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/libgsttag-1.0.so.0",
+          "sha256": "24f400c74cbef3386fca4fa3b0ef6f1d39fc816dc2a5dfc6c3d020fcb2c977df",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/libgstreamer-1.0.so.0",
+          "sha256": "0987a1c0773d4f821b29a331ef191e75c4e632a604a4ce95e4aae889495fcd97",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/libgmodule-2.0.so.0",
+          "sha256": "a6ee483ceb297c982e33b2ec423e1bc3bd6edf12299d73a782badae491b900a4",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/libglib-2.0.so.0",
+          "sha256": "1454a7358b8214d96c422cd96e1850ac443196174318ac5726d57f543e2af91b",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/gstreamer-1.0/libgstopus.so",
+          "sha256": "59dc577caad94a651ac01867cfabda82c36a8866e3a9c463f1e8999ec704fb1d",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/gstreamer-1.0/libgstapp.so",
+          "sha256": "99b140b80907d70a93733c53de71d6dc730ae50fdec7ffcd00643a2f5c549ee2",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/gstreamer-1.0/libgstaudioconvert.so",
+          "sha256": "8a1510643b6ecaabd05095495c854c2669f88f978fd917bb5a371df239148c77",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/gstreamer-1.0/libgstrtpmanager.so",
+          "sha256": "d6b40c2b56aa370078e59e24fcdd16a2bc3a6d582302a4f7d40065ad52247f01",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/gstreamer-1.0/libgstcoreelements.so",
+          "sha256": "c892c8c93476abab014fd489c8c4ddcafef54320a123612b8d6d7f4c9ed9f933",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/gstreamer-1.0/libgstaudioresample.so",
+          "sha256": "71b1bd5ae148aeb2d45f276784d5a85b3218c1dd26a1dea7e5580e8357c0bac0",
+          "elfMachine": 62
+        },
+        {
+          "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/voice/lib/gstreamer-1.0/libgstrtp.so",
+          "sha256": "a3b313d662fd28f8ca179ed11d5fd328ea93c40b963db9008801e49fae91aaff",
+          "elfMachine": 62
+        }
+      ]
+    },
+    {
+      "name": "claude",
+      "source": "https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.304.tgz",
+      "integrity": "sha512-yZ/zZk3y7e0zbkMs740y9Z+bs40MmWApwM9qHQ8Adis01SycQlyaZnHYhB/+UOeFJcL+hzbiIGCIyuTKyL2U7Q==",
+      "verified": true,
+      "elfBinaries": [
+        {
+          "path": "<H8_ROOT>/packages/claude/package/claude",
+          "sha256": "ea0f135784631619a7a409d07322ecec964f9cc4fd377508ed1ba3f141f27912",
+          "elfMachine": 62
+        }
+      ]
+    }
+  ],
+  "versions.json": [
+    {
+      "name": "node",
+      "path": "<H8_ROOT>/packages/node/node-v24.22.0-linux-x64/bin/node",
+      "exit": 0,
+      "stdout": "v24.22.0\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex",
+      "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/bin/codex",
+      "exit": 0,
+      "stdout": "codex-cli 0.162.1\n",
+      "stderr": "WARNING: proceeding, even though we could not create PATH aliases: CODEX_HOME points to \"<H8_ROOT>/version-home/codex\", but that path does not exist\n"
+    },
+    {
+      "name": "claude",
+      "path": "<H8_ROOT>/packages/claude/package/claude",
+      "exit": 0,
+      "stdout": "2.1.304 (Claude Code)\n",
+      "stderr": ""
+    },
+    {
+      "name": "bwrap",
+      "path": "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/bwrap",
+      "exit": 0,
+      "stdout": "usage: <H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/bwrap [OPTIONS...] [--] COMMAND [ARGS...]\n\n    --help                       Print this help\n    --version                    Print version\n    --args FD                    Parse NUL-separated args from FD\n    --argv0 VALUE                Set argv[0] to the value VALUE before running the program\n    --level-prefix               Prepend e.g. <3> to diagnostic messages\n    --unshare-all                Unshare every namespace we support by default\n    --share-net                  Retain the network namespace (can only combine with --unshare-all)\n    --unshare-user               Create new user namespace (may be automatically implied if not setuid)\n    --unshare-user-try           Create new user namespace if possible else continue by skipping it\n    --unshare-ipc                Create new ipc namespace\n    --unshare-pid                Create new pid namespace\n    --unshare-net                Create new network namespace\n    --unshare-uts                Create new uts namespace\n    --unshare-cgroup             Create new cgroup namespace\n    --unshare-cgroup-try         Create new cgroup namespace if possible else continue by skipping it\n    --userns FD                  Use this user namespace (cannot combine with --unshare-user)\n    --userns2 FD                 After setup switch to this user namespace, only useful with --userns\n    --disable-userns             Disable further use of user namespaces inside sandbox\n    --assert-userns-disabled     Fail unless further use of user namespace inside sandbox is disabled\n    --pidns FD                   Use this pid namespace (as parent namespace if using --unshare-pid)\n    --uid UID                    Custom uid in the sandbox (requires --unshare-user or --userns)\n    --gid GID                    Custom gid in the sandbox (requires --unshare-user or --userns)\n    --hostname NAME              Custom hostname in the sandbox (requires --unshare-uts)\n    --chdir DIR                  Change directory to DIR\n    --clearenv                   Unset all environment variables\n    --setenv VAR VALUE           Set an environment variable\n    --unsetenv VAR               Unset an environment variable\n    --lock-file DEST             Take a lock on DEST while sandbox is running\n    --sync-fd FD                 Keep this fd open while sandbox is running\n    --bind SRC DEST              Bind mount the host path SRC on DEST\n    --bind-try SRC DEST          Equal to --bind but ignores non-existent SRC\n    --dev-bind SRC DEST          Bind mount the host path SRC on DEST, allowing device access\n    --dev-bind-try SRC DEST      Equal to --dev-bind but ignores non-existent SRC\n    --ro-bind SRC DEST           Bind mount the host path SRC readonly on DEST\n    --ro-bind-try SRC DEST       Equal to --ro-bind but ignores non-existent SRC\n    --bind-fd FD DEST            Bind open directory or path fd on DEST\n    --ro-bind-fd FD DEST         Bind open directory or path fd read-only on DEST\n    --remount-ro DEST            Remount DEST as readonly; does not recursively remount\n    --overlay-src SRC            Read files from SRC in the following overlay\n    --overlay RWSRC WORKDIR DEST Mount overlayfs on DEST, with RWSRC as the host path for writes and\n                                 WORKDIR an empty directory on the same filesystem as RWSRC\n    --tmp-overlay DEST           Mount overlayfs on DEST, with writes going to an invisible tmpfs\n    --ro-overlay DEST            Mount overlayfs read-only on DEST\n    --exec-label LABEL           Exec label for the sandbox\n    --file-label LABEL           File label for temporary sandbox content\n    --proc DEST                  Mount new procfs on DEST\n    --dev DEST                   Mount new dev on DEST\n    --tmpfs DEST                 Mount new tmpfs on DEST\n    --mqueue DEST                Mount new mqueue on DEST\n    --dir DEST                   Create dir at DEST\n    --file FD DEST               Copy from FD to destination DEST\n    --bind-data FD DEST          Copy from FD to file which is bind-mounted on DEST\n    --ro-bind-data FD DEST       Copy from FD to file which is readonly bind-mounted on DEST\n    --symlink SRC DEST           Create symlink at DEST with target SRC\n    --seccomp FD                 Load and use seccomp rules from FD (not repeatable)\n    --add-seccomp-fd FD          Load and use seccomp rules from FD (repeatable)\n    --block-fd FD                Block on FD until some data to read is available\n    --userns-block-fd FD         Block on FD until the user namespace is ready\n    --info-fd FD                 Write information about the running container to FD\n    --json-status-fd FD          Write container status to FD as multiple JSON documents\n    --new-session                Create a new terminal session\n    --die-with-parent            Kills with SIGKILL child process (COMMAND) when bwrap or bwrap's parent dies.\n    --as-pid-1                   Do not install a reaper process with PID=1\n    --cap-add CAP                Add cap CAP when running as privileged user\n    --cap-drop CAP               Drop cap CAP when running as privileged user\n    --perms OCTAL                Set permissions of next argument (--bind-data, --file, etc.)\n    --size BYTES                 Set size of next argument (only for --tmpfs)\n    --chmod OCTAL PATH           Change permissions of PATH (must already exist)\n",
+      "stderr": ""
+    }
+  ],
+  "isolated-versions.json": [
+    {
+      "host": "node",
+      "exit": 0,
+      "stdout": "v24.22.0\n",
+      "stderr": ""
+    },
+    {
+      "host": "codex",
+      "exit": 0,
+      "stdout": "codex-cli 0.162.1\n",
+      "stderr": ""
+    },
+    {
+      "host": "claude",
+      "exit": 0,
+      "stdout": "2.1.304 (Claude Code)\n",
+      "stderr": ""
+    }
+  ],
+  "qualification.json": {
+    "modelCalls": 0,
+    "authenticationUsed": false,
+    "checks": [
+      {
+        "name": "outside-fixture-fake-credential",
+        "denied": true,
+        "errno": 2
+      },
+      {
+        "name": "fixture-write",
+        "denied": true,
+        "errno": 30
+      },
+      {
+        "name": "runtime-write",
+        "denied": true,
+        "errno": 30
+      },
+      {
+        "name": "root-write",
+        "denied": true,
+        "errno": 30
+      },
+      {
+        "name": "docker-socket",
+        "denied": true,
+        "errno": 2
+      },
+      {
+        "name": "operator-socket",
+        "denied": true,
+        "errno": 2
+      },
+      {
+        "name": "host-loopback",
+        "denied": true,
+        "errno": 111
+      },
+      {
+        "name": "internet-route",
+        "denied": true,
+        "errno": 101
+      },
+      {
+        "name": "symlink-escape",
+        "denied": true,
+        "errno": 2
+      },
+      {
+        "name": "proc-root-escape",
+        "denied": true,
+        "errno": 2
+      },
+      {
+        "name": "windows-mount",
+        "denied": true,
+        "errno": 2
+      },
+      {
+        "name": "replace-fixture-path",
+        "denied": true,
+        "errno": 30
+      },
+      {
+        "name": "nested-userns",
+        "denied": true,
+        "exit": 1,
+        "stderr": "unshare: unshare failed: No space left on device\n"
+      },
+      {
+        "name": "mount-escape",
+        "denied": true,
+        "exit": 32,
+        "stderr": "mount: /fixture: must be superuser to use mount.\n       dmesg(1) may have more information after failed mount system call.\n"
+      },
+      {
+        "name": "child-file-escape",
+        "denied": true,
+        "exit": 1,
+        "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/usr/lib/python3.12/pathlib.py\", line 1029, in read_text\n    with self.open(mode='r', encoding=encoding, errors=errors) as f:\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/pathlib.py\", line 1015, in open\n    return io.open(self, mode, buffering, encoding, errors, newline)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: '<H8_ROOT>/fake-operator-key'\n"
+      },
+      {
+        "name": "child-network-escape",
+        "denied": true,
+        "exit": 1,
+        "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/usr/lib/python3.12/socket.py\", line 852, in create_connection\n    raise exceptions[0]\n  File \"/usr/lib/python3.12/socket.py\", line 837, in create_connection\n    sock.connect(sa)\nOSError: [Errno 101] Network is unreachable\n"
+      }
+    ],
+    "positiveControls": {
+      "outsideFakeCredentialReadable": true,
+      "fixtureWritableBeforeReadonlyMount": true,
+      "dockerSocketAccessibleOutside": true,
+      "operatorConnectOutside": true,
+      "networkConnectOutside": true
+    },
+    "negativeProbe": {
+      "exit": 0,
+      "stdout": "{\"checks\": [{\"name\": \"outside-fixture-fake-credential\", \"denied\": true, \"errno\": 2}, {\"name\": \"fixture-write\", \"denied\": true, \"errno\": 30}, {\"name\": \"runtime-write\", \"denied\": true, \"errno\": 30}, {\"name\": \"root-write\", \"denied\": true, \"errno\": 30}, {\"name\": \"docker-socket\", \"denied\": true, \"errno\": 2}, {\"name\": \"operator-socket\", \"denied\": true, \"errno\": 2}, {\"name\": \"host-loopback\", \"denied\": true, \"errno\": 111}, {\"name\": \"internet-route\", \"denied\": true, \"errno\": 101}, {\"name\": \"symlink-escape\", \"denied\": true, \"errno\": 2}, {\"name\": \"proc-root-escape\", \"denied\": true, \"errno\": 2}, {\"name\": \"windows-mount\", \"denied\": true, \"errno\": 2}, {\"name\": \"replace-fixture-path\", \"denied\": true, \"errno\": 30}, {\"name\": \"nested-userns\", \"denied\": true, \"exit\": 1, \"stderr\": \"unshare: unshare failed: No space left on device\\n\"}, {\"name\": \"mount-escape\", \"denied\": true, \"exit\": 32, \"stderr\": \"mount: /fixture: must be superuser to use mount.\\n       dmesg(1) may have more information after failed mount system call.\\n\"}, {\"name\": \"child-file-escape\", \"denied\": true, \"exit\": 1, \"stderr\": \"Traceback (most recent call last):\\n  File \\\"<string>\\\", line 1, in <module>\\n  File \\\"/usr/lib/python3.12/pathlib.py\\\", line 1029, in read_text\\n    with self.open(mode='r', encoding=encoding, errors=errors) as f:\\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n  File \\\"/usr/lib/python3.12/pathlib.py\\\", line 1015, in open\\n    return io.open(self, mode, buffering, encoding, errors, newline)\\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nFileNotFoundError: [Errno 2] No such file or directory: '<H8_ROOT>/fake-operator-key'\\n\"}, {\"name\": \"child-network-escape\", \"denied\": true, \"exit\": 1, \"stderr\": \"Traceback (most recent call last):\\n  File \\\"<string>\\\", line 1, in <module>\\n  File \\\"/usr/lib/python3.12/socket.py\\\", line 852, in create_connection\\n    raise exceptions[0]\\n  File \\\"/usr/lib/python3.12/socket.py\\\", line 837, in create_connection\\n    sock.connect(sa)\\nOSError: [Errno 101] Network is unreachable\\n\"}], \"security\": {\"CapEff\": \"0000000000000000\", \"CapPrm\": \"0000000000000000\", \"CapBnd\": \"0000000000000000\", \"NoNewPrivs\": \"1\", \"Seccomp\": \"0\"}, \"allowedFixtureRead\": \"PUBLIC_H8_FIXTURE\\n\", \"scratchWritable\": true}\n",
+      "stderr": ""
+    },
+    "codexDiscovery": {
+      "methods": [
+        "initialize",
+        "skills/list"
+      ],
+      "exactMatches": 1,
+      "paths": [
+        "/fixture/.agents/skills/codefleet-plan/SKILL.md"
+      ],
+      "errors": [],
+      "processExit": -9,
+      "stderr": [
+        "\u001b[2m2026-10-20T06:25:01.396641Z\u001b[0m \u001b[31mERROR\u001b[0m \u001b[2mcodex_app_server\u001b[0m\u001b[2m:\u001b[0m Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: https://developers.openai.com/codex/concepts/sandboxing#prerequisites. Codex will use the bundled bubblewrap in the meantime."
+      ]
+    },
+    "descendantCleanup": {
+      "exit": 0,
+      "observed": 3,
+      "remaining": []
+    },
+    "fixtureUnchanged": true,
+    "scratchFiles": [
+      "codex/.tmp/plugins.sync.lock",
+      "codex/goals_1.sqlite",
+      "codex/goals_1.sqlite-shm",
+      "codex/goals_1.sqlite-wal",
+      "codex/installation_id",
+      "codex/logs_2.sqlite",
+      "codex/logs_2.sqlite-shm",
+      "codex/logs_2.sqlite-wal",
+      "codex/memories_1.sqlite",
+      "codex/memories_1.sqlite-shm",
+      "codex/memories_1.sqlite-wal",
+      "codex/queue_1.sqlite",
+      "codex/queue_1.sqlite-shm",
+      "codex/queue_1.sqlite-wal",
+      "codex/skills/.system/.codex-system-skills.marker",
+      "codex/skills/.system/imagegen/LICENSE.txt",
+      "codex/skills/.system/imagegen/SKILL.md",
+      "codex/skills/.system/imagegen/agents/openai.yaml",
+      "codex/skills/.system/imagegen/assets/imagegen-small.svg",
+      "codex/skills/.system/imagegen/assets/imagegen.png",
+      "codex/skills/.system/imagegen/references/cli.md",
+      "codex/skills/.system/imagegen/references/codex-network.md",
+      "codex/skills/.system/imagegen/references/image-api.md",
+      "codex/skills/.system/imagegen/references/prompting.md",
+      "codex/skills/.system/imagegen/references/sample-prompts.md",
+      "codex/skills/.system/imagegen/scripts/image_gen.py",
+      "codex/skills/.system/imagegen/scripts/remove_chroma_key.py",
+      "codex/skills/.system/openai-docs/LICENSE.txt",
+      "codex/skills/.system/openai-docs/SKILL.md",
+      "codex/skills/.system/openai-docs/agents/openai.yaml",
+      "codex/skills/.system/openai-docs/assets/openai-small.svg",
+      "codex/skills/.system/openai-docs/assets/openai.png",
+      "codex/skills/.system/openai-docs/references/codex-self-knowledge.md",
+      "codex/skills/.system/openai-docs/references/latest-model.md",
+      "codex/skills/.system/openai-docs/references/mcp-diagnostics.md",
+      "codex/skills/.system/openai-docs/references/model-migration.md",
+      "codex/skills/.system/openai-docs/references/model-selection.md",
+      "codex/skills/.system/openai-docs/references/official-docs.md",
+      "codex/skills/.system/openai-docs/references/prompting-guide.md",
+      "codex/skills/.system/openai-docs/references/upgrade-guide.md",
+      "codex/skills/.system/openai-docs/references/upgrading-to-gpt-6-astra.md",
+      "codex/skills/.system/openai-docs/scripts/fetch-codex-manual.mjs",
+      "codex/skills/.system/openai-docs/scripts/resolve-latest-model-info",
+      "codex/skills/.system/openai-docs/scripts/resolve-latest-model-info.cjs",
+      "codex/skills/.system/review-agent/SKILL.md",
+      "codex/skills/.system/review-agent/agents/openai.yaml",
+      "codex/skills/.system/skill-creator/SKILL.md",
+      "codex/skills/.system/skill-creator/agents/openai.yaml",
+      "codex/skills/.system/skill-creator/assets/skill-creator-small.svg",
+      "codex/skills/.system/skill-creator/assets/skill-creator.png",
+      "codex/skills/.system/skill-creator/license.txt",
+      "codex/skills/.system/skill-creator/references/openai_yaml.md",
+      "codex/skills/.system/skill-creator/scripts/generate_openai_yaml.py",
+      "codex/skills/.system/skill-creator/scripts/init_skill.py",
+      "codex/skills/.system/skill-creator/scripts/quick_validate.py",
+      "codex/skills/.system/skill-installer/LICENSE.txt",
+      "codex/skills/.system/skill-installer/SKILL.md",
+      "codex/skills/.system/skill-installer/agents/openai.yaml",
+      "codex/skills/.system/skill-installer/assets/skill-installer-small.svg",
+      "codex/skills/.system/skill-installer/assets/skill-installer.png",
+      "codex/skills/.system/skill-installer/scripts/github_utils.py",
+      "codex/skills/.system/skill-installer/scripts/install-skill-from-github.py",
+      "codex/skills/.system/skill-installer/scripts/list-skills.py",
+      "codex/state_5.sqlite",
+      "codex/state_5.sqlite-shm",
+      "codex/state_5.sqlite-wal"
+    ],
+    "profileSha256": "41f55a4bb33c9ef7a6cf70dc05fe6f422a649537570ae7328fbd51a6831c4822",
+    "skillHashes": {
+      "codex": "e89e109d4a345ca22e0fe5623e364bf90cd3d99d7afc5b51b81e133d1b6ea154",
+      "claude": "e89e109d4a345ca22e0fe5623e364bf90cd3d99d7afc5b51b81e133d1b6ea154"
+    },
+    "claudeDiscovery": "NOT_RUN: no model-free Skill-list command established from installed help"
+  },
+  "additional-checks.json": {
+    "codexInvalidConfig": {
+      "exit": 0,
+      "stdout": "",
+      "stderr": "\u001b[2m2026-10-20T06:26:11.175743Z\u001b[0m \u001b[31mERROR\u001b[0m \u001b[2mcodex_app_server\u001b[0m\u001b[2m:\u001b[0m Invalid configuration; using defaults. /scratch/codex/config.toml:1:6: key with no value, expected `=`\n\u001b[2m2026-10-20T06:26:11.175867Z\u001b[0m \u001b[31mERROR\u001b[0m \u001b[2mcodex_app_server\u001b[0m\u001b[2m:\u001b[0m Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: https://developers.openai.com/codex/concepts/sandboxing#prerequisites. Codex will use the bundled bubblewrap in the meantime.\n"
+    },
+    "residualInstalledHostProcesses": [],
+    "fixtureSkillPaths": {
+      "codex": {
+        "exists": true,
+        "sha256": "e89e109d4a345ca22e0fe5623e364bf90cd3d99d7afc5b51b81e133d1b6ea154"
+      },
+      "claude": {
+        "exists": true,
+        "sha256": "e89e109d4a345ca22e0fe5623e364bf90cd3d99d7afc5b51b81e133d1b6ea154"
+      }
+    }
+  },
+  "bwrap-profile.json": [
+    "<H8_ROOT>/packages/codex/package/vendor/x86_64-unknown-linux-musl/codex-resources/bwrap",
+    "--unshare-all",
+    "--unshare-user",
+    "--disable-userns",
+    "--assert-userns-disabled",
+    "--die-with-parent",
+    "--new-session",
+    "--cap-drop",
+    "ALL",
+    "--clearenv",
+    "--ro-bind",
+    "/usr",
+    "/usr",
+    "--symlink",
+    "usr/bin",
+    "/bin",
+    "--symlink",
+    "usr/lib",
+    "/lib",
+    "--symlink",
+    "usr/lib64",
+    "/lib64",
+    "--ro-bind",
+    "<H8_ROOT>/packages",
+    "/opt",
+    "--ro-bind",
+    "<H8_ROOT>/fixture",
+    "/fixture",
+    "--bind",
+    "<H8_ROOT>/scratch",
+    "/scratch",
+    "--proc",
+    "/proc",
+    "--dev",
+    "/dev",
+    "--dir",
+    "/etc",
+    "--dir",
+    "/run",
+    "--dir",
+    "/var",
+    "--dir",
+    "/tmp",
+    "--remount-ro",
+    "/",
+    "--chdir",
+    "/fixture",
+    "--setenv",
+    "HOME",
+    "/scratch",
+    "--setenv",
+    "CODEX_HOME",
+    "/scratch/codex",
+    "--setenv",
+    "CLAUDE_CONFIG_DIR",
+    "/scratch/claude",
+    "--setenv",
+    "TMPDIR",
+    "/scratch/tmp",
+    "--setenv",
+    "PATH",
+    "/usr/bin:/bin",
+    "--setenv",
+    "DISABLE_UPDATES",
+    "1",
+    "--setenv",
+    "DISABLE_AUTOUPDATER",
+    "1",
+    "--setenv",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+    "1"
+  ],
+  "scope": {
+    "installation": "OFFLINE_VERIFIED",
+    "isolatedBinaryStartup": "OFFLINE_VERIFIED",
+    "matchedBoundaryProbes": "OFFLINE_VERIFIED_BOUNDED_16_CHECKS",
+    "hostLive": "BLOCKED",
+    "modelCalls": 0,
+    "modelToolNetworkSeparation": "UNVERIFIED",
+    "claudeSkillDiscovery": "UNVERIFIED",
+    "toolAllowlist": "UNVERIFIED",
+    "resourceExhaustion": "UNVERIFIED",
+    "systemChanges": false,
+    "credentialCopy": false,
+    "sourceOrPolicyChanges": false
+  },
+  "integrityScope": "Node official SHA256 list and npm HTTPS registry SHA512 integrity; registry signature/provenance not separately verified"
+}

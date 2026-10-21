@@ -1,0 +1,39 @@
+node : (node:50588) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+위치 줄:2 문자:139
++ ... nuxEngine'; node src/alpha/cli.mjs host codex doctor --probe-containe ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ((node:50588) Ex...nge at any time:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+(Use `node --trace-warnings ...` to show where the warning was created)
+{
+  "host": "codex",
+  "status": "AVAILABLE",
+  "hostSkills": {
+    "status": "AVAILABLE",
+    "scope": "Packaged Skill; actual Host discovery NOT_RUN"
+  },
+  "planning": "AVAILABLE",
+  "workflow": "AVAILABLE",
+  "localVerification": {
+    "status": "CONDITIONAL",
+    "isolationCapabilities": [],
+    "reason": "Exact reviewed command and snapshot required; same-user execution, no security isolation or protected evidence"
+  },
+  "protectedContainerVerification": {
+    "status": "AVAILABLE",
+    "isolationCapabilities": [
+      "network-denied",
+      "protected-inputs",
+      "bounded-resources"
+    ]
+  },
+  "hostSandbox": {
+    "status": "NOT_VERIFIED",
+    "isolationCapabilities": [],
+    "reason": "No qualified platform/tool profile; cannot activate from supplied claims"
+  },
+  "authentication": "NOT_INSPECTED",
+  "hostLive": "NOT_RUN",
+  "modelCalls": 0
+}

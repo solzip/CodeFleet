@@ -1,0 +1,12 @@
+{
+  "base": "c61e9b829b62dd41336a7225bf3b9165136484db",
+  "scope": "Uncommitted G4; live providers NOT VERIFIED",
+  "files": {
+    "src/alpha/store.mjs": "936549c3af0b48d59a6b3fbba384d5f49bab9e4dfa66bf144477ab07e9c9a9f0",
+    "src/alpha/controller.mjs": "d0439d987f6ee897bb5a1f16742f480ea9a0821fa7ec9dfa9642e7139ba7f0cc",
+    "src/workflow/definition.mjs": "3bfda813678de0db896b1cc2334ccd1a92948c681b4729527e420871f19f6f1a",
+    "src/workflow/persistence.mjs": "33aa0ac37ba0c42cabf7d974d60fb7b1e60210277b7d86567c7a4862c4a017cc",
+    "test/workflow.test.mjs": "7d3d5aeabe42dd32f05265e8db880b20c58c3f89299fd83b7df0ab5c689e255e",
+    "package.json": "e8919855008a54b65d276a059e246be75e24eb10ed812206e00cdf19d9f2b327"
+  }
+}
