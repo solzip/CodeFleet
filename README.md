@@ -8,7 +8,9 @@ CodeFleet은 **기존 Codex CLI와 Claude Code 안에서 사용하는 AI 개발 
 
 Host-Native Core는 main에 통합되어 오프라인 회귀 검증을 거쳤습니다. **실제 Host 세션의 수용 상태는 `HOST_LIVE_NOT_VERIFIED`입니다.** 설치·계획 경로와 보호 실행 경로의 준비 상태를 구분합니다.
 
-[Host 설치·사용](docs/product-completion/host-native-guide.md) · [Core와 검증 Backend](docs/product-completion/host-core-guide.md) · [문서 색인](docs/INDEX.md) · [English archive](README.en.md)
+[제품 원칙](docs/PRODUCT_VISION.md) · [공식 아키텍처](docs/product-completion/architecture.md) · [현재 상태](docs/product-completion/progress.md) · [Host 설치·사용](docs/product-completion/host-native-guide.md) · [Core와 검증 Backend](docs/product-completion/host-core-guide.md) · [문서 색인](docs/INDEX.md) · [English](README.en.md)
+
+신규 프로젝트 Bootstrap과 기존 프로젝트 개선을 모두 목표로 합니다. **Git HEAD 없는 신규 프로젝트 Bootstrap은 별도 개발 중이며 현재 main의 완료 기능이 아닙니다.** 구현·수용 완료 기준은 [로드맵](docs/product-completion/roadmap.md#현재-host-native-후속-작업)에서 관리합니다.
 
 ## 해결하려는 문제
 
