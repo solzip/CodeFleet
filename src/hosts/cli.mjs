@@ -2,8 +2,8 @@ import path from 'node:path';
 import { open } from 'node:fs/promises';
 import { Store } from '../alpha/store.mjs';
 import { dispatchProduct } from '../product/cli.mjs';
-import { enableTasks, task, prepareTask, submitTaskDraft, submitBootstrapFiles, bootstrapView } from '../product/tasks.mjs';
-import { taskReport } from '../product/report.mjs';
+import { enableTasks, task, prepareTask, submitTaskDraft, submitBootstrapFiles, bootstrapView, bootstrapDrift } from '../product/tasks.mjs';
+import { taskReport, bootstrapActions } from '../product/report.mjs';
 import { execute } from '../alpha/controller.mjs';
 import { hostIdentity, issueRequests, submitResponse, stagedExecution } from './exchange.mjs';
 import { requireProductionHostIsolation } from './operator.mjs';
@@ -24,6 +24,8 @@ NEW_PROJECT (unborn HEAD, README-only or non-Git directory) is chosen by the rep
 draft takes {revision,proposal:BootstrapDraft}; files takes {revision,itemId,files:[{path,content}]}
 for one local-edit WorkItem and only requests review. The operator approves the filesetHash with
 objective approve and creates files with objective materialize; git init and commit stay user actions.
+After a LOCAL_FAILED objective verify, files takes {revision,itemId,repair:{verificationItem,evidenceRef},
+files:[{path,content,baseSha256}]} to replace that materialized item's own files; same approval.
 Use --state outside the target repository. Approval requests do not authorize execution.
 An operator must approve the exact workflow hash using the existing objective approve command.
 Responses: {requestId,bindingHash,proposal:{summary,edits:[{path,oldText,newText}]}}.
@@ -78,9 +80,12 @@ export async function dispatchHost(argv, { store, execution = {} } = {}) {
   if (['workflow', 'explain'].includes(action)) {
     if (args.length !== 1) throw Error('Exactly one task id required');
     const current = task(store, args[0]), run = current.runId ? store.get(current.runId) : null;
-    if (current.bootstrap) return present({ exitCode: 0, data: { taskId: current.id, revision: current.revision, contractKind: 'NEW_PROJECT',
-      bootstrap: bootstrapView(store, current.id), authority: 'PREPARATION_ONLY', executable: false, approved: false,
-      nextAction: 'Propose a fileset for a dependency-ready local-edit item; approval and materialization are operator actions' } });
+    if (current.bootstrap) {
+      const view = bootstrapView(store, current.id, { drift: await bootstrapDrift(store, current.id) });
+      return present({ exitCode: 0, data: { taskId: current.id, revision: current.revision, contractKind: 'NEW_PROJECT',
+        bootstrap: view, authority: 'PREPARATION_ONLY', executable: false, approved: false,
+        nextActions: bootstrapActions(view), operatorOnly: ['objective approve', 'objective materialize', 'objective verify'] } });
+    }
     return present({ exitCode: 0, data: { taskId: current.id, revision: current.revision,
       workflow: run?.contract ?? null, states: run?.states ?? null,
       authority: 'PREPARATION_ONLY', executable: false, approved: false,

@@ -10,8 +10,10 @@ import { hybridDefinition } from '../workflow/definition.mjs';
 import { createWorkflow, approveWorkflow, revokeWorkflow, attempts } from '../workflow/persistence.mjs';
 import { probeRepository, gitStatus } from '../intent/probe.mjs';
 import { bootstrapSkeleton, validateBootstrapDraft, existingPaths, draftPaths, objectiveUnknowns } from '../intent/bootstrap.mjs';
-import { bootstrapDefinition, validateBootstrapWorkflow, bootstrapStates, assessBootstrapItem } from '../workflow/bootstrap.mjs';
-import { validateFileset, filesetManifest, createFiles } from '../workflow/bootstrap-files.mjs';
+import { readFile, realpath } from 'node:fs/promises';
+import { bootstrapDefinition, validateBootstrapWorkflow, bootstrapStates, assessBootstrapItem, dependentsOf } from '../workflow/bootstrap.mjs';
+import { validateFileset, filesetManifest, createFiles, validateRepairFileset, repairManifest, modifyFiles } from '../workflow/bootstrap-files.mjs';
+import { inspectLocalCommand, localBackend } from '../verification/backends.mjs';
 
 export function enableTasks(store) {
   store.enableCollaboration();
@@ -216,18 +218,80 @@ function bootstrapContext(store, id) {
   return { current, plan, workflow };
 }
 function filesetSummary(run) {
-  return { runId: run.id, state: run.control === 'cancel' ? 'SUPERSEDED_OR_CANCELLED' : run.state, filesetHash: run.contractHash, files: run.contract.files, results: run.results ?? {} };
+  return { runId: run.id, operation: run.operation ?? 'create', state: run.control === 'cancel' ? 'SUPERSEDED_OR_CANCELLED' : run.state, filesetHash: run.contractHash, files: run.contract.files, results: run.results ?? {}, repairOf: run.contract.repairOf ?? null };
 }
-export function bootstrapView(store, id) {
+const isRepair = run => run.operation === 'modify';
+const sorted = map => Object.fromEntries(Object.entries(map ?? {}).sort(([a], [b]) => a < b ? -1 : 1));
+// What CodeFleet last wrote or observed for each owned path. Tasks recorded before
+// repairs existed carry no map; it is then derived from their completed filesets.
+export function recordedDigests(store, current) {
+  if (current.bootstrap.digests) return { ...current.bootstrap.digests };
+  const digests = {};
+  for (const runId of Object.values(current.bootstrap.filesets)) {
+    const run = store.get(runId);
+    if (run.state !== 'COMPLETED' || isRepair(run)) continue;
+    for (const r of Object.values(run.results ?? {})) if (['CREATED', 'ALREADY_CREATED'].includes(r.status)) digests[r.path] = r.sha256;
+  }
+  return digests;
+}
+// Owned paths are the planned files of every item that has had a fileset; a
+// repair proposes a subset of them but owns them all.
+function ownedPaths(current, workflow) {
+  return new Set(workflow.items.filter(n => current.bootstrap.filesets[n.id]).flatMap(n => n.files));
+}
+// Recorded paths whose bytes on disk differ from what CodeFleet recorded.
+async function observedDrift(root, digests) {
+  const drift = [];
+  for (const [p, sha] of Object.entries(digests)) {
+    try { if (hash(await readFile(path.join(root, ...p.split('/')), 'utf8')) !== sha) drift.push(p); } catch { drift.push(p); }
+  }
+  return drift.sort();
+}
+// Stored states plus what evidence can no longer support: a local result is
+// current only for the exact recorded digests it ran against and while the disk
+// still holds them. Anything else is VERIFICATION_STALE, never a reused pass.
+export function effectiveStates(store, current, workflow, { drift = [] } = {}) {
+  const states = { ...current.bootstrap.states }, digests = recordedDigests(store, current);
+  for (const n of workflow.items.filter(n => n.kind === 'local-verification')) {
+    if (states[n.id] === 'BLOCKED') states[n.id] = 'PENDING_VERIFICATION';
+    const ref = current.bootstrap.verifications?.[n.id];
+    if (!ref || !['LOCAL_PASSED', 'LOCAL_FAILED', 'INCONCLUSIVE'].includes(states[n.id])) continue;
+    let evidence;
+    try { evidence = store.readArtifact(ref); } catch { states[n.id] = 'EVIDENCE_INVALID'; continue; }
+    if (evidence.kind !== 'BootstrapLocalVerification' || evidence.taskId !== current.id || evidence.itemId !== n.id || evidence.status !== states[n.id]) { states[n.id] = 'EVIDENCE_INVALID'; continue; }
+    if (hash(sorted(evidence.fileDigests)) !== hash(sorted(digests)) || drift.some(p => Object.hasOwn(evidence.fileDigests, p))) states[n.id] = 'VERIFICATION_STALE';
+  }
+  return states;
+}
+export function bootstrapView(store, id, { drift = [] } = {}) {
   const { current, workflow } = bootstrapContext(store, id);
+  const states = effectiveStates(store, current, workflow, { drift });
   return { workflowHash: workflow.workflowHash, policySnapshotRef: workflow.policySnapshotRef, authority: 'PLAN_ONLY', executable: false,
-    items: workflow.items.map(n => ({ ...assessBootstrapItem(workflow, current.bootstrap.states, n.id),
-      fileset: current.bootstrap.filesets[n.id] ? filesetSummary(store.get(current.bootstrap.filesets[n.id])) : null })) };
+    recordedDigests: sorted(recordedDigests(store, current)), drift,
+    items: workflow.items.map(n => ({ ...assessBootstrapItem(workflow, states, n.id),
+      fileset: current.bootstrap.filesets[n.id] ? filesetSummary(store.get(current.bootstrap.filesets[n.id])) : null,
+      verificationRef: n.kind === 'local-verification' ? current.bootstrap.verifications?.[n.id] ?? null : undefined })) };
+}
+export async function bootstrapDrift(store, id) {
+  const { current, plan } = bootstrapContext(store, id);
+  return observedDrift(plan.probe.root, recordedDigests(store, current));
+}
+// Execution preflight shared by materialize and verify: same repository and
+// baseline as planned, Git present, and no change outside the owned paths.
+async function repositoryPreflight(current, plan, workflow) {
+  const probe = await probeRepository(plan.probe.root);
+  if (probe.state === 'NOT_GIT') throw Error('BLOCKED_GIT_REPOSITORY_REQUIRED: run git init yourself, then create a new task');
+  if (!['UNBORN_HEAD', 'BOOTSTRAP_CANDIDATE'].includes(probe.state) || probe.repositoryId !== plan.probe.repositoryId || probe.base !== plan.probe.base) throw Error('Repository baseline changed; create a new task');
+  const owned = ownedPaths(current, workflow);
+  const status = await gitStatus(probe.root);
+  if (status.error || hash(status.entries.filter(e => !owned.has(e.path))) !== plan.probe.statusHash) throw Error('Repository changed outside the approved filesets; create a new task');
+  return probe;
 }
 // Host file contents are untrusted proposals; this records them and requests review.
 export async function submitBootstrapFiles(store, id, input) {
   const { current, plan, workflow } = bootstrapContext(store, id);
   if (input?.revision !== current.revision) throw Error('Fileset revision stale; read status first');
+  if (input && Object.hasOwn(input, 'repair')) return submitRepairFiles(store, current, plan, workflow, input);
   const files = validateFileset(input, workflow, input.itemId), itemId = input.itemId;
   if (!['PENDING_FILESET', 'FILESET_PROPOSED'].includes(current.bootstrap.states[itemId])) throw Error(`WorkItem ${itemId} is not awaiting a fileset`);
   const prior = current.bootstrap.filesets[itemId];
@@ -250,6 +314,42 @@ export async function submitBootstrapFiles(store, id, input) {
     states: { ...current.bootstrap.states, [itemId]: 'FILESET_PROPOSED' }, filesets: { ...current.bootstrap.filesets, [itemId]: run.id } } }, 'BOOTSTRAP_FILESET_RECORDED');
   return { task: next, approvalRequest: { taskId: id, itemId, runId: run.id, filesetHash, files: manifest.files, authority: 'REQUEST_ONLY' } };
 }
+// The explicit Repair transition. Only a materialized local-edit item that a
+// local-verification item depends on can reopen, only against that item's latest,
+// still-current LOCAL_FAILED evidence, and only for its own files. Other completed
+// items stay closed; a cross-item repair is one repair fileset per owning item.
+async function submitRepairFiles(store, current, plan, workflow, input) {
+  const itemId = input.itemId, item = workflow.items.find(n => n.id === itemId);
+  if (!item || item.kind !== 'local-edit') throw Error('Filesets are accepted only for local-edit WorkItems');
+  const states = effectiveStates(store, current, workflow);
+  if (!['MATERIALIZED', 'REPAIR_PROPOSED'].includes(states[itemId])) throw Error(`WorkItem ${itemId} is not materialized; a repair replaces files CodeFleet created`);
+  const { verificationItem, evidenceRef } = input.repair ?? {};
+  const verifier = workflow.items.find(n => n.id === verificationItem);
+  if (!verifier || verifier.kind !== 'local-verification' || !dependentsOf(workflow, itemId).includes(verificationItem)) throw Error(`Repair must cite a local-verification item that depends on ${itemId}`);
+  if (current.bootstrap.verifications?.[verificationItem] !== evidenceRef || states[verificationItem] !== 'LOCAL_FAILED') throw Error(`Repair requires the current LOCAL_FAILED evidence of ${verificationItem}`);
+  const files = validateRepairFileset(input, workflow, itemId, recordedDigests(store, current));
+  const prior = current.bootstrap.filesets[itemId], priorRun = store.get(prior);
+  const replacing = isRepair(priorRun) && ['WAITING_APPROVAL', 'READY'].includes(priorRun.state);
+  if (isRepair(priorRun) && !replacing && priorRun.state !== 'COMPLETED') throw Error('Repair materialization already started; resolve it before proposing again');
+  const { manifest, filesetHash } = repairManifest({ taskId: current.id, itemId, workflowHash: workflow.workflowHash, probeRef: plan.probe.probeHash, root: plan.probe.root, repairOf: { verificationItem, evidenceRef } }, files);
+  const run = { id: `${current.id}-${itemId}-r${current.revision}`, kind: 'bootstrap-fileset', operation: 'modify', taskId: current.id, itemId, repo: plan.probe.root, contract: manifest, contractHash: filesetHash,
+    contentRef: store.artifact({ manifest, files }), revision: 1, state: 'WAITING_APPROVAL', results: {}, authority: 'PROVIDER_REPORTED_ONLY' };
+  store.db.exec('BEGIN IMMEDIATE');
+  try {
+    if (replacing) {
+      store.db.prepare('DELETE FROM workflow_approvals WHERE runId=?').run(prior);
+      store.db.prepare("UPDATE runs SET control='cancel' WHERE id=?").run(prior);
+      store.event(prior, 'BOOTSTRAP_FILESET_SUPERSEDED', { by: run.id });
+    }
+    store.db.prepare('INSERT INTO runs(id,body) VALUES (?,?)').run(run.id, JSON.stringify(run));
+    store.event(run.id, 'BOOTSTRAP_REPAIR_PROPOSED', { filesetHash, itemId, verificationItem, evidenceRef }); store.db.exec('COMMIT');
+  } catch (e) { store.db.exec('ROLLBACK'); throw e; }
+  // Completed filesets stay on record; only the current one is approvable.
+  const history = replacing ? current.bootstrap.history ?? [] : [...(current.bootstrap.history ?? []), { itemId, runId: prior, state: priorRun.state }];
+  const next = update(store, current, { ...current, revision: current.revision + 1, bootstrap: { ...current.bootstrap, digests: recordedDigests(store, current), history,
+    states: { ...current.bootstrap.states, [itemId]: 'REPAIR_PROPOSED' }, filesets: { ...current.bootstrap.filesets, [itemId]: run.id } } }, 'BOOTSTRAP_REPAIR_RECORDED', { itemId, verificationItem, evidenceRef });
+  return { task: next, approvalRequest: { taskId: current.id, itemId, runId: run.id, operation: 'modify', filesetHash, files: manifest.files, repairOf: manifest.repairOf, authority: 'REQUEST_ONLY' } };
+}
 const OUTCOMES = { MATERIALIZED: ['COMPLETED', 'MATERIALIZED'], CONFLICT: ['WAITING_HUMAN', 'CONFLICT'], FAILED: ['WAITING_HUMAN', 'MATERIALIZATION_FAILED'], INTERRUPTED: ['WAITING_HUMAN', 'INTERRUPTED'] };
 export async function materializeTask(store, id, itemId, { now = Date.now() } = {}) {
   const { current, plan, workflow } = bootstrapContext(store, id);
@@ -262,27 +362,66 @@ export async function materializeTask(store, id, itemId, { now = Date.now() } = 
   const content = store.readArtifact(run.contentRef);
   if (hash(content.manifest) !== run.contractHash || content.files.length !== run.contract.files.length ||
       content.files.some((f, i) => f.path !== run.contract.files[i].path || hash(f.content) !== run.contract.files[i].sha256)) throw Error('Approved fileset content mismatch');
-  const assessment = assessBootstrapItem(workflow, current.bootstrap.states, itemId);
+  const repair = isRepair(run);
+  const assessment = assessBootstrapItem(workflow, effectiveStates(store, current, workflow), itemId);
   if (assessment.waitingOn.length) throw Error(`Dependencies not satisfied: ${assessment.waitingOn.join(', ')}`);
-  // Execution preflight: same repository and baseline as planned, Git present, and
-  // no change outside the paths this task's approved filesets name.
-  const probe = await probeRepository(plan.probe.root);
-  if (probe.state === 'NOT_GIT') throw Error('BLOCKED_GIT_REPOSITORY_REQUIRED: run git init yourself, then create a new task');
-  if (!['UNBORN_HEAD', 'BOOTSTRAP_CANDIDATE'].includes(probe.state) || probe.repositoryId !== plan.probe.repositoryId || probe.base !== plan.probe.base) throw Error('Repository baseline changed; create a new task');
-  const owned = new Set(Object.values(current.bootstrap.filesets).flatMap(r => store.get(r).contract.files.map(f => f.path)));
-  const status = await gitStatus(probe.root);
-  if (status.error || hash(status.entries.filter(e => !owned.has(e.path))) !== plan.probe.statusHash) throw Error('Repository changed outside the approved filesets; create a new task');
+  const probe = await repositoryPreflight(current, plan, workflow);
   const owner = store.claim(runId);
   try {
     run = store.get(runId); run.state = 'MATERIALIZING'; store.save(run, owner, 'BOOTSTRAP_MATERIALIZATION_STARTED');
-    const outcome = await createFiles(probe.root, content.files, { record: r => { run.results = { ...run.results, [r.path]: r }; store.save(run, owner, 'BOOTSTRAP_FILE_RESULT'); } });
+    const write = repair ? modifyFiles : createFiles;
+    const outcome = await write(probe.root, content.files, { record: r => { run.results = { ...run.results, [r.path]: r }; store.save(run, owner, 'BOOTSTRAP_FILE_RESULT'); } });
     for (const r of outcome.results) run.results = { ...run.results, [r.path]: r };
-    const [runState, itemState] = OUTCOMES[outcome.status];
-    run.materializationRef = store.artifact({ kind: 'BootstrapMaterialization', authority: 'CODEFLEET_DIRECT_WRITE', filesetHash: run.contractHash, probeBefore: probe.probeHash,
+    const [runState, outcomeState] = OUTCOMES[outcome.status];
+    const itemState = repair && outcome.status !== 'MATERIALIZED' ? 'REPAIR_' + outcomeState : outcomeState;
+    run.materializationRef = store.artifact({ kind: 'BootstrapMaterialization', operation: repair ? 'modify' : 'create', authority: 'CODEFLEET_DIRECT_WRITE', filesetHash: run.contractHash, probeBefore: probe.probeHash,
       status: outcome.status, results: outcome.results, verification: 'NOT_RUN', complete: false });
     run.state = runState; run.reason = outcome.status; store.save(run, owner, 'BOOTSTRAP_MATERIALIZATION_' + outcome.status);
     const latest = task(store, id);
-    update(store, latest, { ...latest, revision: latest.revision + 1, bootstrap: { ...latest.bootstrap, states: { ...latest.bootstrap.states, [itemId]: itemState } } }, 'BOOTSTRAP_ITEM_' + itemState);
-    return { status: outcome.status, itemId, runId, results: outcome.results, materializationRef: run.materializationRef, authority: 'CODEFLEET_DIRECT_WRITE', verification: 'NOT_RUN', complete: false };
+    // Record what this process wrote, then invalidate every local result that ran
+    // against the previous bytes: changed files need a new trusted verification.
+    const digests = recordedDigests(store, latest);
+    for (const r of outcome.results) if (['CREATED', 'ALREADY_CREATED', 'MODIFIED', 'ALREADY_MODIFIED'].includes(r.status)) digests[r.path] = r.sha256;
+    const states = { ...latest.bootstrap.states, [itemId]: itemState }, stale = [];
+    if (outcome.written || outcome.status === 'MATERIALIZED') for (const d of dependentsOf(workflow, itemId)) {
+      const node = workflow.items.find(n => n.id === d);
+      if (node.kind === 'local-verification' && ['LOCAL_PASSED', 'LOCAL_FAILED', 'INCONCLUSIVE'].includes(states[d])) { states[d] = 'VERIFICATION_STALE'; stale.push(d); }
+    }
+    update(store, latest, { ...latest, revision: latest.revision + 1, bootstrap: { ...latest.bootstrap, digests: sorted(digests), states } }, 'BOOTSTRAP_ITEM_' + itemState, { itemId, staleVerifications: stale });
+    return { status: outcome.status, itemId, runId, operation: repair ? 'modify' : 'create', results: outcome.results, materializationRef: run.materializationRef, staleVerifications: stale, authority: 'CODEFLEET_DIRECT_WRITE', verification: 'NOT_RUN', complete: false };
   } finally { store.release(runId, owner); }
+}
+// Run one local-verification item through the existing local backend. Without
+// trust this only inspects and returns the exact commandHash to review. The hash
+// covers executable bytes, arguments and the whole tree, so a trust given before
+// any file changed can never authorize a run against the changed files.
+export async function verifyTask(store, id, itemId, request, { trust, acknowledgeUnisolated = false, cancelled = () => false, backend = localBackend() } = {}) {
+  const { current, plan, workflow } = bootstrapContext(store, id);
+  const item = workflow.items.find(n => n.id === itemId);
+  if (!item) throw Error(`Unknown WorkItem: ${itemId}`);
+  if (item.kind !== 'local-verification') throw Error(`objective verify runs only local-verification WorkItems; ${item.kind} is not local verification`);
+  exact(request, ['executable', 'args', 'directory', 'timeoutMs'], 'Local command');
+  const assessment = assessBootstrapItem(workflow, effectiveStates(store, current, workflow), itemId);
+  if (assessment.waitingOn.length) throw Error(`Dependencies not satisfied: ${assessment.waitingOn.join(', ')}`);
+  if (typeof request.directory !== 'string' || await realpath(request.directory) !== plan.probe.root) throw Error('Verification directory must be the task repository root');
+  await repositoryPreflight(current, plan, workflow);
+  const digests = recordedDigests(store, current), drift = await observedDrift(plan.probe.root, digests);
+  if (drift.length) throw Error(`Files changed outside CodeFleet: ${drift.join(', ')}`);
+  const spec = await inspectLocalCommand(request);
+  if (trust === undefined) return { status: 'TRUST_REQUIRED', itemId, commandHash: spec.commandHash, command: spec, fileDigests: sorted(digests),
+    reason: 'Review the exact executable, arguments and tree, then pass --trust <commandHash> --acknowledge-unisolated' };
+  const token = await backend.authorize(request, { reviewedCommandHash: trust, acknowledgeUnisolatedExecution: acknowledgeUnisolated });
+  const result = await backend.verify({ ...request, token, cancelled, contractHash: workflow.workflowHash });
+  const { log, stderr, status, reason, ...observed } = result;
+  const evidence = { kind: 'BootstrapLocalVerification', schemaVersion: 1, taskId: id, itemId, workflowHash: workflow.workflowHash, taskRevision: current.revision,
+    fileDigests: sorted(digests), command: spec, status, reason, observed, log, stderr,
+    authority: 'LOCAL_EXECUTED', verifierIndependence: 'UNPROTECTED', protectedVerification: 'UNSATISFIED', complete: false, recordedAt: new Date().toISOString() };
+  const evidenceRef = store.artifact(evidence);
+  try {
+    update(store, current, { ...current, revision: current.revision + 1, bootstrap: { ...current.bootstrap, digests: sorted(digests),
+      states: { ...current.bootstrap.states, [itemId]: status }, verifications: { ...(current.bootstrap.verifications ?? {}), [itemId]: evidenceRef } } },
+    'BOOTSTRAP_LOCAL_VERIFICATION_RECORDED', { itemId, status, evidenceRef, commandHash: spec.commandHash });
+  } catch (e) { throw Error(`${e.message}; the executed result is preserved as evidence ${evidenceRef} but is not attached to the task`); }
+  return { status, reason, itemId, evidenceRef, commandHash: spec.commandHash, exitCode: result.exitCode, tests: result.tests, passed: result.passed, failed: result.failed, skipped: result.skipped,
+    evidenceIntegrity: result.evidenceIntegrity, authority: 'LOCAL_EXECUTED', protectedVerification: 'UNSATISFIED', complete: false };
 }

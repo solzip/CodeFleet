@@ -198,7 +198,8 @@ test('prepared DAG is queryable; unapproved, mismatched, expired and dependency-
   const dataModel = report.bootstrap.items.find(n => n.id === 'data-model');
   assert.deepEqual([dataModel.kind, dataModel.state, dataModel.capability, dataModel.missing, dataModel.satisfiedBy.authority], ['analysis', 'PLAN_RECORDED', 'NOT_REQUIRED_PLAN_ONLY', [], 'PLANNED']);
   assert.deepEqual(states.todo, ['PENDING_FILESET', 'AVAILABLE']);
-  assert.deepEqual(states.tests, ['BLOCKED', 'BLOCKED']);
+  // Runnable only through objective verify with per-run trust (see the verify tests).
+  assert.deepEqual(states.tests, ['PENDING_VERIFICATION', 'EXPLICIT_TRUST_PER_RUN']);
   assert.deepEqual(report.bootstrap.items.find(n => n.id === 'review-verify').missing, ['protected-verifier', 'protected-evidence', 'protected-inputs']);
   assert.deepEqual([report.verification, report.complete], ['NOT_RUN', false]);
   await assert.rejects(() => materializeTask(f.store, f.id, 'todo'), /No fileset proposed/);

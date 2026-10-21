@@ -82,7 +82,10 @@ plannedFiles [{path,purpose}], plannedTests [{path,criteria}], criteria
 [{id,kind,dependencies,acceptanceCriteria,files}]. Planned files do not exist yet:
 never cite lines or claim tests ran. After prepare, files TASK_ID FILE proposes
 {revision,itemId,files:[{path,content}]} for one local-edit item and only requests
-review. Never run git init, commit, approve or materialize yourself.
+review. When status shows a local-verification item LOCAL_FAILED, a repair is
+{revision,itemId,repair:{verificationItem,evidenceRef},files:[{path,content,baseSha256}]}
+for a materialized item it depends on, baseSha256 being the digest CodeFleet recorded.
+Never run git init, commit, approve, materialize or verify yourself.
 
 Optional protected execution:
 H4 Linux IPC path: use this skill's runtime/hosts/ipc-client.mjs with Node 24.14.1 or newer. Resolve CLIENT relative to this SKILL.md. A trusted operator administrator must supply SOCKET and RUN_ID for an already validated, fixed-scope workflow. Never start an Operator process as the Agent, change the catalog, or open trusted state. Windows Native, WSL2 deployment and live Host confinement remain BLOCKED/unverified. Do not use internal modules or legacy objective approve to bypass this gate.

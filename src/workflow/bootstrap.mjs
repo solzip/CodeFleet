@@ -17,7 +17,9 @@ export const BOOTSTRAP_APPROVALS = Object.freeze({
   'external-effect': 'AUTHENTICATED_HUMAN_ACTION', 'risky-action': 'AUTHENTICATED_HUMAN_ACTION'
 });
 const PLAN_ONLY = ['planning', 'analysis'];
-const SATISFIED = ['PLAN_RECORDED', 'MATERIALIZED'];
+// LOCAL_PASSED satisfies a local-verification item only; it is never protected
+// verification, and a dependent protected item stays blocked on its own capability.
+export const SATISFIED = Object.freeze(['PLAN_RECORDED', 'MATERIALIZED', 'LOCAL_PASSED']);
 const id = value => { if (typeof value !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(value)) throw Error('Invalid WorkItem id'); };
 const derive = item => ({ ...item, requiredCapabilities: [...WORK_KINDS[item.kind]], approval: BOOTSTRAP_APPROVALS[item.kind] });
 
@@ -62,9 +64,19 @@ export function validateBootstrapWorkflow(input, draft) {
   return structuredClone(input);
 }
 // Plan-only items are satisfied by the validated plan itself; local-edit items
-// wait for an approved fileset; everything else stays blocked on its capability.
+// wait for an approved fileset; local-verification items wait for an explicitly
+// trusted run; everything else stays blocked on its capability.
 export function bootstrapStates(workflow, recorded = {}) {
-  return Object.fromEntries(workflow.items.map(n => [n.id, recorded[n.id] ?? (PLAN_ONLY.includes(n.kind) ? 'PLAN_RECORDED' : n.kind === 'local-edit' ? 'PENDING_FILESET' : 'BLOCKED')]));
+  return Object.fromEntries(workflow.items.map(n => [n.id, recorded[n.id] ?? (PLAN_ONLY.includes(n.kind) ? 'PLAN_RECORDED' : n.kind === 'local-edit' ? 'PENDING_FILESET' : n.kind === 'local-verification' ? 'PENDING_VERIFICATION' : 'BLOCKED')]));
+}
+// Every item that depends on itemId, directly or transitively.
+export function dependentsOf(workflow, itemId) {
+  const found = new Set(), queue = [itemId];
+  while (queue.length) {
+    const next = queue.shift();
+    for (const n of workflow.items) if (n.dependencies.includes(next) && !found.has(n.id)) { found.add(n.id); queue.push(n.id); }
+  }
+  return [...found];
 }
 export function assessBootstrapItem(workflow, states, itemId) {
   const item = workflow.items.find(n => n.id === itemId);
@@ -74,7 +86,10 @@ export function assessBootstrapItem(workflow, states, itemId) {
   // items execute nothing here: the PLANNED Draft content satisfies them, so the
   // capabilities their kind would need to run (e.g. host-read) are not required.
   const planOnly = PLAN_ONLY.includes(item.kind);
-  const capability = planOnly ? { status: 'NOT_REQUIRED_PLAN_ONLY', missing: [] } : item.kind === 'local-edit' ? { status: 'AVAILABLE', missing: [] } : evaluateWorkItem(item.kind);
+  // local-verification runs only through objective verify, whose per-run operator
+  // trust of the exact command and tree is the trusted-local-command capability.
+  const capability = planOnly ? { status: 'NOT_REQUIRED_PLAN_ONLY', missing: [] } : item.kind === 'local-edit' ? { status: 'AVAILABLE', missing: [] }
+    : item.kind === 'local-verification' ? { status: 'EXPLICIT_TRUST_PER_RUN', missing: [] } : evaluateWorkItem(item.kind);
   return { id: item.id, kind: item.kind, state: states[item.id], dependencies: item.dependencies, waitingOn: waiting, requiredCapabilities: item.requiredCapabilities, approval: item.approval,
     capability: capability.status, missing: capability.missing, satisfiedBy: planOnly ? { source: 'VALIDATED_BOOTSTRAP_PLAN', authority: 'PLANNED' } : null,
     acceptanceCriteria: item.acceptanceCriteria, files: item.files };

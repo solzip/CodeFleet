@@ -5,7 +5,8 @@ import { createRegistry } from '../providers/registry.mjs';
 import { createClaudePlanner } from '../providers/planner.mjs';
 import { createCodexAdapter } from '../providers/codex.mjs';
 import { probeProvider } from '../providers/capabilities.mjs';
-import { enableTasks, createTask, reviewTask, prepareTask, approveTask, rejectTask, materializeTask, clarifyTask, objectiveUnknownsReport, task, tasks } from './tasks.mjs';
+import { enableTasks, createTask, reviewTask, prepareTask, approveTask, rejectTask, materializeTask, verifyTask, clarifyTask, objectiveUnknownsReport, task, tasks } from './tasks.mjs';
+import { readResponse } from '../hosts/cli.mjs';
 import { runReport, taskReport } from './report.mjs';
 
 export const help = `codefleet-alpha objective plan|run "goal" [repository]
@@ -18,6 +19,8 @@ codefleet-alpha objective status [task-id] | report <task-or-run-id>
 codefleet-alpha objective reject|pause|cancel <task-id> [--actor <name>]
 codefleet-alpha objective readiness [--codex-executable native-path]
 codefleet-alpha objective materialize <task-id> <item-id> (NEW_PROJECT: create an approved fileset; never overwrites, never runs git)
+codefleet-alpha objective verify <task-id> <item-id> REQUEST.json [--trust <commandHash> --acknowledge-unisolated]
+  (NEW_PROJECT local-verification: without --trust only inspects; with it runs once, records LOCAL_PASSED|LOCAL_FAILED|INCONCLUSIVE evidence; never protected VERIFIED)
 codefleet-alpha objective unknowns <task-id>
 codefleet-alpha objective clarify <task-id> --unknown <id> --scope "what the objective means" --actor <name> --revision <n>
   (NEW_PROJECT only: records USER_DECLARED meaning for an objective-derived unknown; never approves execution)
@@ -27,8 +30,8 @@ No command enables an unverified Provider or performs remote delivery.`;
 
 function parse(values) {
   const positional = [], options = {};
-  const flags = new Set(['allow-model', 'json']);
-  const allowed = new Set(['files', 'tests', 'criterion', 'item', 'parallel', 'attempts', 'timeout', 'budget', 'hash', 'actor', 'planner', 'codex-executable', 'claude-executable', 'unknown', 'scope', 'revision']);
+  const flags = new Set(['allow-model', 'json', 'acknowledge-unisolated']);
+  const allowed = new Set(['files', 'tests', 'criterion', 'item', 'parallel', 'attempts', 'timeout', 'budget', 'hash', 'actor', 'planner', 'codex-executable', 'claude-executable', 'unknown', 'scope', 'revision', 'trust']);
   for (let i = 0; i < values.length; i++) {
     const value = values[i];
     if (!value.startsWith('--')) { positional.push(value); continue; }
@@ -68,6 +71,16 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     if (args.length !== 2) throw Error('materialize requires task id and WorkItem id');
     const result = await materializeTask(store, args[0], args[1]);
     return { exitCode: result.status === 'MATERIALIZED' ? 0 : 2, data: { ...await taskReport(store, args[0]), materialization: result } };
+  }
+  if (action === 'verify') {
+    if (args.length !== 3) throw Error('verify requires task id, WorkItem id and REQUEST.json');
+    if ((o.trust === undefined) !== (o['acknowledge-unisolated'] !== true)) throw Error('--trust and --acknowledge-unisolated must be given together');
+    let interrupted = false; const stop = () => { interrupted = true; };
+    process.on('SIGINT', stop); process.on('SIGTERM', stop);
+    try {
+      const result = await verifyTask(store, args[0], args[1], await readResponse(args[2]), { trust: o.trust, acknowledgeUnisolated: o['acknowledge-unisolated'] === true, cancelled: () => interrupted });
+      return { exitCode: result.status === 'LOCAL_PASSED' ? 0 : 2, data: { ...await taskReport(store, args[0]), verificationRun: result } };
+    } finally { process.off('SIGINT', stop); process.off('SIGTERM', stop); }
   }
   if (args.length !== 1) throw Error('Exactly one task or run id required');
   if (action === 'report' && !id.startsWith('task-')) return { exitCode: 0, data: await runReport(store, id) };

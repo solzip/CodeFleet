@@ -65,6 +65,18 @@ export async function inspectLocalCommand({ executable, args, directory, timeout
     directory: cwd, candidateTreeHash: await localTree(cwd), timeoutMs, policy: 'explicit-trusted-local-v1' };
   return { ...spec, commandHash: hash(spec) };
 }
+// A failure is only what the runner itself reported failing in one complete, unaltered
+// run. A non-zero exit alone, missing or duplicated summary counts, interruption,
+// truncation or a changed tree stay INCONCLUSIVE. Neither outcome is protected.
+export function classifyLocalResult(result, integrity) {
+  const counted = ['tests', 'passed', 'failed', 'skipped', 'todo'].every(k => Number.isInteger(result[k]));
+  const reason = !integrity ? 'Tree changed during execution' : result.interrupted ? 'Interrupted' : result.truncated ? 'Output truncated'
+    : !counted ? 'Test summary missing or ambiguous' : result.tests === 0 ? 'No tests executed' : null;
+  if (reason) return { status: 'INCONCLUSIVE', reason };
+  if (result.exitCode === 0 && result.passed === result.tests && result.failed === 0 && result.skipped === 0 && result.todo === 0) return { status: 'LOCAL_PASSED', reason: null };
+  if (result.exitCode !== 0 && result.failed > 0) return { status: 'LOCAL_FAILED', reason: `${result.failed} of ${result.tests} tests failed` };
+  return { status: 'INCONCLUSIVE', reason: 'Exit code and test summary disagree, or tests were skipped' };
+}
 export function localBackend() {
   const grants = new WeakMap(), running = new Map();
   return {
@@ -108,10 +120,7 @@ export function localBackend() {
           contractHash: request.contractHash ?? null, candidateTreeHash: spec.candidateTreeHash,
           commandHash: spec.commandHash,
           requiredGateResults: { protectedVerification: 'UNSATISFIED', treeIntegrity: integrity ? 'SATISFIED' : 'UNSATISFIED' },
-          status: result.exitCode === 0 && result.tests > 0 && result.passed === result.tests &&
-            result.failed === 0 && result.skipped === 0 && result.todo === 0 &&
-            !result.interrupted && !result.truncated && integrity ? 'LOCAL_PASSED' : 'INCONCLUSIVE',
-          complete: false };
+          ...classifyLocalResult(result, integrity), complete: false };
       } finally { running.delete(request.token); }
     },
     async cancel(token) { const r = running.get(token); if (r) r.cancelled = true; },
