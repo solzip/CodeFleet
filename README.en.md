@@ -1,16 +1,32 @@
-# CodeFleet — how do you verify work an agent says it did?
+# CodeFleet
+
+CodeFleet is a **Host-Native AI development orchestration extension for Codex CLI and Claude Code**. It uses the existing Host's models, authentication and session. Natural-language goals become Task Drafts, pass through a Validator, and form a Workflow/DAG. CodeFleet manages roles, Policy, Capability, approval requests, state and recovery; independent Evidence and Judge determine completion. An AI claim of success is not independent verification evidence.
+
+Use a single Agent by default, with role-based collaboration where supported. Offline collaboration tests do not establish automatic Host delegation or actual Host Live acceptance; both remain unverified in the current main baseline.
+
+Basic planning, Draft and DAG preparation need local Node, Git and the Host. Docker, WSL, separate OS accounts and direct model API keys are not default requirements. Docker is the optional protected Container Verification backend, and is required when a contract needs that backend. Explicitly trusted Local Verification does not provide Protected Verification. Host Sandbox remains NOT_VERIFIED; unavailable protection is not silently replaced by Local success.
+
+The product covers both new-project Bootstrap and improvements to existing projects. **Bootstrap without an existing Git HEAD is under separate development, with no completion evidence on the current main baseline.** See the roadmap for acceptance criteria.
+
+[Product principles](docs/PRODUCT_VISION.md) · [Architecture](docs/product-completion/architecture.md) · [Current status](docs/product-completion/progress.md) · [Roadmap](docs/product-completion/roadmap.md) · [Host installation](docs/product-completion/host-native-guide.md) · [Core and backends](docs/product-completion/host-core-guide.md) · [한국어](README.md)
+
+## Implementation and release context
 
 > **Host-Native core:** Use planning, drafts, Workflow/DAG and approval requests in your existing Codex or Claude Code session with local Node and Git. Docker, WSL and separate OS accounts are not universal prerequisites. Docker remains required for the existing protected Alpha verifier; Local success cannot satisfy protected completion. [Core usage and backend guarantees](docs/product-completion/host-core-guide.md). Host Live remains unverified.
 
 > **Host-Native direction:** Prepare proposals in your existing Codex or Claude Code session; CodeFleet owns contracts and verification. [Install and use](docs/product-completion/host-native-guide.md) · [Transition evidence](docs/runs/2026-10-20/alpha-host-native-transition.md). Direct model APIs are optional. Actual host live acceptance has not run.
 
-> **Unreleased development branch:** [Integrated orchestration CLI guide](docs/product-completion/orchestration-guide.md). Local integration evidence does not establish live provider readiness.
+> **Integrated main, separate release scope:** [Integrated orchestration CLI guide](docs/product-completion/orchestration-guide.md) retains the earlier development-stage instructions. Main integration does not establish inclusion in the public Alpha package or live provider readiness. Use the current status and Host guides above for the default path.
 
 > **Java support:** alpha.4 adds Gradle and Maven verification adapters. An operator-assisted real Gradle project completed model repair, isolated tests and draft PR delivery; a Maven fixture completed locally. See the [Java guide](docs/product-completion/alpha-quickstart.md#java-gradlemaven) for supported versions and instructions.
 
 > **Quality scope:** The reproduced acceptance, cost, cancellation and recovery defects have regression fixes. Independent code review remains required; arbitrary hostile JavaScript is outside the verified scope. See [remediation evidence](docs/runs/2026-09-30/alpha-reconciliation-fixes.md).
 
 > **Current development:** [Alpha guide](docs/product-completion/alpha-quickstart.md) and [progress](docs/product-completion/progress.md). Limited Node and Java workflows implement edit proposals, isolated verification, recovery and draft PR delivery. The [public alpha](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.4) is distributed under MIT. Independent external-user onboarding validation is still pending. The text below records the archived engine.
+
+## Historical legacy engine account
+
+The following account describes the frozen legacy engine at its original baseline. Its closure, issue policy, measurements and limits do not describe the resumed Host-Native product. Historical figures and evidence links are retained.
 
 > A structure that keeps an agent's "tests pass" from **reaching the decision at all**, tested end to end.
 > It **completed once under controlled conditions and never on a real project.** 77 findings were registered and

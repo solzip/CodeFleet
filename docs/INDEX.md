@@ -1,5 +1,26 @@
 # 문서 색인
 
+## 현재 공식 문서
+
+CodeFleet은 기존 Codex CLI·Claude Code의 모델·인증·세션을 사용하는 Host-Native 확장이다. 아래 문서가 현재 기준이며, 이후 날짜별 표는 역사적 감사·실행 기록이다.
+
+| 문서 | 책임 |
+| --- | --- |
+| [제품 원칙](PRODUCT_VISION.md) | 원래 목적과 유지할 제품 원칙 |
+| [제품 문서 지도](product-completion/README.md) | 공식 문서의 읽기 순서와 범위 |
+| [공식 아키텍처](product-completion/architecture.md) | 현재 구조와 모듈 책임 |
+| [진행 현황](product-completion/progress.md) | 현재 구현·검증·미해결 상태 |
+| [로드맵](product-completion/roadmap.md) | 다음 작업과 완료 기준; 별도 개발 중인 Bootstrap 포함 |
+| [Host 안내](product-completion/host-native-guide.md) | 설치와 사용 |
+| [Core 안내](product-completion/host-core-guide.md) | Docker 없는 기본 준비, Local / Container / Host Sandbox 보장 범위 |
+| [기록 규약](CONVENTIONS.md) | 작업 기록 작성 규칙 |
+
+상세 계약은 `docs/implementation/`, 실제 실행 증거는 `docs/runs/`, 당시 감사는 `docs/audits/`, 보존 기록은 `docs/archive/`에 둔다. 기존 경로와 해시 고정 원본은 유지한다. 루트의 구형 아키텍처·검토·인계 문서는 당시 설계이며, `concept-foundation.md`는 legacy 검사 계약으로 남는다.
+
+## 역사 기록 색인
+
+아래 전수 집계는 감사·실행·아카이브 Markdown만 센다. 공식 제품 문서·상세 구현 계약·JSON·로그를 포함한 저장소 전체 문서 수가 아니다. 동결 설명과 과거 후속 지시는 해당 기록 시점에 한정한다.
+
 `docs/audits/`·`docs/runs/`·`docs/archive/`의 전 문서를 시간 역순으로 나열한다. 규약은 `docs/CONVENTIONS.md`, 결함 등재 현황은 `docs/REGISTER.md`.
 
 작성 기준: 2026-10-23. 전수 115개 문서 (감사 39 · 실행 69 · 아카이브 7). <!-- fact: docs-indexed = 115 --> <!-- fact: docs-on-disk = 115 -->
