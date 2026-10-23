@@ -9,7 +9,7 @@ import { git } from '../src/alpha/workspace.mjs';
 import { requireSuccess } from '../src/alpha/process.mjs';
 import { hash } from '../src/alpha/contract.mjs';
 import { definition, fromPlan, nextReady } from '../src/workflow/definition.mjs';
-import { createWorkflow, approveWorkflow, reviseWorkflow, attempts, reserve } from '../src/workflow/persistence.mjs';
+import { createWorkflow, approveWorkflow, revokeWorkflow, reviseWorkflow, attempts, reserve } from '../src/workflow/persistence.mjs';
 import { createRegistry } from '../src/providers/registry.mjs';
 import { createClaudeAdapter } from '../src/providers/claude.mjs';
 import { createCodexAdapter } from '../src/providers/codex.mjs';
@@ -153,6 +153,19 @@ test('provider-only evidence never satisfies WorkItem or final success', async (
     assert.equal(r.state, 'WAITING_HUMAN'); assert.equal(r.acceptedHash, undefined); assert.equal(f.calls.length, 0);
   } finally { f.store.close(); }
 });
+test('P1-B: revoked workflow approval blocks reservation and provider execution', async () => {
+  const f = await setup();
+  try {
+    f.approve();
+    revokeWorkflow(f.store, f.run.id, 'fixture-operator');
+    const result = await execute(f.store, f.run.id, f.dependencies);
+    assert.equal(result.state, 'WAITING_HUMAN');
+    assert.match(result.reason, /approval absent/i);
+    assert.equal(attempts(f.store, f.run.id).length, 0);
+    assert.equal(f.calls.length, 0);
+  } finally { f.store.close(); }
+});
+
 test('graph revisions require fresh approval and CAS; old snapshots stay unchanged', async () => {
   const f = await setup([item('a')]);
   try {
