@@ -2,7 +2,7 @@
 
 ## 현재 공식 상태
 
-문서 정리 기준선은 `2a330bb3fdd8a9a9aec5934ffd64f63e7d3d5cba`의 main이다. [제품 원칙](../PRODUCT_VISION.md)과 [공식 아키텍처](architecture.md)를 적용하며, 이 갱신은 새 제품 실행이나 Live 검증 결과를 추가하지 않는다.
+앞선 문서 정리 기준선은 `2a330bb3fdd8a9a9aec5934ffd64f63e7d3d5cba`의 main이다. 이번 개발 지침 정합화는 GitHub main `eb68c39750e92e9557830f36a08fce12854650f0`를 기준으로 한다. [제품 원칙](../PRODUCT_VISION.md)과 [공식 아키텍처](architecture.md)를 적용하며, 문서 갱신은 새 제품 실행이나 Live 검증 결과를 추가하지 않는다.
 
 | 영역 | 현재 상태 | 근거·한계 |
 | --- | --- | --- |
@@ -15,6 +15,39 @@
 | Git HEAD 없는 신규 프로젝트 Bootstrap | 구현·오프라인 검증 (`test/bootstrap*.test.mjs`). Host Live NOT_RUN, 보호 검증 UNSATISFIED | 고정 Draft 테스트 통과를 모델 Live 성공으로 간주하지 않음. [다음 작업과 완료 기준](roadmap.md#현재-host-native-후속-작업) |
 
 다음 작업은 로드맵의 현재 Host-Native 후속 작업을 따른다. 아래 Alpha 배포·G/H 단계·파일럿 인계는 각 시점의 근거와 경과다. 과거 Alpha Live 성공은 현재 Host Live 검증을 대신하지 않는다.
+
+## 개발 지침 정합화 기록
+
+2026-10-23 / 유형: 문서 수정·검증 / 상태: DOCUMENTED. 대상은 위 GitHub main이며 소스 코드·실행 계약·기능 상태는 변경하지 않는다. 기존 로컬 main의 미커밋 파일과 다른 작업 트리를 보존하기 위해 별도 detached 작업 트리에서 편집했다. 문서 검토 후 사용자가 main 커밋·푸시를 승인했다. 기존 폴더는 원래 커밋과 미커밋 작업을 보존하고, 문서 작업 트리에서 main을 이어 간다. 커밋 대상은 문서 여섯 개이며 로컬 실행 로그는 제외한다.
+
+- [AGENTS.md](../../AGENTS.md)에 Codex 실행 지침을 추가하고 [CLAUDE.md](../../CLAUDE.md)에 Host 역할 위임·협업·개선 루프 지침만 보강했다. Legacy FINAL RULEs, Alpha/Host 승인·검증 경계, MIT·공개 신원·보안·테스트·과거 수치는 유지한다.
+- 제품 원칙은 Agentic Development Loop·Harness Engineering·Cross-Platform·실사용 가치를, 아키텍처는 기존 모듈과 목표 책임의 경계를, 로드맵은 Bootstrap에서 Todo + Calendar 실사용까지의 선행 관계와 수락 조건을 관리한다. 중복된 Host 사용/Live/독립 검증 작업은 로드맵의 순서표로 통합했다.
+- 지정 운영 문서 여섯 개의 사전 검사 원시 결과는 차단 후보 여섯 건·자동 제외 없음이었다. 원문 대조 결과 roadmap의 실패 반증은 미래 수락 조건, README/architecture/PRODUCT_VISION의 제한은 유지할 계약, progress의 차단은 명시된 미검증 상태, CLAUDE의 정정 규칙은 역사 보존 지침이었다. 문서 수정 차단 근거에서는 모두 제외하며 실제 Live 차단을 해제하지 않는다. CLAUDE의 민감정보 가능성 경고는 기존 공개용 신원/보안 지침으로 확인했다. 외부 비교 자료는 구현 근거로 사용하지 않았다.
+
+검증 환경: Windows / PowerShell / Node v24.14.1. Git 소유권 예외는 검사 프로세스에 이 작업 트리만 지정했고 전역 설정은 변경하지 않았다. 아래 결과는 문서 정합화와 기존 회귀의 관측이며 기능 수용·Host Live·MVP·비즈니스 성과로 집계하지 않는다.
+
+| 실행/검토 | 실제 결과 |
+| --- | --- |
+| `npm.cmd test` | exit 1. Legacy 324/324 통과, 실패·제외 없음. Alpha 247건 중 235 통과·5 실패·7 제외. Alpha 실패로 뒤의 Host Core/posttest는 자동 실행되지 않음 |
+| Alpha 실패 원인 대조 | 다섯 건 모두 기존 필수 Docker 격리 시험의 `CODEFLEET_TEST_DOCKER` 미설정 assertion. H4 IPC, H6 planning, H3 runtime, Operator guard + Docker, H2 isolation 각각 확인. 테스트나 환경 게이트를 완화하지 않음 |
+| `npm.cmd run test:host-core` 별도 실행 | exit 0, 13/13 통과·실패/제외 없음 |
+| `npm.cmd run posttest` 별도 실행 | exit 0. 기존 규칙 커버리지·Markdown 링크·인용·선언 사실 검사 통과. 기준선 파일 변경 없음 |
+| 문서 검사 범위 | Markdown 164개, 링크 572개, 깨진 대상/대소문자/anchor 없음. 인용 527건 검사, 현행 문서 오류 없음. 과거 기록의 commit 미지정 42건·의심 인용 13건은 기존 한계로 남음. 선언 사실 42건 불일치 없음; 현행 문서 수치 561개 중 미검사 519개를 전체 검증으로 표현하지 않음 |
+| 구조·보존·공통 지침 검토 | 여섯 문서의 fence 균형/중복 절 제목 검사 및 `git diff --check` exit 0. CLAUDE 기존 본문 전체, 공식 문서의 역사 절, 두 README와 Legacy architecture의 기준선 대비 동일성 확인. 단일 Agent·위임 권한·Harness 통제·개선 루프 중단·Local/Protected·OS·외부 효과 원칙 충돌 없음 |
+
+로컬 원시 로그는 이 작업 트리의 `.codefleet/validation/`에 보존하며 공개 문서에 개인 경로를 복사하지 않는다. 요청한 공식 문서 범위를 유지하기 위해 이번 기록은 progress에 통합했다. README의 실제 기능 설명과 충돌이 없어 변경하지 않았고 별도 실행 문서·중복 계획 문서는 추가하지 않았다.
+
+### 결론
+
+개발 지침과 공식 문서의 책임을 정리했다. 현재 기능의 완료 상태는 승격하지 않는다.
+
+### 다음 작업
+
+로드맵의 Bootstrap·양쪽 Host Live 수용부터 기존 Capability/승인 경계를 확인하고 실제 WorkItem 근거를 확보한다. 후속 사용자 승인은 이번 문서 변경의 main 커밋·푸시에 한정하며 기능 수용이나 배포 승인을 뜻하지 않는다.
+
+### 미해소로 남긴 것
+
+실제 Host Live, 자동 역할 위임·개선 루프, 장기 실행의 Host 수용, 전체 OS 실사용 및 Todo + Calendar MVP/사업 성과는 이번 문서 작업에서 미검증이다. 공개 Host 보호 실행 BLOCKED와 Local/Protected 구분을 유지한다.
 
 ## 단계별 경과와 당시 검증 범위
 

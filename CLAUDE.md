@@ -36,6 +36,37 @@ alpha artifacts and distinguish public availability from external pilot evidence
 
 CodeFleet exists to make "the AI said it worked" structurally untrustworthy. Only evidence the Harness observed counts. That standard applies to this repository's own development too: the rules below are the same rules the product enforces, turned on the work of building it.
 
+## Host collaboration and bounded improvement
+
+Use the [product principles](docs/PRODUCT_VISION.md) for the Agentic Development
+Loop and Harness Engineering boundaries; [Codex instructions](AGENTS.md) apply
+the same principles to repository development. Keep one Agent as the default.
+When delegation is authorized and useful, use Claude Code's available Skill,
+Agent and Subagent facilities within the Host's actual permissions. A Skill or
+role name grants no authority and does not prove that a separate Agent ran.
+
+The Manager/Coordinator assigns each WorkItem's scope, dependencies, inputs,
+outputs and verification owner, manages resource/write conflicts and integrates
+results. Parallelize only independent approved work; serialize overlapping writes
+and verify the integrated candidate. Subagent reviews and messages are proposals,
+not Protected Evidence. The Harness retains control of Policy, Capability,
+approval revision, budget and verification state. Reuse existing Persistent
+State/Work Log, Lease and Recovery instead of adding another execution engine.
+
+For a failed attempt, inspect evidence, state a repair hypothesis and reverify the
+new candidate within the approved scope and remaining attempt/time/cost budget.
+Stop on repeated failure or no progress, lost lease, changed approval, uncertain
+effects, exhausted budget or missing capability. Never relax tests or completion
+criteria to continue. Actual tests and required Host Live Evidence must precede
+feature acceptance; documentation updates remain DOCUMENTED.
+
+Maintain Windows, macOS and Linux compatibility without making Docker, WSL or
+extra API keys basic requirements. Report the platform actually tested and keep
+Local results separate from Protected Evidence. Git actions and effects outside
+Git (deployment, external messages, service/data changes) require their respective
+authorization; a file-edit request alone grants neither. For real-use pilots,
+follow the roadmap's company/side-project outcome measurements.
+
 ## Setup
 
 No dependencies, no `npm install`. Node 24+ only (native TypeScript stripping).

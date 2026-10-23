@@ -17,15 +17,28 @@ Host는 모델·인증·세션·자체 도구 권한을 소유한다. CodeFleet�
 | --- | --- |
 | 목표·Draft·Validator | `src/intent/`, `src/product/tasks.mjs`: 구조화 제안을 검사하고 계약을 준비한다. Draft 유효성은 실행 승인이 아니다. |
 | Host 연결 | `src/hosts/`: Skill 설치·준비·교환 계약. 공개 `requests/submit/run/resume`는 생산 격리 미검증으로 차단한다. |
-| DAG·협업·정책 | `src/workflow/`, 기존 Controller·Store: 단일 Agent 기본, 지원되는 병렬 후보와 직렬 통합. 역할 metadata는 실제 Live 위임의 증거가 아니다. |
-| 검증 Backend | `src/verification/backends.mjs`: Local, Container, 미검증 Host Sandbox를 구분한다. |
-| 증거·완료 | 기존 Alpha Evidence·Judge: 계약과 후보에 결합된 독립 증거를 판정한다. AI 자기 보고는 검증 성공이 아니다. |
+| Manager/Coordinator | `src/alpha/controller.mjs`의 기존 Workflow 조정: WorkItem 진행·의존성·자식 실행·결과 통합과 승인/lease 재확인. Manager는 이 책임의 이름이며 별도 Agent 엔진이 아니다. 실제 Host 자동 위임은 미검증이다. |
+| 역할별 Agent·WorkItem | `src/workflow/definition.mjs`, `src/workflow/collaboration.mjs`: Planner·Architect·Executor·Reviewer 배정, 명시적 파일·테스트·의존성, 범위가 결합된 위임과 메시지. 역할 metadata·메시지는 독립 실행 증거가 아니다. |
+| Scheduler·Collaboration | 기존 Workflow의 준비 작업 선택·자원 충돌 제한, Controller의 격리된 병렬 후보와 직렬 통합을 재사용한다. 겹치는 파일 소유권은 거부하며 통합 후보의 필수 검증을 유지한다. 일반적인 Host Subagent 자동 병렬 실행을 보장하지 않는다. |
+| Persistent Work Log·Recovery | `src/alpha/store.mjs`, `src/workflow/persistence.mjs`: SQLite 상태·이벤트·시도·산출물 참조·승인, worker lease와 재개 검사를 재사용한다. Work Log는 기존 영속 기록의 책임이며 별도 저장소가 아니다. 현재 시험 근거를 모든 Host의 장기 실행 보장으로 확대하지 않는다. |
+| Harness | 기존 Controller·계약·정책·승인 경계가 Policy·실제 Capability·승인 revision·예산·검증 상태를 통제한다. Agent/Coordinator의 제안으로 권한을 확대하거나 공개 실행 차단을 해제하지 않는다. |
+| Verification Backend | `src/verification/backends.mjs`: Local, Container, 미검증 Host Sandbox의 능력과 보장 범위를 구분한다. Backend 선택은 필수 검증 기준을 낮추지 않는다. |
+| Evidence/Judge | 기존 Alpha Evidence·Judge: 관측 주체·계약·후보에 결합된 독립 증거로 판정한다. 제안 생성과 완료 판정의 책임을 분리하며 AI 자기 보고는 검증 성공이 아니다. |
+| Bounded Improvement Loop | 기존 Alpha의 시도/시간 예산·재검증과 Bootstrap의 승인된 hash-bound repair 경로를 재사용한다. Bootstrap 로컬 수정·재검증은 구현돼 있지만, 자동 Host 수정 루프의 Live 수용 완료를 뜻하지 않는다. |
 
 기본 계획·Draft·DAG 조회·승인 요청에는 Docker가 필요 없다. Docker는 선택적 보호 검증 Backend이며 이를 요구하는 계약의 검증에는 필요하다. Local Verification은 명시적으로 신뢰한 로컬 실행으로, 보호 격리나 Protected Verification과 동등하지 않다. Host Sandbox는 현재 `NOT_VERIFIED`다. Backend 부재를 Local 자동 대체나 완료 조건 완화로 처리하지 않는다. WSL·별도 OS 계정·직접 모델 API Key도 기본 준비 요구 사항이 아니다.
 
 실제 Host Live·자동 위임·생산 보호 실행 배포는 오프라인 시험과 구분한다. Git HEAD 없는 신규 프로젝트 Bootstrap은 이 기준선에 구현돼 있다(probe·BootstrapDraft·Validator·bootstrap DAG·승인 fileset 생성·로컬 검증). Host Live와 보호 검증은 미완료이며 수용 기준은 [로드맵](roadmap.md)에 둔다.
 
 상세 계약은 [Host 연동](../implementation/host-native.md), [승인 경계](../implementation/operator-authorization.md), [IPC](../implementation/host-ipc.md)를 참조한다. [Core 안내](host-core-guide.md)는 현재 Backend 보장 범위, [Host 안내](host-native-guide.md)는 설치·사용을 담당한다. 상세 계약 원본이나 과거 검토를 이 문서의 최신 상태표로 해석하지 않는다.
+
+## 개발 루프의 책임과 목표 경계
+
+WorkItem 초안은 Validator와 DAG 검사를 거쳐 승인된 범위에서 실행한다. Manager/Coordinator가 배정과 통합을 맡고, Harness가 실행 가능성·승인·예산·상태를 집행하며, Verification Backend가 검사를 수행하고 Evidence/Judge가 결과를 판정한다. Agent의 자체 리뷰가 이 경계를 대체하지 않는다.
+
+실패 후 다음 시도는 실패 근거와 수정 가설, 현재 계약 revision, 새 후보와 검증 증거를 연결해야 한다. 기존 영속 상태와 Lease/Recovery로 중단·재개 및 미확정 효과를 확인하고, 중복 실행을 맹목적으로 시작하지 않는다. 반복 실패·무진전·예산 소진·승인 변경·lease 상실·불명확한 외부 효과에서는 중단하고 필요한 결정을 보고한다. 자동으로 테스트·권한·수락 기준을 완화하지 않는다.
+
+이 책임 구분은 기존 모듈 위의 개발 원칙이다. 일반 목표의 완전 자동 위임·오류 수정·장기 실행, Windows·macOS·Linux 전체의 실사용 수용과 Todo + Calendar MVP 성과는 후속 검증 대상이다. 플랫폼별 경로·프로세스·권한 차이를 Capability와 Backend 경계에서 다루며 새로운 필수 Docker/WSL 플랫폼을 도입하지 않는다. 현재 구현/미검증 구분은 진행 현황, 선행 관계와 수락 기준은 로드맵을 따른다.
 
 ## 초기 Alpha 설계 기록
 

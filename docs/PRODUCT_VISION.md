@@ -6,7 +6,7 @@ CodeFleet은 Codex CLI·Claude Code 안에서 사용하는 **Host-Native AI 개�
 
 ## Host를 활용하는 확장
 
-기존 Host의 모델·인증·세션과 허용된 도구를 우선 활용한다. CodeFleet은 별도의 모델 로그인이나 세션 복제를 기본 경로로 요구하지 않는다. Host 간 세션 이식이나 인증 토큰 추출을 전제로 하지 않으며, 직접 모델 API는 선택적 연동이다.
+기존 Host의 모델·인증·세션과 허용된 도구·Agent/Subagent 기능을 우선 활용한다. CodeFleet은 별도의 Agent 엔진이나 실행 플랫폼을 만드는 것이 아니라 기존 Host에 작업 조정과 검증 규율을 연결한다. 별도의 모델 로그인이나 세션 복제를 기본 경로로 요구하지 않는다. Host 간 세션 이식이나 인증 토큰 추출을 전제로 하지 않으며, 직접 모델 API는 선택적 연동이다.
 
 기본 계획·분석·Draft·Workflow/DAG 사용에 Docker·WSL·별도 OS 계정·직접 모델 API Key를 요구하지 않는다. 현재 로컬 준비 환경과 설치 방법은 [Host Core 안내](product-completion/host-core-guide.md)를 따른다. 보호된 실행에 필요한 조건은 해당 Backend와 계약의 요구 사항으로 구분한다.
 
@@ -21,6 +21,16 @@ CodeFleet은 Codex CLI·Claude Code 안에서 사용하는 **Host-Native AI 개�
 
 ## 검증 수준과 완료
 
+### Agentic Development Loop와 Harness Engineering
+
+Agentic Development Loop는 목표를 검증 가능한 WorkItem으로 나누고 실행·검증의 피드백으로 다음 허용 행동을 정하는 개발 과정이다. Manager/Coordinator는 역할 배정·의존성·병렬 실행·충돌·결과 통합을 관리한다. 역할별 협업은 필요한 경우에만 사용하며 단일 Agent 경로를 유지한다.
+
+Harness Engineering은 Agent의 판단 밖에서 Policy·Capability·승인·예산·검증 상태와 관측 증거를 통제하는 원칙이다. Agent 또는 Coordinator가 자기 결과를 승인하거나 검증 기준을 낮추지 않는다. 기존 Persistent State·Work Log·Lease·Recovery를 재사용하여 시도와 미확정 효과를 추적한다.
+
+실패 후에는 승인된 범위와 남은 예산 안에서만 Bounded Improvement Loop를 수행한다. 실패 근거 → 수정 가설 → 제한된 수정 → 새 후보 재검증으로 이어가며 반복 실패·무진전·권한 변경·예산 소진·복구 불확실성에서는 중단한다. 이 목표가 전체 Host 경로의 자동 수정·위임·장기 실행 구현 완료를 뜻하지 않는다.
+
+### Backend와 독립 증거
+
 | Backend | 의미와 한계 |
 | --- | --- |
 | Local Verification | 사용자가 명시적으로 신뢰한 명령과 후보를 로컬에서 검증한다. OS 격리나 Protected Verification을 보증하지 않는다. |
@@ -34,3 +44,9 @@ AI의 성공 주장은 독립 검증 증거가 아니다. Evidence는 관측 주
 Git HEAD 없는 신규 프로젝트 Bootstrap은 구현과 오프라인 시험이 연결돼 있다. 실제 Host Live와 보호 검증 근거가 연결되기 전에는 수용 완료로 표시하지 않는다. 기존 프로젝트의 준비·검증 경로를 신규 프로젝트 지원 증거로 대신하지 않는다.
 
 오프라인 구현, 설치·발견, 실제 Host Live 수용, 자동 역할 위임, 공개 패키지와 외부 사용자 실적을 각각 구분한다. 과거 실패·차단·보안 의사결정과 해시 고정 증거는 보존하고, 새 상태는 진행 현황에서 후속 근거와 함께 관리한다.
+
+## Cross-Platform과 실사용 가치
+
+Windows·macOS·Linux의 로컬 개발 환경에서 최소 의존성으로 사용할 수 있는 것을 목표로 한다. 경로·셸·프로세스 종료·파일 권한·복구 차이를 실제 환경별로 검증하고, 미시험 조합을 지원 완료로 표시하지 않는다. 선택 Backend의 요구 조건을 기본 설치 전체의 필수 조건으로 확대하지 않는다.
+
+회사의 실제 개발 업무와 사이드 프로젝트에서 준비·승인·개입·검토를 포함한 사람의 작업 시간, 결과 품질·회귀·재작업, 관측 가능한 비용을 줄이는지가 제품 가치의 기준이다. Todo + Calendar MVP를 후속 실사용 수용 대상으로 두며, 기능 시연이나 생성 파일 수만으로 생산성 향상을 주장하지 않는다. 비교 가능한 수동/기존 Host 기준선과 실패·취소를 포함한 실제 표본을 기록한다. 회사 자료와 외부 시스템 변경은 승인 범위에서만 다룬다. 실행 순서와 수락 기준은 로드맵에서, 실적은 진행 현황에서 관리한다.
