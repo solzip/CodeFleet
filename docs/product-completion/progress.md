@@ -39,6 +39,8 @@
 
 ### 결론
 
+후속 사용자 지시로 현재 기본 작업 폴더를 최신 main으로 전환했다. 별도 문서 작업 트리는 detached 상태로 남기고, 기본 폴더의 로컬 요약 문서 네 개를 당시 스냅샷으로 보존·반영한다. main과 내용이 같은 implementation 사본은 로컬 백업에 보존했고 개인 설정·실행 로그·작업 트리는 공개 대상에서 제외했다. 기본 폴더의 이전 커버리지 기록으로 첫 posttest가 실패했으나, 현재 기준으로 `npm.cmd run pretest`와 `npm.cmd run test:legacy`를 실행한 뒤 Legacy 324/324 및 `npm.cmd run posttest` exit 0을 확인했다. Alpha/Host Live를 다시 실행하거나 수용 상태를 승격한 것은 아니다.
+
 개발 지침과 공식 문서의 책임을 정리했다. 현재 기능의 완료 상태는 승격하지 않는다.
 
 ### 다음 작업
