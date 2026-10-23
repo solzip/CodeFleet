@@ -22,9 +22,10 @@ backend, required for contracts that need it. Explicit-trust Local Verification
 is not Protected Verification; Host Sandbox remains unverified. Do not promote
 offline tests to Host Live or automatic delegation certification.
 
-New-project Bootstrap without Git HEAD is under separate development and has no
-completion evidence on this main baseline. Preserve its separate worktree and
-distinguish the product goal from implemented existing-project behavior.
+New-project Bootstrap without Git HEAD is implemented on this baseline: probe,
+BootstrapDraft, Validator, bootstrap DAG, approved fileset creation and local
+verification, covered by offline and process-level tests. Real Host Live is not
+run and Protected Verification stays unsatisfied for NEW_PROJECT; do not claim either.
 
 `src/alpha/` is a separate test-driven Node and Java workflow. Run `npm test` for both
 legacy and alpha suites plus document checks. Legacy TAP and rule coverage stay

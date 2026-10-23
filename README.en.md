@@ -6,7 +6,7 @@ Use a single Agent by default, with role-based collaboration where supported. Of
 
 Basic planning, Draft and DAG preparation need local Node, Git and the Host. Docker, WSL, separate OS accounts and direct model API keys are not default requirements. Docker is the optional protected Container Verification backend, and is required when a contract needs that backend. Explicitly trusted Local Verification does not provide Protected Verification. Host Sandbox remains NOT_VERIFIED; unavailable protection is not silently replaced by Local success.
 
-The product covers both new-project Bootstrap and improvements to existing projects. **Bootstrap without an existing Git HEAD is under separate development, with no completion evidence on the current main baseline.** See the roadmap for acceptance criteria.
+The product covers both new-project Bootstrap and improvements to existing projects. **Bootstrap without an existing Git HEAD is implemented through goal, Draft, Validator, DAG, approved file creation and local verification, verified by offline and process-level tests. Real Host Live and protected verification are not complete.** See the roadmap for acceptance criteria.
 
 [Product principles](docs/PRODUCT_VISION.md) · [Architecture](docs/product-completion/architecture.md) · [Current status](docs/product-completion/progress.md) · [Roadmap](docs/product-completion/roadmap.md) · [Host installation](docs/product-completion/host-native-guide.md) · [Core and backends](docs/product-completion/host-core-guide.md) · [한국어](README.md)
 

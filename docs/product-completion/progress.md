@@ -12,7 +12,7 @@
 | 실제 Host Live | HOST_LIVE_NOT_VERIFIED | [설치·발견 및 차단 기록](../runs/2026-10-20/first-host-native-gate-resolution.md). 오프라인·설치 성공을 Live 수용으로 계산하지 않음 |
 | 역할별 협업 | 오프라인 통제형 협업 근거 있음, 자동 Host 위임 미검증 | [G5 기록](../runs/2026-10-19/alpha-g5-controlled-hybrid.md). 단일 Agent 기본 |
 | 공개 Host 보호 실행 | BLOCKED | `src/hosts/cli.mjs`의 공개 requests/submit/run/resume 차단 유지. 내부 시험 경로와 구분 |
-| Git HEAD 없는 신규 프로젝트 Bootstrap | 별도 개발 중, main 완료 근거 없음 | 기존 프로젝트 준비를 신규 프로젝트 지원으로 간주하지 않음. [다음 작업과 완료 기준](roadmap.md#현재-host-native-후속-작업) |
+| Git HEAD 없는 신규 프로젝트 Bootstrap | 구현·오프라인 검증 (`test/bootstrap*.test.mjs`). Host Live NOT_RUN, 보호 검증 UNSATISFIED | 고정 Draft 테스트 통과를 모델 Live 성공으로 간주하지 않음. [다음 작업과 완료 기준](roadmap.md#현재-host-native-후속-작업) |
 
 다음 작업은 로드맵의 현재 Host-Native 후속 작업을 따른다. 아래 Alpha 배포·G/H 단계·파일럿 인계는 각 시점의 근거와 경과다. 과거 Alpha Live 성공은 현재 Host Live 검증을 대신하지 않는다.
 

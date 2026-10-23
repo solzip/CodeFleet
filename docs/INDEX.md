@@ -10,7 +10,7 @@ CodeFleet은 기존 Codex CLI·Claude Code의 모델·인증·세션을 사용�
 | [제품 문서 지도](product-completion/README.md) | 공식 문서의 읽기 순서와 범위 |
 | [공식 아키텍처](product-completion/architecture.md) | 현재 구조와 모듈 책임 |
 | [진행 현황](product-completion/progress.md) | 현재 구현·검증·미해결 상태 |
-| [로드맵](product-completion/roadmap.md) | 다음 작업과 완료 기준; 별도 개발 중인 Bootstrap 포함 |
+| [로드맵](product-completion/roadmap.md) | 다음 작업과 완료 기준; Bootstrap Host Live 포함 |
 | [Host 안내](product-completion/host-native-guide.md) | 설치와 사용 |
 | [Core 안내](product-completion/host-core-guide.md) | Docker 없는 기본 준비, Local / Container / Host Sandbox 보장 범위 |
 | [기록 규약](CONVENTIONS.md) | 작업 기록 작성 규칙 |

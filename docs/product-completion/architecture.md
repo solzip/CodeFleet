@@ -23,7 +23,7 @@ Host는 모델·인증·세션·자체 도구 권한을 소유한다. CodeFleet�
 
 기본 계획·Draft·DAG 조회·승인 요청에는 Docker가 필요 없다. Docker는 선택적 보호 검증 Backend이며 이를 요구하는 계약의 검증에는 필요하다. Local Verification은 명시적으로 신뢰한 로컬 실행으로, 보호 격리나 Protected Verification과 동등하지 않다. Host Sandbox는 현재 `NOT_VERIFIED`다. Backend 부재를 Local 자동 대체나 완료 조건 완화로 처리하지 않는다. WSL·별도 OS 계정·직접 모델 API Key도 기본 준비 요구 사항이 아니다.
 
-실제 Host Live·자동 위임·생산 보호 실행 배포는 오프라인 시험과 구분한다. Git HEAD 없는 신규 프로젝트 Bootstrap은 별도 개발 중이며 이 기준선의 완료 기능이 아니다. 목표 흐름에 포함하되 구현·수용 기준은 [로드맵](roadmap.md)에 둔다.
+실제 Host Live·자동 위임·생산 보호 실행 배포는 오프라인 시험과 구분한다. Git HEAD 없는 신규 프로젝트 Bootstrap은 이 기준선에 구현돼 있다(probe·BootstrapDraft·Validator·bootstrap DAG·승인 fileset 생성·로컬 검증). Host Live와 보호 검증은 미완료이며 수용 기준은 [로드맵](roadmap.md)에 둔다.
 
 상세 계약은 [Host 연동](../implementation/host-native.md), [승인 경계](../implementation/operator-authorization.md), [IPC](../implementation/host-ipc.md)를 참조한다. [Core 안내](host-core-guide.md)는 현재 Backend 보장 범위, [Host 안내](host-native-guide.md)는 설치·사용을 담당한다. 상세 계약 원본이나 과거 검토를 이 문서의 최신 상태표로 해석하지 않는다.
 
