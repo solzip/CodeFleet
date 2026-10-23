@@ -108,6 +108,9 @@ export function localBackend() {
         const scratch = await mkdtemp(path.join(tmpdir(), 'codefleet-local-'));
         const env = { HOME: scratch, USERPROFILE: scratch, TMP: scratch, TEMP: scratch, TMPDIR: scratch,
           PATH: path.dirname(spec.executable), ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}) };
+        // Trusted embedding seam: final durable fence, after all asynchronous setup.
+        // No Agent/CLI supplied callback is accepted by the backend.
+        if (request.beforeSpawn) await request.beforeSpawn(spec);
         const result = parseTestResult(await command(spec.executable, spec.args, {
           cwd: spec.directory, env, timeoutMs: spec.timeoutMs,
           cancelled: () => control.cancelled || request.cancelled?.()

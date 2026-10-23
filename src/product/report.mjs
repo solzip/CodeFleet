@@ -4,6 +4,7 @@ import { attempts, approval } from '../workflow/persistence.mjs';
 import { judge } from '../alpha/judge.mjs';
 import { messages } from '../workflow/collaboration.mjs';
 import { task, bootstrapView, bootstrapDrift, clarifiableFor } from './tasks.mjs';
+import { reservationStatus } from './reservations.mjs';
 
 function bootstrapNext(current, plan) {
   if (current.state === 'REJECTED') return 'Create a new plan';
@@ -122,10 +123,23 @@ export async function taskReport(store, id) {
   if (plan.contractKind === 'NEW_PROJECT') {
     const view = current.bootstrap && current.state !== 'REJECTED' ? bootstrapView(store, id, { drift: await bootstrapDrift(store, id) }) : null;
     const actions = view ? bootstrapActions(view) : null, local = view ? localVerification(store, view) : {};
+    const decisions = store.db.prepare("SELECT 1 FROM sqlite_master WHERE name='bootstrap_decisions'").get()
+      ? store.db.prepare('SELECT id,requestId FROM bootstrap_decisions WHERE taskId=?').all(id) : [];
+    const reservations = decisions.map(d => {
+      try { return reservationStatus(store, d.id, d.requestId); }
+      catch (e) { return { status: 'EVIDENCE_DEFECT', reason: e.message, complete: false }; }
+    });
+    const continuation = bootstrapContinuation(current, view, actions);
+    if (decisions.length) {
+      continuation.status = 'HUMAN_HANDOFF';
+      continuation.next = null;
+      continuation.reason = 'Durable one-shot execution: inspect reservation status; no command-hash replay, automatic retry or budget reset';
+      if (actions) actions.splice(0, actions.length, { kind: 'HUMAN_HANDOFF', items: [], text: continuation.reason });
+    }
     // complete is never true here: NEW_PROJECT has no protected verification contract.
     return { schemaVersion: 1, kind: 'TaskReport', taskId: id, revision: current.revision, contractKind: 'NEW_PROJECT', state: current.state, reviewState: current.state, plannerAttempt: current.plannerAttempt ?? null, plan, settings: current.settings, run: null,
       bootstrap: view, nextAction: actions ? actions.map(a => `${a.kind}${a.items.length ? ' (' + a.items.join(', ') + ')' : ''}: ${a.text}`).join('; ') : bootstrapNext(current, plan), nextActions: actions,
-      workflowHash: current.bootstrap?.workflowHash ?? null, continuation: bootstrapContinuation(current, view, actions),
+      workflowHash: current.bootstrap?.workflowHash ?? null, continuation, executionReservations: reservations,
       verification: Object.values(local).some(v => v.evidenceRef) ? 'LOCAL_ONLY_UNPROTECTED' : 'NOT_RUN', localVerification: local, protectedVerification: 'UNSATISFIED', complete: false };
   }
   return { schemaVersion: 1, kind: 'TaskReport', taskId: id, revision: current.revision, state: current.state === 'REJECTED' ? 'REJECTED' : run?.state ?? current.state, reviewState: current.state, plannerAttempt: current.plannerAttempt ?? null, plan, settings: current.settings, run,

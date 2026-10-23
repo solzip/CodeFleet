@@ -210,7 +210,7 @@ async function prepareBootstrap(store, current) {
   return update(store, current, { ...current, revision: current.revision + 1, state: 'BOOTSTRAP_PREPARED',
     bootstrap: { workflowRef: store.artifact(workflow), workflowHash: workflow.workflowHash, states: bootstrapStates(workflow), filesets: {} } }, 'BOOTSTRAP_WORKFLOW_PREPARED');
 }
-function bootstrapContext(store, id) {
+export function bootstrapContext(store, id) {
   const current = task(store, id), plan = store.readArtifact(current.planRef);
   if (!isBootstrap(plan) || !current.bootstrap || current.state === 'REJECTED') throw Error('Prepare a validated NEW_PROJECT task first');
   const workflow = validateBootstrapWorkflow(store.readArtifact(current.bootstrap.workflowRef), plan.draft);
@@ -259,6 +259,15 @@ export function effectiveStates(store, current, workflow, { drift = [] } = {}) {
     let evidence;
     try { evidence = store.readArtifact(ref); } catch { states[n.id] = 'EVIDENCE_INVALID'; continue; }
     if (evidence.kind !== 'BootstrapLocalVerification' || evidence.taskId !== current.id || evidence.itemId !== n.id || evidence.status !== states[n.id]) { states[n.id] = 'EVIDENCE_INVALID'; continue; }
+    if (evidence.reservation) {
+      const row = store.db.prepare('SELECT body FROM bootstrap_reservations WHERE requestId=?').get(evidence.reservation.requestId);
+      const reserved = row ? JSON.parse(row.body) : null;
+      if (!reserved || reserved.result?.evidenceRef !== ref || hash(reserved.identity) !== hash(evidence.reservation) ||
+          reserved.revision !== evidence.taskRevision || reserved.state !== evidence.status ||
+          evidence.workflowHash !== current.bootstrap.workflowHash || reserved.commandHash !== evidence.command?.commandHash ||
+          evidence.complete !== false || evidence.verifierIndependence !== 'UNPROTECTED') { states[n.id] = 'EVIDENCE_INVALID'; continue; }
+    } else if (store.db.prepare("SELECT 1 FROM sqlite_master WHERE name='bootstrap_decisions'").get() &&
+      store.db.prepare('SELECT 1 FROM bootstrap_decisions WHERE taskId=?').get(current.id)) { states[n.id] = 'EVIDENCE_INVALID'; continue; }
     if (hash(sorted(evidence.fileDigests)) !== hash(sorted(digests)) || drift.some(p => Object.hasOwn(evidence.fileDigests, p))) states[n.id] = 'VERIFICATION_STALE';
   }
   return states;
@@ -396,6 +405,8 @@ export async function materializeTask(store, id, itemId, { now = Date.now() } = 
 // covers executable bytes, arguments and the whole tree, so a trust given before
 // any file changed can never authorize a run against the changed files.
 export async function verifyTask(store, id, itemId, request, { trust, acknowledgeUnisolated = false, cancelled = () => false, backend = localBackend() } = {}) {
+  if (trust !== undefined && store.db.prepare("SELECT 1 FROM sqlite_master WHERE name='bootstrap_decisions'").get() &&
+      store.db.prepare('SELECT 1 FROM bootstrap_decisions WHERE taskId=?').get(id)) throw Error('Durable decision required for this task; command hash is not an execution grant');
   const { current, plan, workflow } = bootstrapContext(store, id);
   const item = workflow.items.find(n => n.id === itemId);
   if (!item) throw Error(`Unknown WorkItem: ${itemId}`);
