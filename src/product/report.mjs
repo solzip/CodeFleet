@@ -33,8 +33,48 @@ export function bootstrapActions(view) {
   else if (actions.every(a => ['PROTECTED_VERIFICATION_UNSATISFIED', 'BLOCKED_CAPABILITY'].includes(a.kind))) actions.unshift({ kind: 'LOCAL_WORK_COMPLETE', items: [], text: 'All locally executable items are satisfied; what remains needs a capability CodeFleet does not have here' });
   return actions;
 }
-function localVerification(view) {
-  return Object.fromEntries(view.items.filter(i => i.kind === 'local-verification').map(i => [i.id, { state: i.state, evidenceRef: i.verificationRef }]));
+function localVerification(store, view) {
+  return Object.fromEntries(view.items.filter(i => i.kind === 'local-verification').map(i => {
+    const result = { state: i.state, evidenceRef: i.verificationRef };
+    if (i.verificationRef && !['EVIDENCE_INVALID', 'VERIFICATION_STALE'].includes(i.state)) {
+      // A read-only diagnostic, not an accepted verdict or a workflow transition.
+      try {
+        const evidence = store.readArtifact(i.verificationRef);
+        result.judgment = { ...judge(evidence), authority: evidence.authority,
+          scope: 'PROTECTED_ACCEPTANCE', stateTransition: false };
+      } catch { result.judgment = { outcome: 'ESCALATE', reason: 'Evidence unavailable', stateTransition: false }; }
+    }
+    return [i.id, result];
+  }));
+}
+// One advisory next step for the existing Host/Operator loop. This neither
+// reserves work nor grants permission to replay a command or a trust hash.
+function bootstrapContinuation(current, view, actions) {
+  const base = { mode: 'SINGLE_AGENT', authority: 'ADVISORY_ONLY', taskRevision: current.revision,
+    workflowHash: current.bootstrap?.workflowHash ?? null, executionGranted: false,
+    automaticReplay: false };
+  if (!view) return { ...base, status: 'HUMAN_HANDOFF', reason: 'VALIDATED_WORKFLOW_REQUIRED', next: null };
+  if (view.drift.length) return { ...base, status: 'HUMAN_HANDOFF', reason: 'FILES_CHANGED_OUTSIDE_CODEFLEET', next: null };
+  const defect = actions.find(a => a.kind === 'EVIDENCE_DEFECT');
+  const action = defect ?? actions[0];
+  const itemId = action.items[0] ?? null;
+  const next = { kind: action.kind, itemId };
+  if (action.kind === 'PROPOSE_FILESET') return { ...base, status: 'HOST_PROPOSAL_REQUIRED', next,
+    reason: 'Submit a candidate bound to the current Task revision; proposal grants no execution' };
+  if (action.kind === 'AWAIT_FILESET_APPROVAL') return { ...base, status: 'AWAIT_OPERATOR', next,
+    reason: 'Exact current fileset approval required' };
+  if (action.kind === 'MATERIALIZE') {
+    const item = view.items.find(i => i.id === itemId);
+    if (item.fileset.state === 'READY') return { ...base, status: 'AWAIT_OPERATOR', next,
+      reason: 'Recheck approval expiry, current contract, paths and lease in objective materialize' };
+  }
+  if (action.kind === 'RUN_LOCAL_VERIFICATION' &&
+      view.items.find(i => i.id === itemId).state !== 'INCONCLUSIVE') return { ...base, status: 'AWAIT_LOCAL_TRUST', next,
+    reason: 'Inspect current command and tree; obtain separate one-use trust and acknowledge unisolated execution' };
+  return { ...base, status: 'HUMAN_HANDOFF', next,
+    reason: ['NO_FURTHER_ACTION', 'LOCAL_WORK_COMPLETE'].includes(action.kind)
+      ? 'Local work is satisfied; protected verification remains unsatisfied and the Objective is incomplete'
+      : 'Resolve the failure, uncertain execution, dependency or capability before continuing; do not replay automatically' };
 }
 
 export async function runReport(store, id) {
@@ -81,11 +121,11 @@ export async function taskReport(store, id) {
   const run = current.runId ? await runReport(store, current.runId) : null;
   if (plan.contractKind === 'NEW_PROJECT') {
     const view = current.bootstrap && current.state !== 'REJECTED' ? bootstrapView(store, id, { drift: await bootstrapDrift(store, id) }) : null;
-    const actions = view ? bootstrapActions(view) : null, local = view ? localVerification(view) : {};
+    const actions = view ? bootstrapActions(view) : null, local = view ? localVerification(store, view) : {};
     // complete is never true here: NEW_PROJECT has no protected verification contract.
     return { schemaVersion: 1, kind: 'TaskReport', taskId: id, revision: current.revision, contractKind: 'NEW_PROJECT', state: current.state, reviewState: current.state, plannerAttempt: current.plannerAttempt ?? null, plan, settings: current.settings, run: null,
       bootstrap: view, nextAction: actions ? actions.map(a => `${a.kind}${a.items.length ? ' (' + a.items.join(', ') + ')' : ''}: ${a.text}`).join('; ') : bootstrapNext(current, plan), nextActions: actions,
-      workflowHash: current.bootstrap?.workflowHash ?? null,
+      workflowHash: current.bootstrap?.workflowHash ?? null, continuation: bootstrapContinuation(current, view, actions),
       verification: Object.values(local).some(v => v.evidenceRef) ? 'LOCAL_ONLY_UNPROTECTED' : 'NOT_RUN', localVerification: local, protectedVerification: 'UNSATISFIED', complete: false };
   }
   return { schemaVersion: 1, kind: 'TaskReport', taskId: id, revision: current.revision, state: current.state === 'REJECTED' ? 'REJECTED' : run?.state ?? current.state, reviewState: current.state, plannerAttempt: current.plannerAttempt ?? null, plan, settings: current.settings, run,

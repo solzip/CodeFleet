@@ -301,21 +301,97 @@ test('verify refuses other kinds, other directories and a legacy task without a 
 
 test('nextAction follows the workflow: propose, await approval, materialize, verify, nothing left', async () => {
   const f = await prepared({ protectedItem: false });
+  const continuation = async () => (await taskReport(f.store, f.id)).continuation;
+  assert.deepEqual((await continuation()).next, { kind: 'PROPOSE_FILESET', itemId: 'todo' });
+  assert.equal((await continuation()).status, 'HOST_PROPOSAL_REQUIRED');
   assert.deepEqual(await kinds(f), ['PROPOSE_FILESET']);
   assert.deepEqual((await taskReport(f.store, f.id)).nextActions[0].items, ['todo']);
   const todo = await propose(f, 'todo', { files: files.todo.map(p => ({ path: p, content: contents[p] })) });
+  assert.equal((await continuation()).status, 'AWAIT_OPERATOR');
+  await assert.rejects(() => materializeTask(f.store, f.id, 'todo'), /approval required/);
   assert.deepEqual(await kinds(f), ['AWAIT_FILESET_APPROVAL']);
   approve(f, todo);
   assert.deepEqual(await kinds(f), ['MATERIALIZE']);
   await materializeTask(f.store, f.id, 'todo');
+  await assert.rejects(() => materializeTask(f.store, f.id, 'todo'), /terminal/);
+  assert.deepEqual((await continuation()).next, { kind: 'PROPOSE_FILESET', itemId: 'calendar' });
   assert.deepEqual(await kinds(f), ['PROPOSE_FILESET']);
   await create(f, 'calendar');
   const report = await taskReport(f.store, f.id);
+  assert.equal(report.continuation.status, 'AWAIT_LOCAL_TRUST');
+  assert.equal(report.continuation.executionGranted, false);
   assert.deepEqual(report.nextActions.map(a => [a.kind, a.items]), [['RUN_LOCAL_VERIFICATION', ['tests']]]);
   assert.doesNotMatch(report.nextAction, /PROPOSE_FILESET/);
   await verify(f); approve(f, await repair(f)); await materializeTask(f.store, f.id, 'todo'); await verify(f);
   const done = await taskReport(f.store, f.id);
   assert.deepEqual([done.nextActions.map(a => a.kind), done.complete], [['NO_FURTHER_ACTION'], false]);
+  assert.equal(done.continuation.status, 'HUMAN_HANDOFF');
+  assert.equal(done.continuation.taskRevision, rev(f));
+  assert.equal(done.continuation.workflowHash, done.workflowHash);
+  assert.equal(done.continuation.automaticReplay, false);
+  assert.match(done.continuation.reason, /Objective is incomplete/);
+  assert.deepEqual([done.localVerification.tests.judgment.outcome, done.localVerification.tests.judgment.authority,
+    done.localVerification.tests.judgment.stateTransition], ['ESCALATE', 'LOCAL_EXECUTED', false]);
+  const stored = task(f.store, f.id), events = f.store.events(f.id);
+  await taskReport(f.store, f.id);
+  assert.deepEqual(task(f.store, f.id), stored, 'advisory continuation and Judge never mutate state');
+  assert.deepEqual(f.store.events(f.id), events);
+});
+
+test('continuation hands off failures and uncertain execution without reusing local trust', async () => {
+  const f = await built({ protectedItem: false });
+  const failed = await verify(f);
+  const report = await taskReport(f.store, f.id);
+  assert.equal(failed.status, 'LOCAL_FAILED');
+  assert.equal(report.continuation.status, 'HUMAN_HANDOFF');
+  assert.equal(report.continuation.next.kind, 'REPAIR_REQUIRED');
+  assert.equal(report.localVerification.tests.judgment.outcome, 'ESCALATE');
+  assert.equal(report.continuation.executionGranted, false);
+  // A terminal-looking local state must not hide uncertain execution.
+  const current = task(f.store, f.id);
+  current.bootstrap.states.tests = 'INCONCLUSIVE';
+  delete current.bootstrap.verifications;
+  f.store.db.prepare('UPDATE product_tasks SET body=? WHERE id=?').run(JSON.stringify(current), f.id);
+  const uncertain = await taskReport(f.store, f.id);
+  assert.equal(uncertain.continuation.status, 'HUMAN_HANDOFF');
+  assert.equal(uncertain.continuation.automaticReplay, false);
+  assert.equal(uncertain.localVerification.tests.judgment, undefined);
+});
+
+test('continuation does not present stale evidence as a current Judge verdict', async () => {
+  const f = await built({ protectedItem: false });
+  await verify(f);
+  await writeFile(path.join(f.dir, 'src/todo.mjs'), FIXED);
+  const report = await taskReport(f.store, f.id);
+  assert.equal(report.localVerification.tests.state, 'VERIFICATION_STALE');
+  assert.equal(report.localVerification.tests.judgment, undefined);
+  assert.equal(report.continuation.status, 'HUMAN_HANDOFF');
+  assert.equal(report.continuation.reason, 'FILES_CHANGED_OUTSIDE_CODEFLEET');
+  await assert.rejects(() => verifyTask(f.store, f.id, 'tests', request(f)), /Files changed outside CodeFleet/);
+  assert.equal(report.complete, false);
+});
+
+test('verification revision conflict preserves unattached evidence and cannot advance a changed task', async () => {
+  const f = await built({ protectedItem: false });
+  const before = task(f.store, f.id);
+  let executed = 0;
+  const backend = {
+    async authorize() { return {}; },
+    async verify() {
+      executed++;
+      const changed = { ...before, revision: before.revision + 1 };
+      f.store.db.prepare('UPDATE product_tasks SET revision=?,body=? WHERE id=?').run(changed.revision, JSON.stringify(changed), f.id);
+      return { status: 'INCONCLUSIVE', reason: 'Injected revision change during execution', authority: 'LOCAL_EXECUTED',
+        log: '', stderr: '', exitCode: null, interrupted: true, protectedVerification: 'UNSATISFIED' };
+    }
+  };
+  await assert.rejects(() => verifyTask(f.store, f.id, 'tests', request(f), {
+    trust: 'fixture-only', acknowledgeUnisolated: true, backend
+  }), /Task revision conflict; the executed result is preserved as evidence .* but is not attached/);
+  assert.equal(executed, 1);
+  assert.equal(task(f.store, f.id).bootstrap.verifications, undefined);
+  assert.equal(task(f.store, f.id).bootstrap.states.tests, 'PENDING_VERIFICATION');
+  assert.equal((await taskReport(f.store, f.id)).continuation.automaticReplay, false);
 });
 
 test('objective verify CLI inspects without trust, requires both flags and keeps verify-local exit codes', async () => {
