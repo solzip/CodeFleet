@@ -2,6 +2,10 @@
 
 Bootstrap 영속 예약의 검토-local R1/R2는 [최종 검토](audits/2026-10-23/01-durable-reservation-final-review.md)와 후속 [수정·재검증](runs/2026-10-23/durable-reservation-final-review-fix.md)에서 추적한다. 아래 Legacy 번호·역사 판정은 변경하지 않는다.
 
+PR #9의 추가 [승인 경계 검토](audits/2026-10-23/02-pr9-authorization-boundary.md)는 AB1을 NEEDS_FIX로 기록한다. 일반 CLI의 trusted-caller 가정은 동일 사용자 Agent에 대한 Operator 신원 집행을 보장하지 않는다. R1/R2 수정과 기존 Legacy 판정은 보존한다.
+
+AB1 후속 [로컬 수정](runs/2026-10-23/durable-authorization-boundary-fix.md)은 공개 영속 승인 발급·실행과 기존 API를 차단하여 READY_FOR_PR_UPDATE로 판정한다. 정상 인증 Operator 경로를 구현한 것은 아니며 오프라인 예약·조회·철회 계약은 보존한다. Commit·Push·PR 갱신은 별도 승인 대상이다.
+
 현재 알파의 신규 결함은 별도 [품질 감사](audits/2026-09-30/alpha-quality-gate.md)에서 추적한다. 후속 [수정·재검증](runs/2026-09-30/alpha-quality-remediation.md)을 함께 읽는다. 추가 [최종 검토](audits/2026-09-30/alpha2-final-review.md)의 후속 상태는 [취소·재조정 수정](runs/2026-09-30/alpha-reconciliation-fixes.md)을 따른다. 아래 등재부는 기존 아카이브로 보존한다.
 
 > ## 동결

@@ -7,13 +7,25 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { built, request } from './fixtures/bootstrap-reservation.mjs';
 import { task, verifyTask, enableTasks } from '../src/product/tasks.mjs';
-import { issueDecision, revokeDecision, executeDecision, reservationStatus } from '../src/product/reservations.mjs';
+import { issueOfflineDecision as issueDecision, revokeDecision, executeOfflineDecision as executeDecision, reservationStatus,
+  issueDecision as publicIssue, executeDecision as publicExecute } from '../src/product/reservations.mjs';
 import { command } from '../src/alpha/process.mjs';
 import { Store } from '../src/alpha/store.mjs';
 import { taskReport } from '../src/product/report.mjs';
+import { existsSync } from 'node:fs';
+import { dispatchProduct } from '../src/product/cli.mjs';
 
-const cli = path.resolve('src/alpha/cli.mjs');
+// The former public execution path is now blocked. Retain all reservation
+// mechanics assertions with real processes using an explicitly offline driver.
+const cli = path.resolve('test/fixtures/reservation-offline-cli.mjs');
 const worker = path.resolve('test/fixtures/reservation-worker.mjs');
+const publicCli = path.resolve('src/alpha/cli.mjs');
+const publicCall = (state, args, options) => command(process.execPath, [publicCli, '--state', state, ...args], options);
+function blocked(output) {
+  assert.equal(output.exitCode, 1, output.stdout + output.stderr);
+  assert.equal(JSON.parse(output.stdout).status, 'BLOCKED_OR_UNSUPPORTED');
+  assert.match(JSON.parse(output.stdout).error, /HOST_OPERATOR_ISOLATION_UNAVAILABLE/);
+}
 async function setup(t, { slow = false, failing = false, timeBudgetMs = 60000, maxAttempts = 1, timeoutSeconds = 300 } = {}) {
   const f = await built(); t.after(() => f.store.close());
   changeTask(f, value => { value.settings.maxAttempts = maxAttempts; value.settings.timeoutSeconds = timeoutSeconds; });
@@ -38,7 +50,73 @@ function changeTask(f, fn) {
   f.store.db.prepare('UPDATE product_tasks SET body=?,revision=? WHERE id=?').run(JSON.stringify(value), value.revision, f.id);
 }
 
-// Final-review R1: real CLI, persistent SQLite faults, then a fresh CLI reader.
+test('AB1: public CLI rejects Agent-authored decisions and execution before opening Store', async t => {
+  const f = await setup(t);
+  const input = { ...f.input, actor: 'agent-authored-operator', decisionId: randomUUID(), requestId: randomUUID() };
+  const file = path.join(f.root, 'self-issued.json'); await writeFile(file, JSON.stringify(input));
+  const before = f.store.db.prepare('SELECT * FROM bootstrap_decisions').all();
+  const events = f.store.events(f.id);
+  await assert.rejects(() => publicIssue(f.store, f.id, 'tests', f.request, input, { trusted: true }), /HOST_OPERATOR_ISOLATION_UNAVAILABLE/);
+  await assert.rejects(() => publicExecute(f.store, f.id, 'tests', f.request, { ...f.input, trusted: true }), /HOST_OPERATOR_ISOLATION_UNAVAILABLE/);
+  const issue = ['objective', 'authorize-local', f.id, 'tests', f.file, file];
+  blocked(await publicCall(f.state, issue));
+  // Caller-controlled environment/actor labels cannot turn the gate on.
+  blocked(await publicCall(f.state, issue, { env: { ...process.env, CODEFLEET_OPERATOR: 'true', CODEFLEET_TRUSTED_OPERATOR: 'true' } }));
+  blocked(await publicCall(f.state, ['objective', 'verify', f.id, 'tests', f.file, '--decision', input.decisionId, '--request-id', input.requestId]));
+  assert.deepEqual(f.store.db.prepare('SELECT * FROM bootstrap_decisions').all(), before);
+  assert.deepEqual(f.store.events(f.id), events);
+  assert.equal(await f.count(), 0);
+  const absent = path.join(f.root, 'must-not-open');
+  blocked(await publicCall(absent, issue));
+  blocked(await publicCall(absent, ['objective', 'verify', f.id, 'tests', f.file, '--decision', input.decisionId, '--request-id', input.requestId]));
+  assert.equal(existsSync(absent), false);
+  await assert.rejects(() => dispatchProduct(issue.slice(1), { store: f.store, execution: { actor: 'operator', trusted: true } }), /HOST_OPERATOR_ISOLATION_UNAVAILABLE/);
+});
+
+for (const state of ['issued', 'expired', 'revoked', 'consumed', 'forged', 'handoff']) test(`AB1: public execution refuses ${state} decision; control/status preserve durable history`, async t => {
+  const f = await setup(t);
+  if (state === 'expired') f.store.db.prepare('UPDATE bootstrap_decisions SET expires=0').run();
+  if (state === 'revoked') revokeDecision(f.store, f.input.decisionId, 'fixture');
+  if (state === 'consumed') assert.equal((await f.run()).status, 'LOCAL_PASSED');
+  if (state === 'handoff') assert.equal((await f.run({ hooks: { beforeSpawn: () => { throw Error('fixture handoff'); } } })).status, 'HUMAN_HANDOFF');
+  if (state === 'forged') {
+    const row = f.store.db.prepare('SELECT body FROM bootstrap_decisions').get();
+    const binding = JSON.parse(row.body); binding.actor = 'operator'; binding.operatorProof = 'self-written';
+    f.store.db.prepare('UPDATE bootstrap_decisions SET body=?').run(JSON.stringify(binding));
+  }
+  const snapshot = () => ({ task: task(f.store, f.id), decisions: f.store.db.prepare('SELECT * FROM bootstrap_decisions').all(),
+    reservations: f.store.db.prepare('SELECT * FROM bootstrap_reservations').all(), runs: f.store.db.prepare('SELECT * FROM runs').all(), events: f.store.events(f.id) });
+  const before = snapshot(), count = await f.count();
+  const args = ['objective', 'verify', f.id, 'tests', f.file, '--decision', f.input.decisionId, '--request-id', f.input.requestId];
+  for (let i = 0; i < 2; i++) blocked(await publicCall(f.state, args));
+  assert.deepEqual(snapshot(), before); assert.equal(await f.count(), count);
+  const queried = await publicCall(f.state, ['objective', 'reservation', f.input.decisionId, f.input.requestId]);
+  assert.equal(queried.exitCode, 0, queried.stderr);
+  const result = JSON.parse(queried.stdout);
+  assert.equal(result.complete, false);
+  assert.equal(result.status, state === 'consumed' ? 'LOCAL_PASSED' : state === 'handoff' ? 'HUMAN_HANDOFF' : 'NOT_RESERVED');
+  const oldTrust = await publicCall(f.state, ['objective', 'verify', f.id, 'tests', f.file, '--trust', f.input.commandHash, '--acknowledge-unisolated']);
+  assert.equal(oldTrust.exitCode, 1); assert.match(oldTrust.stdout.toString(), /Durable decision required/);
+  assert.equal((await publicCall(f.state, ['objective', 'revoke-local', f.input.decisionId, '--actor', 'fixture'])).exitCode, 0);
+  blocked(await publicCall(f.state, args));
+  assert.equal(await f.count(), count);
+});
+
+test('AB1: both public Host ingress paths reject issuance and requests/submit/run/resume', async t => {
+  const f = await setup(t), state = path.join(f.root, 'host-must-not-open');
+  for (const host of ['codex', 'claude']) {
+    for (const action of ['requests', 'submit', 'run', 'resume']) {
+      const r = await publicCall(state, ['host', host, action, f.id, '--actor', 'operator']);
+      assert.equal(r.exitCode, 1); assert.equal(JSON.parse(r.stdout).status, 'BLOCKED');
+      assert.equal(existsSync(state), false);
+    }
+    const r = await publicCall(f.state, ['host', host, 'authorize-local', f.id, 'tests', f.file, f.file]);
+    assert.equal(r.exitCode, 1); assert.equal(JSON.parse(r.stdout).status, 'BLOCKED');
+  }
+  assert.equal(await f.count(), 0);
+});
+
+// Final-review R1: real offline processes, persistent SQLite faults and restart.
 for (const boundary of ['terminal-event', 'commit']) test(`P1-B fix: ${boundary} rollback never publishes success`, async t => {
   const f = await setup(t), before = task(f.store, f.id).revision;
   f.store.db.exec(boundary === 'terminal-event'
@@ -115,7 +193,7 @@ async function until(fn) {
   throw Error('fixture checkpoint timed out');
 }
 
-test('P1-B: two actual CLI processes race one decision; restart/request replay launches at most once', async t => {
+test('P1-B: two offline CLI processes race one decision; restart/request replay launches at most once', async t => {
   const f = await setup(t, { slow: true });
   const before = task(f.store, f.id).revision;
   const outputs = await Promise.all([command(process.execPath, f.argv), command(process.execPath, f.argv)]);
@@ -288,7 +366,7 @@ test('P1-B: transaction rollback preserves approval and budget when event insert
   assert.equal(await f.count(), 1);
 });
 
-test('P1-B: actual CLI issues only explicit decision JSON, exposes durable state and revokes without execution', async t => {
+test('P1-B: offline driver issues explicit decision JSON, exposes durable state and revokes without execution', async t => {
   const f = await setup(t);
   const input = { ...f.input, decisionId: randomUUID(), requestId: randomUUID() };
   const file = path.join(f.root, 'decision.json'); await writeFile(file, JSON.stringify(input));

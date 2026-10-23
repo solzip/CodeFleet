@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { Store } from '../../src/alpha/store.mjs';
 import { enableTasks } from '../../src/product/tasks.mjs';
-import { executeDecision } from '../../src/product/reservations.mjs';
+import { executeOfflineDecision as executeDecision } from '../../src/product/reservations.mjs';
 const input = JSON.parse(process.argv[2]);
 const store = new Store(input.state); enableTasks(store);
 const hooks = input.stage ? { [input.stage]: async () => {

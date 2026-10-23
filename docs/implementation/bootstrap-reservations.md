@@ -1,5 +1,38 @@
 # Durable Bootstrap Local execution reservations
 
+## Current public boundary after AB1
+
+Public `objective authorize-local` and `objective verify --decision/--request-id`
+are **BLOCKED_OR_UNSUPPORTED**, exit 1, before opening Store or reading JSON.
+They reuse the existing production Host isolation gate. No supported authenticated
+Bootstrap Operator runtime is connected; a future generic Host runtime alone
+does not enable these commands. Actor strings, environment flags, arbitrary
+decision JSON and old stored decisions cannot enable public durable execution.
+
+The existing `issueDecision` and `executeDecision` API names also fail closed.
+`issueOfflineDecision` and `executeOfflineDecision` below retain trusted **offline
+embedding mechanics**, not authentication APIs. No public CLI/IPC route calls them.
+Tests use an explicitly named driver under `test/fixtures/` for real-process
+reservation mechanics; this is not a production Operator path or proof of
+Operator authentication. Arbitrary same-user module imports or modified code
+cannot be contained by this library; the public entry points fail closed.
+
+Existing decisions and Evidence are preserved without provenance migration,
+refund, retry or automatic execution. Use `objective reservation` for historical
+results and `objective revoke-local` to remove remaining authority; the actor
+on revocation remains an audit label, not identity proof. Revocation never grants
+execution. An unconsumed row is historical ISSUED/NOT_RESERVED, not an executable
+approval. Public `verify --decision` is blocked even for a prior completed row;
+read-only status may still report its independently checked historical result.
+
+Tasks with a durable decision still reject the old hash-only trust route. The
+existing explicit-trust Local verification for other Tasks and Fileset approval
+contracts are unchanged. Those paths are not an OS identity boundary and are
+not a fallback for an uncertain durable decision. No new Docker prerequisite is
+introduced: when the required identity capability is absent, execution is blocked.
+
+## Retained offline mechanics
+
 Scope: NEW_PROJECT, one trusted Operator decision, one Local verification launch,
 single concurrency per canonical repository in the existing Store, no automatic
 repair or retry. This is an opt-in trusted local CLI/embedding contract. It is
@@ -11,7 +44,8 @@ programs; this contract is not an isolation or anti-tampering boundary.
 
 `objective verify TASK ITEM REQUEST.json` reuses the existing command/tree and
 Bootstrap repository/dependency inspection without executing or granting trust.
-An Operator separately supplies `DECISION.json` to
+The retained offline decision schema (public issuance is blocked) is
+`DECISION.json` for
 `objective authorize-local TASK ITEM REQUEST.json DECISION.json`:
 
 ```json
@@ -45,7 +79,7 @@ does not execute. Repeated issuance with the same ID fails rather than replacing
 the old decision. Revocation is permanent via
 `objective revoke-local DECISION --actor operator`.
 
-Execution is `objective verify TASK ITEM REQUEST.json --decision DECISION
+The blocked public execution syntax is `objective verify TASK ITEM REQUEST.json --decision DECISION
 --request-id REQUEST`. Exact stored canonical paths/arguments must match.
 `objective reservation DECISION REQUEST` reads the durable outcome. Once a Task
 has a durable decision, its old `--trust` execution route refuses to run. Existing

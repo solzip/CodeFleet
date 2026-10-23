@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { hash } from '../alpha/contract.mjs';
 import { exact } from '../intent/contract.mjs';
-import { canonical } from '../hosts/operator.mjs';
+import { canonical, requireProductionHostIsolation } from '../hosts/operator.mjs';
 import { localBackend } from '../verification/backends.mjs';
 import { task, verifyTask, bootstrapContext, bootstrapView } from './tasks.mjs';
 
@@ -47,9 +47,21 @@ function currentBinding(store, binding) {
 function validDecision(d) {
   if (d.revoked !== null || d.expires <= Date.now()) throw Error('Operator decision expired or revoked');
 }
-// This operation records explicit Operator input only. Inspection never creates a
-// decision; UUIDs, expiry and budgets must be supplied separately from commandHash.
-export async function issueDecision(store, taskId, itemId, request, input) {
+export function requireDurableOperator() {
+  requireProductionHostIsolation();
+  // A generic future Host deployment does not authenticate Bootstrap decisions.
+  throw Error('DURABLE_OPERATOR_BINDING_UNAVAILABLE: authenticated Bootstrap issuance/execution is not integrated');
+}
+// Preserve the old API names as fail-closed entry points. No caller JSON,
+// optional argument, environment flag or stored decision can enable these APIs.
+export async function issueDecision() { requireDurableOperator(); }
+export async function executeDecision() { requireDurableOperator(); }
+
+// Trusted offline embedding only, like dispatchHost. This function does NOT
+// authenticate a human/Operator. No public CLI or IPC issuance route calls it.
+// JSON, actor and hashes are bindings, never proof of caller authority.
+// Inspection never creates a decision; expiry and budgets remain explicit.
+export async function issueOfflineDecision(store, taskId, itemId, request, input) {
   enableReservations(store);
   exact(input, ['decisionId','requestId','actor','revision','commandHash','acknowledgeUnisolated','expiresAt','maxExecutions','timeBudgetMs','maxConsecutiveFailures'], 'Operator decision');
   if (!identifier(input.decisionId) || !identifier(input.requestId) || input.decisionId === input.commandHash || input.requestId === input.commandHash || input.decisionId === input.requestId ||
@@ -129,7 +141,9 @@ function committedStatus(store, decisionId, requestId) {
     reason: uncertain ? 'Uncertain effects; reconcile manually, never relaunch or refund' : r.reason ?? r.result?.reason,
     automaticReplay: false, complete: false };
 }
-export async function executeDecision(store, taskId, itemId, request, { decisionId, requestId, cancelled = () => false, hooks = {} } = {}) {
+// Offline reservation mechanics only. Public execution of even pre-existing
+// decisions is blocked; their issuance provenance cannot be authenticated.
+export async function executeOfflineDecision(store, taskId, itemId, request, { decisionId, requestId, cancelled = () => false, hooks = {} } = {}) {
   enableReservations(store);
   const d = decision(store, decisionId), b = d.binding;
   exact(request, ['executable', 'args', 'directory', 'timeoutMs'], 'Decision request');

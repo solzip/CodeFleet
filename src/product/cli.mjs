@@ -8,7 +8,7 @@ import { probeProvider } from '../providers/capabilities.mjs';
 import { enableTasks, createTask, reviewTask, prepareTask, approveTask, rejectTask, materializeTask, verifyTask, clarifyTask, objectiveUnknownsReport, task, tasks } from './tasks.mjs';
 import { readResponse } from '../hosts/cli.mjs';
 import { runReport, taskReport } from './report.mjs';
-import { issueDecision, revokeDecision, executeDecision, reservationStatus } from './reservations.mjs';
+import { revokeDecision, reservationStatus, requireDurableOperator } from './reservations.mjs';
 
 export const help = `codefleet-alpha objective plan|run "goal" [repository]
 codefleet-alpha objective review <task-id> --files src/a.js --tests test/a.test.js --criterion "regression passes"
@@ -23,6 +23,7 @@ codefleet-alpha objective materialize <task-id> <item-id> (NEW_PROJECT: create a
 codefleet-alpha objective verify <task-id> <item-id> REQUEST.json [--trust <commandHash> --acknowledge-unisolated]
 codefleet-alpha objective authorize-local <task-id> <item-id> REQUEST.json DECISION.json
 codefleet-alpha objective verify <task-id> <item-id> REQUEST.json --decision <id> --request-id <id>
+  (authorize-local and verify --decision are BLOCKED: no supported authenticated durable Operator entry point; use reservation for historical results)
 codefleet-alpha objective reservation <decision-id> <request-id>
 codefleet-alpha objective revoke-local <decision-id> --actor <name>
   (NEW_PROJECT local-verification: without --trust only inspects; with it runs once, records LOCAL_PASSED|LOCAL_FAILED|INCONCLUSIVE evidence; never protected VERIFIED)
@@ -51,8 +52,16 @@ function parse(values) {
 const list = value => value?.split(',').filter(Boolean);
 const number = (value, fallback) => value === undefined ? fallback : Number(value);
 
+function requireDurableEntry(argv) {
+  if (argv[0] === 'authorize-local' || argv[0] === 'verify' && argv.slice(1).some(v =>
+    v === '--decision' || v.startsWith('--decision=') || v === '--request-id' || v.startsWith('--request-id='))) {
+    requireDurableOperator();
+  }
+}
+
 // Dependency injection is a trusted test/embedding seam, not a CLI/plugin flag.
 export async function dispatchProduct(argv, { store, execution = {}, plannerRegistry } = {}) {
+  requireDurableEntry(argv);
   const [action, ...rest] = argv;
   if (!action || ['help', '--help'].includes(action)) return { exitCode: 0, data: { schemaVersion: 1, help } };
   const { positional: args, options: o } = parse(rest);
@@ -62,10 +71,6 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     return { exitCode: 2, data: { schemaVersion: 1, readiness: 'BLOCKED_OR_UNSUPPORTED', providers, liveCalls: 'NOT_RUN', reason: 'Version/help do not prove enforcement; no automatic live certification' } };
   }
   enableTasks(store);
-  if (action === 'authorize-local') {
-    if (args.length !== 4) throw Error('authorize-local requires task, item, command file and explicit decision file');
-    return { exitCode: 0, data: await issueDecision(store, args[0], args[1], await readResponse(args[2]), await readResponse(args[3])) };
-  }
   if (action === 'reservation') {
     if (args.length !== 2) throw Error('reservation requires decision and request IDs');
     return { exitCode: 0, data: reservationStatus(store, args[0], args[1]) };
@@ -97,9 +102,7 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     process.on('SIGINT', stop); process.on('SIGTERM', stop);
     try {
       const request = await readResponse(args[2]);
-      const result = o.decision !== undefined
-        ? await executeDecision(store, args[0], args[1], request, { decisionId: o.decision, requestId: o['request-id'], cancelled: () => interrupted })
-        : await verifyTask(store, args[0], args[1], request, { trust: o.trust, acknowledgeUnisolated: o['acknowledge-unisolated'] === true, cancelled: () => interrupted });
+      const result = await verifyTask(store, args[0], args[1], request, { trust: o.trust, acknowledgeUnisolated: o['acknowledge-unisolated'] === true, cancelled: () => interrupted });
       return { exitCode: result.status === 'LOCAL_PASSED' ? 0 : 2, data: { ...await taskReport(store, args[0]), verificationRun: result } };
     } finally { process.off('SIGINT', stop); process.off('SIGTERM', stop); }
   }
@@ -146,8 +149,12 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
 }
 
 export async function productCli(argv, directory) {
-  const store = new Store(directory);
-  try { return await dispatchProduct(argv, { store }); }
+  let store;
+  try {
+    requireDurableEntry(argv); // Before opening Store or reading caller JSON.
+    store = new Store(directory);
+    return await dispatchProduct(argv, { store });
+  }
   catch (e) { return { exitCode: 1, data: { schemaVersion: 1, status: 'BLOCKED_OR_UNSUPPORTED', error: e.message } }; }
-  finally { store.close(); }
+  finally { store?.close(); }
 }
