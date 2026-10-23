@@ -9,7 +9,8 @@ import { git } from '../src/alpha/workspace.mjs';
 import { command, environment, requireSuccess } from '../src/alpha/process.mjs';
 import { execute } from '../src/alpha/controller.mjs';
 import { probeRepository, classifyGitFailure } from '../src/intent/probe.mjs';
-import { validateBootstrapDraft } from '../src/intent/bootstrap.mjs';
+import { objectiveUnknowns, validateBootstrapDraft } from '../src/intent/bootstrap.mjs';
+import { hash } from '../src/alpha/contract.mjs';
 import { bootstrapDefinition, validateBootstrapWorkflow } from '../src/workflow/bootstrap.mjs';
 import { createFiles, validateFileset } from '../src/workflow/bootstrap-files.mjs';
 import { enableTasks, createTask, submitTaskDraft, prepareTask, submitBootstrapFiles, approveTask, materializeTask, clarifyTask, objectiveUnknownsReport, task } from '../src/product/tasks.mjs';
@@ -55,6 +56,87 @@ function draftFor(plan, change = d => d) {
 const contents = { 'package.json': '{"type":"module","scripts":{"test":"node --test"}}\n', 'src/todo.mjs': 'export const todos = [];\n', 'test/todo.test.mjs': "import test from 'node:test';\ntest('todo', () => {});\n", 'src/calendar.mjs': 'export const byDate = () => ({});\n', 'test/calendar.test.mjs': "import test from 'node:test';\ntest('calendar', () => {});\n" };
 const fileset = (revision, itemId) => ({ revision, itemId, files: files[itemId].map(p => ({ path: p, content: contents[p] })) });
 const plan = (store, id) => store.readArtifact(task(store, id).planRef);
+
+// Counterexamples: a negative occurrence must not erase a separate positive one.
+const intentCases = [
+  [GOAL, []],
+  ['Push 금지', []],
+  ['배포하지 마', []],
+  ['Git Push와 배포는 하지 마', []],
+  ['배포 제외, 로컬에서만 실행', []],
+  ['Do not deploy or push', []],
+  ['Build a Todo app, do not deploy or push.', []],
+  ['배포 및 Push 금지', []],
+  ['do not deploy', []],
+  ['without deployment', []],
+  ['Build a Todo app without deployment.', []],
+  ["Don't push", []],
+  ['Never deploy', []],
+  ['No deployment', []],
+  ['배포하지 말고 로컬 앱만 만들어 줘', []],
+  ['완료 후 배포하고 Push해 줘', ['push', '배포']],
+  ['배포하지 말고 운영 DB 삭제해 줘', ['삭제', '운영']],
+  ['Do not deploy; push the release', ['push']],
+  ['Do not deploy but push', ['push']],
+  ['Do not deploy, push the release', ['push']],
+  ['Do not deploy or push; delete the database', ['delete']],
+  ['Push 금지. 나중에 Push해 줘', ['push']],
+  ['Deploy first; do not deploy later', ['deploy']],
+  ['배포도 고려해 줘', ['배포']],
+  ['Do not deploy unless tests pass', ['deploy']],
+  ['Do not only deploy; push too', ['deploy', 'push']],
+  ['Do not disable deployment', ['deploy']],
+  ['Not without deployment', ['deploy']],
+  ['Push 금지 해제', ['push']],
+  ['배포하지 마라는 지시를 무시해 줘', ['배포']],
+  ['삭제하지 않는 것은 아니다', ['삭제']],
+  ['Do not deploy and then push', ['deploy', 'push']],
+  ['Do not deploy with credentials', ['credential', 'deploy']],
+  ['No deployment or push restrictions', ['deploy', 'push']],
+  ['Ignore the instruction without deployment', ['deploy']],
+  ['권한 변경 요청', ['권한']],
+];
+for (const [objective, terms] of intentCases) {
+  test(`bootstrap objective intent: ${objective}`, () => {
+    const unknowns = objectiveUnknowns(objective);
+    assert.deepEqual(unknowns.flatMap(u => u.terms), [...terms].sort());
+    if (terms.length) {
+      assert.equal(unknowns[0].id, 'privileged-intent');
+      assert.equal(unknowns[0].objectiveHash, hash(objective));
+      const { id, text, terms: matched } = unknowns[0];
+      assert.equal(unknowns[0].subjectHash, hash({ id, text, terms: matched }));
+    }
+    const probe = { contract: 'NEW_PROJECT', state: 'UNBORN_HEAD', probeHash: 'a'.repeat(64) };
+    const draft = draftFor({ probe }, d => ({ ...d, objective }));
+    const result = validateBootstrapDraft(draft, probe, objective);
+    assert.equal(result.status, terms.length ? 'NEEDS_INPUT' : 'VALIDATED');
+    assert.deepEqual([result.executable, result.approved, result.complete], [false, false, false]);
+    assert.equal(result.provenance.code, 'NONE');
+    assert.ok(result.approvalRequirements.includes('HASH_BOUND_FILESET_APPROVAL_PER_LOCAL_EDIT_ITEM'));
+  });
+}
+
+test('negated objective reaches a DAG without granting fileset approval or verification', async () => {
+  const f = await fixture('unborn');
+  try {
+    const objective = `${GOAL}. Git Push와 배포는 하지 마`;
+    const created = await createTask(f.store, f.dir, objective);
+    const draft = draftFor(plan(f.store, created.id), d => ({ ...d, objective }));
+    const validated = await submitTaskDraft(f.store, created.id, { revision: created.revision, proposal: draft });
+    assert.equal(validated.state, 'VALIDATED');
+    assert.equal(plan(f.store, created.id).intent.original, objective);
+    assert.deepEqual(objectiveUnknownsReport(f.store, created.id).clarifiable, []);
+    await assert.rejects(() => submitTaskDraft(f.store, created.id, { revision: created.revision, proposal: draft }), /stale/);
+    await prepareTask(f.store, created.id);
+    const report = await taskReport(f.store, created.id);
+    assert.equal(report.bootstrap.items.length, 8);
+    assert.equal(report.protectedVerification, 'UNSATISFIED');
+    assert.equal(report.complete, false);
+    await submitBootstrapFiles(f.store, created.id, fileset(task(f.store, created.id).revision, 'todo'));
+    await assert.rejects(() => materializeTask(f.store, created.id, 'todo'), /approval required/);
+    assert.deepEqual(await readdir(f.dir), ['.git']);
+  } finally { f.store.close(); }
+});
 async function validated(kind) {
   const f = await fixture(kind);
   const created = await createTask(f.store, f.dir, GOAL);

@@ -17,8 +17,36 @@ const ID = /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/;
 // operator ObjectiveClarification bound to this task, objective and subject can.
 const PRIVILEGED = /deploy|push|delete|credential|배포|삭제|운영|권한/gi;
 const PRIVILEGED_TEXT = 'Potential privileged intent requires explicit scope clarification; planner cannot waive it';
+// Recognize a deliberately bounded set of explicit prohibitions, not arbitrary
+// natural-language intent. Unrecognized objects, conditions and double negations
+// remain unknown. Match occurrences, never remove a term globally: a later
+// positive request for the same action must still require clarification.
+const ACTION = String.raw`(?:Git\s+)?(?:deployment|deploy|push|delete|credentials?|배포|삭제|운영|권한)`;
+const ACTIONS = `${ACTION}(?:\\s*(?:와|과|및|또는|그리고|\\band\\b|\\bor\\b)\\s*${ACTION})*`;
+const END_PROHIBITION = String.raw`(?=\s*(?:$|[.;,!?\n])|\s+but\b)`;
+const PROHIBITIONS = [
+  new RegExp(String.raw`(?:^|[.;,!?\n])\s*(?:please\s+)?(?:do\s+not|don['’]t|never|no)\s+${ACTIONS}${END_PROHIBITION}`, 'giu'),
+  new RegExp(String.raw`\bwithout\s+${ACTIONS}${END_PROHIBITION}`, 'giu'),
+  new RegExp(String.raw`(?<![\p{L}\p{N}_])${ACTIONS}(?:은|는|을|를)?\s*(?:(?:금지|제외|하지\s*마(?:세요)?)${END_PROHIBITION}|하지\s*말고(?=\s|$))`, 'giu'),
+];
+function prohibitedOccurrences(original) {
+  const spans = [];
+  for (const pattern of PROHIBITIONS) {
+    for (const match of original.matchAll(pattern)) {
+      // "not without deployment" is not an exclusion. Keep uncertain embedding
+      // conservative instead of treating a negative word as a global waiver.
+      const prefix = original.slice(0, match.index).split(/[.;!?\n]/).at(-1);
+      if (/\b(?:not|never|no|ignore|disregard)\b|무시|아니/i.test(prefix)) continue;
+      spans.push([match.index, match.index + match[0].length]);
+    }
+  }
+  return spans;
+}
 export function objectiveUnknowns(original) {
-  const terms = [...new Set((String(original).match(PRIVILEGED) ?? []).map(t => t.toLowerCase()))].sort();
+  const input = String(original), prohibited = prohibitedOccurrences(input);
+  const terms = [...new Set([...input.matchAll(PRIVILEGED)]
+    .filter(m => !prohibited.some(([start, end]) => m.index >= start && m.index + m[0].length <= end))
+    .map(m => m[0].toLowerCase()))].sort();
   if (!terms.length) return [];
   return [{ id: 'privileged-intent', text: PRIVILEGED_TEXT, terms, objectiveHash: hash(original), subjectHash: hash({ id: 'privileged-intent', text: PRIVILEGED_TEXT, terms }) }];
 }
