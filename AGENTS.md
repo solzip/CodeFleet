@@ -59,6 +59,32 @@ approval, missing capability or uncertain effects. Report the blocker and requir
 decision. Never weaken tests, approval checks or completion criteria to turn a
 failure green. Existing Bootstrap repair is not proof of an autonomous Live loop.
 
+### Objective continuity and recovery
+
+A Codex turn, Attempt or session ending does not complete the Objective. Continue
+the next safe, authorized WorkItem while scope, capability and budget permit.
+If continuation is blocked, preserve the incomplete status and hand off the
+remaining criteria, evidence, blocker and next permitted action; do not equate a
+summary, exhausted context or a successful child task with Objective acceptance.
+
+After Codex context compaction or a session restart, re-read current user
+instructions and the authoritative contract/revision, approval, DAG/WorkItems,
+persisted state/events, attempt/lease, remaining budget and evidence references.
+Use the existing context manifest where available, or pinned base/context hashes
+and artifacts for that path. A conversation summary is a navigation aid, not
+authority. Reconcile pending effects before continuing; never reset budgets or
+relaunch an uncertain Attempt just because the conversation restarted. If a
+required record is missing or contradictory, stop affected execution and hand off.
+Use Codex's own compaction; do not add a Goal engine or another state store.
+
+For changed requirements, assess affected scope, dependencies, context, tests,
+approvals and evidence before execution. Use the supported revision/new-task
+path, obtain the required approval for the new binding, and reverify affected
+candidates. Preserve old evidence as history; it does not approve a new revision.
+During an authorized comparison, follow the roadmap's Host single-Agent /
+CodeFleet single-Agent / CodeFleet multi-Agent baseline and report actual time,
+quality and observable cost. Do not delegate solely to manufacture a comparison.
+
 ## Verify claims at their actual level
 
 Maintain Windows, macOS and Linux compatibility as a product goal. Use portable
@@ -72,14 +98,19 @@ by contracts that select it. Explicit-trust Local Verification is not Protected
 Evidence. Host Sandbox remains unverified until actual enforcement is measured.
 Do not silently downgrade a required backend when it is unavailable.
 
-Use the repository's existing commands with Node matching `package.json`:
+Use Node matching `package.json` and the existing commands in
+[Verification paths](CLAUDE.md#verification-paths):
 
-```text
-npm test
-npm run check:links
-npm run check:citations
-npm run check:facts
-```
+- Basic development/regression: run the Docker-free suites and document checks
+  applicable to the change. An unavailable optional backend does not block
+  independent basic work. This is a scoped check, not full regression acceptance.
+- Full security/protected verification: preserve all Docker isolation tests and
+  required gates. Record missing prerequisites as BLOCKED and unexecuted checks
+  as NOT_RUN; if a command ran and failed, retain its nonzero exit and failures.
+  Never delete tests, weaken gates or label a partial pass as a full pass.
+- Host Live: obtain separate execution evidence from actual Codex/Claude sessions.
+  Offline tests, Skill discovery and Host reports alone do not establish Live
+  success; Local Evidence never becomes Protected Evidence by relabeling.
 
 No runtime dependency installation is needed. On Windows use `npm.cmd` if the
 PowerShell shim is blocked. Capture the command's exit code immediately, including

@@ -40,6 +40,22 @@ WorkItem 초안은 Validator와 DAG 검사를 거쳐 승인된 범위에서 실�
 
 이 책임 구분은 기존 모듈 위의 개발 원칙이다. 일반 목표의 완전 자동 위임·오류 수정·장기 실행, Windows·macOS·Linux 전체의 실사용 수용과 Todo + Calendar MVP 성과는 후속 검증 대상이다. 플랫폼별 경로·프로세스·권한 차이를 Capability와 Backend 경계에서 다루며 새로운 필수 Docker/WSL 플랫폼을 도입하지 않는다. 현재 구현/미검증 구분은 진행 현황, 선행 관계와 수락 기준은 로드맵을 따른다.
 
+### Objective·Revision·Context와 복구의 연결
+
+Objective는 사용자가 승인한 목표와 필수 수락 조건의 범위이며 새 Goal 엔진을 뜻하지 않는다. Manager/Coordinator는 남은 WorkItem·의존성과 재개 지점을 설명하고, Harness는 현재 승인·Capability·예산·Lease를 다시 검사하며, Evidence/Judge는 계약과 후보에 결합된 결과를 판정한다. Turn·Attempt·세션·Subagent 종료는 이 완료 조건을 대신하지 않는다.
+
+| 기존 연결 | 코드·계약에서 확인되는 범위 | 목표 및 검증 한계 |
+| --- | --- | --- |
+| Contract/Revision·Objective 관계 | Legacy `src/task-revision.ts`는 승인 당시 계약과 Objective 관계 snapshot을 보존하고, 현재 권한은 원장 replay로 판단한다. Host 경로의 `src/product/tasks.mjs`는 SQLite Task revision과 이벤트를 함께 갱신한다. 서로 다른 기존 저장 계약을 유지한다. | 모든 자연어 요구 변경을 자동 해석·전파하는 통합 Objective 엔진이 구현됐다는 뜻이 아니다. |
+| Revision·승인·WorkItem | `src/workflow/persistence.mjs`는 revision/hash별 승인, revision 충돌, 시도한 WorkItem의 불변성, 새 revision의 승인 대기를 검사한다. 이미 시도한 Hybrid 변경은 새 Workflow가 필요하며 임의 진행 중 수정은 지원하지 않는다. | 영향 분석으로 관련 DAG·Context·검증·승인을 재검토한다. 지원되지 않는 변경은 새 검토 Task/Workflow로 넘기며 제한을 우회하지 않는다. |
+| Context Manifest·고정 맥락 | `src/intent/discovery.mjs`의 Git base/blob 식별, `src/hosts/exchange.mjs`의 contract/context/binding hash와 revision 검사, 기존 artifact 참조를 재사용한다. | 아래 초기 설계의 `contextManifestHash`는 목표 스키마다. 모든 경로에 공통 Context Manifest가 구현됐다고 보지 않으며 Host 압축을 대체하지 않는다. |
+| SQLite·Lease·Recovery | 기존 Store의 상태·이벤트·artifact와 Controller의 승인/lease/budget 검사를 재사용한다. 미확정 STARTED Attempt는 RECONCILING으로 남고 자동 재실행하지 않으며, 완료 자식은 보존 증거를 검사하여 재조정한다. | 프로세스 재개 반증과 Host 컨텍스트 압축/새 세션의 실제 복구는 별개다. 후자는 각 Host Live 수용 근거가 필요하다. |
+| 완료·Evidence 정합성 | `src/product/report.mjs`는 완료 상태와 검증 증거를 함께 확인한다. NEW_PROJECT는 로컬 작업 후에도 Protected Verification UNSATISFIED / complete false를 유지한다. | 새 후보·계약에 과거 증거를 자동 승격하지 않는다. 압축 복구·요구 변경·Goal 지속성 전체가 Live 수용됐다는 주장은 하지 않는다. |
+
+복구 시 현재 사용자 지시와 영속된 목표/계약·revision·승인·DAG·작업 로그·시도/lease·예산·증거를 다시 읽고 고정 맥락과 대조한다. 요약만으로 상태를 만들거나 DB를 직접 고쳐 승인하지 않는다. 누락·충돌·미확정 효과는 영향을 받는 실행을 보류하고 Human Handoff로 전달한다. 새 요구사항은 영향을 받는 작업과 후속 의존 작업의 진행 가능성, 기존 승인/증거의 적용 범위를 재검토한 뒤 지원되는 경로로 반영한다. 무관한 작업도 기존 권한과 조건을 만족하는 범위에서만 계속한다.
+
+위 연결의 오프라인 반증은 기존 `test/task-revision.test.ts`, `test/workflow.test.mjs`, `test/hybrid.test.mjs`, `test/bootstrap-verify.test.mjs`에서 다룬다. 이 테스트의 존재와 해당 범위의 통과를 Host Live 또는 전체 제품 수용으로 해석하지 않는다. 세 Agent 구성의 비교는 기존 보고의 관측 시간·공급자 보고 비용 등 가용 자료를 사용하되 동일한 독립 품질 기준으로 평가하는 후속 수용 조건이다. 별도 실행 엔진·상태 DB·Benchmark 플랫폼을 도입하지 않는다.
+
 ## 초기 Alpha 설계 기록
 
 이하의 첫 버전·초기 범위·목표 스키마·명령은 당시 설계다. Host-Native 기본 설치나 현재 모든 기능의 지원 여부를 정의하지 않는다. 책임 분리·독립 증거·정책·복구 원칙은 위 현재 구조에서도 유지한다.

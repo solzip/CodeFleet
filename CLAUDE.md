@@ -27,8 +27,10 @@ BootstrapDraft, Validator, bootstrap DAG, approved fileset creation and local
 verification, covered by offline and process-level tests. Real Host Live is not
 run and Protected Verification stays unsatisfied for NEW_PROJECT; do not claim either.
 
-`src/alpha/` is a separate test-driven Node and Java workflow. Run `npm test` for both
-legacy and alpha suites plus document checks. Legacy TAP and rule coverage stay
+`src/alpha/` is a separate test-driven Node and Java workflow. The aggregate
+`npm test` includes legacy, alpha and Host Core suites plus document checks;
+it requires the protected test environment described under **Verification paths**.
+Legacy TAP and rule coverage stay
 separate so the archive's measured facts retain their original meaning. Real
 provider and remote acceptance scripts are opt-in and must not run in CI with
 credentials. The owner approved MIT licensing on 2026-09-30. Publish only tested
@@ -56,35 +58,101 @@ State/Work Log, Lease and Recovery instead of adding another execution engine.
 For a failed attempt, inspect evidence, state a repair hypothesis and reverify the
 new candidate within the approved scope and remaining attempt/time/cost budget.
 Stop on repeated failure or no progress, lost lease, changed approval, uncertain
-effects, exhausted budget or missing capability. Never relax tests or completion
+effects, exhausted budget or missing capability. Hand off the blocker, evidence
+and required decision to the user. Never relax tests or completion
 criteria to continue. Actual tests and required Host Live Evidence must precede
 feature acceptance; documentation updates remain DOCUMENTED.
 
-Maintain Windows, macOS and Linux compatibility without making Docker, WSL or
-extra API keys basic requirements. Report the platform actually tested and keep
+Maintain Windows, macOS and Linux compatibility as a product goal, without making
+Docker, WSL or extra API keys basic requirements. Report the platform tested and keep
 Local results separate from Protected Evidence. Git actions and effects outside
 Git (deployment, external messages, service/data changes) require their respective
 authorization; a file-edit request alone grants neither. For real-use pilots,
 follow the roadmap's company/side-project outcome measurements.
 
+### Objective continuity after compaction or restart
+
+A Claude Code turn, Attempt, Subagent result or session ending is not Objective
+completion. Continue safe approved work within the current budget; otherwise
+hand off the unmet criteria, evidence, blocker and next permitted action without
+marking the Objective complete. A conversation summary is not acceptance evidence.
+
+After Claude Code compaction/restart, use the Host's own context facilities and
+re-read current instructions plus the authoritative contract/revision, approval,
+DAG/WorkItems, stored state/events, attempt/lease, remaining budget and evidence.
+Recover context from the existing manifest where available or that path's pinned
+base/context hashes and artifacts. Reconcile uncertain effects before resuming;
+do not reset budgets, reissue pending work or trust a summary over durable records.
+Missing or conflicting records require a handoff for the affected execution.
+Do not implement compaction or a second Goal/state engine in CodeFleet.
+
+When requirements change, assess the affected scope, dependencies, context,
+tests, approvals and evidence; use supported revision/new-task paths and required
+approval before execution. Preserve superseded evidence without treating it as
+proof for the new contract. Reverify affected candidates before accepting them.
+For an authorized baseline comparison, record Host single-Agent, CodeFleet
+single-Agent and CodeFleet multi-Agent results under the roadmap's common time,
+quality and cost criteria; a comparison plan does not authorize Subagent execution.
+
 ## Setup
 
-No dependencies, no `npm install`. Node 24+ only (native TypeScript stripping).
+No runtime dependencies, no `npm install`. Use the Node version required by
+`package.json` (native TypeScript stripping).
 
 ```bash
-node -v          # must be >= 24
-npm test         # suite, then the coverage, link, citation and declared-fact checkers
+node -v          # compare with package.json engines.node
 ```
 
 `.codefleet/` is not tracked. It holds this repo's own trial runs, not state you need to resume.
 
-On a machine that has not built this repository before, set the commit identity
-before the first commit. See **Publication constraints** for why it matters:
+For an authorized maintainer publishing this repository under its established
+identity, the following repository-local settings illustrate that policy.
+They are not installation/test prerequisites or defaults for another developer's
+PC. Inspect the existing identity before an approved commit; do not run these
+commands or change a user's local/global Git settings without authorization.
+See **Publication constraints**:
 
 ```bash
 git config user.name "sol"
 git config user.email "solarchive.dev@gmail.com"
 ```
+
+## Verification paths
+
+**Basic development/regression (without Docker).** Use existing scripts for the
+changed scope. The following sequence covers Legacy, Host Core and document
+checks; run each command only after the preceding one succeeds:
+
+```text
+npm run pretest
+npm run test:legacy
+npm run test:host-core
+npm run posttest
+```
+
+`pretest` resets the generated rule-coverage data; `test:legacy` regenerates it.
+`posttest` checks coverage, links, citations and declared facts. For document-only
+work, the existing `check:links`, `check:citations` and `check:facts` scripts can
+also run separately; facts/coverage checks need valid Legacy measurement data.
+This basic sequence is not the full Alpha/security suite. An unavailable optional
+backend does not block independent basic checks. On Windows, use `npm.cmd` when
+the PowerShell shim is blocked. Record each actual command, its exit code,
+failures and skips; do not infer success from the last command in a pipeline.
+
+**Full security/protected verification.** Keep `npm test`, the existing Docker
+isolation tests and all required gates. Follow the prepared-environment scope in
+[Alpha validation CI](.github/workflows/alpha.yml), including its Linux protected
+job; the basic sequence above does not replace it. `test:alpha` contains mandatory
+Docker prerequisites and is not a Docker-free shortcut. If prerequisites are
+missing, report the path as BLOCKED and unexecuted checks as NOT_RUN. A command
+that actually fails remains a failure with its nonzero exit code. Do not remove
+tests, filter out required gates or claim full regression from partial passes.
+
+**Host Live verification.** Obtain separate execution evidence from actual Codex
+and Claude sessions within the approved scope. Offline passes, Skill discovery
+and Host reports alone do not prove Live success. Preserve Local/Protected
+Evidence boundaries and the current unverified Host Live/automatic delegation
+status; no test command here grants Live execution or external-write approval.
 
 ## Where to start reading
 
@@ -205,10 +273,14 @@ copyright and MIT notice in distributions. Historical records describe the
 policy at their original commits; they do not override the current LICENSE.
 Licensing permits use but does not certify correctness or production readiness.
 
-**Commits carry one identity, `sol <solarchive.dev@gmail.com>`.** Every commit
-was rewritten to it. One commit from a second identity puts the history back to
-two authors, and the only remedy is another rewrite and a force push. Set it
-repository-locally on each machine rather than relying on a global default.
+**This repository's official publication identity remains
+`sol <solarchive.dev@gmail.com>`.** Its history was rewritten to that identity.
+Preserve that policy for authorized maintainer publication; it is not a universal
+Git identity for contributors or users of CodeFleet. If an intended author's
+identity conflicts with this repository's policy, resolve it with the owner
+before publishing, rather than impersonating the maintainer or rewriting history.
+Do not automatically change local/global Git settings. Identity configuration
+does not grant commit, push or PR approval.
 
 The address changed once, on 2026-08-11. All 129 commits were rewritten to the
 address above and force pushed; author and committer dates were preserved and no
