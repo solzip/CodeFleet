@@ -39,6 +39,25 @@ If that boundary is unavailable, restrict a separately authorized pilot to Skill
 6. With separately reviewed tasks, inspect cancellation and stale/duplicate responses. A cancelled task must not resume; a consumed or old binding must not create another execution. Missing or changed evidence must invalidate the report. Do not tamper with the successful run to manufacture a second success.
 7. Save sanitized command outcomes and Harness artifacts, not host credentials, raw conversation histories or personal paths. Repeat with Claude using the same domain criteria only after Codex passes.
 
+## NEW_PROJECT planning pilot (prepared 2026-10-23, not authorized or executed)
+
+A narrower path than the steps above: an empty Git fixture, planning only. It needs no Docker, no API key, no fixture commit and no Harness execution, so the H2–H5 gates above do not apply to it. It does start a real model turn in an existing Host account, so it needs its own authorization naming the host, fixture and account limits. Offline evidence for the same path, with a fixed Draft instead of a model: `test/bootstrap-process.test.mjs` and the [re-measurement record](../runs/2026-10-23/new-project-p0-acceptance-remeasure.md). That evidence is not a Live result.
+
+Preparation, no model (each step was run on 2026-10-23 in a scratchpad; Claude Code 2.1.309, codex-cli 0.162.1):
+
+1. Create an empty directory outside every checkout and run `git init` in it. Create a separate empty STATE directory outside the fixture.
+2. `node scripts/host-install.mjs install claude|codex FIXTURE` from this checkout. The fixture then shows only `?? .claude/` or `?? .agents/`, and the probe stays `UNBORN_HEAD`.
+3. `node FIXTURE/<.claude|.agents>/skills/codefleet/runtime/alpha/cli.mjs --state STATE host <host> capabilities` exits 0.
+
+Live turn, one per host, after authorization:
+
+4. Open the Host **interactively** in the fixture. A non-interactive `claude -p` run denied the first CLI call without a prompt on 2026-10-21 (`docs/runs/2026-10-21/claude-host-live-permission-blocked.md` on `docs/host-native-live-records`), so it cannot reach G3. On Windows, Codex must request `require_escalated` for each exact CLI command, as the installed Skill text says.
+5. Invoke the Skill (`/codefleet` or `$codefleet`) with the goal `Todo + Calendar 일정 관리 웹앱을 새로 만든다` and the explicit STATE path. A goal containing `삭제` adds a privileged-intent unknown that only operator `objective clarify` clears; keep the goal above for the first pilot.
+6. Approve only `… cli.mjs --state STATE host <host> <plan|status|draft|prepare|workflow|explain|report> …` and read-only Git. Deny everything else and stop. Never choose a persistent allow rule.
+7. Stop after `workflow` shows the DAG. `files`, approval and materialize are outside this pilot.
+
+Record for the pilot: Task ID, the state after `draft` (`VALIDATED` or the refusal text), DAG `workflowHash` and item count, fixture `git status --porcelain` before and after, and the Host version and model. The Draft is authored by the model and stays `PROVIDER_REPORTED_ONLY`. A pass shows only that this Host can drive the planning path. It is not HOST_LIVE_VERIFIED and not Harness verification.
+
 Actual role delegation and multi-agent collaboration require a subsequent scope and evidence linking each host agent to a CodeFleet WorkItem. Current role labels and scheduler tests prove no live delegation.
 
 ## Official interfaces checked

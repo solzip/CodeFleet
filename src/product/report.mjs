@@ -3,7 +3,39 @@ import { verifiedEvidence } from '../alpha/evidence.mjs';
 import { attempts, approval } from '../workflow/persistence.mjs';
 import { judge } from '../alpha/judge.mjs';
 import { messages } from '../workflow/collaboration.mjs';
-import { task } from './tasks.mjs';
+import { task, bootstrapView, bootstrapDrift, clarifiableFor } from './tasks.mjs';
+
+function bootstrapNext(current, plan) {
+  if (current.state === 'REJECTED') return 'Create a new plan';
+  const open = clarifiableFor(current, plan).filter(u => u.status === 'OPEN').map(u => u.id);
+  if (!current.bootstrap && open.length) return `An operator must confirm the objective's meaning with objective clarify (${open.join(', ')}); a planner cannot clear it. Other unknowns need a BootstrapDraft`;
+  return current.state === 'VALIDATED' ? 'Prepare the bootstrap workflow' : 'Submit a BootstrapDraft; planned files are not existing code';
+}
+// Derived from the effective item states, most urgent first. Every entry names the
+// items it is about, so an empty kind never asks for work that does not exist.
+const UNSATISFIED_LOCAL = ['PENDING_VERIFICATION', 'VERIFICATION_STALE', 'INCONCLUSIVE'];
+export function bootstrapActions(view) {
+  const ready = view.items.filter(i => !i.waitingOn.length), ids = list => list.map(i => i.id);
+  const fileset = s => ready.filter(i => i.fileset && !i.fileset.state.startsWith('SUPERSEDED') && s.includes(i.fileset.state) && i.state !== 'MATERIALIZED');
+  const actions = [];
+  const add = (kind, items, text) => { if (items.length) actions.push({ kind, items: ids(items), text }); };
+  add('AWAIT_FILESET_APPROVAL', fileset(['WAITING_APPROVAL']), 'An operator reviews and approves the filesetHash with objective approve');
+  add('MATERIALIZE', fileset(['READY', 'WAITING_HUMAN']), 'objective materialize <task-id> <item-id>; a WAITING_HUMAN fileset retries only what is not yet written, after any conflict is resolved by hand');
+  add('REPAIR_REQUIRED', ready.filter(i => i.kind === 'local-verification' && i.state === 'LOCAL_FAILED'), 'Local tests failed: propose a repair fileset (files with baseSha256 and repair evidenceRef) for a materialized local-edit item this verification depends on');
+  add('PROPOSE_FILESET', ready.filter(i => i.kind === 'local-edit' && i.state === 'PENDING_FILESET'), 'Propose a fileset for these local-edit items');
+  add('RUN_LOCAL_VERIFICATION', ready.filter(i => i.kind === 'local-verification' && UNSATISFIED_LOCAL.includes(i.state)), 'objective verify <task-id> <item-id> REQUEST.json to inspect, then rerun with --trust <commandHash> --acknowledge-unisolated');
+  add('EVIDENCE_DEFECT', view.items.filter(i => i.state === 'EVIDENCE_INVALID'), 'Recorded verification evidence is missing or altered; it cannot be waived. Run local verification again');
+  add('PROTECTED_VERIFICATION_UNSATISFIED', ready.filter(i => i.kind === 'protected-verification'), 'Protected verification is not available for NEW_PROJECT; it stays unsatisfied (commit as a user action, then use an existing-repository contract)');
+  add('BLOCKED_CAPABILITY', ready.filter(i => i.capability === 'BLOCKED' && i.kind !== 'protected-verification'), 'Blocked on a missing capability or approval');
+  const done = view.items.every(i => ['PLAN_RECORDED', 'MATERIALIZED', 'LOCAL_PASSED'].includes(i.state));
+  if (done) actions.push({ kind: 'NO_FURTHER_ACTION', items: [], text: 'Every WorkItem is satisfied locally; complete stays false because local verification is not protected VERIFIED. git commit stays a user action' });
+  else if (!actions.length) actions.push({ kind: 'WAITING_ON_DEPENDENCIES', items: ids(view.items.filter(i => i.waitingOn.length)), text: 'Remaining items wait on unsatisfied dependencies' });
+  else if (actions.every(a => ['PROTECTED_VERIFICATION_UNSATISFIED', 'BLOCKED_CAPABILITY'].includes(a.kind))) actions.unshift({ kind: 'LOCAL_WORK_COMPLETE', items: [], text: 'All locally executable items are satisfied; what remains needs a capability CodeFleet does not have here' });
+  return actions;
+}
+function localVerification(view) {
+  return Object.fromEntries(view.items.filter(i => i.kind === 'local-verification').map(i => [i.id, { state: i.state, evidenceRef: i.verificationRef }]));
+}
 
 export async function runReport(store, id) {
   const run = store.get(id);
@@ -47,6 +79,15 @@ export async function runReport(store, id) {
 export async function taskReport(store, id) {
   const current = task(store, id), plan = store.readArtifact(current.planRef);
   const run = current.runId ? await runReport(store, current.runId) : null;
+  if (plan.contractKind === 'NEW_PROJECT') {
+    const view = current.bootstrap && current.state !== 'REJECTED' ? bootstrapView(store, id, { drift: await bootstrapDrift(store, id) }) : null;
+    const actions = view ? bootstrapActions(view) : null, local = view ? localVerification(view) : {};
+    // complete is never true here: NEW_PROJECT has no protected verification contract.
+    return { schemaVersion: 1, kind: 'TaskReport', taskId: id, revision: current.revision, contractKind: 'NEW_PROJECT', state: current.state, reviewState: current.state, plannerAttempt: current.plannerAttempt ?? null, plan, settings: current.settings, run: null,
+      bootstrap: view, nextAction: actions ? actions.map(a => `${a.kind}${a.items.length ? ' (' + a.items.join(', ') + ')' : ''}: ${a.text}`).join('; ') : bootstrapNext(current, plan), nextActions: actions,
+      workflowHash: current.bootstrap?.workflowHash ?? null,
+      verification: Object.values(local).some(v => v.evidenceRef) ? 'LOCAL_ONLY_UNPROTECTED' : 'NOT_RUN', localVerification: local, protectedVerification: 'UNSATISFIED', complete: false };
+  }
   return { schemaVersion: 1, kind: 'TaskReport', taskId: id, revision: current.revision, state: current.state === 'REJECTED' ? 'REJECTED' : run?.state ?? current.state, reviewState: current.state, plannerAttempt: current.plannerAttempt ?? null, plan, settings: current.settings, run,
     nextAction: current.state === 'REJECTED' ? 'Create a new plan' : !current.runId ? 'Review scope, then run to prepare a workflow' : 'Approve the exact workflow hash, then run with explicit model consent',
     workflowHash: current.runId ? store.get(current.runId).contractHash : null };

@@ -6,7 +6,7 @@
 
 CodeFleet은 **기존 Codex CLI·Claude Code의 모델·인증·세션을 활용하는 Host-Native AI 개발 오케스트레이션 확장 도구**다. 자연어 목표를 Task Draft·Validator·Workflow/DAG로 연결하고, 단일 Agent를 기본으로 필요시 역할을 나눈다. Policy·Capability·승인·상태·복구를 관리하며 AI의 성공 주장과 독립 Evidence·Judge의 완료 판정을 구분한다.
 
-기본 계획·DAG 준비에는 Docker·WSL·별도 OS 계정·직접 모델 API Key가 필요 없다. Docker는 선택적 보호 검증 Backend다. Local Verification은 Protected Verification과 다르며 Host Sandbox는 미검증이다. 실제 Host Live·자동 위임 상태는 진행 현황을 따른다. 신규 프로젝트 Bootstrap과 기존 프로젝트 개선이 제품 목표이며, Git HEAD 없는 Bootstrap은 별도 개발 중으로 현재 main의 완료 기능이 아니다.
+기본 계획·DAG 준비에는 Docker·WSL·별도 OS 계정·직접 모델 API Key가 필요 없다. Docker는 선택적 보호 검증 Backend다. Local Verification은 Protected Verification과 다르며 Host Sandbox는 미검증이다. 실제 Host Live·자동 위임 상태는 진행 현황을 따른다. 신규 프로젝트 Bootstrap과 기존 프로젝트 개선이 제품 목표이며, Git HEAD 없는 Bootstrap은 구현·오프라인 검증됐고 Host Live·보호 검증은 미완료다.
 
 사용자는 방향, 권한, 예산, 완료 기준을 정한다. 시스템은 허용된 작업을 진행하고 근거를 남긴다. 사용자는 진행 상황을 감독하고 중단하거나 예외를 결정한다. 사람의 개입 시간 감소와 결과 품질을 함께 측정한다.
 

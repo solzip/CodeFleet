@@ -27,11 +27,50 @@ node scripts/host-install.mjs remove codex <project-directory>
 
 The same lifecycle commands accept `claude`. Codex gets `.agents/skills/codefleet/SKILL.md`; Claude gets `.claude/skills/codefleet/SKILL.md`. Each skill includes a local runtime snapshot and the MIT license. There are no global settings, hooks, background services or network downloads. Existing skills are never overwritten; removal refuses modified files. To update, review/remove the unchanged old installation and install the new snapshot. Runtime snapshots do not update when the source checkout changes.
 
-Reload/restart the host if needed to discover the installed skill, then invoke `$codefleet` in Codex or `/codefleet` in Claude Code. H1 verified discovery with Codex 0.162.1's actual local `skills/list` loader, including disable/re-enable, without a model turn. Actual Skill invocation in either host and Claude discovery remain unverified. These are standalone skills; no Claude plugin marketplace is required and no plugin manifest or hook is claimed to have been registered.
+Reload/restart the host if needed to discover the installed skill, then invoke `$codefleet` in Codex or `/codefleet` in Claude Code. H1 verified discovery with Codex 0.162.1's actual local `skills/list` loader, including disable/re-enable, without a model turn. The Windows preparation acceptance below also verified loader matches 1/0/1 and the current Codex agent reading/following the installed Skill. This does not certify UI hot reload or Claude live invocation. These are standalone skills; no Claude plugin marketplace is required and no plugin manifest or hook is claimed to have been registered.
 
 Install before taking the approved Git baseline. Installation adds files, so review and handle those files according to your repository policy before planning; CodeFleet requires a clean target repository. Do not auto-commit them. Keep CodeFleet state and response JSON files outside the target repository and outside host write permissions where possible. Installation smoke tests use disposable directories, not your global host configuration.
 
 ## Goal to verified result
+
+### Windows Codex: recover a blocked preparation command
+
+Start with normal Host permissions and an explicit writable `--state STATE`
+outside the target repository. Keep that state and trusted runtime throughout.
+Do not use the implicit home state or the protected Operator state.
+
+For `GIT_OWNERSHIP` or `PROCESS_SPAWN_DENIED`, the installed Codex Skill now directs
+the agent to request approval for the exact CLI command through the existing Host
+execution tool: `sandbox_permissions="require_escalated"`, with a justification
+naming the command, state and repository/task. These are tool arguments, not
+CodeFleet flags. Do not add blanket node/shell rules or change sandbox policy,
+Git safe.directory, ownership or ACLs. If approval is denied/unavailable, preserve
+the error and remain BLOCKED. Mixed owners of the repository root and `.git` can
+still cause refusal even after approval; approval does not repair ownership.
+
+Inspect any recorded Task before another command. A failed plan remains recorded;
+after confirming there was no model/execution attempt, create a new plan rather
+than resuming the failed one. Do not blindly replay mutations. Check the Task
+contract and requested action separately: **Host execution approval never grants
+CodeFleet fileset approval, capabilities, Local trust or Protected Verification.**
+Objective unknowns still require explicit user scope clarification under the
+existing operator contract. Protected `requests/submit/run/resume` remain blocked.
+
+On 2026-10-21, the current Windows Codex 0.162.1 session directly invoked the
+installed runtime through Task creation/status, Bootstrap Draft validation,
+4-item DAG preparation/status and a 2-file fileset proposal. `plan/draft/prepare/files`
+used exact-command Host approvals; status/workflow queries ran in the sandbox.
+No operator executed those commands on Codex's behalf. The final proposal was
+`REQUEST_ONLY`, with 0 approvals, 0 attempts, verification `NOT_RUN` and no target
+files created. The existing Todo project's 120 files remained identical.
+See the [measured recovery and regression results](../implementation/host-native.md#windows-codex-preparation-recovery).
+
+This verifies preparation with Host approval, not unrestricted execution inside
+the sandbox or protected Host execution. The installed Todo Skill is an older
+snapshot and was preserved; review its lifecycle update before using the new
+guidance there, or use the corrected trusted checkout runtime with the same state.
+In PowerShell append `exit $LASTEXITCODE` when capturing a CLI's exit status:
+`prepare/files` intentionally return 2 for a pending approval, not completed work.
 
 In the examples below `CLI` is the trusted checkout's `src/alpha/cli.mjs` or the installed skill's `runtime/alpha/cli.mjs`. Use the same trusted runtime and explicit state directory throughout. `STATE`, `REPO`, `TASK`, `HASH` and response filenames are placeholders. Quote paths for your shell.
 

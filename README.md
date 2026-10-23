@@ -10,7 +10,7 @@ Host-Native Core는 main에 통합되어 오프라인 회귀 검증을 거쳤습
 
 [제품 원칙](docs/PRODUCT_VISION.md) · [공식 아키텍처](docs/product-completion/architecture.md) · [현재 상태](docs/product-completion/progress.md) · [Host 설치·사용](docs/product-completion/host-native-guide.md) · [Core와 검증 Backend](docs/product-completion/host-core-guide.md) · [문서 색인](docs/INDEX.md) · [English](README.en.md)
 
-신규 프로젝트 Bootstrap과 기존 프로젝트 개선을 모두 목표로 합니다. **Git HEAD 없는 신규 프로젝트 Bootstrap은 별도 개발 중이며 현재 main의 완료 기능이 아닙니다.** 구현·수용 완료 기준은 [로드맵](docs/product-completion/roadmap.md#현재-host-native-후속-작업)에서 관리합니다.
+신규 프로젝트 Bootstrap과 기존 프로젝트 개선을 모두 목표로 합니다. **Git HEAD 없는 신규 프로젝트 Bootstrap은 목표→Draft→Validator→DAG→승인된 파일 생성→로컬 검증까지 구현돼 오프라인·프로세스 단위 테스트로 검증됐습니다. 실제 Host Live와 보호 검증은 아직 완료되지 않았습니다.** 구현·수용 완료 기준은 [로드맵](docs/product-completion/roadmap.md#현재-host-native-후속-작업)에서 관리합니다.
 
 ## 해결하려는 문제
 
@@ -170,7 +170,7 @@ Host-Native 계획·DAG·검증 계약의 오프라인 시험과 기존 Legacy·
 | 당시 수용된 한계 / 미확인 | 1 / 27건 <!-- fact: findings-accepted-limit = 1 --> <!-- fact: findings-unchecked = 27 --> |
 | Legacy 테스트 기준 | 통과 324 / 실패 0 <!-- fact: tests-passing = 324 --> <!-- fact: tests-failing = 0 --> |
 | 규칙 조건 인용 커버리지 | 545줄 중 345줄, 63.3%. 구현 완성률이 아님 <!-- fact: condition-lines = 545 --> <!-- fact: conditions-covered = 345 --> <!-- fact: coverage-percent = 63.3 --> |
-| 동결 아카이브 감사·실행 기록 | 94편 <!-- fact: audit-run-records = 94 --> |
+| 동결 아카이브 감사·실행 기록 | 108편 <!-- fact: audit-run-records = 108 --> |
 
 테스트 수치 선언은 문서 검사에서 생성된 Legacy 결과와 대조하며, 새 환경에서 시험을 실행했다는 증거를 대신하지 않습니다.
 

@@ -2,8 +2,8 @@ import path from 'node:path';
 import { open } from 'node:fs/promises';
 import { Store } from '../alpha/store.mjs';
 import { dispatchProduct } from '../product/cli.mjs';
-import { enableTasks, task, prepareTask, submitTaskDraft } from '../product/tasks.mjs';
-import { taskReport } from '../product/report.mjs';
+import { enableTasks, task, prepareTask, submitTaskDraft, submitBootstrapFiles, bootstrapView, bootstrapDrift } from '../product/tasks.mjs';
+import { taskReport, bootstrapActions } from '../product/report.mjs';
 import { execute } from '../alpha/controller.mjs';
 import { hostIdentity, issueRequests, submitResponse, stagedExecution } from './exchange.mjs';
 import { requireProductionHostIsolation } from './operator.mjs';
@@ -18,7 +18,14 @@ host <codex|claude> doctor [--probe-container]
 host <codex|claude> review <task-id> --files ... --tests ... --criterion ...
 host <codex|claude> prepare|approval-request|requests|run|resume|pause|cancel|status|report <task-id>
 host <codex|claude> submit <response.json>
+host <codex|claude> files <task-id> <fileset.json>
 host <codex|claude> capabilities
+NEW_PROJECT (unborn HEAD, README-only or non-Git directory) is chosen by the repository probe.
+draft takes {revision,proposal:BootstrapDraft}; files takes {revision,itemId,files:[{path,content}]}
+for one local-edit WorkItem and only requests review. The operator approves the filesetHash with
+objective approve and creates files with objective materialize; git init and commit stay user actions.
+After a LOCAL_FAILED objective verify, files takes {revision,itemId,repair:{verificationItem,evidenceRef},
+files:[{path,content,baseSha256}]} to replace that materialized item's own files; same approval.
 Use --state outside the target repository. Approval requests do not authorize execution.
 An operator must approve the exact workflow hash using the existing objective approve command.
 Responses: {requestId,bindingHash,proposal:{summary,edits:[{path,oldText,newText}]}}.
@@ -41,7 +48,18 @@ export async function dispatchHost(argv, { store, execution = {} } = {}) {
   const identity = hostIdentity(host);
   const present = result => {
     const data = { ...result.data, host: identity };
-    if (data.kind === 'TaskReport') data.nextAction = 'Review and prepare; obtain operator hash-bound approval; requests, submit, then run staged proposals';
+    const failure = data.plan?.probe?.error;
+    if (host === 'codex' && data.state === 'BLOCKED' && ['GIT_OWNERSHIP', 'PROCESS_SPAWN_DENIED'].includes(failure?.kind)) {
+      // Advice only. The Host owns the approval UI and execution permission;
+      // no CodeFleet grant, replay or process launch is performed here.
+      data.hostRecovery = { status: 'HOST_APPROVAL_REQUIRED', reason: failure.kind,
+        authority: 'ADVISORY_ONLY', automaticRetry: false, grantsExecution: false,
+        taskId: data.taskId, taskRevision: data.revision,
+        nextAction: 'Use the Codex execution tool command-specific approval for the exact scoped CLI command. Re-query this task first; a blocked plan requires a new plan, not resume. Preserve the failed task. If approval is denied or unavailable, report BLOCKED.',
+        codefleetApproval: 'UNCHANGED', verification: 'NOT_ESTABLISHED' };
+      data.nextAction = data.hostRecovery.nextAction;
+    }
+    if (data.kind === 'TaskReport' && data.contractKind !== 'NEW_PROJECT' && !data.hostRecovery) data.nextAction = 'Review and prepare; obtain operator hash-bound approval; requests, submit, then run staged proposals';
     if (data.run?.provider?.startsWith('host-')) data.run.cost = { ...data.run.cost, scope: 'LOCAL_STAGED_REPLAY_ONLY', modelCalls: 0, hostSessionCost: null, hostSessionCostStatus: 'UNKNOWN' };
     return { ...result, data };
   };
@@ -62,6 +80,12 @@ export async function dispatchHost(argv, { store, execution = {} } = {}) {
   if (['workflow', 'explain'].includes(action)) {
     if (args.length !== 1) throw Error('Exactly one task id required');
     const current = task(store, args[0]), run = current.runId ? store.get(current.runId) : null;
+    if (current.bootstrap) {
+      const view = bootstrapView(store, current.id, { drift: await bootstrapDrift(store, current.id) });
+      return present({ exitCode: 0, data: { taskId: current.id, revision: current.revision, contractKind: 'NEW_PROJECT',
+        bootstrap: view, authority: 'PREPARATION_ONLY', executable: false, approved: false,
+        nextActions: bootstrapActions(view), operatorOnly: ['objective approve', 'objective materialize', 'objective verify'] } });
+    }
     return present({ exitCode: 0, data: { taskId: current.id, revision: current.revision,
       workflow: run?.contract ?? null, states: run?.states ?? null,
       authority: 'PREPARATION_ONLY', executable: false, approved: false,
@@ -74,6 +98,11 @@ export async function dispatchHost(argv, { store, execution = {} } = {}) {
       nextAction: run ? 'Request review of exact workflow hash' : 'Validate draft, then prepare workflow' } });
   }
   if (['plan', 'review', 'status', 'report', 'pause', 'cancel', 'reject'].includes(action)) return present(await dispatchProduct([action, ...args], { store }));
+  if (action === 'files') {
+    if (args.length !== 2) throw Error('files requires task id and bounded fileset JSON');
+    const { approvalRequest } = await submitBootstrapFiles(store, args[0], await readResponse(args[1]));
+    return present({ exitCode: 2, data: { ...await taskReport(store, args[0]), approvalRequest } });
+  }
   if (action === 'submit') {
     if (args.length !== 1) throw Error('submit requires response.json');
     return { exitCode: 0, data: submitResponse(store, host, await readResponse(args[0])) };
@@ -82,7 +111,9 @@ export async function dispatchHost(argv, { store, execution = {} } = {}) {
   if (args.length !== 1) throw Error('Exactly one task id required');
   const id = args[0];
   if (['prepare', 'approval-request'].includes(action)) {
-    const current = await prepareTask(store, id), run = store.get(current.runId);
+    const prepared = await prepareTask(store, id);
+    if (prepared.bootstrap) return present({ exitCode: 2, data: { ...await taskReport(store, id), approvalRequest: null, reason: 'NEW_PROJECT approval is per fileset; propose files for a local-edit item' } });
+    const current = prepared, run = store.get(current.runId);
     return present({ exitCode: 2, data: { ...await taskReport(store, id), approvalRequest: { taskId: id, taskRevision: current.revision, runRevision: run.revision, workflowHash: run.contractHash, authority: 'REQUEST_ONLY' } } });
   }
   const current = task(store, id);
