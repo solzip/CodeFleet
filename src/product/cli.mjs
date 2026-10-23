@@ -8,6 +8,7 @@ import { probeProvider } from '../providers/capabilities.mjs';
 import { enableTasks, createTask, reviewTask, prepareTask, approveTask, rejectTask, materializeTask, verifyTask, clarifyTask, objectiveUnknownsReport, task, tasks } from './tasks.mjs';
 import { readResponse } from '../hosts/cli.mjs';
 import { runReport, taskReport } from './report.mjs';
+import { issueDecision, revokeDecision, executeDecision, reservationStatus } from './reservations.mjs';
 
 export const help = `codefleet-alpha objective plan|run "goal" [repository]
 codefleet-alpha objective review <task-id> --files src/a.js --tests test/a.test.js --criterion "regression passes"
@@ -20,6 +21,10 @@ codefleet-alpha objective reject|pause|cancel <task-id> [--actor <name>]
 codefleet-alpha objective readiness [--codex-executable native-path]
 codefleet-alpha objective materialize <task-id> <item-id> (NEW_PROJECT: create an approved fileset; never overwrites, never runs git)
 codefleet-alpha objective verify <task-id> <item-id> REQUEST.json [--trust <commandHash> --acknowledge-unisolated]
+codefleet-alpha objective authorize-local <task-id> <item-id> REQUEST.json DECISION.json
+codefleet-alpha objective verify <task-id> <item-id> REQUEST.json --decision <id> --request-id <id>
+codefleet-alpha objective reservation <decision-id> <request-id>
+codefleet-alpha objective revoke-local <decision-id> --actor <name>
   (NEW_PROJECT local-verification: without --trust only inspects; with it runs once, records LOCAL_PASSED|LOCAL_FAILED|INCONCLUSIVE evidence; never protected VERIFIED)
 codefleet-alpha objective unknowns <task-id>
 codefleet-alpha objective clarify <task-id> --unknown <id> --scope "what the objective means" --actor <name> --revision <n>
@@ -31,7 +36,7 @@ No command enables an unverified Provider or performs remote delivery.`;
 function parse(values) {
   const positional = [], options = {};
   const flags = new Set(['allow-model', 'json', 'acknowledge-unisolated']);
-  const allowed = new Set(['files', 'tests', 'criterion', 'item', 'parallel', 'attempts', 'timeout', 'budget', 'hash', 'actor', 'planner', 'codex-executable', 'claude-executable', 'unknown', 'scope', 'revision', 'trust']);
+  const allowed = new Set(['files', 'tests', 'criterion', 'item', 'parallel', 'attempts', 'timeout', 'budget', 'hash', 'actor', 'planner', 'codex-executable', 'claude-executable', 'unknown', 'scope', 'revision', 'trust', 'decision', 'request-id']);
   for (let i = 0; i < values.length; i++) {
     const value = values[i];
     if (!value.startsWith('--')) { positional.push(value); continue; }
@@ -57,6 +62,18 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     return { exitCode: 2, data: { schemaVersion: 1, readiness: 'BLOCKED_OR_UNSUPPORTED', providers, liveCalls: 'NOT_RUN', reason: 'Version/help do not prove enforcement; no automatic live certification' } };
   }
   enableTasks(store);
+  if (action === 'authorize-local') {
+    if (args.length !== 4) throw Error('authorize-local requires task, item, command file and explicit decision file');
+    return { exitCode: 0, data: await issueDecision(store, args[0], args[1], await readResponse(args[2]), await readResponse(args[3])) };
+  }
+  if (action === 'reservation') {
+    if (args.length !== 2) throw Error('reservation requires decision and request IDs');
+    return { exitCode: 0, data: reservationStatus(store, args[0], args[1]) };
+  }
+  if (action === 'revoke-local') {
+    if (args.length !== 1) throw Error('revoke-local requires decision ID');
+    return { exitCode: 0, data: revokeDecision(store, args[0], o.actor) };
+  }
   let id = args[0];
   const report = async () => ({ exitCode: 0, data: await taskReport(store, id) });
   if (action === 'plan' || (action === 'run' && !id?.startsWith('task-'))) {
@@ -75,10 +92,14 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
   if (action === 'verify') {
     if (args.length !== 3) throw Error('verify requires task id, WorkItem id and REQUEST.json');
     if ((o.trust === undefined) !== (o['acknowledge-unisolated'] !== true)) throw Error('--trust and --acknowledge-unisolated must be given together');
+    if ((o.decision === undefined) !== (o['request-id'] === undefined) || (o.decision !== undefined && o.trust !== undefined)) throw Error('Durable execution requires decision/request IDs separately from legacy trust');
     let interrupted = false; const stop = () => { interrupted = true; };
     process.on('SIGINT', stop); process.on('SIGTERM', stop);
     try {
-      const result = await verifyTask(store, args[0], args[1], await readResponse(args[2]), { trust: o.trust, acknowledgeUnisolated: o['acknowledge-unisolated'] === true, cancelled: () => interrupted });
+      const request = await readResponse(args[2]);
+      const result = o.decision !== undefined
+        ? await executeDecision(store, args[0], args[1], request, { decisionId: o.decision, requestId: o['request-id'], cancelled: () => interrupted })
+        : await verifyTask(store, args[0], args[1], request, { trust: o.trust, acknowledgeUnisolated: o['acknowledge-unisolated'] === true, cancelled: () => interrupted });
       return { exitCode: result.status === 'LOCAL_PASSED' ? 0 : 2, data: { ...await taskReport(store, args[0]), verificationRun: result } };
     } finally { process.off('SIGINT', stop); process.off('SIGTERM', stop); }
   }
