@@ -2,9 +2,16 @@
 
 `docs/audits/`·`docs/runs/`·`docs/archive/`의 전 문서를 시간 역순으로 나열한다. 규약은 `docs/CONVENTIONS.md`, 결함 등재 현황은 `docs/REGISTER.md`.
 
-작성 기준: 2026-10-21. 전수 112개 문서 (감사 38 · 실행 67 · 아카이브 7). <!-- fact: docs-indexed = 112 --> <!-- fact: docs-on-disk = 112 -->
+작성 기준: 2026-10-23. 전수 114개 문서 (감사 38 · 실행 69 · 아카이브 7). <!-- fact: docs-indexed = 114 --> <!-- fact: docs-on-disk = 114 -->
 
 현재 공개 사용 제품 계획은 [제품 완성 문서](product-completion/README.md)에 있다. 기존 아카이브의 실측과 새 제품 계획을 구분하며, 구현 상태는 새 진행 현황에서 관리한다.
+
+## 2026-10-23
+
+| Date | Document | Type | Result | Follow-up |
+| --- | --- | --- | --- | --- |
+| 10-23 | `runs/2026-10-23/new-project-process-regression.md` | Process E2E as regression; Live procedure | 4 process-level tests (claude, codex) pass; 4/4 guard mutations detected; alpha 247 tests, same 5 Docker-env failures (5 sites, corrects predecessor's 3) | Owner authorization for the NEW_PROJECT Live pilot |
+| 10-23 | `runs/2026-10-23/new-project-p0-acceptance-remeasure.md` | P0 acceptance re-measurement | Process-level claude and codex: plan, re-query, BootstrapDraft VALIDATED, DAG 8 items re-queried; forged reference and 4 unapproved paths refused; legacy/host-core/checkers exit 0, alpha same 5 Docker-env failures | Owner decision on PR order; Claude Code Live NOT_RUN |
 
 ## 2026-10-21
 
