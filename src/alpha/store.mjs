@@ -5,18 +5,29 @@ import { randomUUID } from 'node:crypto';
 import { hash } from './contract.mjs';
 
 export class Store {
-  constructor(directory) {
-    this.directory = path.resolve(directory); mkdirSync(this.directory, { recursive: true });
-    this.db = new DatabaseSync(path.join(this.directory, 'state.sqlite'));
-    const version = this.db.prepare('PRAGMA user_version').get().user_version;
-    if (![0, 1, 2].includes(version)) { this.db.close(); throw Error('Unsupported state schema; restore a compatible version or use a new state directory'); }
-    this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;
+  constructor(directory, { readOnly = false } = {}) {
+    this.directory = path.resolve(directory);
+    this.readOnly = readOnly;
+    if (!readOnly) mkdirSync(this.directory, { recursive: true });
+    this.db = new DatabaseSync(path.join(this.directory, 'state.sqlite'), { readOnly });
+    try {
+      const version = this.db.prepare('PRAGMA user_version').get().user_version;
+      if (!(readOnly ? [1, 2] : [0, 1, 2]).includes(version)) throw Error('Unsupported state schema; restore a compatible version or use a new state directory');
+      if (readOnly) {
+        // Connection-local only. Never initialize, migrate or set journal mode.
+        this.db.exec('PRAGMA query_only=ON; PRAGMA busy_timeout=5000');
+        if (this.db.prepare('PRAGMA quick_check').all().some(r => r.quick_check !== 'ok')) throw Error('Corrupt state database');
+        return;
+      }
+      this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;
       CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, body TEXT NOT NULL, owner TEXT, leaseUntil INTEGER NOT NULL DEFAULT 0, pid INTEGER, control TEXT NOT NULL DEFAULT 'run');
       CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY AUTOINCREMENT, runId TEXT NOT NULL, at TEXT NOT NULL, type TEXT NOT NULL, body TEXT NOT NULL);`);
-    if (version === 0) this.db.exec('PRAGMA user_version=1');
+      if (version === 0) this.db.exec('PRAGMA user_version=1');
+    } catch (error) { this.db.close(); throw error; }
   }
   // Opt-in additive migration: ordinary V1 use stays V1; no historical rows change.
   enableWorkflows() {
+    if (this.readOnly) throw Error('Read-only Store cannot initialize workflows');
     this.db.exec('BEGIN IMMEDIATE');
     try {
       this.db.exec(`CREATE TABLE IF NOT EXISTS graph_revisions (runId TEXT NOT NULL REFERENCES runs(id), revision INTEGER NOT NULL, digest TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(runId,revision));
@@ -73,6 +84,7 @@ export class Store {
     try {
       const row = this.db.prepare('SELECT owner,leaseUntil,pid,control,body FROM runs WHERE id=?').get(id);
       if (!row) throw Error('Unknown run');
+      if (row.owner && Date.now() < Number(row.leaseUntil) - 30000) throw Error('Worker lease clock moved backwards; reconcile before claiming');
       let alive = false;
       if (row.pid) { try { process.kill(Number(row.pid), 0); alive = true; } catch (e) { alive = e.code === 'EPERM'; } }
       if (row.owner && alive && Number(row.leaseUntil) > Date.now()) throw Error('Run already has an active worker');
@@ -86,17 +98,32 @@ export class Store {
       return owner;
     } catch (e) { this.db.exec('ROLLBACK'); throw e; }
   }
-  heartbeat(id, owner) { return this.db.prepare('UPDATE runs SET leaseUntil=? WHERE id=? AND owner=?').run(Date.now() + 30000, id, owner).changes === 1; }
-  save(run, owner, type) {
+  heartbeat(id, owner) {
+    const now = Date.now();
+    // A late renewal cannot resurrect an expired lease. Persist invalidation so
+    // rolling the wall clock back (or restarting) cannot restore this owner.
+    const row = this.db.prepare(`UPDATE runs SET leaseUntil=CASE
+      WHEN leaseUntil>? AND leaseUntil<=? THEN ? ELSE 0 END
+      WHERE id=? AND owner=? RETURNING leaseUntil`).get(now, now + 30000, now + 30000, id, owner);
+    return Boolean(row?.leaseUntil);
+  }
+  save(run, owner, type, fence = () => {}) {
+    const observed = Date.now();
+    // Keep observed lease loss even when the following result transaction fails.
+    this.db.prepare('UPDATE runs SET leaseUntil=0 WHERE id=? AND owner=? AND (leaseUntil<=? OR leaseUntil>?)')
+      .run(run.id, owner, observed, observed + 30000);
     this.db.exec('BEGIN IMMEDIATE');
     try {
-      const result = this.db.prepare('UPDATE runs SET body=? WHERE id=? AND owner=? AND leaseUntil>?').run(JSON.stringify(run), run.id, owner, Date.now());
+      fence();
+      const now = Date.now();
+      const result = this.db.prepare('UPDATE runs SET body=? WHERE id=? AND owner=? AND leaseUntil>? AND leaseUntil<=?').run(JSON.stringify(run), run.id, owner, now, now + 30000);
       if (result.changes !== 1) throw Error('Worker lease lost; result cannot be committed');
       this.event(run.id, type, { state: run.state, attempts: run.attempts, reason: run.reason ?? null }); this.db.exec('COMMIT');
     } catch (e) { this.db.exec('ROLLBACK'); throw e; }
   }
   release(id, owner) { this.db.prepare('UPDATE runs SET owner=NULL,leaseUntil=0,pid=NULL WHERE id=? AND owner=?').run(id, owner); }
   artifact(value) {
+    if (this.readOnly) throw Error('Read-only Store cannot write artifacts');
     const bytes = Buffer.from(JSON.stringify(value)); const digest = hash(bytes);
     const dir = path.join(this.directory, 'artifacts'); mkdirSync(dir, { recursive: true });
     const target = path.join(dir, `${digest}.json`); const temp = `${target}.${randomUUID()}.tmp`;

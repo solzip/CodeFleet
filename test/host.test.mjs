@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, appendFile, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, appendFile, symlink, lstat, realpath, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { Store } from '../src/alpha/store.mjs';
@@ -63,6 +63,12 @@ for (const host of ['codex', 'claude']) {
     assert.equal((await installHost(root, host)).status, 'INSTALLED_OFFLINE');
     const skill = path.join(root, host === 'codex' ? '.agents' : '.claude', 'skills/codefleet');
     const text = await readFile(path.join(skill, 'SKILL.md'), 'utf8');
+      const {collectLinks}=await import('../scripts/check-links.mjs');
+      const links=collectLinks(await readFile(path.join(skill,'runtime/README.md'),'utf8')).links;
+      assert.ok(links.length>0);
+      for(const {target} of links)assert.equal((await lstat(path.resolve(skill,'runtime',target))).isFile(),true,'Installed link: '+target);
+      assert.match(text,/PUBLIC_DELEGATION_BLOCKED/);
+      assert.match(text,/local-files-accept/);
     assert.match(text, /runtime\/hosts\/ipc-client.mjs/);
     assert.match(await readFile(path.join(skill, 'runtime/hosts/ipc-client.mjs'), 'utf8'), /hostRequest/);
     assert.match(text, /name: codefleet/); assert.match(text, /operator/);
@@ -193,11 +199,42 @@ test('modified installation is preserved and oversized response is rejected', as
   const large = path.join(root, 'large.json'); await writeFile(large, ' '.repeat(220001)); await assert.rejects(readResponse(large), /limit/);
 });
 test('installer refuses a redirected parent', async () => {
-  const root = await mkdtemp(path.join(tmpdir(), 'cf-host-link-')), outside = await mkdtemp(path.join(tmpdir(), 'cf-host-outside-'));
-  await symlink(outside, path.join(root, '.agents'), process.platform === 'win32' ? 'junction' : 'dir');
+  const provisioned = process.env.CODEFLEET_TEST_LINK_ROOT;
+  const root = provisioned ? path.join(provisioned, 'host-root') : await mkdtemp(path.join(tmpdir(), 'cf-host-link-'));
+  const outside = provisioned ? path.join(provisioned, 'outside') : await mkdtemp(path.join(tmpdir(), 'cf-host-outside-'));
+  if (!provisioned) await symlink(outside, path.join(root, '.agents'), process.platform === 'win32' ? 'junction' : 'dir');
+  assert.equal((await lstat(path.join(root, '.agents'))).isSymbolicLink(), true);
+  assert.equal(await realpath(path.join(root, '.agents')), await realpath(outside));
   await assert.rejects(installHost(root, 'codex'), /Unsafe/);
+  assert.deepEqual(await readdir(outside), [], 'installer must not write through the redirect');
 });
 test('Host-Native fake session with production Docker Harness', { skip: process.env.CODEFLEET_TEST_DOCKER !== '1' }, async () => {
   const f = await fixture('claude', true);
   try { await stage(f); const result = await f.call(['run', f.id]); assert.equal(result.exitCode, 0, JSON.stringify(result.data)); assert.equal(result.data.run.verification.status, 'VERIFIED'); } finally { f.store.close(); }
+});
+
+test('public capabilities distinguish Host permission from authenticated delegation',async()=>{
+ const result=await dispatchHost(['codex','capabilities']);
+ assert.equal(result.data.publicDelegation,'PUBLIC_DELEGATION_BLOCKED');
+ const b=result.data.delegationBoundary;
+ assert.equal(b.grantsExecution,false);
+ assert.equal(b.authenticatedApprovalSource,'NOT_CONNECTED');
+ assert.equal(b.sourceChanges,false);
+ assert.equal(b.modelExecution,false);
+ assert.equal(b.separateOsAccountRequired,false);
+ assert.equal(b.persistentApprovalServerRequired,false);
+ assert.ok(b.insufficientEvidence.includes('ACCEPT_FOR_SESSION'));
+ await assert.rejects(dispatchHost(['codex','capabilities','{"decision":"acceptForSession"}']),/No capability arguments/);
+});
+
+test('public capability inspection never opens or creates a State directory',async()=>{
+ const {hostCli}=await import('../src/hosts/cli.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'cf-capabilities-')),state=path.join(root,'absent-state');
+ const result=await hostCli(['codex','capabilities'],state);
+ assert.equal(result.exitCode,0);
+ assert.equal(result.data.delegationBoundary.authenticatedApprovalSource,'NOT_CONNECTED');
+ await assert.rejects(lstat(state),{code:'ENOENT'});
+ const refused=await hostCli(['codex','capabilities','--approve'],state);
+ assert.equal(refused.exitCode,1);
+ await assert.rejects(lstat(state),{code:'ENOENT'});
 });

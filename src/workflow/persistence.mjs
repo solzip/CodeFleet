@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { hash } from '../alpha/contract.mjs';
 import { repository } from '../alpha/workspace.mjs';
 import { validateWorkflow, policyFor, parallelLimit } from './definition.mjs';
-import { workflowGuard } from '../hosts/workflow-authorization.mjs';
+import { workflowGuard, bootstrapGuard } from '../hosts/workflow-authorization.mjs';
 
 function transaction(store, fn) {
   store.db.exec('BEGIN IMMEDIATE');
@@ -28,10 +28,14 @@ export async function createWorkflow(store, repo, input, source, commandId = ran
     store.event(run.id, 'WORKFLOW_CREATED', { graphRef, sourceRef: contractRef }); return run;
   });
 }
-export function approveWorkflow(store, runId, { actor, workflowHash, expiresAt }) {
+export function approveWorkflow(store, runId, { actor, workflowHash, expiresAt, authorization }) {
   return transaction(store, () => {
     const run = store.get(runId); idle(store, run);
     if (run.authorizationMode === 'OS_OPERATOR_V1') throw Error('Protected workflow cannot use actor approval');
+    if (run.taskId) {
+      const guard = bootstrapGuard(store, run.taskId);
+      if (guard) run.operatorAuthorization = guard.authorizeFileset(run, { actor, workflowHash, expiresAt, authorization });
+    }
     if (typeof actor !== 'string' || !actor.trim() || workflowHash !== run.contractHash || !Number.isFinite(expiresAt) || expiresAt <= Date.now() || expiresAt > Date.now() + 3600000) throw Error('Explicit matching workflow approval and bounded expiry required');
     store.db.prepare('INSERT OR REPLACE INTO workflow_approvals VALUES (?,?,?,?,?)').run(runId, run.revision, workflowHash, actor, expiresAt);
     run.state = 'READY'; store.db.prepare('UPDATE runs SET body=? WHERE id=?').run(JSON.stringify(run), runId);

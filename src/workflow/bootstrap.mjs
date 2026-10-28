@@ -7,6 +7,9 @@ import { WORK_KINDS, evaluateWorkItem } from './capability-policy.mjs';
 // not its source contract: there are no existing files or protected tests yet, so
 // G4's maxAttempts-bounded, file-owning WorkItem rules cannot apply.
 export const BOOTSTRAP_POLICY = Object.freeze({ version: 'bootstrap-plan-1', maxItems: BOOTSTRAP_LIMITS.items, delivery: 'local-new-files-only', verification: 'NOT_PROTECTED_UNTIL_EXISTING_CONTRACT', gitEffects: 'USER_ONLY' });
+export const EXISTING_LOCAL_POLICY=Object.freeze({...BOOTSTRAP_POLICY,version:'existing-local-1',delivery:'exact-existing-source-replacements',tests:'IMMUTABLE_BASELINE'});
+export const EXISTING_LOCAL_TEXT_POLICY=Object.freeze({...EXISTING_LOCAL_POLICY,version:'existing-local-2',delivery:'exact-text-create-or-replace-per-item'});
+const policyFor=draft=>draft.kind==='ExistingLocalDraft'?(draft.schemaVersion===2?EXISTING_LOCAL_TEXT_POLICY:EXISTING_LOCAL_POLICY):BOOTSTRAP_POLICY;
 // Approval is derived from kind, never supplied, so a proposal cannot lower it.
 export const BOOTSTRAP_APPROVALS = Object.freeze({
   planning: 'NONE_PLAN_ONLY', analysis: 'NONE_PLAN_ONLY',
@@ -24,22 +27,23 @@ const id = value => { if (typeof value !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_-]{
 const derive = item => ({ ...item, requiredCapabilities: [...WORK_KINDS[item.kind]], approval: BOOTSTRAP_APPROVALS[item.kind] });
 
 export function bootstrapDefinition(plan, { workflowId = 'bootstrap' } = {}) {
-  if (plan?.contractKind !== 'NEW_PROJECT' || plan.validation?.status !== 'VALIDATED') throw Error('Bootstrap workflow requires a VALIDATED NEW_PROJECT plan');
+  if (!['NEW_PROJECT','EXISTING_LOCAL'].includes(plan?.contractKind) || plan.validation?.status !== 'VALIDATED') throw Error('Bootstrap workflow requires a VALIDATED NEW_PROJECT plan');
   const items = plan.draft.workItems.map(item => {
     exact(item, ['id', 'kind', 'dependencies', 'acceptanceCriteria', 'files'], 'Bootstrap WorkItem');
     if (!Object.hasOwn(WORK_KINDS, item.kind)) throw Error(`Unknown WorkItem kind: ${String(item.kind)}`);
     return derive(structuredClone(item));
   });
-  const body = { schemaVersion: 1, kind: 'BootstrapWorkflow', workflowId, draftHash: plan.validation.draftHash, probeRef: plan.probe.probeHash, items, policySnapshotRef: hash(BOOTSTRAP_POLICY) };
+  const body = { schemaVersion: 1, kind: 'BootstrapWorkflow', workflowId, draftHash: plan.validation.draftHash, probeRef: plan.probe.probeHash, items, policySnapshotRef: hash(policyFor(plan.draft)) };
   return validateBootstrapWorkflow({ ...body, workflowHash: hash(body) }, plan.draft);
 }
 export function validateBootstrapWorkflow(input, draft) {
   exact(input, ['schemaVersion', 'kind', 'workflowId', 'draftHash', 'probeRef', 'items', 'policySnapshotRef', 'workflowHash'], 'BootstrapWorkflow');
   const { workflowHash, ...body } = input;
-  if (input.schemaVersion !== 1 || input.kind !== 'BootstrapWorkflow' || hash(body) !== workflowHash || input.draftHash !== hash(draft) || input.probeRef !== draft.probeRef || input.policySnapshotRef !== hash(BOOTSTRAP_POLICY)) throw Error('Bootstrap workflow identity/hash/policy mismatch');
+  if (input.schemaVersion !== 1 || input.kind !== 'BootstrapWorkflow' || hash(body) !== workflowHash || input.draftHash !== hash(draft) || input.probeRef !== draft.probeRef || input.policySnapshotRef !== hash(policyFor(draft))) throw Error('Bootstrap workflow identity/hash/policy mismatch');
   id(input.workflowId);
   if (!Array.isArray(input.items) || !input.items.length || input.items.length > BOOTSTRAP_POLICY.maxItems) throw Error(`Bootstrap WorkItems must be 1..${BOOTSTRAP_POLICY.maxItems}`);
-  const planned = new Set(draftPaths(draft)), owned = new Set(), nodes = new Map();
+  const existingLocal=draft.kind==='ExistingLocalDraft';
+  const planned = new Set(existingLocal ? draft.plannedFiles.map(f=>f.path) : draftPaths(draft)), owned = new Set(), nodes = new Map();
   for (const item of input.items) {
     exact(item, ['id', 'kind', 'dependencies', 'acceptanceCriteria', 'files', 'requiredCapabilities', 'approval'], 'Bootstrap WorkItem'); id(item.id);
     if (!Object.hasOwn(WORK_KINDS, item.kind) || hash(derive({ ...item, requiredCapabilities: undefined, approval: undefined })) !== hash(item)) throw Error('WorkItem capability or approval differs from its kind');

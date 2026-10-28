@@ -34,12 +34,15 @@ export const hostSandboxBackend = Object.freeze({
 
 // This is explicit trust of code, not containment of hostile code. Hashing detects
 // changes before/after execution but cannot prevent concurrent writes or effects.
-export async function localTree(directory) {
+export async function localTree(directory, replacements = [], { excludeGit = false, entries = false } = {}) {
+  const overlay = new Map(replacements.map(f => [f.path, f]));
+  if (overlay.size !== replacements.length) throw Error('Duplicate projected file');
   const files = []; let bytes = 0;
   async function walk(relative = '') {
     const dir = path.join(directory, relative);
     if ((await lstat(dir)).isSymbolicLink()) throw Error('Local verification rejects linked paths');
     for (const name of (await readdir(dir)).sort()) {
+      if (excludeGit && !relative && name === '.git') continue;
       const rel = relative ? relative + '/' + name : name;
       const stat = await lstat(path.join(directory, rel));
       if (stat.isSymbolicLink()) throw Error('Local verification rejects symlinks');
@@ -47,13 +50,23 @@ export async function localTree(directory) {
       else if (stat.isFile()) {
         bytes += stat.size;
         if (bytes > 32 * 1024 * 1024 || files.length >= 1500) throw Error('Local snapshot exceeds bound');
-        files.push([rel, stat.mode, hash(await readFile(path.join(directory, rel)))]);
+        const original = await readFile(path.join(directory, rel)), replacement = overlay.get(rel);
+        if (replacement && (typeof replacement.content !== 'string' || hash(original) !== replacement.baseSha256)) throw Error('Projected source base changed');
+        files.push([rel, stat.mode, replacement ? hash(replacement.content) : hash(original)]);
+        overlay.delete(rel);
       } else throw Error('Local verification requires regular files');
     }
   }
   await walk();
+  if (overlay.size) throw Error('Projected repair must replace existing regular files');
   if (!files.length) throw Error('Local verification requires a nonempty reviewed snapshot');
-  return hash(files);
+  return entries ? files : hash(files);
+}
+// Review only: does not write, authorize, or execute the projected tree.
+export async function previewLocalCommand(request, replacements) {
+  const { commandHash, ...spec } = await inspectLocalCommand(request);
+  spec.candidateTreeHash = await localTree(spec.directory, replacements);
+  return { ...spec, commandHash: hash(spec) };
 }
 export async function inspectLocalCommand({ executable, args, directory, timeoutMs = 30000 }) {
   if (!path.isAbsolute(executable) || /\.(cmd|bat|ps1)$/i.test(executable) ||

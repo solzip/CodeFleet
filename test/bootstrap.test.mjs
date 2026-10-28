@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, realpath, symlink, rm, readdir } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, realpath, symlink, rm, readdir, lstat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
@@ -27,6 +27,11 @@ async function commitAll(dir) {
 async function fixture(kind) {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), 'cf-bootstrap-'))), dir = path.join(root, 'repo');
   await mkdir(dir);
+  if (kind === 'nogit') {
+    const parent = await git(dir, ['rev-parse', '--show-toplevel']);
+    assert.equal(classifyGitFailure(parent).kind, 'NOT_GIT',
+      'Non-Git fixtures require TEMP/TMP outside every repository; a repository subdirectory is not a non-Git fixture');
+  }
   if (kind !== 'nogit') requireSuccess(await git(dir, ['init']), 'init');
   if (['readme', 'source'].includes(kind)) await writeFile(path.join(dir, 'README.md'), '# todo\n');
   if (kind === 'source') { await mkdir(path.join(dir, 'src')); await mkdir(path.join(dir, 'test')); await writeFile(path.join(dir, 'src/a.js'), 'export const add = (a, b) => a + b;\n'); await writeFile(path.join(dir, 'test/a.test.js'), "import { add } from '../src/a.js';\n"); }
@@ -177,6 +182,9 @@ test('Git ownership refusal from real Git is classified, other failures are not,
   assert.equal(refused.exitCode, 128);
   const ownership = classifyGitFailure(refused);
   assert.equal(ownership.kind, 'GIT_OWNERSHIP'); assert.match(ownership.remedy, /never changes safe\.directory/);
+  assert.match(ownership.remedy, /do not automatically escalate or retry/);
+  assert.match(ownership.remedy, /unelevated needs explicit consent/);
+  assert.match(ownership.remedy, /Recheck current contract, candidate, capabilities, leases/);
   assert.equal(classifyGitFailure({ exitCode: 128, stderr: Buffer.from('fatal: not a git repository') }).kind, 'NOT_GIT');
   assert.equal(classifyGitFailure({ exitCode: 128, stderr: Buffer.from('fatal: bad object HEAD') }).kind, 'GIT_ERROR');
   // Observed verbatim in a Codex unelevated Windows sandbox: no child process may start.
@@ -334,9 +342,17 @@ test('existing files are never overwritten; conflicts, outside changes and link 
   await assert.rejects(() => materializeTask(f.store, f.id, 'calendar'), /changed outside the approved filesets/);
   await rm(path.join(f.dir, 'notes.txt'));
   assert.equal((await materializeTask(f.store, f.id, 'calendar')).status, 'MATERIALIZED');
-  const outside = await realpath(await mkdtemp(path.join(tmpdir(), 'cf-outside-')));
-  const root = await realpath(await mkdtemp(path.join(tmpdir(), 'cf-link-')));
-  await symlink(outside, path.join(root, 'linked'), 'junction');
+  // MXC may forbid creating reparse points. An operator can provision this real
+  // junction before sandbox startup; the same materializer must reject it inside
+  // the sandbox. Missing/invalid fixtures fail, never skip the security assertion.
+  const provisioned = process.env.CODEFLEET_TEST_LINK_ROOT;
+  const outside = provisioned ? await realpath(path.join(provisioned, 'outside'))
+    : await realpath(await mkdtemp(path.join(tmpdir(), 'cf-outside-')));
+  const root = provisioned ? await realpath(path.join(provisioned, 'root'))
+    : await realpath(await mkdtemp(path.join(tmpdir(), 'cf-link-')));
+  if (!provisioned) await symlink(outside, path.join(root, 'linked'), 'junction');
+  assert.equal((await lstat(path.join(root, 'linked'))).isSymbolicLink(), true);
+  assert.equal(await realpath(path.join(root, 'linked')), outside);
   const linked = await createFiles(root, [{ path: 'linked/a.js', content: 'x', sha256: 'unused', bytes: 1 }]);
   assert.deepEqual([linked.status, linked.written], ['CONFLICT', false]);
   assert.deepEqual(await readdir(outside), [], 'nothing written through the link');

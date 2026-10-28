@@ -25,11 +25,23 @@ node scripts/host-install.mjs enable codex <project-directory>
 node scripts/host-install.mjs remove codex <project-directory>
 ```
 
+For a reviewed local tarball, install into a separate tools directory with
+`npm.cmd install --offline --ignore-scripts --no-audit --no-fund PATH_TO_TARBALL`.
+Then run `node node_modules/codefleet/scripts/host-install.mjs install codex PROJECT`.
+The installer ships in the package; no development checkout is required. This
+is a local release-candidate installation, not a claim of npm registry availability.
+
 The same lifecycle commands accept `claude`. Codex gets `.agents/skills/codefleet/SKILL.md`; Claude gets `.claude/skills/codefleet/SKILL.md`. Each skill includes a local runtime snapshot and the MIT license. There are no global settings, hooks, background services or network downloads. Existing skills are never overwritten; removal refuses modified files. To update, review/remove the unchanged old installation and install the new snapshot. Runtime snapshots do not update when the source checkout changes.
 
 Reload/restart the host if needed to discover the installed skill, then invoke `$codefleet` in Codex or `/codefleet` in Claude Code. H1 verified discovery with Codex 0.162.1's actual local `skills/list` loader, including disable/re-enable, without a model turn. The Windows preparation acceptance below also verified loader matches 1/0/1 and the current Codex agent reading/following the installed Skill. This does not certify UI hot reload or Claude live invocation. These are standalone skills; no Claude plugin marketplace is required and no plugin manifest or hook is claimed to have been registered.
 
-Install before taking the approved Git baseline. Installation adds files, so review and handle those files according to your repository policy before planning; CodeFleet requires a clean target repository. Do not auto-commit them. Keep CodeFleet state and response JSON files outside the target repository and outside host write permissions where possible. Installation smoke tests use disposable directories, not your global host configuration.
+Installation adds files: review them under your repository policy before planning;
+do not auto-commit. The supervised EXISTING_LOCAL path snapshots HEAD and current
+changes, preserves unrelated dirty/untracked files and rejects unexpected changes
+to approved targets. Legacy protected paths retain their clean-repository rules.
+Keep CodeFleet state and response JSON outside the target repository and outside
+host write permissions where possible. Installation checks use disposable
+directories, not global host configuration.
 
 ## Goal to verified result
 

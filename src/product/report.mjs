@@ -1,15 +1,18 @@
 import path from 'node:path';
+import {localTree} from '../verification/backends.mjs';
 import { verifiedEvidence } from '../alpha/evidence.mjs';
 import { attempts, approval } from '../workflow/persistence.mjs';
 import { judge } from '../alpha/judge.mjs';
 import { messages } from '../workflow/collaboration.mjs';
 import { task, bootstrapView, bootstrapDrift, clarifiableFor } from './tasks.mjs';
 import { reservationStatus } from './reservations.mjs';
+import { localAcceptance } from './local-acceptance.mjs';
 
 function bootstrapNext(current, plan) {
   if (current.state === 'REJECTED') return 'Create a new plan';
   const open = clarifiableFor(current, plan).filter(u => u.status === 'OPEN').map(u => u.id);
   if (!current.bootstrap && open.length) return `An operator must confirm the objective's meaning with objective clarify (${open.join(', ')}); a planner cannot clear it. Other unknowns need a BootstrapDraft`;
+  if(plan.contractKind==='EXISTING_LOCAL')return current.state==='VALIDATED'?'Prepare the existing Local DAG':'Submit an ExistingLocalDraft against the observed working-tree baseline; tests remain read-only';
   return current.state === 'VALIDATED' ? 'Prepare the bootstrap workflow' : 'Submit a BootstrapDraft; planned files are not existing code';
 }
 // Derived from the effective item states, most urgent first. Every entry names the
@@ -21,7 +24,8 @@ export function bootstrapActions(view) {
   const actions = [];
   const add = (kind, items, text) => { if (items.length) actions.push({ kind, items: ids(items), text }); };
   add('AWAIT_FILESET_APPROVAL', fileset(['WAITING_APPROVAL']), 'An operator reviews and approves the filesetHash with objective approve');
-  add('MATERIALIZE', fileset(['READY', 'WAITING_HUMAN']), 'objective materialize <task-id> <item-id>; a WAITING_HUMAN fileset retries only what is not yet written, after any conflict is resolved by hand');
+  add('RECONCILE', fileset(['MATERIALIZING', 'WAITING_HUMAN']), 'Inspect persisted files, results and Lease with objective recover; public materialize never replays a started fileset');
+  add('MATERIALIZE', fileset(['READY']), 'objective materialize <task-id> <item-id>; requires a fresh approved fileset with no started effects');
   add('REPAIR_REQUIRED', ready.filter(i => i.kind === 'local-verification' && i.state === 'LOCAL_FAILED'), 'Local tests failed: propose a repair fileset (files with baseSha256 and repair evidenceRef) for a materialized local-edit item this verification depends on');
   add('PROPOSE_FILESET', ready.filter(i => i.kind === 'local-edit' && i.state === 'PENDING_FILESET'), 'Propose a fileset for these local-edit items');
   add('RUN_LOCAL_VERIFICATION', ready.filter(i => i.kind === 'local-verification' && UNSATISFIED_LOCAL.includes(i.state)), 'objective verify <task-id> <item-id> REQUEST.json to inspect, then rerun with --trust <commandHash> --acknowledge-unisolated');
@@ -37,7 +41,8 @@ export function bootstrapActions(view) {
 function localVerification(store, view) {
   return Object.fromEntries(view.items.filter(i => i.kind === 'local-verification').map(i => {
     const result = { state: i.state, evidenceRef: i.verificationRef };
-    if (i.verificationRef && !['EVIDENCE_INVALID', 'VERIFICATION_STALE'].includes(i.state)) {
+    if (i.state === 'LOCAL_CHECKPOINT') result.historicalOnly = true;
+    if (i.verificationRef && !['EVIDENCE_INVALID', 'VERIFICATION_STALE', 'LOCAL_CHECKPOINT'].includes(i.state)) {
       // A read-only diagnostic, not an accepted verdict or a workflow transition.
       try {
         const evidence = store.readArtifact(i.verificationRef);
@@ -120,7 +125,7 @@ export async function runReport(store, id) {
 export async function taskReport(store, id) {
   const current = task(store, id), plan = store.readArtifact(current.planRef);
   const run = current.runId ? await runReport(store, current.runId) : null;
-  if (plan.contractKind === 'NEW_PROJECT') {
+  if (['NEW_PROJECT','EXISTING_LOCAL'].includes(plan.contractKind)) {
     const view = current.bootstrap && current.state !== 'REJECTED' ? bootstrapView(store, id, { drift: await bootstrapDrift(store, id) }) : null;
     const actions = view ? bootstrapActions(view) : null, local = view ? localVerification(store, view) : {};
     const decisions = store.db.prepare("SELECT 1 FROM sqlite_master WHERE name='bootstrap_decisions'").get()
@@ -136,11 +141,22 @@ export async function taskReport(store, id) {
       continuation.reason = 'Durable one-shot execution: inspect reservation status; no command-hash replay, automatic retry or budget reset';
       if (actions) actions.splice(0, actions.length, { kind: 'HUMAN_HANDOFF', items: [], text: continuation.reason });
     }
-    // complete is never true here: NEW_PROJECT has no protected verification contract.
-    return { schemaVersion: 1, kind: 'TaskReport', taskId: id, revision: current.revision, contractKind: 'NEW_PROJECT', state: current.state, reviewState: current.state, plannerAttempt: current.plannerAttempt ?? null, plan, settings: current.settings, run: null,
+    const acceptance = localAcceptance(current, plan, view, ref => store.readArtifact(ref));
+    if(acceptance.complete){
+      try{if(await localTree(current.repo)!==acceptance.candidateTreeHash){acceptance.complete=false;acceptance.reason='CURRENT_CANDIDATE_CHANGED';}}
+      catch{acceptance.complete=false;acceptance.reason='CURRENT_CANDIDATE_UNREADABLE';}
+    }
+    if (reservations.some(r => r.status === 'EVIDENCE_DEFECT')) {
+      acceptance.complete = false; acceptance.reason = 'EVIDENCE_DEFECT';
+    }
+    if (acceptance.complete) {
+      continuation.status = 'COMPLETE_LOCAL'; continuation.next = null; continuation.reason = acceptance.reason;
+      actions.splice(0, actions.length, { kind: 'COMPLETE_LOCAL', items: [], text: 'All criteria passed on the current candidate at explicitly selected Local-only trust; no Protected claim or further execution' });
+    }
+    return { schemaVersion: 1, kind: 'TaskReport', taskId: id, revision: current.revision, contractKind: plan.contractKind, state: current.state, reviewState: current.state, plannerAttempt: current.plannerAttempt ?? null, plan, settings: current.settings, run: null,
       bootstrap: view, nextAction: actions ? actions.map(a => `${a.kind}${a.items.length ? ' (' + a.items.join(', ') + ')' : ''}: ${a.text}`).join('; ') : bootstrapNext(current, plan), nextActions: actions,
       workflowHash: current.bootstrap?.workflowHash ?? null, continuation, executionReservations: reservations,
-      verification: Object.values(local).some(v => v.evidenceRef) ? 'LOCAL_ONLY_UNPROTECTED' : 'NOT_RUN', localVerification: local, protectedVerification: 'UNSATISFIED', complete: false };
+      verification: Object.values(local).some(v => v.evidenceRef) ? 'LOCAL_ONLY_UNPROTECTED' : 'NOT_RUN', localVerification: local, protectedVerification: 'UNSATISFIED', acceptance, complete: acceptance.complete };
   }
   return { schemaVersion: 1, kind: 'TaskReport', taskId: id, revision: current.revision, state: current.state === 'REJECTED' ? 'REJECTED' : run?.state ?? current.state, reviewState: current.state, plannerAttempt: current.plannerAttempt ?? null, plan, settings: current.settings, run,
     nextAction: current.state === 'REJECTED' ? 'Create a new plan' : !current.runId ? 'Review scope, then run to prepare a workflow' : 'Approve the exact workflow hash, then run with explicit model consent',

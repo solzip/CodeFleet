@@ -10,7 +10,18 @@ export function hostIdentity(host) {
   if (!HOSTS.includes(host)) throw Error('Unsupported host');
   return { id: host, mode: 'STAGED_PROPOSAL', modelCalls: 0, liveValidation: 'NOT_RUN',
     automatedHostTools: 'BLOCKED', hostSandbox: 'UNVERIFIED', automaticDelegation: 'UNVERIFIED',
-    operatorAuthorization: 'BLOCKED_NO_OS_AUTHENTICATED_BROKER', publicExecution: 'BLOCKED',
+    operatorAuthorization: 'BLOCKED_NO_OS_AUTHENTICATED_BROKER', publicExecution: 'BLOCKED', publicDelegation: 'PUBLIC_DELEGATION_BLOCKED',
+    supervisedLocal: 'EXACT_USER_REVIEW_WITH_HOST_PERMISSION_UNPROTECTED',
+    delegationBoundary: {
+      status: 'PUBLIC_DELEGATION_BLOCKED', grantsExecution: false,
+      authenticatedApprovalSource: 'NOT_CONNECTED',
+      internalScope: 'SIGNED_EXACT_CANDIDATE_LOCAL_VERIFICATION_ONLY',
+      sourceChanges: false, modelExecution: false,
+      insufficientEvidence: ['CLIENT_APPROVAL_JSON', 'ACCEPT_FOR_SESSION', 'EXEC_POLICY_ALLOW_RULE', 'CLIENT_ATTESTATION_TOKEN', 'HOST_LOGIN'],
+      requiredConnection: 'Independently trusted user approval source bound to Objective, revision, scope, budget, expiry and revocation; inaccessible to the executing Agent',
+      nextAction: 'Use supervised exact Fileset and Local command review. Do not create an Agent signer or reinterpret Host permission as Objective delegation.',
+      separateOsAccountRequired: false, persistentApprovalServerRequired: false
+    },
     authentication: 'EXISTING_HOST_SESSION_ONLY', hostSessionCost: 'UNKNOWN' };
 }
 function exact(value, keys) {

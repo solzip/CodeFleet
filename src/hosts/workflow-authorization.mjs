@@ -3,6 +3,18 @@ import { hash } from '../alpha/contract.mjs';
 import { validateWorkflow, policyFor } from '../workflow/definition.mjs';
 
 const guards = new WeakMap();
+const bootstrapGuards = new WeakMap();
+export function registerBootstrapGuard(store, guard) {
+  if (bootstrapGuards.has(store)) throw Error('Bootstrap guard already registered');
+  bootstrapGuards.set(store, guard);
+}
+export function bootstrapGuard(store, taskId) {
+  const row = store.db.prepare('SELECT body FROM runs WHERE id=?').get(taskId);
+  if (!row || JSON.parse(row.body).authorizationMode !== 'SIGNED_BOOTSTRAP_OFFLINE_V1') return null;
+  const guard = bootstrapGuards.get(store);
+  if (!guard) throw Error('Trusted Bootstrap Operator runtime required; public execution remains blocked');
+  return guard;
+}
 export function registerWorkflowGuard(store, guard) {
   if (guards.has(store)) throw Error('Workflow guard already registered');
   guards.set(store, guard);

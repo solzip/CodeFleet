@@ -30,7 +30,7 @@ check-doc-citations.mjs     exit=0        인용 250 · 살아있는 문서 깨�
 git status                  clean · origin/main 과 동일
 ```
 
-`INDEX.md`가 선언한 58개(감사 36 · 실행 15 · 아카이브 7)를 디스크에서 세어도 58이었다. 절대경로·실명·이메일 누출은 `grep -rniE 'C:[\\/]Users|윤솔|cys@'`로 0건.
+`INDEX.md`가 선언한 58개(감사 36 · 실행 15 · 아카이브 7)를 디스크에서 세어도 58이었다. 절대경로·실명·이메일 누출은 `<LOCAL_PROFILE_SCAN_PATTERN>`로 0건.
 
 **그래서 이 작업의 결론은 "검사기가 초록인 것과 문서가 정리된 것은 다르다"에서 시작한다.**
 

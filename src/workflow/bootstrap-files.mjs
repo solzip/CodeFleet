@@ -96,7 +96,7 @@ export async function preflightFiles(root, files) {
 }
 // Writes only after a clean preflight. `wx` makes creation exclusive, so a file
 // appearing between preflight and write is a CONFLICT, never an overwrite.
-export async function createFiles(root, files, { cancelled = () => false, record = () => {} } = {}) {
+export async function createFiles(root, files, { cancelled = () => false, record = () => {}, beforeWrite = () => {} } = {}) {
   const realRoot = await realpath(root), preflight = await preflightFiles(realRoot, files);
   if (preflight.some(r => r.status === 'CONFLICT')) return { status: 'CONFLICT', written: false, results: preflight };
   const results = [];
@@ -106,6 +106,7 @@ export async function createFiles(root, files, { cancelled = () => false, record
     if (cancelled()) { results.push({ path: f.path, status: 'NOT_RUN', reason: 'Cancelled before write' }); continue; }
     let result;
     try {
+      await beforeWrite();
       const place = await locate(realRoot, f.path);
       if (place.blocked) throw Object.assign(Error(place.blocked), { code: 'EBLOCKED' });
       for (const dir of place.missing) {
@@ -141,7 +142,7 @@ async function observe(root, f) {
   return { target: place.target, disk, status: disk === f.baseSha256 ? 'PENDING' : disk === f.sha256 ? 'ALREADY_MODIFIED' : 'CONFLICT',
     ...(disk !== f.baseSha256 && disk !== f.sha256 ? { reason: 'File changed outside CodeFleet; overwrite refused' } : {}) };
 }
-export async function modifyFiles(root, files, { cancelled = () => false, record = () => {} } = {}) {
+export async function modifyFiles(root, files, { cancelled = () => false, record = () => {}, beforeWrite = () => {} } = {}) {
   const realRoot = await realpath(root);
   if (realRoot !== path.resolve(root)) throw Error('Workspace root must be its own real path');
   const preflight = [];
@@ -159,6 +160,7 @@ export async function modifyFiles(root, files, { cancelled = () => false, record
       const again = await observe(realRoot, f);
       if (again.status !== 'PENDING') { await unlink(temp); result = { path: f.path, status: 'CONFLICT', reason: again.reason ?? 'File changed during repair' }; }
       else {
+        beforeWrite();
         await rename(temp, prior.target);
         const observed = hash(await readFile(prior.target, 'utf8'));
         result = observed === f.sha256 ? { path: f.path, status: 'MODIFIED', baseSha256: f.baseSha256, sha256: observed, bytes: f.bytes } : { path: f.path, status: 'FAILED', reason: 'Read-back digest mismatch', sha256: observed };

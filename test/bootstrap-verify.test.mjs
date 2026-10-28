@@ -242,7 +242,9 @@ test('an item left in REPAIR_CONFLICT is not reopened by another repair proposal
   await writeFile(path.join(f.dir, 'src/todo.mjs'), 'export const add = () => []; // user edit\n');
   assert.equal((await materializeTask(f.store, f.id, 'todo')).status, 'CONFLICT');
   await assert.rejects(() => repair(f, 'export const add = (l, t) => l.concat([t]);\n'), /todo is not materialized/);
-  assert.deepEqual(await kinds(f), ['MATERIALIZE']);
+  assert.deepEqual(await kinds(f), ['RECONCILE']);
+  await assert.rejects(() => materializeTask(f.store, f.id, 'todo', { freshOnly: true }), /Recovery|replay|started|recover/i);
+  assert.equal(await readFile(path.join(f.dir, 'src/todo.mjs'), 'utf8'), 'export const add = () => []; // user edit\n');
 });
 
 test('local results are classified from the runner summary, not the exit code alone', () => {
