@@ -13,6 +13,7 @@ import threading
 import select
 
 root = sys.argv[1]
+monitor = None
 for name, mode in [('private',0o700),('private/state',0o700),('private/workspaces',0o700),('ipc',0o755)]:
     os.mkdir(root+'/'+name,mode)
 for name in ['private/state','private/workspaces','private','ipc']:
@@ -141,7 +142,39 @@ print(json.dumps(denied))
     check('changed-graph-before-dispatch-denied',call('execute',{'runId':'changed','host':'codex'})['status']=='BLOCKED')
     stage('safe')
     check('forged-evidence-fields-denied',call('verify',{'runId':'safe','evidence':{'passed':1}})['status']=='BLOCKED')
-    request_id=str(uuid.uuid4());accepted=call('execute',{'runId':'safe','host':'codex'},request_id)
+    # Observe existing SQLite fences without changing clocks, leases or policy.
+    # The bounded in-memory trace survives the fixture's normal volume cleanup.
+    monitor_code = """
+import collections,json,signal,sqlite3,sys,time
+c=sqlite3.connect('file:'+sys.argv[1]+'?mode=ro',uri=True)
+c.execute('PRAGMA query_only=ON')
+rows=collections.deque(maxlen=128);rollbacks=collections.deque(maxlen=16)
+running=True;prior=None;previous_wall=None;previous_mono=None
+def stop(*args):
+ global running
+ running=False
+signal.signal(signal.SIGTERM,stop)
+while running:
+ wall=time.time_ns()//1000000;mono=time.monotonic_ns()//1000000
+ if previous_wall is not None and wall<previous_wall:
+  rollbacks.append({'before':previous_wall,'after':wall,'monotonicDeltaMs':mono-previous_mono})
+ previous_wall=wall;previous_mono=mono
+ row=c.execute("select owner,leaseUntil,pid,control,body from runs where id='safe'").fetchone()
+ if row:
+  body=json.loads(row[4]);value=[row[0],row[1],row[2],row[3],body.get('revision'),body.get('state')]
+  if value!=prior:
+   rows.append({'wall':wall,'monotonic':mono,'owner':row[0],'leaseUntil':row[1],'pid':row[2],'control':row[3],'revision':body.get('revision'),'state':body.get('state')})
+   prior=value
+ time.sleep(.01)
+print(json.dumps({'leaseTimeline':list(rows),'wallClockRollbacks':list(rollbacks)}),flush=True)
+"""
+    monitor=subprocess.Popen(['python3','-c',monitor_code,root+'/private/state/state.sqlite'],preexec_fn=identity(1000),stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    try:
+        request_id=str(uuid.uuid4());accepted=call('execute',{'runId':'safe','host':'codex'},request_id)
+    except BaseException:
+        run(1000,['python3','-c','import os,signal;os.kill('+str(monitor.pid)+',signal.SIGTERM)'])
+        monitor.communicate(timeout=5)
+        raise
     check('bounded-execution-accepted',accepted['status']=='OK' and not accepted['result']['complete'])
     check('duplicate-request-no-execution',call('execute',{'runId':'safe','host':'codex'},request_id).get('replay') is True)
     check('duplicate-id-conflict',call('status',{'runId':'safe'},request_id)['status']=='BLOCKED')
@@ -153,10 +186,13 @@ print(json.dumps(denied))
         time.sleep(.2)
     assert report['status']=='OK',report
     final=report['result']
+    run(1000,['python3','-c','import os,signal;os.kill('+str(monitor.pid)+',signal.SIGTERM)'])
+    trace,trace_error=monitor.communicate(timeout=5)
+    assert monitor.returncode==0,trace_error
     if not final['complete']:
         debug="import sqlite3,json,sys;c=sqlite3.connect(sys.argv[1]+'/state.sqlite');rows=[json.loads(r[0]) for r in c.execute('select body from runs')];print([json.load(open(sys.argv[1]+'/artifacts/'+r['baselineHash']+'.json')) for r in rows if r.get('baselineHash')])"
         info=run(1000,['python3','-c',debug,root+'/private/state'])
-        raise AssertionError(str(final)+' BASELINE '+info.stdout+info.stderr)
+        raise AssertionError(str(final)+' BASELINE '+info.stdout+info.stderr+' LEASE_TRACE '+trace)
     check('real-docker-harness-and-judge',final['verification']['status']=='VERIFIED' and final['verification']['passed']>0)
     check('artifact-candidate-recheck',call('verify',{'runId':'safe'})['result']['verification']['status']=='VERIFIED')
     stop(server);server=start()
@@ -190,4 +226,7 @@ print(json.dumps(denied))
     check('tampered-artifact-not-verified',call('verify',{'runId':'safe'})['result']['verification']['status']=='INVALID')
     print(json.dumps({'status':'OFFLINE_VERIFIED','checks':checks,'modelCalls':0,'hostLive':'NOT_RUN','humanInput':'BLOCKED','tests':final['verification']['tests']}))
 finally:
+    if monitor is not None and monitor.poll() is None:
+        run(1000,['python3','-c','import os,signal;os.kill('+str(monitor.pid)+',signal.SIGTERM)'])
+        monitor.communicate(timeout=5)
     stop(server)

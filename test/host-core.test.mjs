@@ -10,6 +10,8 @@ import { hostCli } from '../src/hosts/cli.mjs';
 import { planningSkill, requirePlanningLive } from '../src/hosts/planning.mjs';
 import { enableTasks } from '../src/product/tasks.mjs';
 import { installHost } from '../src/hosts/install.mjs';
+import { hostDoctor } from '../src/hosts/doctor.mjs';
+import { dispatchHost } from '../src/hosts/cli.mjs';
 
 test('Codex blocked probe recovery is advisory, preserves task and grants no approval', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'cf-recovery-')), state = path.join(root, 'state');
@@ -29,6 +31,12 @@ test('Codex blocked probe recovery is advisory, preserves task and grants no app
         assert.equal(recovery.grantsExecution, false); assert.equal(recovery.automaticRetry, false);
         assert.equal(recovery.taskId, id); assert.equal(recovery.taskRevision, 2);
         assert.match(result.data.nextAction, /command-specific approval/);
+        assert.equal(recovery.status, kind === 'GIT_OWNERSHIP' ? 'BLOCKED_ENVIRONMENT' : 'HOST_APPROVAL_REQUIRED');
+        if (kind === 'GIT_OWNERSHIP') {
+          assert.match(recovery.nextAction, /Do not treat command-specific approval as an ownership fix/);
+          assert.match(recovery.nextAction, /no automatic unelevated fallback/);
+          assert.match(recovery.nextAction, /doctor --repository/);
+        }
       } else assert.equal(recovery, undefined);
     }
     assert.equal(s.db.prepare('SELECT body FROM product_tasks WHERE id=?').get(id).body, before);
@@ -40,7 +48,39 @@ test('Codex blocked probe recovery is advisory, preserves task and grants no app
     await installHost(root, host);
     const skill = await readFile(path.join(root, host === 'codex' ? '.agents' : '.claude', 'skills/codefleet/SKILL.md'), 'utf8');
     assert.equal(skill.includes('sandbox_permissions="require_escalated"'), host === 'codex');
+    if (host === 'codex') {
+      assert.match(skill, /For GIT_OWNERSHIP, stop with BLOCKED_ENVIRONMENT; do not automatically escalate/);
+      assert.match(skill, /For PROCESS_SPAWN_DENIED only/);
+      assert.match(skill, /windows.sandbox=mxc sandbox --include-managed-config/);
+    }
   }
+});
+
+test('repository doctor observes actual native Git without a Store or execution grant', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'cf-doctor-'));
+  requireSuccess(await git(root, ['init']), 'doctor fixture');
+  const report = await hostDoctor('codex', { repository: root });
+  assert.equal(report.status, 'AVAILABLE');
+  assert.equal(report.repository.state, 'UNBORN_HEAD');
+  assert.equal(report.repository.error, null);
+  assert.equal(report.executionContext.pid, process.pid);
+  assert.equal(report.executionContext.sandbox, 'HOST_MANAGED_NOT_ATTESTED');
+  assert.equal(report.executionContext.executionGranted, false);
+  assert.equal(report.modelCalls, 0);
+  assert.equal(report.hostLive, 'NOT_RUN');
+  const cli = await dispatchHost(['codex', 'doctor', '--repository', root]);
+  assert.equal(cli.exitCode, 0);
+  assert.equal(cli.data.repository.root, report.repository.root);
+  const nested = path.join(root, 'nested'); await mkdir(nested);
+  const blocked = await dispatchHost(['codex', 'doctor', '--repository', nested]);
+  assert.equal(blocked.exitCode, 1);
+  assert.equal(blocked.data.status, 'BLOCKED_ENVIRONMENT');
+  assert.equal(blocked.data.repository.error.kind, 'NOT_REPOSITORY_ROOT');
+  assert.equal(blocked.data.planning, 'UNAVAILABLE');
+  assert.equal(blocked.data.executionContext.executionGranted, false);
+  for (const args of [['--repository'], ['--repository', root, '--repository', root], ['--sandbox', 'unelevated'], ['--probe-container', '--probe-container']])
+    await assert.rejects(dispatchHost(['codex', 'doctor', ...args]), /doctor accepts/);
+  await assert.rejects(hostDoctor('codex', { repository: path.join(root, 'missing') }), /ENOENT/);
 });
 
 async function fixture() {

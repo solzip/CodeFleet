@@ -6,6 +6,10 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { git } from '../src/alpha/workspace.mjs';
 import { command, environment, requireSuccess } from '../src/alpha/process.mjs';
+import {installHost} from '../src/hosts/install.mjs';
+import {randomUUID} from 'node:crypto';
+import {Store} from '../src/alpha/store.mjs';
+import {enableTasks,task} from '../src/product/tasks.mjs';
 
 // Every step is a separate CLI process sharing only --state, so each re-query
 // reads persisted state. environment() forwards no API key and no Docker variable.
@@ -35,9 +39,9 @@ async function emptyRepository() {
   await mkdir(dir); requireSuccess(await git(dir, ['init']), 'init');
   return { root, dir, state: path.join(root, 'state') };
 }
-function cliFor(f) {
+function cliFor(f, entry=cli) {
   const invoke = async (...args) => {
-    const r = await command(process.execPath, [cli, '--state', f.state, ...args], { timeoutMs: 60000 });
+    const r = await command(process.execPath, [entry, '--state', f.state, ...args], { timeoutMs: 60000 });
     assert.equal(r.interrupted, false, args.join(' '));
     return { code: r.exitCode, data: JSON.parse(r.stdout.toString('utf8')) };
   };
@@ -47,6 +51,50 @@ function cliFor(f) {
 const unborn = async dir => (await git(dir, ['rev-parse', '--verify', 'HEAD'])).exitCode !== 0;
 
 for (const host of ['claude', 'codex']) {
+  test(`Native ${host}: installed Skill CLI, Objective, Draft, DAG, approved files and durable Local verification`,async()=>{
+    const f=await emptyRepository();await installHost(f.root,host);
+    const base=path.join(f.root,host==='codex'?'.agents':'.claude','skills/codefleet');
+    assert.match(await readFile(path.join(base,'SKILL.md'),'utf8'),/Supervised Native Local continuation/);
+    const {invoke,json}=cliFor(f,path.join(base,'runtime/alpha/cli.mjs'));
+    const planned=await invoke('host',host,'plan',GOAL,f.dir,'--attempts','2'),id=planned.data.taskId;
+    const budgetStore=new Store(f.state);enableTasks(budgetStore);
+    try { assert.equal(task(budgetStore,id).settings.maxAttempts,2); } finally {budgetStore.close();}
+    const drafted=await invoke('host',host,'draft',id,await json('draft.json',{revision:planned.data.revision,proposal:draftFor(planned.data.plan)}));
+    assert.equal(drafted.code,0);await invoke('host',host,'prepare',id);
+    const body={...contents,'src/todo.mjs':"export const todos = ['defect'];\n",
+      'test/todo.test.mjs':"import test from 'node:test';import assert from 'node:assert/strict';import {todos} from '../src/todo.mjs';test('todo initial state',()=>assert.deepEqual(todos,[]));\n",
+      'src/calendar.mjs':'export const days = [];\n',
+      'test/calendar.test.mjs':"import test from 'node:test';import assert from 'node:assert/strict';import {days} from '../src/calendar.mjs';test('calendar initial state',()=>assert.deepEqual(days,[]));\n"};
+    for(const itemId of ['todo','calendar']) {
+      const revision=(await invoke('host',host,'workflow',id)).data.revision;
+      const proposed=await invoke('host',host,'files',id,await json(itemId+'.json',{revision,itemId,files:files[itemId].map(p=>({path:p,content:body[p]}))}));
+      assert.equal(proposed.code,2);
+      assert.equal((await invoke('objective','materialize',id,itemId)).code,1);
+      assert.equal((await invoke('objective','approve',id,'--hash',proposed.data.approvalRequest.filesetHash,'--actor','fixture-user')).code,0);
+      assert.equal((await invoke('objective','materialize',id,itemId)).code,0);
+    }
+    const revision=(await invoke('host',host,'workflow',id)).data.revision;
+    const request=await json('request.json',{executable:process.execPath,args:['--test','--test-reporter=tap'],directory:f.dir,timeoutMs:10000});
+    const args=['objective','local-step',id,request,'--revision',String(revision),'--request-id',randomUUID(),'--expires',String(Date.now()+120000)];
+    const review=await invoke(...args);assert.equal(review.data.action,'AWAIT_APPROVAL');
+    const failed=await invoke(...args,'--trust',review.data.reviewHash,'--acknowledge-unisolated');
+    assert.equal(failed.data.execution.status,'LOCAL_FAILED',JSON.stringify(failed));
+    const reader=new Store(f.state);let evidence;
+    try { evidence=reader.readArtifact(failed.data.execution.evidenceRef); } finally {reader.close();}
+    const repair=await json('repair.json',{itemId:'todo',evidenceRef:failed.data.execution.evidenceRef,
+      hypothesis:'Initialize the store with no entries',diagnostic:'not ok',
+      files:[{path:'src/todo.mjs',baseSha256:evidence.fileDigests['src/todo.mjs'],content:contents['src/todo.mjs']}]});
+    const repairArgs=['objective','local-step',id,request,repair,'--revision',String((await invoke('host',host,'workflow',id)).data.revision),'--request-id',randomUUID(),'--expires',String(Date.now()+120000)];
+    const repairReview=await invoke(...repairArgs);assert.equal(repairReview.data.action,'AWAIT_APPROVAL',JSON.stringify(repairReview));
+    const result=await invoke(...repairArgs,'--trust',repairReview.data.reviewHash,'--acknowledge-unisolated');
+    assert.equal(result.code,0,JSON.stringify(result));assert.equal(result.data.execution.tests,2);
+    assert.notEqual(result.data.execution.reservation.attemptId,failed.data.execution.reservation.attemptId);
+    assert.equal(await readFile(path.join(f.dir,'test/todo.test.mjs'),'utf8'),body['test/todo.test.mjs']);
+    assert.equal(await readFile(path.join(f.dir,'src/todo.mjs'),'utf8'),contents['src/todo.mjs']);
+    assert.equal(result.data.execution.authority,'LOCAL_EXECUTED');assert.equal(result.data.complete,false);
+    assert.equal(result.data.snapshot.judgments.tests.outcome,'ESCALATE');
+    console.log('P0-4 INSTALLED '+JSON.stringify({host,state:f.state,taskId:id,before:failed.data.execution,after:result.data.execution}));
+  });
   test(`process: ${host} plans an empty Git repository, drafts, validates (G3) and prepares the DAG (G4); every step re-queries from a new process`, async () => {
     assert.equal(environment().ANTHROPIC_API_KEY, undefined); assert.equal(environment().CODEFLEET_TEST_DOCKER, undefined);
     const f = await emptyRepository(), { invoke, json } = cliFor(f);
@@ -115,3 +163,11 @@ for (const host of ['claude', 'codex']) {
     assert.equal(await unborn(f.dir), true);
   });
 }
+
+test('CLI creation rejects invalid budgets before recording a Task',async()=>{
+  const f=await emptyRepository(),{invoke}=cliFor(f);
+  for(const [flag,value] of [['--attempts','6'],['--attempts','1.5'],['--timeout','29'],['--budget','0']]) {
+    assert.equal((await invoke('objective','plan',GOAL,f.dir,flag,value)).code,1);
+  }
+  assert.deepEqual((await invoke('objective','status')).data.tasks,[]);
+});

@@ -63,10 +63,10 @@ export function bootstrapSkeleton(probe, objective) {
 // async caller measures it with existingPaths so validation itself stays pure.
 // `clarifications` are records the task layer has already bound to this task and
 // read through hash-checked artifacts; here they must also match objective and subject.
-export function validateBootstrapDraft(draft, probe, original, existing = [], clarifications = []) {
-  if (probe?.contract !== 'NEW_PROJECT') return { status: 'CAPABILITY_GAP', gaps: [`NOT_A_NEW_PROJECT: ${probe?.state ?? 'UNPROBED'}`], unknowns: [], provenance: PROVENANCE, executable: false, approved: false, complete: false };
+export function validateBootstrapDraft(draft, probe, original, existing = [], clarifications = [], existingLocal = false) {
+  if (existingLocal ? !['UNBORN_HEAD','BOOTSTRAP_CANDIDATE','EXISTING_SOURCE'].includes(probe?.state) : probe?.contract !== 'NEW_PROJECT') return { status: 'CAPABILITY_GAP', gaps: [`NOT_A_NEW_PROJECT: ${probe?.state ?? 'UNPROBED'}`], unknowns: [], provenance: PROVENANCE, executable: false, approved: false, complete: false };
   exact(draft, ['schemaVersion', 'kind', 'objective', 'probeRef', 'requirements', 'openQuestions', 'decisions', 'plannedFiles', 'plannedTests', 'criteria', 'scope', 'risks', 'workItems'], 'BootstrapDraft');
-  if (draft.schemaVersion !== 1 || draft.kind !== 'BootstrapDraft') throw Error('BootstrapDraft version mismatch');
+  if (!(existingLocal?[1,2]:[1]).includes(draft.schemaVersion) || draft.kind !== (existingLocal ? 'ExistingLocalDraft' : 'BootstrapDraft')) throw Error('BootstrapDraft version mismatch');
   if (draft.probeRef !== probe.probeHash) throw Error('Draft probe baseline mismatch');
   text(draft.objective);
   if (draft.objective !== original) throw Error('Planner cannot replace the original objective');
@@ -77,7 +77,7 @@ export function validateBootstrapDraft(draft, probe, original, existing = [], cl
   exact(draft.scope, ['includes', 'excludes'], 'scope'); list(draft.scope.includes); list(draft.scope.excludes);
   [...draft.scope.includes, ...draft.scope.excludes].forEach(text);
   const paths = [];
-  for (const f of draft.plannedFiles) { exact(f, ['path', 'purpose'], 'planned file'); filePath(f.path); text(f.purpose); if (TEST.test(f.path)) throw Error(`Planned test listed as source: ${f.path}`); paths.push(f.path); }
+  for (const f of draft.plannedFiles) { exact(f, ['path', 'purpose'], 'planned file'); filePath(f.path); text(f.purpose); if(existingLocal && draft.schemaVersion===1 && !/^src\/.+\.mjs$/.test(f.path)) throw Error('Existing Local v1 requires source modules'); if (TEST.test(f.path)) throw Error(`Planned test listed as source: ${f.path}`); paths.push(f.path); }
   const criterionIds = new Set(draft.criteria.map(c => c?.id));
   for (const t of draft.plannedTests) {
     exact(t, ['path', 'criteria'], 'planned test'); filePath(t.path);
@@ -86,7 +86,9 @@ export function validateBootstrapDraft(draft, probe, original, existing = [], cl
     paths.push(t.path);
   }
   if (new Set(paths.map(p => p.toLowerCase())).size !== paths.length) throw Error('Duplicate planned paths');
-  if (existing.length) throw Error(`Planned path already exists; it cannot be planned as new: ${existing[0]}`);
+  if (!existingLocal && existing.length) throw Error(`Planned path already exists; it cannot be planned as new: ${existing[0]}`);
+  if (existingLocal && draft.schemaVersion===1 && paths.some(p=>!existing.includes(p))) throw Error('Existing Local v1 requires existing files');
+  if (existingLocal && draft.plannedTests.some(t=>!existing.includes(t.path))) throw Error('Existing Local acceptance tests must exist before planning');
   const tests = new Set(draft.plannedTests.map(t => t.path)), unknowns = [], gaps = [];
   for (const c of draft.criteria) {
     exact(c, ['id', 'description', 'tests'], 'criterion'); id(c.id); text(c.description); list(c.tests);

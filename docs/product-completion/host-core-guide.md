@@ -6,8 +6,21 @@ Workflow/DAG, roles, policy, recovery and evidence-bound completion.
 No direct model API, Docker, WSL or separate OS account is required to prepare
 work. The current local runtime requires Node 24.14.1 or newer and Git.
 
-This is an unreleased implementation. Host Live invocation, automatic Host
-delegation and a production Host Sandbox profile are not verified.
+This is an unreleased implementation. [Windows supervised Codex Live acceptance](../runs/2026-10-28/public-existing-local-v2.md)
+covers installed Skill invocation, two implementation WorkItems, Local verification
+and Recovery. Authenticated public delegation remains blocked; this does not
+establish Protected verification or a production Host Sandbox profile.
+
+Maintainers can check the installed package without fixture commits or model calls:
+
+```text
+npm.cmd run alpha:package-smoke -- --supervised-only --repository REPO --recovery-state STATE --recovery-task TASK
+```
+
+Recovery options are optional as a pair. Planning uses temporary State and the
+repository hash must remain unchanged. This is distribution verification, not a
+new Host Live or application test. The legacy default smoke creates fixture
+commits and requires its own authorization. See the [observed result](../runs/2026-10-28/trusted-authorization-boundary.md).
 
 ## Docker-free preparation
 
@@ -23,6 +36,7 @@ validated executable contract; unresolved goals remain drafts.
 
 ```text
 node CLI host codex doctor
+node CLI host codex doctor --repository REPO
 node CLI --state STATE host codex plan "Fix subtraction" REPO
 node CLI --state STATE host codex status TASK
 node CLI --state STATE host codex review TASK --files src/a.js --tests test/a.test.js --criterion "Subtraction passes"
@@ -36,6 +50,46 @@ Replace `codex` with `claude`. No command above launches a model. The existing
 session supplies reasoning and uses read/search within its actual Host policy.
 Local context matching only suggests source/test candidates; it is not semantic
 verification. Skill instructions are not a sandbox.
+
+### Windows Native execution path
+
+Keep the Host sandbox choice separate from the identity actually running Git and
+from CodeFleet execution approval. `doctor --repository REPO` observes native Git
+in its own process and creates no State. Runtime readiness alone is not repository
+readiness: an ownership or repository error returns BLOCKED_ENVIRONMENT. The
+observation is not a reusable grant or sandbox attestation.
+
+For Codex CLI 0.162.1, use the [official Windows sandbox guidance](https://learn.chatgpt.com/docs/windows/windows-sandbox).
+With user authorization, perform the documented MXC compatibility command once:
+
+```text
+codex -c windows.sandbox=mxc sandbox --include-managed-config --permission-profile :workspace -- cmd.exe /d /c echo MXC_OK
+```
+
+After a successful check, retain explicit MXC selection and managed policy for
+each approved CodeFleet command, including the preflight before requesting an
+expiring approval:
+
+```text
+codex -c windows.sandbox=mxc sandbox --include-managed-config --permission-profile :workspace -- node CLI host codex doctor --repository REPO
+codex -c windows.sandbox=mxc sandbox --include-managed-config --permission-profile :workspace -- node CLI --state STATE objective recover TASK
+```
+
+Use that same official prefix for separately approved Bootstrap, materialization
+and Local verification commands. Do not create a second launcher or scheduler.
+Git initialization and other Git mutations require their own approved Host action;
+the workspace sandbox can forbid `.git` writes even when native Git reads pass.
+Prepare a new user-owned acceptance project only with explicit scope approval.
+Preserve failed fixtures and never transplant their Task or Evidence.
+
+GIT_OWNERSHIP is not an instruction to escalate. Re-query effects and leases, then
+review the execution path with the user. Changing the Host path requires fresh
+Native Probe, contract/candidate, capability and approval checks; it does not
+authorize replay or refresh expired grants. The Agent never issues its own approval.
+If MXC is unavailable, discuss the official unelevated fallback before use: it has
+weaker network isolation and lacks denied-read-path support. No silent fallback,
+safe.directory exception, ownership/ACL repair or default Full Access is supported.
+Local Evidence remains unprotected even when the Host command ran inside MXC.
 
 For a Host-generated semantic draft, use `host codex draft TASK proposal.json`
 before preparation. The envelope is `{revision,proposal:{draft,references,inferences}}`.

@@ -59,13 +59,7 @@ export class OfflineOperatorLedger {
     return { id, state: row.state, dispatch: this.#db.prepare('SELECT state FROM dispatches WHERE requestId=?').get(id)?.state ?? null };
   }
   #verified(envelope) {
-    exact(envelope, ['decision', 'signature']); const d = envelope.decision;
-    exact(d, ['id', 'kind', 'binding', 'principal', 'expiresAt', 'maxUses']); binding(d.binding);
-    if (!['APPROVE', 'DENY', 'REVOKE'].includes(d.kind) || d.maxUses !== 1 || !Number.isSafeInteger(d.expiresAt)) throw Error('Invalid decision');
-    const key = this.#keys.get(d.principal);
-    if (!key || typeof envelope.signature !== 'string' || !/^[a-f0-9]{128}$/.test(envelope.signature) || !verify(null, Buffer.from(canonical(d)), key, Buffer.from(envelope.signature, 'hex'))) throw Error('Operator signature invalid');
-    if (d.expiresAt <= this.#clock()) throw Error('Decision expired');
-    return d;
+    return verifiedDecision(envelope, this.#keys, this.#clock);
   }
   operator(envelope) {
     const d = this.#verified(envelope);
@@ -121,6 +115,27 @@ export class OfflineOperatorLedger {
       throw error;
     }
   }
+}
+
+// Shared H2 signature/shape verification, without allocating another ledger.
+// Key enrollment and invocation remain trusted dependencies, not Agent input.
+export function operatorDecisionVerifier(operatorKeys, clock = Date.now) {
+  if (!operatorKeys?.length) throw Error('Trusted Operator key enrollment required');
+  const keys = new Map(operatorKeys.map(pem => {
+    const key = createPublicKey(pem);
+    if (key.asymmetricKeyType !== 'ed25519') throw Error('Ed25519 operator key required');
+    return [fingerprint(pem), key];
+  }));
+  return envelope => verifiedDecision(envelope, keys, clock);
+}
+function verifiedDecision(envelope, keys, clock) {
+  exact(envelope, ['decision', 'signature']); const d = envelope.decision;
+  exact(d, ['id', 'kind', 'binding', 'principal', 'expiresAt', 'maxUses']); binding(d.binding);
+  if (typeof d.id !== 'string' || !d.id || !['APPROVE', 'DENY', 'REVOKE'].includes(d.kind) || d.maxUses !== 1 || !Number.isSafeInteger(d.expiresAt)) throw Error('Invalid decision');
+  const key = keys.get(d.principal);
+  if (!key || typeof envelope.signature !== 'string' || !/^[a-f0-9]{128}$/.test(envelope.signature) || !verify(null, Buffer.from(canonical(d)), key, Buffer.from(envelope.signature, 'hex'))) throw Error('Operator signature invalid');
+  if (d.expiresAt <= clock()) throw Error('Decision expired');
+  return frozen(JSON.parse(canonical(d)));
 }
 
 export function requireProductionHostIsolation() {

@@ -1,5 +1,69 @@
 # 결함 등재부
 
+[Alpha gate closure](runs/2026-10-28/alpha-gate-closure.md): Focused IPC/Repair and Windows safety checks pass; independently installed package has unchanged runtime. Windows supervised RC passes. Linux full qualification remains incomplete; second historical IPC failure lacks a definitive trace. Official publication and public delegation remain pending.
+
+2026-10-28 [Alpha release gates](runs/2026-10-28/alpha-release-gates.md): Frozen tarball/source equality and Windows Legacy/Core/Native gates verified. Initial Linux Alpha/Host Core gates failed; the single bounded recheck still failed on H4 lease loss and Repair setup clock rollback (exact results in the linked run record). Full Alpha release remains blocked. SUPERVISED_READY does not imply full release or authenticated autonomy.
+
+2026-10-28 [Supervised release candidate](runs/2026-10-28/codex-core-release-candidate.md): Packaged public Skill installer fixed; installed Native Local, Continuation, Repair, Recovery and acceptance regression passed (159/159). SUPERVISED_READY retained; PUBLIC_DELEGATION_BLOCKED. Fresh-session entry is recorded in the run evidence.
+
+2026-10-28 [Trusted authorization availability](runs/2026-10-28/trusted-authorization-boundary.md): Windows Codex 0.162.1 userVerification/status returned providerUnavailable. Installed-package HEAD entry, read-only Recovery and repository preservation passed. SUPERVISED_READY retained; PUBLIC_DELEGATION_BLOCKED.
+
+2026-10-28 [공개 위임 신뢰 경계](runs/2026-10-28/trusted-public-delegation.md): Codex 0.162.1 공식 App Server 스키마에서 독립적인 Objective 사용자 승인 출처를 확보하지 못했다. PUBLIC_DELEGATION_BLOCKED와 기존 SUPERVISED_READY를 유지한다. 내부 검증 전용 위임의 미지원 권한 필드 거부와 State 없는 공개 capability 조회를 수정했으며 새 무인 Live 성공은 주장하지 않는다.
+
+
+2026-10-28 [HEAD 저장소·새 Codex 세션 수용](runs/2026-10-28/public-existing-local-v2.md): EXISTING_LOCAL v2에서 일반 텍스트 소스 생성과 기존 파일 수정을 연결했다. 실제 새 `$codefleet` 세션의 구현안 2개를 감독형 승인으로 적용했고, HEAD·미커밋 보존·11 PASS·COMPLETE_LOCAL·프로세스 Recovery를 확인했다. 공개 인증 위임은 차단, Protected는 미충족이며 단일 세션 무인 실행 성공은 아니다.
+
+
+2026-10-28 [기존 프로젝트 감독형 Local 수용](runs/2026-10-28/public-existing-local.md): EXISTING_LOCAL과 정확한 파일 Review/Accept를 연결했다. 실제 Todo 복제본의 의존 구현 2개 적용, 기존 통합 테스트 8 PASS / exit 0, Revision 9 COMPLETE_LOCAL 및 별도 프로세스 Recovery를 확인했다. 공개 인증 위임은 PUBLIC_DELEGATION_BLOCKED, 자동 Skill 진입·Protected는 미검증이다. 기존 ESM 파일 교체만 지원하며 원본과 과거 실패 Evidence는 보존했다. 설치 runtime README 링크 결함도 수정했다.
+
+2026-10-28 [Core continuation](runs/2026-10-28/codex-core-continuation.md): 외부 서명된 정확한 Candidate 검증 위임에서 의존 검증 연속 실행·재개를 구현하고, 감독형 Local Review 식별자 생성과 미준비 Draft 복구를 연결했다. 공개 Host 인증 승인 위임과 소스 변경 위임은 미지원이며 실제 2개 구현 WorkItem Live 수용은 미완료다. 기존 Todo의 8 PASS / COMPLETE_LOCAL과 사용자 보고 수동 브라우저 12 PASS는 보존한다. 브라우저 결과는 독립 자동화 Evidence가 아니며 Protected는 UNSATISFIED다.
+
+2026-10-28 후속: [Native Local 동일 Candidate 재검증](runs/2026-10-27/environment-reverification.md#2026-10-28-native-local-continuation)은
+사용자 승인 후 실제 Todo 통합 8 PASS / exit 0, COMPLETE_LOCAL로 해결했다.
+일반 Local 실행은 정책 attestation을 주장하지 않는다. MXC 관측 연결 결손 및
+Protected 검증·브라우저 E2E 미수용은 별도로 유지한다.
+
+[환경 전용 재검증](runs/2026-10-27/environment-reverification.md): 동일 Candidate의 승인된
+환경 변경을 별도 Decision·Attempt에 결합하는 Core 경로를 추가했다. 실제 Todo HTTP 실패는
+MXC loopback connect EACCES이며 앱·테스트는 변경하지 않았다. 실제 Host 유효 정책 observer
+연결과 네트워크 승인·Live 재검증은 미완료다. JSON 정책 주장은 실행 권한이 아니다.
+
+[MXC 제품 수용 Sprint](runs/2026-10-27/windows-mxc-product-sprint.md)는 기존 MXC 회귀 실패를
+Fixture 위치·실제 junction 준비 경계에서 해소했다. 신규 Local-only 완료 판정은 기존
+Protected 계약을 유지한다. Todo Calendar 제안은 정확한 Fileset 승인 대기이며 Live 미수용이다.
+
+[Windows Native 호환성 후속](runs/2026-10-27/windows-native-mxc-path.md)에서 소유권 충돌을
+일괄적인 Host 권한 확장으로 안내하는 흐름을 수정했다. MXC와 사용자 소유 저장소 읽기는
+실측됐지만 새 Fixture의 전체 개발 경로는 미수용이며 P0-C 완료로 승격하지 않는다.
+
+[B 적용 사전 점검](runs/2026-10-27/codex-host-session2-proposal.md#subsequent-authorized-b-application-blocked-before-approval)은 실행 계정과 Fixture 소유 계정 차이로 Native Probe가
+GIT_OWNERSHIP을 반환해 차단됐다. B 승인·적용은 미실행이며 검사 우회나 자동 재시도는 하지 않았다.
+
+[P0-C Session 2](runs/2026-10-27/codex-host-session2-proposal.md)에서 기존 A 적용·Local 성공
+Evidence를 재사용하고 실제 새 Codex 호출 1회의 B 제안을 검증·기록했다.
+B 적용·통합 검증은 승인 대기이며, 전체 P0-C·Compaction·Protected 완료는 미해소다.
+아래 이전 시점 기록의 A 적용/Session 2 대기 상태는 이 후속 관측으로 연결한다.
+
+[P0-C 재개 준비](runs/2026-10-27/codex-recovery-resume-preparation.md)의 `RECOVERY_INIT_WRITE`는
+Recovery 조회 경로의 불필요한 쓰기 초기화 결함이었다.
+[최소 수정·내부 검증](runs/2026-10-27/codex-recovery-readonly-store-fix.md)에서 읽기 전용 연결과
+초기화를 분리하고 Recovery 30건·관련 회귀 123건을 통과했다. 해당 내부 차단은 해소됐으나
+A 실제 적용은 새 승인 대기다. 기존 Legacy 번호와 과거 Recovery 기록은 보존한다.
+
+[P0-C 복구 후속](runs/2026-10-27/codex-first-objective-recovery.md)은 기존 Store의
+복구 관측과 불확실한 Fileset 공개 재실행 차단을 추가한다. 아래 P0-B 초기 기록 이후
+감독형 Codex A/B 생성·통합 Local 검증은 관측됐지만 Protected 완료는 아니다.
+실제 새 세션·Compaction 및 공개 무인 승인 경계는 미해소다.
+
+[P0-B 내부 연결](runs/2026-10-27/codex-first-multi-workitem.md)에서 후속 파일 추가 후
+검증 진행 차단과 Evidence 손상 시 소비 예산 과소 표기를 재현·수정했다.
+역사적 의존성 통과 기록은 현재 후보 Judge나 새 실행 권한으로 재사용하지 않는다.
+당시 공개 승인 경계와 실제 Codex 다중 WorkItem Live는 미해소였으며, 후속 측정은 위 기록을 따른다.
+
+Codex-first [P0-A 내부 bounded continuation](runs/2026-10-27/codex-first-bounded-continuation.md)은
+기존 Reservation을 재사용하며 AB1의 공개 승인 경계 차단을 유지한다.
+내부 직렬 진행 구현은 AB1의 정상 공개 Operator 경로 해소 판정이 아니다.
+
 Bootstrap 영속 예약의 검토-local R1/R2는 [최종 검토](audits/2026-10-23/01-durable-reservation-final-review.md)와 후속 [수정·재검증](runs/2026-10-23/durable-reservation-final-review-fix.md)에서 추적한다. 아래 Legacy 번호·역사 판정은 변경하지 않는다.
 
 PR #9의 추가 [승인 경계 검토](audits/2026-10-23/02-pr9-authorization-boundary.md)는 AB1을 NEEDS_FIX로 기록한다. 일반 CLI의 trusted-caller 가정은 동일 사용자 Agent에 대한 Operator 신원 집행을 보장하지 않는다. R1/R2 수정과 기존 Legacy 판정은 보존한다.

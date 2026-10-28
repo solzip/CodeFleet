@@ -1,6 +1,85 @@
 # 진행 현황과 결정 목록
 
+[Alpha gate closure](../runs/2026-10-28/alpha-gate-closure.md): Focused IPC/Repair and Windows safety checks pass; independently installed package has unchanged runtime. Windows supervised RC passes. Linux full qualification remains incomplete; second historical IPC failure lacks a definitive trace. Official publication and public delegation remain pending.
+
+2026-10-28 [Alpha release gates](../runs/2026-10-28/alpha-release-gates.md): Frozen tarball/source equality and Windows Legacy/Core/Native gates verified. Initial Linux Alpha/Host Core gates failed; the single bounded recheck was 6 PASS / 2 FAIL (H4 lease loss and Repair setup clock rollback). Full Alpha release remains blocked. SUPERVISED_READY does not imply full release or authenticated autonomy.
+
+2026-10-28 [Supervised release candidate](../runs/2026-10-28/codex-core-release-candidate.md): Packaged public Skill installer fixed; installed Native Local, Continuation, Repair, Recovery and acceptance regression passed (159/159). SUPERVISED_READY retained; PUBLIC_DELEGATION_BLOCKED. Fresh-session entry is recorded in the run evidence.
+
+2026-10-28 [Trusted authorization availability](../runs/2026-10-28/trusted-authorization-boundary.md): Windows Codex 0.162.1 userVerification/status returned providerUnavailable. Installed-package HEAD entry, read-only Recovery and repository preservation passed. SUPERVISED_READY retained; PUBLIC_DELEGATION_BLOCKED.
+
+2026-10-28 [공개 위임 신뢰 경계](../runs/2026-10-28/trusted-public-delegation.md): Codex 0.162.1 공식 App Server 스키마에서 독립적인 Objective 사용자 승인 출처를 확보하지 못했다. PUBLIC_DELEGATION_BLOCKED와 기존 SUPERVISED_READY를 유지한다. 내부 검증 전용 위임의 미지원 권한 필드 거부와 State 없는 공개 capability 조회를 수정했으며 새 무인 Live 성공은 주장하지 않는다.
+
+
+2026-10-28 [HEAD 저장소·새 Codex 세션 수용](../runs/2026-10-28/public-existing-local-v2.md): EXISTING_LOCAL v2에서 일반 텍스트 소스 생성과 기존 파일 수정을 연결했다. 실제 새 `$codefleet` 세션의 구현안 2개를 감독형 승인으로 적용했고, HEAD·미커밋 보존·11 PASS·COMPLETE_LOCAL·프로세스 Recovery를 확인했다. 공개 인증 위임은 차단, Protected는 미충족이며 단일 세션 무인 실행 성공은 아니다.
+
+
+2026-10-28 [기존 프로젝트 감독형 Local 수용](../runs/2026-10-28/public-existing-local.md): EXISTING_LOCAL과 정확한 파일 Review/Accept를 연결했다. 실제 Todo 복제본의 의존 구현 2개 적용, 기존 통합 테스트 8 PASS / exit 0, Revision 9 COMPLETE_LOCAL 및 별도 프로세스 Recovery를 확인했다. 공개 인증 위임은 PUBLIC_DELEGATION_BLOCKED, 자동 Skill 진입·Protected는 미검증이다. 기존 ESM 파일 교체만 지원하며 원본과 과거 실패 Evidence는 보존했다. 설치 runtime README 링크 결함도 수정했다.
+
+2026-10-28 [Core continuation](../runs/2026-10-28/codex-core-continuation.md): 외부 서명된 정확한 Candidate 검증 위임에서 의존 검증 연속 실행·재개를 구현하고, 감독형 Local Review 식별자 생성과 미준비 Draft 복구를 연결했다. 공개 Host 인증 승인 위임과 소스 변경 위임은 미지원이며 실제 2개 구현 WorkItem Live 수용은 미완료다. 기존 Todo의 8 PASS / COMPLETE_LOCAL과 사용자 보고 수동 브라우저 12 PASS는 보존한다. 브라우저 결과는 독립 자동화 Evidence가 아니며 Protected는 UNSATISFIED다.
+
 ## 현재 공식 상태
+
+2026-10-28 Native Local 후속: 사용자 승인된 일반 Windows 실행에서 Todo Calendar
+동일 Candidate 통합 테스트가 8 PASS / 0 FAIL, exit 0으로 완료됐다. Revision 12,
+Objective COMPLETE_LOCAL이며 이전 실패 Evidence와 앱·고정 테스트는 보존했다.
+기존 환경 복구 경로에 비격리 Local 실행 컨텍스트를 명시한 새 Review를 연결했고,
+관련 내부 회귀 118 PASS / 0 FAIL을 확인했다. Protected 검증과 브라우저 E2E는
+미검증이다. [실행 기록의 후속 절](../runs/2026-10-27/environment-reverification.md#2026-10-28-native-local-continuation)을 따른다.
+
+2026-10-27 [환경 전용 동일 Candidate 재검증](../runs/2026-10-27/environment-reverification.md):
+기존 Reservation·Native Local에 환경 복구 결합을 추가하고 내부 회귀를 수행했다.
+Todo Calendar는 실제 3개 Fileset 적용 후 7 PASS / 1 FAIL(exit 1), MXC loopback EACCES로
+Revision 11에서 HUMAN_HANDOFF다. 앱·테스트 변경과 무단 재실행은 없다.
+Core 환경 복구와 실제 Host 정책 관측 어댑터는 구분한다. 후자의 연결·네트워크 승인·
+실제 Todo 재검증·브라우저 수용은 미완료이며 아래 Sprint 기록은 이전 체크포인트다.
+
+2026-10-27 [MXC 제품 수용 Sprint](../runs/2026-10-27/windows-mxc-product-sprint.md):
+기존 MXC 회귀 실패를 해소하고 신규 Local-only 계약의 현재 후보 완료 판정을 구현했다.
+Todo Calendar 실제 코드 제안·Validator·DAG는 준비됐으며 정확한 Fileset 승인 대기다.
+적용·앱 통합 테스트·새 Objective Recovery와 전체 제품 수용은 아직 미완료다.
+
+2026-10-27 최우선 후속: P0-D 개발을 보류하고 [Windows Native 호환성](../runs/2026-10-27/windows-native-mxc-path.md)을 진행한다.
+공식 MXC 검사 1회와 일반 사용자 소유 작업 트리의 실제 Git·Native Probe는 통과했다.
+소유권 충돌의 무조건적인 권한 확장 안내를 제거하고 `doctor --repository`를 추가했다.
+새 Fixture의 모델·적용·검증·복구 Live 경로는 승인 대기이며 전체 수용은 미완료다.
+
+2026-10-27 재개: 정상 sandbox를 요청한 [B 실행 사전 점검](../runs/2026-10-27/codex-host-session2-proposal.md#normal-sandbox-resumption-blocked_environment)에서도 실제 Native Probe가 GIT_OWNERSHIP을 반환했다.
+적격 실행 환경을 재현하지 못해 BLOCKED_ENVIRONMENT로 종료했다. 제품 결함으로 분류하지 않으며
+신규 승인·Materialize·통합 테스트는 미실행이다.
+
+2026-10-27 B 적용 후속: [Session 2 적용 사전 점검](../runs/2026-10-27/codex-host-session2-proposal.md#subsequent-authorized-b-application-blocked-before-approval)은 Native Probe의
+GIT_OWNERSHIP(exit 128)으로 차단됐다. 승인 발급·Materialize는 0회이며 revision 10과
+A Evidence·기존 후보·예산을 보존했다. 실제 통합 후보가 없어 정확한 Local Review는 미준비다.
+
+2026-10-27 P0-C 후속: [실제 Codex Session 2 제안](../runs/2026-10-27/codex-host-session2-proposal.md).
+기존 A MATERIALIZED·LOCAL_PASSED 및 Evidence를 재실행 없이 재사용했다. 영속 Recovery 뒤
+새 Codex 세션 1회에서 B 제안을 생성했고 기존 Fileset Validator를 통과했다.
+제안 기록 후 Task revision 10, AWAIT_FILESET_APPROVAL(todo)이며 B 적용·통합 검증은 미실행이다.
+전체 P0-C·Compaction·Protected 완료는 선언하지 않는다. 아래 기록은 각 시점의 범위다.
+
+2026-10-27 P0-C: [Recovery 읽기 전용 Store 수정](../runs/2026-10-27/codex-recovery-readonly-store-fix.md).
+RECOVERY_INIT_WRITE의 생성·초기화·예약 조회 쓰기 경로를 분리했다. 격리 Recovery 30건,
+관련 회귀 123건과 선택 Store 4건이 통과했다. P0-C Revision 7과 P0-B Live 원본은 보존됐고
+A 승인 요청을 재검토했다. 실제 A 적용·Session 2 실행은 하지 않았으며 새 승인이 필요하다.
+
+2026-10-27 P0-C: [영속 상태 복구와 별도 세션 승인 준비](../runs/2026-10-27/codex-first-objective-recovery.md).
+기존 Store를 읽는 `objective recover`와 미확정 Fileset의 공개 재실행 차단을 추가했다.
+내부 프로세스 중단·재개와 실제 Codex 새 세션 수용은 구분하며, 후자는 별도 승인 대기다.
+Compaction Recovery와 Protected 완료를 주장하지 않는다.
+
+앞선 [P0-B 내부 기록](../runs/2026-10-27/codex-first-multi-workitem.md) 이후 별도 승인된
+실제 Codex A/B 수정안 생성·적용 및 통합 Local 테스트 5개 통과(exit 0)를 관측했다.
+Task Revision 12와 통합 Evidence는 위 후속 기록에 보존한다. 감독형 Windows Live
+다중 WorkItem 경로의 수용이며, Protected 미충족으로 Objective complete는 false다.
+
+2026-10-27 Codex-first 후속: 기존 `core-p0-1` Worktree의 미커밋 Core를 이어
+[P0-A bounded continuation](../runs/2026-10-27/codex-first-bounded-continuation.md)을 구현했다.
+내부 신뢰 경계에서 새 Decision을 검증·소비하며 적격 Local 검증 WorkItem을 직렬 진행한다.
+공개 사전 승인 발급 경계는 여전히 BLOCKED이며 Native Local은 감독형을 유지한다.
+P0-5A의 제한된 Windows Codex Live 기록은 보존하고, 이 변경의 Live 수용으로
+승격하지 않았다. Claude 추가 Live는 중단한다. 아래 표와 경과는 각 기준선의
+검증 범위이며 이번 작업의 결과·미검증 범위는 연결 기록을 따른다.
 
 앞선 문서 정리 기준선은 `2a330bb3fdd8a9a9aec5934ffd64f63e7d3d5cba`의 main이다. 이번 개발 지침 정합화는 GitHub main `eb68c39750e92e9557830f36a08fce12854650f0`를 기준으로 한다. [제품 원칙](../PRODUCT_VISION.md)과 [공식 아키텍처](architecture.md)를 적용하며, 문서 갱신은 새 제품 실행이나 Live 검증 결과를 추가하지 않는다.
 

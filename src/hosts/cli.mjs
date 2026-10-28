@@ -14,7 +14,7 @@ export const hostHelp = `Host-native staged proposal workflow (no API key or mod
 host <codex|claude> plan "goal" [repository]
 host <codex|claude> draft <task-id> <proposal.json>
 host <codex|claude> workflow|explain <task-id>
-host <codex|claude> doctor [--probe-container]
+host <codex|claude> doctor [--probe-container] [--repository PATH]
 host <codex|claude> review <task-id> --files ... --tests ... --criterion ...
 host <codex|claude> prepare|approval-request|requests|run|resume|pause|cancel|status|report <task-id>
 host <codex|claude> submit <response.json>
@@ -30,7 +30,10 @@ Use --state outside the target repository. Approval requests do not authorize ex
 An operator must approve the exact workflow hash using the existing objective approve command.
 Responses: {requestId,bindingHash,proposal:{summary,edits:[{path,oldText,newText}]}}.
 Host reports never count as verification. Public requests/submit/run/resume are blocked
-until an OS-authenticated Operator broker is available; actor strings cannot enable them.`;
+until their production trust/isolation gates are satisfied; actor strings cannot enable them.
+For public Objective delegation, capabilities explains the missing authenticated approval
+source and verification-only internal scope. A separate OS account or persistent broker
+is not a prerequisite for the supported supervised Local path.`;
 
 export async function readResponse(file) {
   const handle = await open(path.resolve(file), 'r');
@@ -52,21 +55,29 @@ export async function dispatchHost(argv, { store, execution = {} } = {}) {
     if (host === 'codex' && data.state === 'BLOCKED' && ['GIT_OWNERSHIP', 'PROCESS_SPAWN_DENIED'].includes(failure?.kind)) {
       // Advice only. The Host owns the approval UI and execution permission;
       // no CodeFleet grant, replay or process launch is performed here.
-      data.hostRecovery = { status: 'HOST_APPROVAL_REQUIRED', reason: failure.kind,
+      const ownership = failure.kind === 'GIT_OWNERSHIP';
+      data.hostRecovery = { status: ownership ? 'BLOCKED_ENVIRONMENT' : 'HOST_APPROVAL_REQUIRED', reason: failure.kind,
         authority: 'ADVISORY_ONLY', automaticRetry: false, grantsExecution: false,
         taskId: data.taskId, taskRevision: data.revision,
-        nextAction: 'Use the Codex execution tool command-specific approval for the exact scoped CLI command. Re-query this task first; a blocked plan requires a new plan, not resume. Preserve the failed task. If approval is denied or unavailable, report BLOCKED.',
+        nextAction: ownership
+          ? 'Preserve this task and choose an eligible Host sandbox with the user. Do not treat command-specific approval as an ownership fix. On Windows, check official MXC compatibility once; no automatic unelevated fallback. Run host codex doctor --repository PATH in the exact intended execution path before fresh approval. After changing the Host path, recheck contract, candidate, capabilities, leases and uncertain effects. A blocked plan requires a new plan; never replay uncertain mutations.'
+          : 'Use the Codex execution tool command-specific approval for the exact scoped CLI command. Re-query this task first; a blocked plan requires a new plan, not resume. Preserve the failed task. If approval is denied or unavailable, report BLOCKED.',
         codefleetApproval: 'UNCHANGED', verification: 'NOT_ESTABLISHED' };
       data.nextAction = data.hostRecovery.nextAction;
     }
-    if (data.kind === 'TaskReport' && data.contractKind !== 'NEW_PROJECT' && !data.hostRecovery) data.nextAction = 'Review and prepare; obtain operator hash-bound approval; requests, submit, then run staged proposals';
+    if (data.kind === 'TaskReport' && !['NEW_PROJECT','EXISTING_LOCAL'].includes(data.contractKind) && !data.hostRecovery) data.nextAction = 'Review and prepare; obtain operator hash-bound approval; requests, submit, then run staged proposals';
     if (data.run?.provider?.startsWith('host-')) data.run.cost = { ...data.run.cost, scope: 'LOCAL_STAGED_REPLAY_ONLY', modelCalls: 0, hostSessionCost: null, hostSessionCostStatus: 'UNKNOWN' };
     return { ...result, data };
   };
   if (action === 'capabilities') { if (args.length) throw Error('No capability arguments accepted'); return { exitCode: 0, data: identity }; }
   if (action === 'doctor') {
-    if (args.length > 1 || args.length === 1 && args[0] !== '--probe-container') throw Error('doctor accepts only --probe-container');
-    const data = await hostDoctor(host, { probeContainer: args.length === 1 });
+    let probeContainer = false, repository;
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '--probe-container' && !probeContainer) probeContainer = true;
+      else if (args[i] === '--repository' && repository === undefined && args[i + 1] && !args[i + 1].startsWith('--')) repository = path.resolve(args[++i]);
+      else throw Error('doctor accepts unique --probe-container and --repository PATH options only');
+    }
+    const data = await hostDoctor(host, { probeContainer, repository });
     return { exitCode: data.status === 'AVAILABLE' ? 0 : 1, data };
   }
   enableTasks(store);
@@ -82,7 +93,7 @@ export async function dispatchHost(argv, { store, execution = {} } = {}) {
     const current = task(store, args[0]), run = current.runId ? store.get(current.runId) : null;
     if (current.bootstrap) {
       const view = bootstrapView(store, current.id, { drift: await bootstrapDrift(store, current.id) });
-      return present({ exitCode: 0, data: { taskId: current.id, revision: current.revision, contractKind: 'NEW_PROJECT',
+      return present({ exitCode: 0, data: { taskId: current.id, revision: current.revision, contractKind: store.readArtifact(current.planRef).contractKind,
         bootstrap: view, authority: 'PREPARATION_ONLY', executable: false, approved: false,
         nextActions: bootstrapActions(view), operatorOnly: ['objective approve', 'objective materialize', 'objective verify'] } });
     }
@@ -130,7 +141,7 @@ export async function dispatchHost(argv, { store, execution = {} } = {}) {
   return present({ exitCode: data.run.complete ? 0 : 2, data });
 }
 export async function hostCli(argv, directory) {
-  if (argv[1] === 'doctor') {
+  if (['doctor', 'capabilities'].includes(argv[1]) || !argv[0] || ['help', '--help'].includes(argv[0])) {
     try { return await dispatchHost(argv); }
     catch (error) { return { exitCode: 1, data: { status: 'BLOCKED', error: error.message } }; }
   }

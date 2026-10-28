@@ -23,9 +23,37 @@ CodeFleet은 기존 Codex CLI·Claude Code의 모델·인증·세션을 사용�
 
 `docs/audits/`·`docs/runs/`·`docs/archive/`의 전 문서를 시간 역순으로 나열한다. 규약은 `docs/CONVENTIONS.md`, 결함 등재 현황은 `docs/REGISTER.md`.
 
-작성 기준: 2026-10-23. 전수 123개 문서 (감사 41 · 실행 75 · 아카이브 7). <!-- fact: docs-indexed = 123 --> <!-- fact: docs-on-disk = 123 -->
+작성 기준: 2026-10-28. 전수 141개 문서 (감사 41 · 실행 93 · 아카이브 7). <!-- fact: docs-indexed = 141 --> <!-- fact: docs-on-disk = 141 -->
 
 현재 공개 사용 제품 계획은 [제품 완성 문서](product-completion/README.md)에 있다. 기존 아카이브의 실측과 새 제품 계획을 구분하며, 구현 상태는 새 진행 현황에서 관리한다.
+
+## 2026-10-28
+
+| Date | Document | Type | Result | Follow-up |
+| --- | --- | --- | --- | --- |
+| 10-28 | `runs/2026-10-28/alpha-gate-closure.md` | Focused gate closure | H4 and Repair pass; installed runtime unchanged | Windows scoped RC; Linux qualification incomplete |
+| 10-28 | `runs/2026-10-28/alpha-release-gates.md` | Release gates | Frozen package and Windows pass; initial Linux failures preserved | Follow-up and integration scope recorded |
+| 10-28 | `runs/2026-10-28/codex-core-release-candidate.md` | Supervised RC | Packaged installer fixed; installed regression passed | Host entry and integration limits recorded |
+| 10-28 | `runs/2026-10-28/trusted-authorization-boundary.md` | Host readiness / package | providerUnavailable; installed HEAD/Recovery passed | SUPERVISED_READY; public delegation blocked |
+| 10-28 | `runs/2026-10-28/trusted-public-delegation.md` | 공개 위임 경계 | 공식 스키마 대조·미지원 범위 거부·Store 없는 조회 | 인증 출처 미연결; SUPERVISED_READY 유지 |
+| 10-28 | `runs/2026-10-28/public-existing-local-v2.md` | HEAD·새 Codex 세션 감독형 수용 | 일반 텍스트 생성·수정, 11 PASS, COMPLETE_LOCAL, 복구 | 공개 인증 위임·Protected 미완료 |
+| 10-28 | `runs/2026-10-28/public-existing-local.md` | Existing Local 감독형 수용 | 실제 의존 구현 2개·고정 테스트 8 PASS·COMPLETE_LOCAL·프로세스 복구 | 공개 위임 차단; 실제 Skill 자동 진입·Protected 미검증 |
+| 10-28 | `runs/2026-10-28/codex-core-continuation.md` | Core continuation | 서명된 검증 위임·감독형 Review UX·Draft Recovery 구현 및 내부 검증 | 공개 Host 승인 연결·기존 프로젝트 진입·실제 개발 Live 미완료 |
+
+## 2026-10-27
+
+| Date | Document | Type | Result | Follow-up |
+| --- | --- | --- | --- | --- |
+| 10-27 | `runs/2026-10-27/environment-reverification.md` | 환경 전용 재검증 | 동일 Candidate의 새 Decision·Attempt 및 실패 Evidence 보존 구현·내부 회귀 | 10-28 Native Local Todo 8 PASS; 브라우저·Protected 미검증 |
+| 10-27 | `runs/2026-10-27/windows-mxc-product-sprint.md` | MXC 제품 수용 개발 | 기존 MXC 실패 해소, Local-only 판정 구현, 실제 Todo Calendar 제안·DAG | 정확한 Fileset 승인 후 적용·통합 검증 |
+| 10-27 | `runs/2026-10-27/windows-native-mxc-path.md` | Windows Native 호환성 | MXC 공식 검사·일반 사용자 저장소 Native Probe 통과; 소유권 안내·doctor 수정 | 새 Fixture Live 승인 대기; 전체 개발 경로 미수용 |
+| 10-27 | `runs/2026-10-27/codex-host-session2-proposal.md` | P0-C 실제 Session 2 제안 | 영속 Recovery·새 Codex 1회·B Validator 통과 | 후속 B 적용은 Native GIT_OWNERSHIP으로 승인 발급 전 차단; 전체 P0-C·Compaction 미완료 |
+| 10-27 | `runs/2026-10-27/codex-recovery-readonly-store-fix.md` | P0-C 읽기 전용 Store 수정 | Recovery 초기화 분리·반증 및 회귀 기록 | 기존 A 요청 재검토; 실제 적용은 새 승인 필요 |
+| 10-27 | `runs/2026-10-27/codex-recovery-resume-preparation.md` | P0-C 재개 승인 준비 | 기존 제안·논리 상태 보존; Recovery 초기화 쓰기 결함으로 실행 차단 | A 요청 미발급; Store 최소 수정·검증 후 새 승인 |
+| 10-27 | `runs/2026-10-27/codex-host-session1-recovery.md` | P0-C 승인된 Host Session 1 | Codex 제안 1회·Validator 통과, 별도 프로세스에서 논리 상태 보존 확인 | A 적용·검증 및 Session 2 별도 승인; SQLite 바이트 읽기 전용은 미확립 |
+| 10-27 | `runs/2026-10-27/codex-first-objective-recovery.md` | P0-C 복구 구현·검증 | 영속 상태 복구, 프로세스 중단·재실행 차단; P0-B 감독형 Live 후속 결과 보존 | 실제 Codex 새 세션은 별도 승인 대기 |
+| 10-27 | `runs/2026-10-27/codex-first-bounded-continuation.md` | Codex-first P0-A 구현·검증 | 내부 적격 검증 WorkItem 직렬 진행, 새 Decision/Attempt 소비; 공개 승인 경계 유지 | P0-B 및 실제 승인-policy 경계 수용 |
+| 10-27 | `runs/2026-10-27/codex-first-multi-workitem.md` | P0-B 내부 연결·Live 승인 준비 | A 의존성 통과 기록 보존, B 추가 후 새 통합 검증; 모델 호출 없음 | 고정 A 제안 호출 패킷 별도 승인 대기 |
 
 ## 2026-10-23
 

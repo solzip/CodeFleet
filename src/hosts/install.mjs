@@ -43,9 +43,25 @@ STATE host ${host} plan "goal" REPOSITORY, then status TASK_ID. STATE is a local
 preparation directory, never the protected Operator state. Keep the existing Host
 model, authentication and session. Read/search only within actual Host permissions.
 Skill instructions do not enforce isolation. Host reports are untrusted proposals.
+For an explicitly requested Local-only new-project contract, add --acceptance
+LOCAL_ONLY to plan. Omission preserves PROTECTED_REQUIRED. This creation-only
+choice does not authorize files, commands or downgrade an existing Task.
 ${host === 'codex' ? `
-Windows Codex command recovery (preparation only): start within normal Host permissions.
-For GIT_OWNERSHIP or PROCESS_SPAWN_DENIED, use the existing Codex execution tool's
+Windows Codex command recovery: start within normal Host permissions.
+For GIT_OWNERSHIP, stop with BLOCKED_ENVIRONMENT; do not automatically escalate.
+Host approval and sandbox selection do not prove the actual execution identity.
+With user authorization, check official MXC compatibility once using:
+codex -c windows.sandbox=mxc sandbox --include-managed-config --permission-profile :workspace -- cmd.exe /d /c echo MXC_OK
+If supported, consistently launch scoped CodeFleet commands through the official
+MXC path, retaining managed policy: codex -c windows.sandbox=mxc sandbox
+--include-managed-config --permission-profile :workspace -- node CLI ...
+Run host codex doctor --repository REPOSITORY in that actual path before requesting
+expiring Fileset or Local approval. Keep the same path for approved application
+and tests; recheck contract, candidate, capability, leases and uncertain effects
+after any context change. Never issue your own approval or migrate an old Task.
+If MXC is unavailable, discuss unelevated with the user: weaker network isolation
+and no denied-read-path support. No automatic fallback or configuration changes.
+For PROCESS_SPAWN_DENIED only, use the existing Codex execution tool's
 command-specific approval: sandbox_permissions="require_escalated" with a justification
 naming the exact node CLI command, explicit --state, repository/task and purpose.
 This is a Host tool argument, never a CLI flag. Do not grant yourself permission,
@@ -63,6 +79,24 @@ mutation or escalate requests/submit/run/resume, approve, clarify or materialize
 to bypass their gates. An objective unknown needs the user's explicit scope
 clarification through the existing operator contract, not a planner assertion.
 ` : ''}
+
+For an existing Git project, explicitly select host ${host} plan "goal" REPOSITORY
+--local-existing --acceptance LOCAL_ONLY. This snapshots current files and dirty
+state; it does not initialize Git or overwrite uncommitted work. ExistingLocalDraft
+uses the BootstrapDraft fields with kind ExistingLocalDraft. plannedTests are
+existing immutable acceptance inputs, not owned writes. Use ExistingLocalDraft
+schemaVersion 2 for declared general text sources, with separate WorkItems for
+creation and replacement. Submit baseSha256 from the recorded snapshot for
+existing files, or explicit null for absent files. Version 1 retains its original
+existing src/*.mjs-only contract. Never mix creation and replacement in one item.
+After host files, use objective local-files-review TASK ITEM; show the exact files
+and review hash to the user. Only with user approval and Host execution permission
+call objective local-files-accept REF --trust HASH --acknowledge-unisolated.
+This is supervised same-user Local trust, NOT authenticated public delegation.
+Query recover/status after each item, then generate the next eligible proposal
+using the current Host model. Do not launch a nested model without authorization.
+Use local-review/local-accept for the exact current-candidate verification.
+PUBLIC_DELEGATION_BLOCKED remains until a trusted external approval transport is connected.
 
 Use review TASK_ID --files PATHS --tests PATHS --criterion TEXT for explicit scope,
 or draft TASK_ID FILE for {revision,proposal:{draft,references,inferences}}.
@@ -85,7 +119,46 @@ never cite lines or claim tests ran. After prepare, files TASK_ID FILE proposes
 review. When status shows a local-verification item LOCAL_FAILED, a repair is
 {revision,itemId,repair:{verificationItem,evidenceRef},files:[{path,content,baseSha256}]}
 for a materialized item it depends on, baseSha256 being the digest CodeFleet recorded.
-Never run git init, commit, approve, materialize or verify yourself.
+Never run git init, approve, materialize or verify without the user's applicable
+explicit authorization; git commit is outside this workflow.
+If the user explicitly authorizes project initialization, the Host may perform
+that bounded setup before planning. Present exact Fileset hashes and contents
+for user approval, then use the existing supervised objective approve/materialize
+commands only with that approval. Never issue consent as an Agent or use actor
+strings as authentication. Fileset proposals may be reviewed together, but
+materialization must still follow DAG dependencies. Keep the existing Host session
+for code generation; a nested model subprocess is not required.
+
+Supervised Native Local continuation (separate from Protected IPC):
+Prefer objective local-review TASK_ID REQUEST.json [REPAIR.json]. CodeFleet
+generates and stores revision, request ID and expiry; show the returned scope and
+reviewHash to the user. After exact user approval and Host command permission,
+use objective local-accept REVIEW_REF --trust REVIEW_HASH --acknowledge-unisolated.
+Use the returned identifiers directly; never ask the user to construct packets.
+This remains supervised same-user Local execution, not authenticated delegation.
+If interrupted, run objective recover before any new action. An existing request
+is only reconciled/read, never replayed. Prepared artifacts do not grant consent.
+Use the installed runtime/alpha/cli.mjs objective local-step TASK_ID REQUEST.json
+[REPAIR.json] --revision N --request-id UNIQUE_ID --expires EPOCH_MS to request
+review only. REQUEST contains executable (absolute native path), args, directory,
+timeoutMs. A repair contains itemId, evidenceRef, hypothesis, diagnostic and
+files [{path,baseSha256,content}]. Inspect the returned exact review, including
+current and projected command/candidate hashes and remaining budget.
+Only after the user explicitly approves this exact review and the Host permits
+the command, repeat it with --trust REVIEW_HASH --acknowledge-unisolated.
+Never invent consent from your proposal, a JSON actor, or prior approval.
+This is same-user LOCAL_EXECUTED / UNPROTECTED, not authenticated Operator or
+Protected execution. A new execution requires a fresh reviewed request; on
+uncertain delivery retain the same request to read state, never reset budgets.
+No model subprocess, direct API key, Docker, WSL or separate account is needed.
+If the current contract requires Protected evidence, leave Objective incomplete.
+For LOCAL_ONLY, final acceptance currently requires one integrated native Node
+command with args --test --test-reporter=tap followed by every criterion test
+path explicitly (no filters/globs). Its WorkItem must depend transitively on every
+implementation item. Use objective report/recover to read COMPLETE_LOCAL after
+current-candidate evidence passes; Local Evidence remains UNPROTECTED. An old
+checkpoint does not satisfy a new candidate. Unsupported final coverage stays
+incomplete instead of treating an arbitrary successful command as acceptance.
 
 Optional protected execution:
 H4 Linux IPC path: use this skill's runtime/hosts/ipc-client.mjs with Node 24.14.1 or newer. Resolve CLIENT relative to this SKILL.md. A trusted operator administrator must supply SOCKET and RUN_ID for an already validated, fixed-scope workflow. Never start an Operator process as the Agent, change the catalog, or open trusted state. Windows Native, WSL2 deployment and live Host confinement remain BLOCKED/unverified. Do not use internal modules or legacy objective approve to bypass this gate.
@@ -110,6 +183,8 @@ export async function installHost(project, host, { planning = false } = {}) {
   await mkdir(target);
   const files = { 'SKILL.md': planning ? planningSkill(host) : skill(host), LICENSE: await readFile(path.join(root, 'LICENSE'), 'utf8') };
   if (!planning) for (const name of await regularTree(path.join(root, 'src'))) files['runtime/' + name] = await readFile(path.join(root, 'src', name));
+  // src/README is a historical repository note whose parent links are not installed.
+  if(!planning) files['runtime/README.md']='# CodeFleet installed runtime\n\nRun alpha/cli.mjs with Node 24.14.1 or newer. See ../SKILL.md for supervised usage.\n\nLicense: [MIT](../LICENSE).\n';
   const inventory = {};
   for (const [name, body] of Object.entries(files)) {
     const dest = path.join(target, name); await mkdir(path.dirname(dest), { recursive: true });

@@ -291,6 +291,47 @@ test('P1-B: time budget expires before spawn; no execution and no refund', async
   assert.equal(r.status, 'HUMAN_HANDOFF'); assert.equal(await f.count(), 0);
 });
 
+for (const clock of ['backwards', 'frozen']) test(`P0-2: ${clock} wall clock cannot extend live reservation budget`, async t => {
+  const f = await setup(t, { timeBudgetMs: 1000 }), realNow = Date.now;
+  try {
+    const r = await f.run({ hooks: { reserved: async reservation => {
+      Date.now = () => reservation.reservedAt - (clock === 'backwards' ? 5000 : 0);
+      if (clock === 'frozen') await new Promise(resolve => setTimeout(resolve, 1100));
+    } } });
+    assert.equal(r.status, 'HUMAN_HANDOFF');
+    assert.equal(await f.count(), 0);
+    assert.equal(f.store.db.prepare('SELECT remaining FROM bootstrap_decisions').get().remaining, 0);
+  } finally { Date.now = realNow; }
+});
+
+test('time: pre-issuance clock refuses execution without consuming a grant',async t=>{
+  const f=await setup(t),real=Date.now;
+  const issued=f.store.db.prepare('SELECT issued FROM bootstrap_decisions').get().issued;
+  try {Date.now=()=>issued-1000;await assert.rejects(f.run(),/clock/i);}
+  finally{Date.now=real;}
+  assert.equal(await f.count(),0);
+  assert.equal(f.store.db.prepare('SELECT remaining FROM bootstrap_decisions').get().remaining,1);
+});
+test('time: observed expired grant cannot revive after clock rollback and process restart',async t=>{
+  const f=await setup(t),real=Date.now;
+  try {Date.now=()=>f.input.expiresAt+1;await assert.rejects(f.run(),/expired/i);}
+  finally{Date.now=real;}
+  const r=await command(process.execPath,f.argv);
+  assert.notEqual(r.exitCode,0,r.stdout);
+  assert.equal(await f.count(),0);
+  assert.equal(reservationStatus(f.store,f.input.decisionId,f.input.requestId).decision.status,'EXPIRED');
+  assert.equal(f.store.db.prepare('SELECT remaining FROM bootstrap_decisions').get().remaining,1);
+});
+test('time: expiry during inspection survives reservation transaction rollback',async t=>{
+  const f=await setup(t),real=Date.now;
+  const scheduled=setImmediate(()=>{Date.now=()=>f.input.expiresAt+1;});
+  try {await assert.rejects(f.run(),/expired/i);}
+  finally{clearImmediate(scheduled);Date.now=real;}
+  assert.equal(reservationStatus(f.store,f.input.decisionId,f.input.requestId).decision.status,'EXPIRED');
+  await assert.rejects(f.run(),/expired/i);
+  assert.equal(await f.count(),0);
+});
+
 test('P1-B: cumulative reserved wall-time cannot reset with a fresh exact decision', async t => {
   const f = await setup(t, { maxAttempts: 2, timeoutSeconds: 15 });
   assert.equal((await f.run()).status, 'LOCAL_PASSED');
