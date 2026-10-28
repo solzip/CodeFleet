@@ -88,6 +88,58 @@ any mismatch removes the next action and requires human review. A conversation
 summary is not a supported binding. A packet is an observation, not a signed
 authority or a lock: every eventual effect still uses the existing live fences.
 
+For a prepared Objective, retain the full recovery JSON outside the project source
+before a session/context handoff. Pass it unchanged as the optional input to the
+same `objective recover` command after resuming. Its `checkpoint` binds the Task,
+Workflow and Candidate plus Work Log and execution-state observations (Filesets,
+approvals, leases, reservations, budgets, WorkItems and judgments). The checkpoint
+is a comparison token, not an authenticated approval or a second state store.
+Unknown authority fields, a foreign Task or malformed hashes fail closed. The
+legacy four-field binding remains supported and is labelled LEGACY_BINDING_ONLY.
+
+`synchronization` identifies changed revision, Task, Workflow, Candidate, Work Log
+or execution state. Any checkpoint mismatch removes the next action and requires
+fresh review; it does not migrate approvals or reset completed items, Evidence or
+budget. Retained completed item IDs are derived from current persisted state, not
+the conversation or supplied report. An absent checkpoint is INITIAL_OBSERVATION,
+not proof that prior context was retained. This comparison supports Host recovery
+instructions; process-level tests do not prove that an actual Codex compaction
+event occurred. Explicit in-place contract changes use the supervised revision
+path below; recovery itself never applies a changed contract.
+
+### Supervised semantic contract revision
+
+`objective revision-review TASK PROPOSAL.json` accepts `{revision,draft}`, where
+revision is the current operational Task revision. It validates the complete
+replacement Draft and returns an expiring review bound to the Task, candidate,
+old/new Workflow, unchanged budgets and acceptance mode. After explicit user
+review, `objective revision-accept REF --trust HASH --acknowledge-unisolated`
+applies one atomic transition using existing SQLite, artifacts and Work Log.
+`objective revision-revoke REF` withdraws a pending review.
+
+The separate `contractRevision` starts at 1 and advances only for semantic changes.
+Fileset and test records continue advancing Task revision independently. Changed
+items and their downstream closure reopen; unaffected completed items remain.
+Unmapped/global requirement changes conservatively affect all items. Pending
+Filesets need fresh review. Unconsumed Decisions are revoked; consumed Decisions,
+Attempts, budgets, source receipts and historical Evidence are retained.
+
+An unaffected prior verification may admit dependencies as LOCAL_CHECKPOINT only
+when its recorded prerequisite/test digests remain intact. It is not a pass for
+the new contract. Final Local acceptance requires fresh integrated Evidence for
+the current Workflow and candidate. Protected-required completion remains blocked
+without Protected Evidence.
+
+This bounded route preserves WorkItem identities, kinds, fixed test paths/mapping,
+existing acceptance criterion IDs, budgets and trust mode. It supports reopening
+materialized source in EXISTING_LOCAL; NEW_PROJECT can revise pending source work.
+It rejects active leases, uncertain effects, unresolved failed execution, source
+drift and stale/expired/revoked reviews. Enrolled signed Operator tasks require
+their own trusted revision issuer and cannot use this same-user supervised path.
+Contract approval never grants file or command execution, model invocation or
+authenticated public delegation. Separate-process tests are internal acceptance,
+not Codex Host Live or compaction certification.
+
 Recovery returns Objective criteria and scope, effective WorkItems, remaining work,
 Capability/approval requirements, approval rows and present validity, persisted
 attempt/time consumption, Fileset and candidate hashes, Decision consumption,

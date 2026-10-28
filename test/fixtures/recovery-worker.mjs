@@ -4,21 +4,33 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Store } from '../../src/alpha/store.mjs';
 import { prepare } from './development-loop.mjs';
-import { task, submitBootstrapFiles, approveTask, materializeTask, verifyTask } from '../../src/product/tasks.mjs';
+import { task, recordedDigests, submitBootstrapFiles, approveTask, materializeTask, verifyTask } from '../../src/product/tasks.mjs';
 import { issueOfflineDecision, executeOfflineDecision, revokeDecision } from '../../src/product/reservations.mjs';
 import { recoverObjective } from '../../src/product/recovery.mjs';
+import { prepareContractRevision, acceptContractRevision } from '../../src/product/contract-revisions.mjs';
 export const sources = {
   normalize: { path: 'src/normalize-title.mjs', content: "export function normalizeTitle(input) { const title=input.trim(); if(!title) throw Error('Blank'); return title; }\n" },
   todo: { path: 'src/create-todo.mjs', content: "import {normalizeTitle} from './normalize-title.mjs'; export const createTodo=input=>({title:normalizeTitle(input),completed:false});\n" }
 };
 const input = JSON.parse(process.argv[2]); let store;
 try {
-  if (input.action === 'prepare') { console.log(JSON.stringify(await prepare(input.root))); }
+  if (input.action === 'prepare') { console.log(JSON.stringify(await prepare(input.root,input.options))); }
   else {
     store = new Store(input.state, { readOnly: input.action === 'recover' }); const id = input.id; let result;
     const request = item => ({ executable: process.execPath, args: ['--test', '--test-reporter=tap', 'test/normalize-title.test.mjs', ...(item === 'verify-integrated' ? ['test/create-todo.test.mjs'] : [])], directory: input.repo, timeoutMs: 10000 });
     if (input.action === 'recover') result = await recoverObjective(store, id, input.binding);
-    if (input.action === 'propose') result = await submitBootstrapFiles(store, id, { revision: task(store,id).revision, itemId: input.itemId, files: [sources[input.itemId]] });
+    if (input.action === 'revision-review') {
+      const current=task(store,id),draft=structuredClone(store.readArtifact(current.planRef).draft);
+      draft.criteria.find(c=>c.id==='todo').description+='; each call returns a distinct object';
+      result=await prepareContractRevision(store,id,{revision:current.revision,draft});
+    }
+    if (input.action === 'revision-accept') result=await acceptContractRevision(store,input.reviewRef,{trust:input.trust,acknowledgeUnisolated:true});
+    if (input.action === 'propose') {
+      const current=task(store,id),source={...sources[input.itemId]};
+      if(input.content)source.content=input.content;
+      if(store.readArtifact(current.planRef).contractKind==='EXISTING_LOCAL')source.baseSha256=recordedDigests(store,current)[source.path]??null;
+      result = await submitBootstrapFiles(store, id, { revision: current.revision, itemId: input.itemId, files: [source] });
+    }
     if (input.action === 'approve') result = approveTask(store,id,{actor:'offline-recovery-test',workflowHash:input.filesetHash,expiresAt:Date.now()+120000});
     if (input.action === 'materialize') result = await materializeTask(store,id,input.itemId,{freshOnly:true,hooks:input.crash ? { beforeCommit: () => process.exit(89) } : {}});
     if (input.action === 'issue') {

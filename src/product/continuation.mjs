@@ -7,8 +7,12 @@ import path from 'node:path';
 import { taskReport, bootstrapActions } from './report.mjs';
 import { task, bootstrapContext, recordedDigests } from './tasks.mjs';
 import { executeOfflineDecision, requireDurableOperator } from './reservations.mjs';
+import { readyBatch } from '../workflow/definition.mjs';
+import { validateFileset } from '../workflow/bootstrap-files.mjs';
+import { localTree } from '../verification/backends.mjs';
+import { exact } from '../intent/contract.mjs';
 
-const satisfied = new Set(['PLAN_RECORDED', 'MATERIALIZED', 'LOCAL_PASSED']);
+const satisfied = new Set(['PLAN_RECORDED', 'MATERIALIZED', 'LOCAL_PASSED', 'LOCAL_CHECKPOINT']);
 const terminal = new Set(['LOCAL_PASSED', 'LOCAL_FAILED', 'INCONCLUSIVE']);
 
 // Recomputed from the existing Task, artifacts, events and reservations on every
@@ -93,7 +97,9 @@ export async function continueWorkItem() { requireDurableOperator(); }
 // fileset/execution authority. Re-query after each approved verification.
 export async function developmentProposalRequest(store, taskId, itemId) {
   const snapshot = await continuationSnapshot(store, taskId);
-  if (snapshot.status !== 'HOST_ACTION_REQUIRED' || snapshot.next?.kind !== 'PROPOSE_FILESET' || snapshot.next.itemId !== itemId)
+  const eligible = snapshot.workItems.find(i => i.id === itemId && i.kind === 'local-edit' &&
+    i.state === 'PENDING_FILESET' && !i.waitingOn.length);
+  if (snapshot.status !== 'HOST_ACTION_REQUIRED' || snapshot.next?.kind !== 'PROPOSE_FILESET' || !eligible)
     throw Error('Eligible source proposal required; resolve dependencies, Evidence and approvals first');
   if (!snapshot.budget.remainingAttempts || !snapshot.budget.remainingTimeMs)
     throw Error('Verification budget exhausted; new development proposal requires reviewed limits');
@@ -113,6 +119,112 @@ export async function developmentProposalRequest(store, taskId, itemId) {
     context: { files, hash: hash(files) }, dependencies: snapshot.workItems.filter(i => item.dependencies.includes(i.id)),
     budget: snapshot.budget, authority: 'PROPOSAL_REQUEST_ONLY', executionGranted: false, modelInvocationGranted: false,
     requiredNextApprovals: ['SEPARATE_HOST_MODEL_CALL', 'EXACT_FILESET', 'FRESH_VERIFICATION_DECISION'], complete: false };
+}
+
+// The Host owns actual agent invocation. This is a bounded proposal handoff,
+// not an execution scheduler or approval issuer. File application stays serial.
+export async function developmentProposalBatch(store, taskId, options = {}) {
+  if (Object.keys(options).some(k => !['maxAgents', 'parallelBenefit'].includes(k)))
+    throw Error('Unknown collaboration option; model/execution approval cannot be supplied here');
+  const { maxAgents = 1, parallelBenefit = '' } = options;
+  if (!Number.isInteger(maxAgents) || maxAgents < 1 || maxAgents > 3 ||
+      typeof parallelBenefit !== 'string' || parallelBenefit.length > 2000)
+    throw Error('Invalid proposal concurrency limit or rationale');
+  const snapshot = await continuationSnapshot(store, taskId);
+  if (snapshot.status !== 'HOST_ACTION_REQUIRED' || snapshot.next?.kind !== 'PROPOSE_FILESET')
+    throw Error('Eligible source proposals required');
+  const { current, workflow } = bootstrapContext(store, taskId);
+  const candidateHash = await localTree(current.repo);
+  const limit = parallelBenefit.trim() ? maxAgents : 1;
+  const states = Object.fromEntries(snapshot.workItems.map(i => [i.id,
+    satisfied.has(i.state) ? 'SUCCEEDED' :
+      i.kind === 'local-edit' && i.state === 'PENDING_FILESET' && !i.waitingOn.length ? 'READY' : 'BLOCKED']));
+  // Reuse the existing ready/resource selection; never parallelize effects.
+  const selected = readyBatch({ schemaVersion: 2, maxParallel: limit,
+    items: workflow.items.map((i, priority) => ({ ...i, priority,
+      resources: i.files.map(f => 'file:' + f.toLowerCase()) })) }, states);
+  const requests = [];
+  for (const item of selected) requests.push(await developmentProposalRequest(store, taskId, item.id));
+  if (!requests.length || hash(task(store, taskId)) !== hash(current) ||
+      requests.some(r => r.taskHash !== hash(current)) || await localTree(current.repo) !== candidateHash)
+    throw Error('Collaboration context changed');
+  const body = { kind: 'HostProposalBatch', taskId, revision: current.revision,
+    contractRevision: current.contractRevision ?? 1, workflowHash: workflow.workflowHash,
+    taskHash: hash(current), candidateHash, requests,
+    mode: requests.length > 1 ? 'PARALLEL_PROPOSALS_ONLY' : 'SINGLE_AGENT',
+    parallelBenefit: requests.length > 1 ? parallelBenefit : null,
+    executionGranted: false, modelInvocationGranted: false, automaticReplay: false,
+    authority: 'PROPOSAL_REQUEST_ONLY', integration: 'SERIAL_EXACT_FILESET_REVIEW',
+    requiredNextApprovals: ['SEPARATE_HOST_MODEL_CALL', 'EXACT_FILESET', 'FRESH_VERIFICATION_DECISION'] };
+  return { ...body, batchHash: hash(body) };
+}
+
+// Existing Work Log only. A started handoff is not proof the Host launched an
+// agent. Until all results return it is an unknown outcome, never auto-replayed.
+export function pendingHostProposals(store, taskId) {
+  const events = store.events(taskId);
+  return events.filter(e => e.type === 'HOST_PROPOSALS_DISPATCH_DECLARED' &&
+    !events.some(done => done.type === 'HOST_PROPOSALS_REVIEWED' && done.body.batchHash === e.body.batchHash))
+    .map(e => ({ batchHash: e.body.batchHash, batchRef: e.body.batchRef,
+      status: 'HOST_OUTCOME_UNCONFIRMED', authority: 'PROVIDER_REPORTED_ONLY', automaticReplay: false }));
+}
+
+export async function recordProposalDispatch(store, taskId, batch) {
+  const fresh = await developmentProposalBatch(store, taskId, {
+    maxAgents: batch?.requests?.length, parallelBenefit: batch?.parallelBenefit ?? '' });
+  if (hash(fresh) !== hash(batch)) throw Error('Stale or invalid Host proposal batch');
+  const batchRef = store.artifact(batch);
+  store.db.exec('BEGIN IMMEDIATE');
+  try {
+    if (hash(task(store, taskId)) !== batch.taskHash || pendingHostProposals(store, taskId).length ||
+        store.events(taskId).some(e => e.type === 'HOST_PROPOSALS_DISPATCH_DECLARED' && e.body.batchHash === batch.batchHash))
+      throw Error('Host handoff already declared or changed; inspect outcomes, never redispatch automatically');
+    store.event(taskId, 'HOST_PROPOSALS_DISPATCH_DECLARED', { batchRef, batchHash: batch.batchHash,
+      itemIds: batch.requests.map(r => r.item.id), authority: 'PROVIDER_REPORTED_ONLY',
+      modelInvocationGranted: false, executionGranted: false });
+    store.db.exec('COMMIT');
+    return { batchRef, batchHash: batch.batchHash, modelInvocationGranted: false, executionGranted: false };
+  } catch (error) { store.db.exec('ROLLBACK'); throw error; }
+}
+
+// Validate ALL returned proposals against a freshly observed batch before
+// any submission. Agent identity/messages remain reports, never Evidence.
+export async function reviewDevelopmentResults(store, taskId, batch, results) {
+  const { batchHash, ...body } = batch ?? {};
+  if (!batchHash || hash(body) !== batchHash || body.taskId !== taskId)
+    throw Error('Collaboration batch binding mismatch');
+  const fresh = await developmentProposalBatch(store, taskId, {
+    maxAgents: body.requests.length, parallelBenefit: body.parallelBenefit ?? '' });
+  if (fresh.batchHash !== batchHash) throw Error('Stale collaboration context; review current contract/candidate');
+  if (!Array.isArray(results) || results.length !== fresh.requests.length ||
+      new Set(results.map(r => r?.itemId)).size !== results.length)
+    throw Error('Exactly one result per assigned WorkItem required');
+  const { current, workflow, plan } = bootstrapContext(store, taskId);
+  const digests = recordedDigests(store, current), proposals = [];
+  for (const request of fresh.requests) {
+    const result = results.find(r => r.itemId === request.item.id);
+    exact(result, ['itemId', 'agentId', 'files', 'feedback'], 'Host proposal result');
+    if (typeof result.agentId !== 'string' || !/^[a-zA-Z0-9_.:/-]{1,200}$/.test(result.agentId) ||
+        typeof result.feedback !== 'string' || result.feedback.length > 8000 || !Array.isArray(result.files))
+      throw Error('Invalid Host result metadata');
+    const existing = plan.contractKind === 'EXISTING_LOCAL';
+    for (const f of result.files) {
+      exact(f, existing ? ['path','content','baseSha256'] : ['path','content'], 'Host result file');
+      if (existing && f.baseSha256 !== (digests[f.path] ?? null)) throw Error('Result base digest mismatch');
+    }
+    const validated = validateFileset({ revision: current.revision, itemId: result.itemId,
+      files: result.files.map(({path,content}) => ({path,content})) }, workflow, result.itemId);
+    if (existing && (result.files.some(f => f.baseSha256 === null) && result.files.some(f => f.baseSha256 !== null) ||
+        validated.every(f => f.sha256 === digests[f.path])))
+      throw Error('Mixed creation/replacement or no-op result requires a different WorkItem');
+    proposals.push({ revision: current.revision, itemId: result.itemId, files: structuredClone(result.files) });
+  }
+  if (hash(task(store, taskId)) !== fresh.taskHash || await localTree(current.repo) !== fresh.candidateHash)
+    throw Error('Collaboration context changed during result review');
+  return { kind: 'ReviewedHostProposals', taskId, batchHash, proposals,
+    results: structuredClone(results), authority: 'PROVIDER_REPORTED_ONLY',
+    executionGranted: false, complete: false, integration: 'SUBMIT_SERIAL_THEN_EXACT_FILESET_APPROVAL',
+    note: 'Recheck the current revision and dependencies before each submission. This is not Host execution evidence.' };
 }
 
 // Internal trusted embedding only. Scope is a restrictive execution ceiling,

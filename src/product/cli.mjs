@@ -10,8 +10,9 @@ import { readResponse } from '../hosts/cli.mjs';
 import { runReport, taskReport } from './report.mjs';
 import { revokeDecision, reservationStatus, requireDurableOperator } from './reservations.mjs';
 import { nativeLocalStep, nativeEnvironmentStep, prepareNativeLocalReview, acceptNativeLocalReview, prepareNativeFilesReview, acceptNativeFilesReview } from './native-local.mjs';
-import { developmentProposalRequest } from './continuation.mjs';
+import { developmentProposalRequest, developmentProposalBatch, reviewDevelopmentResults, recordProposalDispatch } from './continuation.mjs';
 import { recoverObjective } from './recovery.mjs';
+import { prepareContractRevision, acceptContractRevision, revokeContractRevision } from './contract-revisions.mjs';
 
 export const help = `codefleet-alpha objective plan|run "goal" [repository]
   [--local-existing] (explicit existing Git working-tree Local contract; no Git writes)
@@ -24,7 +25,13 @@ codefleet-alpha objective approve <task-id> --hash <workflowHash> --actor <name>
 codefleet-alpha objective run|resume <task-id> --allow-model
 codefleet-alpha objective status [task-id] | report <task-or-run-id>
 codefleet-alpha objective proposal-request <task-id> <item-id> (eligible source context only; no model call or execution approval)
-codefleet-alpha objective recover <task-id> [BINDING.json] (inspect persisted state only; never execute, renew or replay)
+codefleet-alpha objective proposal-batch <task-id> [OPTIONS.json] (maxAgents 1..3, parallelBenefit; proposal-only, no model grant)
+codefleet-alpha objective proposal-start <task-id> BATCH.json (record pending Host handoff; not permission or proof of invocation)
+codefleet-alpha objective proposal-results <task-id> BATCH.json RESULTS.json (validate all results, record proposal feedback; never apply or approve)
+codefleet-alpha objective recover <task-id> [RECOVERY.json|BINDING.json] (compare prior checkpoint; never execute, renew or replay)
+codefleet-alpha objective revision-review <task-id> PROPOSAL.json (revision and full revised draft; no execution)
+codefleet-alpha objective revision-accept <review-ref> --trust <review-hash> --acknowledge-unisolated
+codefleet-alpha objective revision-revoke <review-ref> (revoke a prepared revision review)
 codefleet-alpha objective reject|pause|cancel <task-id> [--actor <name>]
 codefleet-alpha objective readiness [--codex-executable native-path]
 codefleet-alpha objective materialize <task-id> <item-id> (NEW_PROJECT: create an approved fileset; never overwrites, never runs git)
@@ -86,6 +93,23 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
   const [action, ...rest] = argv;
   if (!action || ['help', '--help'].includes(action)) return { exitCode: 0, data: { schemaVersion: 1, help } };
   const { positional: args, options: o } = parse(rest);
+  if (action === 'proposal-start') {
+    if (args.length !== 2 || Object.keys(o).length) throw Error('proposal-start requires Task and exact batch');
+    return { exitCode: 0, data: await recordProposalDispatch(store, args[0], await readResponse(args[1])) };
+  }
+  if (action === 'proposal-batch') {
+    if (args.length < 1 || args.length > 2 || Object.keys(o).length) throw Error('proposal-batch requires Task and optional options file');
+    return { exitCode: 0, data: await developmentProposalBatch(store, args[0], args[1] ? await readResponse(args[1]) : {}) };
+  }
+  if (action === 'proposal-results') {
+    if (args.length !== 3 || Object.keys(o).length) throw Error('proposal-results requires Task, exact batch and results');
+    const data = await reviewDevelopmentResults(store, args[0], await readResponse(args[1]), await readResponse(args[2]));
+    const resultRef = store.artifact(data);
+    if (!store.events(args[0]).some(e => e.type === 'HOST_PROPOSALS_REVIEWED' && e.body.resultRef === resultRef))
+      store.event(args[0], 'HOST_PROPOSALS_REVIEWED', { resultRef, batchHash: data.batchHash,
+        authority: 'PROVIDER_REPORTED_ONLY', executionGranted: false });
+    return { exitCode: 0, data: { ...data, resultRef } };
+  }
   if(o['local-existing'] && action!=='plan') throw Error('--local-existing is plan-only');
   if (o.acceptance !== undefined && !(action === 'plan' || action === 'run' && !args[0]?.startsWith('task-'))) throw Error('Acceptance mode is creation-only; existing contracts cannot be downgraded');
   if (action === 'readiness') {
@@ -94,11 +118,24 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     return { exitCode: 2, data: { schemaVersion: 1, readiness: 'BLOCKED_OR_UNSUPPORTED', providers, liveCalls: 'NOT_RUN', reason: 'Version/help do not prove enforcement; no automatic live certification' } };
   }
   if (action === 'recover') {
-    if (args.length < 1 || args.length > 2 || Object.keys(o).length) throw Error('recover accepts Task ID and optional prior binding only; no execution flags');
+    if (args.length < 1 || args.length > 2 || Object.keys(o).length) throw Error('recover accepts Task ID and optional prior recovery report/checkpoint/binding only; no execution flags');
     const data = await recoverObjective(store, args[0], args[1] ? await readResponse(args[1]) : undefined);
     return { exitCode: data.status === 'RECOVERED' ? 0 : 2, data };
   }
   enableTasks(store);
+  if (action === 'revision-review') {
+    if(args.length!==2||Object.keys(o).length)throw Error('revision-review requires Task and proposal only');
+    return {exitCode:2,data:await prepareContractRevision(store,args[0],await readResponse(args[1]))};
+  }
+  if (action === 'revision-accept') {
+    if(args.length!==1||Object.keys(o).some(k=>!['trust','acknowledge-unisolated'].includes(k)))throw Error('Exact revision review options required');
+    const applied=await acceptContractRevision(store,args[0],{trust:o.trust,acknowledgeUnisolated:o['acknowledge-unisolated']===true});
+    return {exitCode:0,data:{...applied,recovery:await recoverObjective(store,applied.taskId)}};
+  }
+  if (action === 'revision-revoke') {
+    if(args.length!==1||Object.keys(o).length)throw Error('revision-revoke requires one review reference');
+    return {exitCode:0,data:revokeContractRevision(store,args[0])};
+  }
   if(action==='local-files-review') {
     if(args.length!==2||Object.keys(o).length)throw Error('local-files-review requires Task and WorkItem');
     return {exitCode:2,data:await prepareNativeFilesReview(store,...args)};
@@ -235,7 +272,7 @@ export async function productCli(argv, directory) {
   try {
     requireDurableEntry(argv); // Before opening Store or reading caller JSON.
     if (!argv[0] || ['help', '--help'].includes(argv[0])) return await dispatchProduct(argv);
-    store = new Store(directory, { readOnly: argv[0] === 'recover' });
+    store = new Store(directory, { readOnly: ['recover', 'proposal-batch'].includes(argv[0]) });
     return await dispatchProduct(argv, { store });
   }
   catch (e) { return { exitCode: 1, data: { schemaVersion: 1, status: 'BLOCKED_OR_UNSUPPORTED', error: e.message } }; }

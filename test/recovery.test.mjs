@@ -8,20 +8,134 @@ import path from 'node:path';
 import {command} from '../src/alpha/process.mjs';
 import {Store} from '../src/alpha/store.mjs';
 import {productCli} from '../src/product/cli.mjs';
+import {task} from '../src/product/tasks.mjs';
+import {hash} from '../src/alpha/contract.mjs';
+import {prepareContractRevision,acceptContractRevision,revokeContractRevision} from '../src/product/contract-revisions.mjs';
 const worker=path.resolve('test/fixtures/recovery-worker.mjs');
+test('contract revision preserves A and budgets, supersedes B approval and recovers in new processes',async()=>{
+ const f=await setup();await f.apply('normalize');const a=await f.verify('verify-normalize');
+ const proposed=await f.call('propose',{itemId:'todo'});await f.call('approve',{filesetHash:proposed.approvalRequest.filesetHash});
+ const before=await f.call('recover'),proposalReview=await f.call('revision-review');
+ const proposalPath=path.join(f.root,'contract-proposal.json');
+ await writeFile(proposalPath,JSON.stringify({revision:before.binding.revision,draft:proposalReview.review.draft}));
+ const preparedCli=await command(process.execPath,['src/alpha/cli.mjs','--state',f.state,'objective','revision-review',f.id,proposalPath]);
+ assert.equal(preparedCli.exitCode,2,preparedCli.stdout+preparedCli.stderr);
+ const review=JSON.parse(preparedCli.stdout);
+ assert.deepEqual(review.review.impact.affected,['protected-review','todo','verify-integrated']);
+ assert.ok(review.review.impact.preserved.includes('verify-normalize'));
+ await f.call('revision-accept',{reviewRef:review.reviewRef,trust:'forged'},1);
+ const acceptedCli=await command(process.execPath,['src/alpha/cli.mjs','--state',f.state,'objective','revision-accept',review.reviewRef,'--trust',review.reviewHash,'--acknowledge-unisolated']);
+ assert.equal(acceptedCli.exitCode,0,acceptedCli.stdout+acceptedCli.stderr);
+ const applied=JSON.parse(acceptedCli.stdout);assert.equal(applied.recovery.contractRevision,2);
+ assert.equal(applied.contractRevision,2);assert.equal(applied.executionGranted,false);
+ await f.call('revision-accept',{reviewRef:review.reviewRef,trust:review.reviewHash},1);
+ const stale=await f.call('recover',{binding:before});assert.equal(stale.next,null);
+ const resumed=await f.call('recover');assert.equal(resumed.status,'RECOVERED',JSON.stringify(resumed));
+ assert.equal(resumed.budget.usedAttempts,1);assert.equal(resumed.contractRevision,2);
+ assert.equal(resumed.workItems.find(i=>i.id==='verify-normalize').state,'LOCAL_CHECKPOINT');
+ assert.equal(resumed.reservations[0].evidenceRef,a.evidenceRef);
+ await f.call('materialize',{itemId:'todo'},1);
+ await f.apply('todo');const integrated=await f.verify('verify-integrated');
+ assert.equal(integrated.tests,5);const final=await f.call('recover');
+ assert.equal(final.budget.usedAttempts,2);assert.equal(final.complete,false);
+ assert.equal(final.protectedVerification,'UNSATISFIED');
+});
 async function call(input,exitCode=0){const r=await command(process.execPath,[worker,JSON.stringify(input)],{timeoutMs:30000});assert.equal(r.exitCode,exitCode,r.stdout+r.stderr);return r.stdout.length?JSON.parse(r.stdout):null;}
-async function setup(){const root=await mkdtemp(path.join(tmpdir(),'cf-recovery-'));const f=await call({action:'prepare',root});f.call=(action,extra={},code=0)=>call({...f,action,...extra},code);f.apply=async itemId=>{const p=await f.call('propose',{itemId});await f.call('approve',{filesetHash:p.approvalRequest.filesetHash});return f.call('materialize',{itemId});};f.verify=async itemId=>{const decision=await f.call('issue',{itemId});return f.call('execute',{itemId,decision});};return f;}
+async function setup(options){const root=await mkdtemp(path.join(tmpdir(),'cf-recovery-'));const f=await call({action:'prepare',root,options});f.call=(action,extra={},code=0)=>call({...f,action,...extra},code);f.apply=async itemId=>{const p=await f.call('propose',{itemId});await f.call('approve',{filesetHash:p.approvalRequest.filesetHash});return f.call('materialize',{itemId});};f.verify=async itemId=>{const decision=await f.call('issue',{itemId});return f.call('execute',{itemId,decision});};return f;}
 test('P0-C A: new processes recover A, admit B and connect fresh integrated Evidence without replay',async()=>{
  const f=await setup();await f.apply('normalize');const a=await f.verify('verify-normalize');
  const before=await f.call('recover');assert.equal(before.status,'RECOVERED',JSON.stringify(before.blockers));assert.equal(before.next.itemId,'todo');assert.equal(before.budget.usedAttempts,1);
  const bindingFile=path.join(f.root,'binding.json');await writeFile(bindingFile,JSON.stringify(before.binding));
  const cli=await command(process.execPath,['src/alpha/cli.mjs','--state',f.state,'objective','recover',f.id,bindingFile]);assert.equal(cli.exitCode,0,cli.stdout+cli.stderr);assert.equal(JSON.parse(cli.stdout).executionGranted,false);
  const again=await f.call('recover');assert.equal(again.workLog.hash,before.workLog.hash);assert.equal(again.observationHash,before.observationHash);
+ const checkpointFile=path.join(f.root,'recovery.json');await writeFile(checkpointFile,JSON.stringify(before));
+ const resumed=await command(process.execPath,['src/alpha/cli.mjs','--state',f.state,'objective','recover',f.id,checkpointFile]);
+ assert.equal(resumed.exitCode,0,resumed.stdout+resumed.stderr);const resumedReport=JSON.parse(resumed.stdout);
+ assert.equal(resumedReport.synchronization.status,'MATCHED');assert.equal(resumedReport.synchronization.compared,'CHECKPOINT');
+ assert.equal(resumedReport.budget.usedAttempts,1);assert.equal(resumedReport.reservations[0].evidenceRef,a.evidenceRef);
  const b=await f.apply('todo');const stale=await f.call('recover',{binding:before.binding});assert.equal(stale.next,null);assert.ok(stale.blockers.includes('STALE_RECOVERY_BINDING'));
+ const changed=await f.call('recover',{binding:before});assert.equal(changed.next,null);
+ assert.ok(changed.blockers.includes('STALE_RECOVERY_CHECKPOINT'));assert.ok(changed.synchronization.changes.includes('revision'));
+ assert.ok(changed.synchronization.retainedCompletedItems.includes('normalize'));assert.equal(changed.budget.usedAttempts,1);
  const after=await f.call('recover');assert.equal(after.status,'RECOVERED',JSON.stringify(after.blockers));assert.equal(after.next.itemId,'verify-integrated');assert.equal(after.workItems.find(i=>i.id==='verify-normalize').state,'LOCAL_CHECKPOINT');
  const integrated=await f.verify('verify-integrated');assert.equal(integrated.tests,5);assert.notEqual(integrated.evidenceRef,a.evidenceRef);assert.notEqual(integrated.reservation.attemptId,a.reservation.attemptId);
  const final=await f.call('recover');assert.equal(final.budget.usedAttempts,2);assert.equal(final.complete,false);assert.equal(final.protectedVerification,'UNSATISFIED');assert.equal(final.reservations.length,2);
  console.log('P0-C EVIDENCE '+JSON.stringify({root:f.root,id:f.id,a:a.evidenceRef,b:b.materializationRef,integrated:integrated.evidenceRef,budget:final.budget,modelCalls:0,authority:'SYNTHETIC_OFFLINE'}));
+});
+test('contract revision reopens existing B twice, preserves A and reaches fresh Local-only acceptance',async()=>{
+ const f=await setup({localExisting:true,acceptanceMode:'LOCAL_ONLY'});
+ await f.apply('normalize');await f.verify('verify-normalize');await f.apply('todo');
+ const oldDecision=await f.call('issue',{itemId:'verify-integrated'});
+ const aBytes=await readFile(path.join(f.repo,'src/normalize-title.mjs'));
+ for(let i=0;i<2;i++){
+  const review=await f.call('revision-review');
+  await f.call('revision-accept',{reviewRef:review.reviewRef,trust:review.reviewHash});
+ }
+ await f.call('execute',{itemId:'verify-integrated',decision:oldDecision},1);
+ const before=await f.call('recover');assert.equal(before.complete,false);assert.equal(before.budget.usedAttempts,1);
+ const proposal=await f.call('propose',{itemId:'todo',content:"import {normalizeTitle} from './normalize-title.mjs'; export function createTodo(input) { return {title:normalizeTitle(input),completed:false}; }\n"});
+ await f.call('approve',{filesetHash:proposal.approvalRequest.filesetHash});await f.call('materialize',{itemId:'todo'});
+ await f.verify('verify-integrated');
+ const final=await f.call('recover');assert.equal(final.complete,true,JSON.stringify(final));
+ assert.equal(final.contractRevision,3);assert.equal(final.budget.usedAttempts,2);
+ assert.equal(final.protectedVerification,'UNSATISFIED');
+ assert.deepEqual(await readFile(path.join(f.repo,'src/normalize-title.mjs')),aBytes);
+});
+
+test('contract revision rejects revoked, expired, expanded, stale and leased requests without a Task transition',async()=>{
+ const f=await setup(),s=new Store(f.state);
+ try{
+  const current=task(s,f.id),draft=structuredClone(s.readArtifact(current.planRef).draft);
+  draft.criteria.find(c=>c.id==='todo').description+='; distinct objects';
+  const input={revision:current.revision,draft},review=await prepareContractRevision(s,f.id,input);
+  const accept=ref=>acceptContractRevision(s,ref,{trust:hash(s.readArtifact(ref).review),acknowledgeUnisolated:true});
+  await assert.rejects(()=>prepareContractRevision(s,f.id,{...input,budget:999}),/unexpected|unknown|field/i);
+  await assert.rejects(()=>acceptContractRevision(s,review.reviewRef,{trust:review.reviewHash}),/Explicit/);
+  for(const mutate of [r=>r.expiresAt=0,r=>r.issuedAt=Date.now()+60000,r=>r.settings.maxAttempts=5,
+    r=>r.candidateHash='forged',r=>r.nextWorkflowHash='forged',r=>r.taskRevision++,
+    r=>r.draft.plannedTests[0].path='test/changed.test.mjs',r=>r.draft.criteria[0].tests=['test/create-todo.test.mjs']]){
+   const packet=structuredClone(s.readArtifact(review.reviewRef));mutate(packet.review);
+   await assert.rejects(()=>accept(s.artifact(packet)));
+  }
+  revokeContractRevision(s,review.reviewRef);await assert.rejects(()=>accept(review.reviewRef),/revoked/);
+  assert.equal(hash(task(s,f.id)),hash(current));
+  const fresh=await prepareContractRevision(s,f.id,input);
+  const run=current.bootstrap.filesets['fixed-tests'];
+  s.db.prepare("UPDATE runs SET owner='active-test-owner' WHERE id=?").run(run);
+  await assert.rejects(()=>accept(fresh.reviewRef),/lease|effects/i);
+  s.db.prepare('UPDATE runs SET owner=NULL WHERE id=?').run(run);
+  assert.equal(hash(task(s,f.id)),hash(current));
+ }finally{s.close();}
+});
+
+test('contract revision refuses unconfirmed execution without consuming another Attempt',async()=>{
+ const f=await setup();await f.apply('normalize');const decision=await f.call('issue',{itemId:'verify-normalize'});
+ await f.call('execute',{itemId:'verify-normalize',decision,crash:'beforeCommit'},88);
+ const result=await f.call('revision-review',{},1);assert.match(result.error,/RECONCILE/);
+ assert.equal((await f.call('recover')).budget.usedAttempts,1);
+});
+
+test('checkpoint detects approval revocation without changing the task revision or candidate',async()=>{
+ const f=await setup();const proposal=await f.call('propose',{itemId:'normalize'});
+ await f.call('approve',{filesetHash:proposal.approvalRequest.filesetHash});const before=await f.call('recover');
+ await f.call('fault',{fault:'revoke-fileset',itemId:'normalize'});
+ const after=await f.call('recover',{binding:before});assert.deepEqual(after.binding,before.binding);
+ assert.ok(after.blockers.includes('STALE_RECOVERY_CHECKPOINT'));assert.ok(after.synchronization.changes.includes('executionState'));
+ assert.equal(after.next,null);assert.equal(after.executionGranted,false);assert.equal(after.budget.usedAttempts,0);
+});
+test('checkpoint rejects cross-objective and fabricated authority fields without changing State',async()=>{
+ const f=await setup(),before=await f.call('recover');const s=new Store(f.state,{readOnly:true});const saved=rows(s);s.close();
+ for(const checkpoint of [{...before.checkpoint,taskId:'task-other'},{...before.checkpoint,executionGranted:true},{...before.checkpoint,workLogHash:'forged'}]){
+  const r=await f.call('recover',{binding:checkpoint});assert.equal(r.status,'HUMAN_HANDOFF');assert.equal(r.next,null);assert.equal(r.executionGranted,false);
+ }
+ const after=new Store(f.state,{readOnly:true});try{assert.deepEqual(rows(after),saved);}finally{after.close();}
+});
+test('checkpoint detects a changed Work Log at the same contract and candidate',async()=>{
+ const f=await setup(),before=await f.call('recover');const s=new Store(f.state);
+ try{s.event(f.id,'RECOVERY_TEST_OBSERVATION',{authority:'NONE'});}finally{s.close();}
+ const after=await f.call('recover',{binding:before.checkpoint});assert.deepEqual(after.binding,before.binding);
+ assert.ok(after.synchronization.changes.includes('workLog'));assert.equal(after.status,'HUMAN_HANDOFF');
+ assert.equal(after.next,null);assert.equal(after.budget.usedAttempts,0);assert.equal(after.executionGranted,false);
 });
 for(const crash of ['reserved','beforeEvidence','beforeCommit'])test('P0-C B: crashed '+crash+' never replays or refunds',async()=>{
  const f=await setup();await f.apply('normalize');const decision=await f.call('issue',{itemId:'verify-normalize'});

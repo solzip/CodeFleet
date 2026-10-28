@@ -22,7 +22,7 @@ export const BOOTSTRAP_APPROVALS = Object.freeze({
 const PLAN_ONLY = ['planning', 'analysis'];
 // LOCAL_PASSED satisfies a local-verification item only; it is never protected
 // verification, and a dependent protected item stays blocked on its own capability.
-export const SATISFIED = Object.freeze(['PLAN_RECORDED', 'MATERIALIZED', 'LOCAL_PASSED']);
+export const SATISFIED = Object.freeze(['PLAN_RECORDED', 'MATERIALIZED', 'LOCAL_PASSED', 'LOCAL_CHECKPOINT']);
 const id = value => { if (typeof value !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(value)) throw Error('Invalid WorkItem id'); };
 const derive = item => ({ ...item, requiredCapabilities: [...WORK_KINDS[item.kind]], approval: BOOTSTRAP_APPROVALS[item.kind] });
 
@@ -82,10 +82,11 @@ export function dependentsOf(workflow, itemId) {
   }
   return [...found];
 }
-export function assessBootstrapItem(workflow, states, itemId) {
+export function assessBootstrapItem(workflow, states, itemId, { admittedCheckpoints = [] } = {}) {
   const item = workflow.items.find(n => n.id === itemId);
   if (!item) throw Error(`Unknown WorkItem: ${itemId}`);
-  const waiting = item.dependencies.filter(d => !SATISFIED.includes(states[d]));
+  const waiting = item.dependencies.filter(d => !SATISFIED.includes(states[d]) ||
+    states[d] === 'LOCAL_CHECKPOINT' && !admittedCheckpoints.includes(d));
   // local-edit's scoped write is the approved fileset materializer itself. Plan-only
   // items execute nothing here: the PLANNED Draft content satisfies them, so the
   // capabilities their kind would need to run (e.g. host-read) are not required.

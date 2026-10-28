@@ -7,7 +7,7 @@ export function localAcceptance(current, plan, view, evidenceFor) {
   if (result.mode !== 'LOCAL_ONLY') return result;
   result.reason = 'LOCAL_ACCEPTANCE_UNSATISFIED';
   if (!view || current.state === 'REJECTED' || view.drift.length || !view.items.length ||
-      view.items.some(i => !['PLAN_RECORDED', 'MATERIALIZED', 'LOCAL_PASSED'].includes(i.state))) return result;
+      view.items.some(i => !['PLAN_RECORDED', 'MATERIALIZED', 'LOCAL_PASSED', 'LOCAL_CHECKPOINT'].includes(i.state))) return result;
   const tests = [...new Set(plan.draft.criteria.flatMap(c => c.tests))].sort();
   if (!tests.length || !plan.draft.criteria.length || plan.draft.criteria.some(c => !c.tests.length)) return result;
   // One integrated, current-candidate Node test invocation must cover every

@@ -136,6 +136,22 @@ reviewHash to the user. After exact user approval and Host command permission,
 use objective local-accept REVIEW_REF --trust REVIEW_HASH --acknowledge-unisolated.
 Use the returned identifiers directly; never ask the user to construct packets.
 This remains supervised same-user Local execution, not authenticated delegation.
+Before a session handoff or context compaction, retain the JSON output of
+objective recover TASK_ID for a prepared Objective outside the project source.
+After resuming, pass that unchanged output to objective recover TASK_ID RECOVERY.json.
+Inspect synchronization, blockers, current work items, budget and uncertain effects
+before proposing the next action. A changed checkpoint requires fresh review;
+never edit it to hide a mismatch or replay completed work. This is context comparison,
+not user authentication or an automatic contract migration. If no checkpoint exists,
+inspect persisted state with recover and do not claim continuity was verified.
+For requirement changes, read the current draft and prepare {revision,draft} with
+objective revision-review TASK_ID PROPOSAL.json. Show the affected/preserved items,
+fixed tests, unchanged budgets and exact review hash to the user. Only after
+explicit supervised consent use objective revision-accept REVIEW_REF --trust HASH
+--acknowledge-unisolated. This changes the contract, not execution authority:
+new Fileset and command reviews are still required. Never self-approve. Active
+leases, uncertain effects and unresolved failures must be reconciled first.
+Use objective revision-revoke REVIEW_REF to withdraw a pending contract review.
 If interrupted, run objective recover before any new action. An existing request
 is only reconciled/read, never replayed. Prepared artifacts do not grant consent.
 Use the installed runtime/alpha/cli.mjs objective local-step TASK_ID REQUEST.json
@@ -172,7 +188,32 @@ Call node CLIENT SOCKET METHOD PARAMS_JSON REQUEST_ID. Use a unique UUID for eac
 5. execute {runId:RUN_ID,host:"${host}"} starts permitted confined work through the existing Harness. ACCEPTED is not completion. Poll result or status {runId:RUN_ID}. verify {runId:RUN_ID} rechecks existing evidence; it does not accept supplied evidence. Only complete=true with VERIFIED evidence may be reported as verified.
 6. pause/cancel {runId:RUN_ID}; resume {runId:RUN_ID,host:"${host}"} rechecks the existing contract and Lease. Unconfirmed attempts require reconciliation, never replay.
 
-Single-agent reasoning is the default. Planner, Architect, Executor and Reviewer are WorkItem roles, not proof of separate agents. Automatic host delegation and Host Live execution are NOT_RUN. If independent UID, protected code/state or Harness capabilities are unavailable, report protected execution BLOCKED; preparation stays available.
+Single-agent reasoning is the default. For supervised Local source proposals, use
+objective proposal-batch TASK_ID [OPTIONS.json]. OPTIONS may specify maxAgents
+(1..3) and parallelBenefit; without a concrete benefit it selects one item.
+The batch uses the existing DAG/resource selection and binds all requests to one
+candidate/context. It grants NO model invocation or execution permission.
+With separate user permission and actual Host Subagent support, assign each
+batch only once: record objective proposal-start TASK_ID BATCH.json before
+invocation. This records a pending handoff, not permission or invocation proof.
+Assign each
+request to a proposal-only agent: owned files, fixed tests, dependencies and
+acceptance criteria are in the request. Agents return text, never edit shared
+project files or run approval/test commands. Retain actual Host agent IDs and
+dispatch/return observations separately; reported identities are not proof.
+Use objective proposal-results TASK_ID BATCH.json RESULTS.json where each result
+is {itemId,agentId,files,feedback}; existing-file entries retain baseSha256.
+This validates every result before recording proposal feedback in the Work Log.
+Submit reviewed proposals serially through the existing files route, refreshing
+Task revision each time. Recheck context and stop on unexpected changes; approve
+and materialize exact filesets only through supervised review. Then verify the
+integrated candidate through Native Local Reservation and Evidence/Judge.
+After interruption recover the Objective and inspect actual Host agents before
+any redispatch; proposal packets/feedback are not resumable execution grants.
+Planner, Architect, Executor and Reviewer are roles, not proof of separate agents.
+Automatic host delegation remains NOT_VERIFIED. If independent UID, protected
+code/state or Harness capabilities are unavailable, report protected execution
+BLOCKED; preparation stays available.
 
 Legacy local plan/review/prepare tooling remains preparation-only; public legacy requests/submit/run/resume remain blocked. No API key is needed by IPC. Host subscription limits apply; host session cost is unknown. Installing this Skill does not install or attest the trusted service. Do not bypass host permissions or CodeFleet approval gates.
 `;

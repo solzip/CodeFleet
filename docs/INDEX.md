@@ -19,11 +19,12 @@ CodeFleet은 기존 Codex CLI·Claude Code의 모델·인증·세션을 사용�
 
 ## 역사 기록 색인
 
+
 아래 전수 집계는 감사·실행·아카이브 Markdown만 센다. 공식 제품 문서·상세 구현 계약·JSON·로그를 포함한 저장소 전체 문서 수가 아니다. 동결 설명과 과거 후속 지시는 해당 기록 시점에 한정한다.
 
 `docs/audits/`·`docs/runs/`·`docs/archive/`의 전 문서를 시간 역순으로 나열한다. 규약은 `docs/CONVENTIONS.md`, 결함 등재 현황은 `docs/REGISTER.md`.
 
-작성 기준: 2026-10-28. 전수 141개 문서 (감사 41 · 실행 93 · 아카이브 7). <!-- fact: docs-indexed = 141 --> <!-- fact: docs-on-disk = 141 -->
+작성 기준: 2026-10-28. 전수 142개 문서 (감사 41 · 실행 94 · 아카이브 7). <!-- fact: docs-indexed = 142 --> <!-- fact: docs-on-disk = 142 -->
 
 현재 공개 사용 제품 계획은 [제품 완성 문서](product-completion/README.md)에 있다. 기존 아카이브의 실측과 새 제품 계획을 구분하며, 구현 상태는 새 진행 현황에서 관리한다.
 
@@ -31,6 +32,7 @@ CodeFleet은 기존 Codex CLI·Claude Code의 모델·인증·세션을 사용�
 
 | Date | Document | Type | Result | Follow-up |
 | --- | --- | --- | --- | --- |
+| 10-28 | `runs/2026-10-28/manager-proposal-handoff.md` | Manager proposal coordination | Supervised integration COMPLETE_LOCAL; separate parallel proposal Live | Benchmark proposals unexecuted; public delegation blocked |
 | 10-28 | `runs/2026-10-28/alpha-gate-closure.md` | Focused gate closure | H4 and Repair pass; installed runtime unchanged | Windows scoped RC; Linux qualification incomplete |
 | 10-28 | `runs/2026-10-28/alpha-release-gates.md` | Release gates | Frozen package and Windows pass; initial Linux failures preserved | Follow-up and integration scope recorded |
 | 10-28 | `runs/2026-10-28/codex-core-release-candidate.md` | Supervised RC | Packaged installer fixed; installed regression passed | Host entry and integration limits recorded |

@@ -4,7 +4,7 @@ import { hash } from '../alpha/contract.mjs';
 import { exact } from '../intent/contract.mjs';
 import { canonical, requireProductionHostIsolation } from '../hosts/operator.mjs';
 import { localBackend, classifyLocalResult } from '../verification/backends.mjs';
-import { task, verifyTask, bootstrapContext, bootstrapView } from './tasks.mjs';
+import { task, verifyTask, bootstrapContext, bootstrapView, archivedContractEvidence } from './tasks.mjs';
 import { bootstrapGuard } from '../hosts/workflow-authorization.mjs';
 import { validateEnvironmentRecovery, observeRecoveryPolicy, validRecoveryObservation } from './environment-recovery.mjs';
 
@@ -226,7 +226,7 @@ function committedStatus(store, decisionId, requestId) {
     if (!r.result || r.result.status !== r.state || run.state !== r.state ||
         hash(run.reservation) !== hash(r) || d.remaining !== 0 || d.consumed === null ||
         current.revision <= r.revision ||
-        ((current.bootstrap.verifications?.[r.itemId] !== r.result.evidenceRef || current.bootstrap.states[r.itemId] !== r.state) && !completedRepairFor(store, r) && !completedEnvironmentRecoveryFor(store, r)) ||
+        ((current.bootstrap.verifications?.[r.itemId] !== r.result.evidenceRef || current.bootstrap.states[r.itemId] !== r.state) && !completedRepairFor(store, r) && !completedEnvironmentRecoveryFor(store, r) && !archivedContractEvidence(store, current, r.itemId, r.result.evidenceRef)) ||
         !store.events(r.taskId).some(event => event.type === 'BOOTSTRAP_LOCAL_VERIFICATION_RECORDED' &&
           event.body.attemptId === r.runId && event.body.evidenceRef === r.result.evidenceRef && event.body.status === r.state)) throw Error('EVIDENCE_DEFECT: reservation finalization mismatch');
     const e = store.readArtifact(r.result.evidenceRef);
