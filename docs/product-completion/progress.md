@@ -8,6 +8,7 @@
 | --- | --- | --- |
 | Host-Native 준비 | main 통합, 오프라인 검증 기록 있음 | [Host Core 기록](../runs/2026-10-20/host-native-core-verification.md). 기존 Host 모델·인증·세션을 활용하며 계획·Draft·DAG·승인 요청은 Docker 없이 준비 가능 |
 | Local / Container 검증 | 구현된 경로, 보장 범위 상이 | [Core 안내](host-core-guide.md). Local 성공은 Protected Verification을 만족시키지 않음 |
+| Bootstrap 영속 Local 예약 | 로컬 AB1 차단 수정 READY_FOR_PR_UPDATE | [승인 경계 수정](../runs/2026-10-23/durable-authorization-boundary-fix.md): 공개 CLI/API 발급·실행 차단, 정상 Operator 경로 미지원; 47개 예약/공개 경계 시험 통과. [AB1 감사](../audits/2026-10-23/02-pr9-authorization-boundary.md)·[R1/R2 수정](../runs/2026-10-23/durable-reservation-final-review-fix.md) 보존. 새 후보 CI·Protected·Host Live NOT_RUN; Git 공개 미수행 |
 | Host Sandbox | NOT_VERIFIED | `src/verification/backends.mjs`의 미검증 Backend. 정책 선언만으로 활성화하지 않음 |
 | 실제 Host Live | HOST_LIVE_NOT_VERIFIED | [설치·발견 및 차단 기록](../runs/2026-10-20/first-host-native-gate-resolution.md). 오프라인·설치 성공을 Live 수용으로 계산하지 않음 |
 | 역할별 협업 | 오프라인 통제형 협업 근거 있음, 자동 Host 위임 미검증 | [G5 기록](../runs/2026-10-19/alpha-g5-controlled-hybrid.md). 단일 Agent 기본 |

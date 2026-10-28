@@ -23,7 +23,7 @@ CodeFleet은 기존 Codex CLI·Claude Code의 모델·인증·세션을 사용�
 
 `docs/audits/`·`docs/runs/`·`docs/archive/`의 전 문서를 시간 역순으로 나열한다. 규약은 `docs/CONVENTIONS.md`, 결함 등재 현황은 `docs/REGISTER.md`.
 
-작성 기준: 2026-10-23. 전수 118개 문서 (감사 39 · 실행 72 · 아카이브 7). <!-- fact: docs-indexed = 118 --> <!-- fact: docs-on-disk = 118 -->
+작성 기준: 2026-10-23. 전수 123개 문서 (감사 41 · 실행 75 · 아카이브 7). <!-- fact: docs-indexed = 123 --> <!-- fact: docs-on-disk = 123 -->
 
 현재 공개 사용 제품 계획은 [제품 완성 문서](product-completion/README.md)에 있다. 기존 아카이브의 실측과 새 제품 계획을 구분하며, 구현 상태는 새 진행 현황에서 관리한다.
 
@@ -31,6 +31,11 @@ CodeFleet은 기존 Codex CLI·Claude Code의 모델·인증·세션을 사용�
 
 | Date | Document | Type | Result | Follow-up |
 | --- | --- | --- | --- | --- |
+| 10-23 | `runs/2026-10-23/durable-authorization-boundary-fix.md` | 승인 경계 수정·검증 | 공개 영속 발급·실행 차단; 기존 상태·오프라인 예약 회귀 보존 | 정상 Operator 경로 미지원; Git 공개 별도 승인 |
+| 10-23 | `audits/2026-10-23/02-pr9-authorization-boundary.md` | 승인 경계 검토 | NEEDS_FIX: 동일 사용자 Agent의 일반 CLI 자체 승인 반증; CI 성공 범위 구분 | Operator 전용 진입 경계 집행 필요; 제품 코드·Git 공개 변경 없음 |
+| 10-23 | `runs/2026-10-23/durable-reservation-final-review-fix.md` | 결함 수정·검증 | R1/R2 최소 수정; 검증 결과는 기록 참조 | Host Live/Protected 미검증; Git 공개 미수행 |
+| 10-23 | `audits/2026-10-23/01-durable-reservation-final-review.md` | 최종 수용 검토 | NEEDS_FIX: 확정 롤백 성공 오표시·JSON 속성 순서 결함 | 수정 후 재검증; Git 공개 미수행 |
+| 10-23 | `runs/2026-10-23/durable-reservation-p1-b.md` | 구현·검증 | Bootstrap Local 일회성 예약; 검증 기록 참조 | Host Live/Protected 미검증 |
 | 10-23 | `runs/2026-10-23/bounded-continuation-p1-b.md` | Bounded execution contract review | Cross-process hash reuse reproduced; no execution-policy expansion | HUMAN_HANDOFF for exact durable decision/Attempt contract |
 | 10-23 | `runs/2026-10-23/agentic-continuation-p1-a.md` | Single-Agent continuation | Advisory next step and Evidence/Judge handoff; automatic execution not accepted | Durable one-use trust and Attempt/Lease design review |
 | 10-23 | `runs/2026-10-23/bootstrap-negation-p0-a.md` | Bootstrap negation fix | 부정문 반증·Bootstrap·관련 회귀 통과; Docker 및 Host Live 미충족 | 사용자 검토 후 다음 단계 별도 승인 |
