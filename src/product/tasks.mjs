@@ -232,7 +232,50 @@ export function bootstrapContext(store, id) {
   if (!isBootstrap(plan) || !current.bootstrap || current.state === 'REJECTED') throw Error('Prepare a validated NEW_PROJECT task first');
   const workflow = validateBootstrapWorkflow(store.readArtifact(current.bootstrap.workflowRef), plan.draft);
   if (workflow.workflowHash !== current.bootstrap.workflowHash) throw Error('Bootstrap workflow integrity mismatch');
+  contractRevisionHistory(store, current);
   return { current, plan, workflow };
+}
+// Semantic revisions use immutable artifacts and the existing task event stream.
+// Historical results never become a pass under a different Workflow hash.
+export function contractRevisionHistory(store, current) {
+  const refs = current.bootstrap?.contractHistory ?? [];
+  if (!Array.isArray(refs) || refs.length > 32 || new Set(refs).size !== refs.length ||
+      (current.contractRevision ?? 1) !== refs.length + 1) throw Error('Contract revision history mismatch');
+  const records = refs.map((ref, i) => {
+    const receipt = store.readArtifact(ref), before = store.readArtifact(receipt.previousTaskRef);
+    const packet = store.readArtifact(receipt.reviewRef), review = packet.review;
+    const plan = store.readArtifact(receipt.planRef), workflow = validateBootstrapWorkflow(store.readArtifact(receipt.workflowRef), plan.draft);
+    if (receipt.kind !== 'ContractRevisionReceipt' || receipt.taskId !== current.id || before.id !== current.id ||
+        receipt.contractRevision !== i + 2 || (before.contractRevision ?? 1) !== i + 1 ||
+        hash(before.bootstrap.contractHistory ?? []) !== hash(refs.slice(0, i)) ||
+        packet.kind !== 'ContractRevisionReviewPacket' || receipt.reviewHash !== hash(review) ||
+        review.taskHash !== hash(before) || review.toContractRevision !== receipt.contractRevision ||
+        review.workflowHash !== before.bootstrap.workflowHash || review.nextWorkflowHash !== workflow.workflowHash ||
+        hash(review.draft) !== hash(plan.draft) || hash(receipt.impact) !== hash(review.impact) ||
+        !store.events(current.id).some(e => e.type === 'CONTRACT_REVISION_APPLIED' && e.body.receiptRef === ref &&
+          e.body.revision === before.revision + 1 && e.body.planRef === receipt.planRef)) throw Error('Contract revision provenance invalid');
+    return { ref, receipt, before, plan, workflow };
+  });
+  if (records.length && (records.at(-1).receipt.workflowRef !== current.bootstrap.workflowRef ||
+      records.at(-1).receipt.planRef !== current.planRef)) throw Error('Current contract detached from revision history');
+  return records;
+}
+export function archivedContractEvidence(store, current, itemId, evidenceRef, checkpoint = false) {
+  const records = contractRevisionHistory(store, current);
+  const start = records.findIndex(r => r.before.bootstrap.verifications?.[itemId] === evidenceRef);
+  if (start < 0) return false;
+  if (!checkpoint) return true; // reservation history only; full Evidence integrity is still checked by its caller
+  const evidence = store.readArtifact(evidenceRef), first = records[start];
+  if (!evidence.reservation || evidence.status !== 'LOCAL_PASSED' || evidence.authority !== 'LOCAL_EXECUTED' ||
+      evidence.workflowHash !== first.before.bootstrap.workflowHash ||
+      records.slice(start).some(r => r.receipt.impact.affected.includes(itemId))) return false;
+  const workflow = records.at(-1).workflow, needed = new Set();
+  const visit = id => { if (needed.has(id)) return; needed.add(id); workflow.items.find(n => n.id === id)?.dependencies.forEach(visit); };
+  visit(itemId);
+  const paths = workflow.items.filter(n => needed.has(n.id)).flatMap(n => n.files);
+  paths.push(...records.at(-1).plan.draft.plannedTests.map(t => t.path));
+  const digests = recordedDigests(store, current);
+  return paths.every(p => evidence.fileDigests?.[p] && evidence.fileDigests[p] === digests[p]);
 }
 function filesetSummary(run) {
   return { runId: run.id, operation: run.operation ?? 'create', state: run.control === 'cancel' ? 'SUPERSEDED_OR_CANCELLED' : run.state, filesetHash: run.contractHash, files: run.contract.files, results: run.results ?? {}, repairOf: run.contract.repairOf ?? null };
@@ -254,7 +297,7 @@ export function recordedDigests(store, current) {
 // Owned paths are the planned files of every item that has had a fileset; a
 // repair proposes a subset of them but owns them all.
 function ownedPaths(current, workflow) {
-  return new Set(workflow.items.filter(n => current.bootstrap.filesets[n.id]).flatMap(n => n.files));
+  return new Set(workflow.items.filter(n => current.bootstrap.filesets[n.id] || current.bootstrap.revisionReopen?.[n.id]).flatMap(n => n.files));
 }
 // Recorded paths whose bytes on disk differ from what CodeFleet recorded.
 async function observedDrift(root, digests) {
@@ -299,15 +342,18 @@ export function effectiveStates(store, current, workflow, { drift = [] } = {}) {
     let evidence;
     try { evidence = store.readArtifact(ref); } catch { states[n.id] = 'EVIDENCE_INVALID'; continue; }
     if (evidence.kind !== 'BootstrapLocalVerification' || evidence.taskId !== current.id || evidence.itemId !== n.id || evidence.status !== states[n.id]) { states[n.id] = 'EVIDENCE_INVALID'; continue; }
+    const checkpoint = evidence.workflowHash !== current.bootstrap.workflowHash &&
+      archivedContractEvidence(store, current, n.id, ref, true);
     if (evidence.reservation) {
       const row = store.db.prepare('SELECT body FROM bootstrap_reservations WHERE requestId=?').get(evidence.reservation.requestId);
       const reserved = row ? JSON.parse(row.body) : null;
       if (!reserved || reserved.result?.evidenceRef !== ref || hash(reserved.identity) !== hash(evidence.reservation) ||
           reserved.revision !== evidence.taskRevision || reserved.state !== evidence.status ||
-          evidence.workflowHash !== current.bootstrap.workflowHash || reserved.commandHash !== evidence.command?.commandHash ||
+          (evidence.workflowHash !== current.bootstrap.workflowHash && !checkpoint) || reserved.commandHash !== evidence.command?.commandHash ||
           evidence.complete !== false || evidence.verifierIndependence !== 'UNPROTECTED') { states[n.id] = 'EVIDENCE_INVALID'; continue; }
     } else if (store.db.prepare("SELECT 1 FROM sqlite_master WHERE name='bootstrap_decisions'").get() &&
       store.db.prepare('SELECT 1 FROM bootstrap_decisions WHERE taskId=?').get(current.id)) { states[n.id] = 'EVIDENCE_INVALID'; continue; }
+    if (checkpoint) { states[n.id] = drift.length ? 'VERIFICATION_STALE' : 'LOCAL_CHECKPOINT'; continue; }
     if (hash(sorted(evidence.fileDigests)) !== hash(sorted(digests)) || drift.some(p => Object.hasOwn(evidence.fileDigests, p))) {
       states[n.id] = !drift.length && retainedCheckpoint(store, current, workflow, n, ref, evidence, digests)
         ? 'LOCAL_CHECKPOINT' : 'VERIFICATION_STALE';
@@ -315,12 +361,19 @@ export function effectiveStates(store, current, workflow, { drift = [] } = {}) {
   }
   return states;
 }
+function assessCurrentItem(store, current, workflow, states, itemId) {
+  // A same-contract historical checkpoint only explains an already completed
+  // dependency crossing. Explicit revision preservation is separately checked.
+  const admittedCheckpoints = workflow.items.filter(n => states[n.id] === 'LOCAL_CHECKPOINT' &&
+    archivedContractEvidence(store, current, n.id, current.bootstrap.verifications?.[n.id], true)).map(n => n.id);
+  return assessBootstrapItem(workflow, states, itemId, { admittedCheckpoints });
+}
 export function bootstrapView(store, id, { drift = [] } = {}) {
   const { current, workflow } = bootstrapContext(store, id);
   const states = effectiveStates(store, current, workflow, { drift });
   return { workflowHash: workflow.workflowHash, policySnapshotRef: workflow.policySnapshotRef, authority: 'PLAN_ONLY', executable: false,
     recordedDigests: sorted(recordedDigests(store, current)), drift,
-    items: workflow.items.map(n => ({ ...assessBootstrapItem(workflow, states, n.id),
+    items: workflow.items.map(n => ({ ...assessCurrentItem(store, current, workflow, states, n.id),
       fileset: current.bootstrap.filesets[n.id] ? filesetSummary(store.get(current.bootstrap.filesets[n.id])) : null,
       verificationRef: n.kind === 'local-verification' ? current.bootstrap.verifications?.[n.id] ?? null : undefined })) };
 }
@@ -367,7 +420,7 @@ export async function submitBootstrapFiles(store, id, input) {
     if(files.some(f=>f.baseSha256===null)&&files.some(f=>f.baseSha256!==null))throw Error('Use separate WorkItems for creation and replacement');
     if(files.every(f=>f.sha256===f.baseSha256))throw Error('No-op existing fileset');
     await repositoryPreflight(current,plan,workflow);
-    if(assessBootstrapItem(workflow,effectiveStates(store,current,workflow),input.itemId).waitingOn.length)throw Error('Dependencies not satisfied');
+    if(assessCurrentItem(store,current,workflow,effectiveStates(store,current,workflow),input.itemId).waitingOn.length)throw Error('Dependencies not satisfied');
   } else files=validateFileset(input,workflow,input.itemId);
   const itemId=input.itemId;
   if (!['PENDING_FILESET', 'FILESET_PROPOSED'].includes(current.bootstrap.states[itemId])) throw Error(`WorkItem ${itemId} is not awaiting a fileset`);
@@ -447,7 +500,7 @@ export async function materializeTask(store, id, itemId, { now = Date.now(), gua
   const drift = repair && plan.contractKind!=='EXISTING_LOCAL' ? [] : await observedDrift(plan.probe.root, recordedDigests(store, current));
   if (drift.length) throw Error('Dependency candidate changed before materialization');
   const statesBefore = effectiveStates(store, current, workflow, { drift });
-  const assessment = assessBootstrapItem(workflow, statesBefore, itemId);
+  const assessment = assessCurrentItem(store, current, workflow, statesBefore, itemId);
   if (assessment.waitingOn.length) throw Error(`Dependencies not satisfied: ${assessment.waitingOn.join(', ')}`);
   const dependencyEvidence = Object.fromEntries(assessment.dependencies.filter(d => statesBefore[d] === 'LOCAL_PASSED')
     .map(d => [d, current.bootstrap.verifications[d]]));
@@ -503,7 +556,7 @@ export async function verifyTask(store, id, itemId, request, { trust, acknowledg
   if (!item) throw Error(`Unknown WorkItem: ${itemId}`);
   if (item.kind !== 'local-verification') throw Error(`objective verify runs only local-verification WorkItems; ${item.kind} is not local verification`);
   exact(request, ['executable', 'args', 'directory', 'timeoutMs'], 'Local command');
-  const assessment = assessBootstrapItem(workflow, effectiveStates(store, current, workflow), itemId);
+  const assessment = assessCurrentItem(store, current, workflow, effectiveStates(store, current, workflow), itemId);
   if (assessment.waitingOn.length) throw Error(`Dependencies not satisfied: ${assessment.waitingOn.join(', ')}`);
   if (typeof request.directory !== 'string' || await realpath(request.directory) !== plan.probe.root) throw Error('Verification directory must be the task repository root');
   await repositoryPreflight(current, plan, workflow);

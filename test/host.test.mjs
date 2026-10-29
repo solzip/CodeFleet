@@ -69,6 +69,9 @@ for (const host of ['codex', 'claude']) {
       for(const {target} of links)assert.equal((await lstat(path.resolve(skill,'runtime',target))).isFile(),true,'Installed link: '+target);
       assert.match(text,/PUBLIC_DELEGATION_BLOCKED/);
       assert.match(text,/local-files-accept/);
+      assert.match(text,/recover TASK_ID RECOVERY.json/);
+      assert.match(text,/revision-review TASK_ID PROPOSAL.json/);
+      assert.match(text,/revision-accept REVIEW_REF --trust HASH/);
     assert.match(text, /runtime\/hosts\/ipc-client.mjs/);
     assert.match(await readFile(path.join(skill, 'runtime/hosts/ipc-client.mjs'), 'utf8'), /hostRequest/);
     assert.match(text, /name: codefleet/); assert.match(text, /operator/);

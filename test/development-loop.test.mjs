@@ -7,14 +7,94 @@ import { command } from '../src/alpha/process.mjs';
 import { Store } from '../src/alpha/store.mjs';
 import { hash } from '../src/alpha/contract.mjs';
 import { fixedFiles } from './fixtures/development-loop.mjs';
-import { draft } from './fixtures/development-loop.mjs';
+import { draft, prepare } from './fixtures/development-loop.mjs';
 import { bootstrapDefinition } from '../src/workflow/bootstrap.mjs';
+import { developmentProposalBatch, reviewDevelopmentResults, recordProposalDispatch } from '../src/product/continuation.mjs';
+import { submitBootstrapFiles, task } from '../src/product/tasks.mjs';
+import { recoverObjective } from '../src/product/recovery.mjs';
+import { dispatchProduct } from '../src/product/cli.mjs';
 
 // These implementations are SYNTHETIC test inputs, never Codex Live proposals.
 const sources = {
   normalize: { path: 'src/normalize-title.mjs', content: "export function normalizeTitle(title) { const value = title.trim(); if (!value) throw Error('Blank title'); return value; }\n" },
   todo: { path: 'src/create-todo.mjs', content: "import { normalizeTitle } from './normalize-title.mjs';\nexport function createTodo(title) { return { title: normalizeTitle(title), completed: false }; }\n" }
 };
+
+test('Host proposal batches reuse readiness, default to one agent and reject unreviewed results', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'cf-collaboration-'));
+  const f = await prepare(root, { localExisting: true, independent: true, acceptanceMode: 'LOCAL_ONLY' });
+  const store = new Store(f.state); t.after(() => store.close());
+  const initial = task(store, f.id), before = await recoverObjective(store, f.id);
+  assert.equal((await developmentProposalBatch(store, f.id)).requests.length, 1);
+  assert.equal((await developmentProposalBatch(store, f.id, { maxAgents: 3 })).mode, 'SINGLE_AGENT');
+  await assert.rejects(developmentProposalBatch(store, f.id, { maxAgents: 4 }), /limit/);
+  await assert.rejects(developmentProposalBatch(store, f.id, { allowModel: true }), /approval/);
+  const batch = await developmentProposalBatch(store, f.id, { maxAgents: 2, parallelBenefit: 'Independent owned modules; proposal-only overlap reduces waiting' });
+  assert.deepEqual(batch.requests.map(r => r.item.id), ['normalize', 'todo']);
+  assert.equal(batch.mode, 'PARALLEL_PROPOSALS_ONLY');
+  assert.equal(batch.modelInvocationGranted, false);
+  assert.equal(batch.executionGranted, false);
+  const results = Object.entries(sources).map(([itemId, file]) => ({
+    itemId, agentId: 'offline-' + itemId, feedback: 'SYNTHETIC, not Host Live',
+    files: [{ ...file, baseSha256: null }]
+  }));
+  const reviewed = await reviewDevelopmentResults(store, f.id, batch, results);
+  assert.equal(reviewed.complete, false);
+  assert.equal(reviewed.authority, 'PROVIDER_REPORTED_ONLY');
+  assert.equal(task(store, f.id).revision, initial.revision);
+  assert.deepEqual((await recoverObjective(store, f.id, before)).synchronization.changes, []);
+  await assert.rejects(reviewDevelopmentResults(store, f.id, batch, results.slice(0, 1)), /Exactly one/);
+  await assert.rejects(reviewDevelopmentResults(store, f.id, batch, [results[0], results[0]]), /Exactly one/);
+  for (const fault of ['ownership', 'base', 'authority']) {
+    const bad = structuredClone(results);
+    if (fault === 'ownership') bad[1].files[0].path = 'test/create-todo.test.mjs';
+    if (fault === 'base') bad[1].files[0].baseSha256 = '0'.repeat(64);
+    if (fault === 'authority') bad[1].approved = true;
+    await assert.rejects(reviewDevelopmentResults(store, f.id, batch, bad));
+    assert.equal(task(store, f.id).revision, initial.revision);
+    assert.deepEqual(task(store, f.id).bootstrap.filesets, {});
+  }
+  const batchFile = path.join(root, 'batch.json'), resultsFile = path.join(root, 'results.json');
+  await writeFile(batchFile, JSON.stringify(batch)); await writeFile(resultsFile, JSON.stringify(results));
+  await recordProposalDispatch(store, f.id, batch);
+  const pending = await recoverObjective(store, f.id);
+  assert.equal(pending.status, 'RECONCILE');
+  assert.equal(pending.complete, false);
+  assert.equal(pending.automaticReplay, false);
+  assert.equal(pending.hostProposals.length, 1);
+  await assert.rejects(recordProposalDispatch(store, f.id, batch), /already declared/);
+  const restarted = await command(process.execPath, [path.resolve('src/alpha/cli.mjs'),
+    '--state', f.state, 'objective', 'recover', f.id]);
+  assert.equal(restarted.exitCode, 2);
+  assert.equal(JSON.parse(restarted.stdout).status, 'RECONCILE');
+  const recorded = await dispatchProduct(['proposal-results', f.id, batchFile, resultsFile], { store });
+  assert.equal(recorded.exitCode, 0);
+  assert.equal(store.readArtifact(recorded.data.resultRef).authority, 'PROVIDER_REPORTED_ONLY');
+  await dispatchProduct(['proposal-results', f.id, batchFile, resultsFile], { store });
+  assert.equal(store.events(f.id).filter(e => e.type === 'HOST_PROPOSALS_REVIEWED').length, 1);
+  assert.equal((await recoverObjective(store, f.id)).budget.usedAttempts, 0);
+  assert.deepEqual((await recoverObjective(store, f.id)).hostProposals, []);
+  await assert.rejects(recordProposalDispatch(store, f.id, batch), /already declared/);
+  // Registration changes revision. The old batch cannot silently authorize
+  // another import, and nothing was materialized.
+  await submitBootstrapFiles(store, f.id, reviewed.proposals[0]);
+  await assert.rejects(reviewDevelopmentResults(store, f.id, batch, results), /Eligible|Stale/);
+  await assert.rejects(readFile(path.join(f.repo, sources.normalize.path)), { code: 'ENOENT' });
+});
+
+test('Host proposal batch excludes dependent work and rejects candidate drift', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'cf-collaboration-'));
+  const f = await prepare(root, { localExisting: true });
+  const store = new Store(f.state); t.after(() => store.close());
+  const options = { maxAgents: 3, parallelBenefit: 'requested parallelism does not override dependencies' };
+  const batch = await developmentProposalBatch(store, f.id, options);
+  assert.equal(batch.mode, 'SINGLE_AGENT');
+  assert.deepEqual(batch.requests.map(r => r.item.id), ['normalize']);
+  const result = [{ itemId: 'normalize', agentId: 'offline', feedback: '', files: [{ ...sources.normalize, baseSha256: null }] }];
+  await writeFile(path.join(f.repo, 'test/normalize-title.test.mjs'), 'changed');
+  await assert.rejects(reviewDevelopmentResults(store, f.id, batch, result), /Eligible|context|changed/);
+  assert.equal(task(store, f.id).revision, batch.revision);
+});
 async function call(input, fails = false) {
   const r = await command(process.execPath, [path.resolve('test/fixtures/development-worker.mjs'), JSON.stringify(input)]);
   assert.equal(r.exitCode, fails ? 1 : 0, r.stdout + r.stderr); return JSON.parse(r.stdout);

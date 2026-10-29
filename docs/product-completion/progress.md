@@ -1,5 +1,18 @@
 # 진행 현황과 결정 목록
 
+2026-10-28 [Manager proposal handoff](../runs/2026-10-28/manager-proposal-handoff.md):
+기존 실제 자식 제안 두 개를 감독형 Fileset/Reservation 경로로 적용하고, 고정 테스트 14 PASS·독립 Local Evidence·COMPLETE_LOCAL·별도 프로세스 Recovery를 확인했다.
+후속 승인된 5개 Host 턴 비교에서 실제 자식 2개의 실행이 6.307초 중첩됐다. 제안 생성은 기본 Codex 21.346초, CodeFleet 단일 22.223초, Multi-Agent 46.580초로 이번 작업의 성능 이점은 입증되지 않았다.
+비교 제안은 적용·테스트하지 않았으며, 병렬 생성부터 Judge까지 한 번에 이어진 수용과 구분한다. 기존 DAG·handoff·Evidence 경계를 재사용했고 공개 위임 BLOCKED·Protected UNSATISFIED를 유지한다.
+
+2026-10-28 [Contract Revision Synchronization](../implementation/objective-recovery.md#supervised-semantic-contract-revision):
+감독형 Review/Accept로 동일 Objective의 의미적 계약 Revision을 갱신하는 경로를 구현했다.
+B와 의존 작업만 재검토하고, 영향 없는 A는 검증 이력·의존성 체크포인트로 보존한다.
+기존 프로젝트 B 재변경, 별도 프로세스 Recovery, 이전 승인 거부 및 새 통합 Evidence의
+Local-only 완료를 내부 검증했다. 예산·소비된 Decision·과거 Evidence는 유지한다.
+실제 Codex Live 계약 변경은 정확한 감독형 실행 승인 대기이며, 내부 검증으로 대체하지 않는다.
+PUBLIC_DELEGATION_BLOCKED와 Protected 신뢰 경계를 유지한다.
+
 [Alpha gate closure](../runs/2026-10-28/alpha-gate-closure.md): Focused IPC/Repair and Windows safety checks pass; independently installed package has unchanged runtime. Windows supervised RC passes. Linux full qualification remains incomplete; second historical IPC failure lacks a definitive trace. Official publication and public delegation remain pending.
 
 2026-10-28 [Alpha release gates](../runs/2026-10-28/alpha-release-gates.md): Frozen tarball/source equality and Windows Legacy/Core/Native gates verified. Initial Linux Alpha/Host Core gates failed; the single bounded recheck was 6 PASS / 2 FAIL (H4 lease loss and Repair setup clock rollback). Full Alpha release remains blocked. SUPERVISED_READY does not imply full release or authenticated autonomy.

@@ -1,5 +1,5 @@
 // Offline harness and immutable test input. No model implementation or invocation.
-import { mkdir, realpath } from 'node:fs/promises';
+import { mkdir, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Store } from '../../src/alpha/store.mjs';
 import { git } from '../../src/alpha/workspace.mjs';
@@ -41,19 +41,34 @@ export function draft(probeRef) {
       item('verify-integrated', 'local-verification', ['todo'], [], ['normalize', 'todo']),
       item('protected-review', 'protected-verification', ['verify-integrated'], [], ['protected evidence required'])] };
 }
-export async function prepare(root, { maxAttempts = 3 } = {}) {
+export async function prepare(root, { maxAttempts = 3, localExisting = false, acceptanceMode = 'PROTECTED_REQUIRED', independent = false } = {}) {
   await mkdir(root, { recursive: true }); root = await realpath(root);
   const repo = path.join(root, 'repo'), state = path.join(root, 'state');
   await mkdir(repo); requireSuccess(await git(repo, ['init']), 'isolated fixture git init');
+  if(localExisting)for(const [file,content]of Object.entries(fixedFiles)){
+    await mkdir(path.dirname(path.join(repo,file)),{recursive:true});await writeFile(path.join(repo,file),content);
+  }
   const store = new Store(state); enableTasks(store);
   try {
-    const created = await createTask(store, repo, objective, { maxAttempts, timeoutSeconds: 120 });
+    const created = await createTask(store, repo, objective, { maxAttempts, timeoutSeconds: 120, localExisting, acceptanceMode });
     const id = created.id, plan = store.readArtifact(task(store, id).planRef);
-    await submitTaskDraft(store, id, { revision: task(store, id).revision, proposal: draft(plan.probe.probeHash) });
+    const proposal=draft(plan.probe.probeHash);
+    if (independent) {
+      proposal.workItems.find(i => i.id === 'todo').dependencies = ['fixed-tests'];
+      proposal.workItems.find(i => i.id === 'verify-integrated').dependencies = ['normalize', 'todo'];
+    }
+    if(localExisting){
+      proposal.kind='ExistingLocalDraft';proposal.schemaVersion=2;
+      proposal.plannedFiles=proposal.plannedFiles.filter(f=>f.path!=='package.json');
+      Object.assign(proposal.workItems.find(i=>i.id==='fixed-tests'),{kind:'planning',files:[]});
+    }
+    if(acceptanceMode==='LOCAL_ONLY')proposal.workItems=proposal.workItems.filter(i=>i.kind!=='protected-verification');
+    await submitTaskDraft(store, id, { revision: task(store, id).revision, proposal });
     if (task(store, id).state !== 'VALIDATED') throw Error('Fixture Draft was not validated');
     await prepareTask(store, id);
+    if(localExisting)return {root,repo,state,id};
     const proposed = await submitBootstrapFiles(store, id, { revision: task(store, id).revision, itemId: 'fixed-tests',
-      files: Object.entries(fixedFiles).map(([path, content]) => ({ path, content })) });
+      files: Object.entries(fixedFiles).map(([path, content]) => ({ path, content, ...(localExisting?{baseSha256:null}:{}) })) });
     approveTask(store, id, { actor: 'fixture-test-owner', workflowHash: proposed.approvalRequest.filesetHash, expiresAt: Date.now() + 3600000 });
     await materializeTask(store, id, 'fixed-tests', { freshOnly: true });
     return { root, repo, state, id };

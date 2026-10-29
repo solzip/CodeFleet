@@ -153,7 +153,7 @@ export async function taskReport(store, id) {
       continuation.status = 'COMPLETE_LOCAL'; continuation.next = null; continuation.reason = acceptance.reason;
       actions.splice(0, actions.length, { kind: 'COMPLETE_LOCAL', items: [], text: 'All criteria passed on the current candidate at explicitly selected Local-only trust; no Protected claim or further execution' });
     }
-    return { schemaVersion: 1, kind: 'TaskReport', taskId: id, revision: current.revision, contractKind: plan.contractKind, state: current.state, reviewState: current.state, plannerAttempt: current.plannerAttempt ?? null, plan, settings: current.settings, run: null,
+    return { schemaVersion: 1, kind: 'TaskReport', taskId: id, revision: current.revision, contractRevision: current.contractRevision ?? 1, contractHistory: current.bootstrap?.contractHistory ?? [], contractKind: plan.contractKind, state: current.state, reviewState: current.state, plannerAttempt: current.plannerAttempt ?? null, plan, settings: current.settings, run: null,
       bootstrap: view, nextAction: actions ? actions.map(a => `${a.kind}${a.items.length ? ' (' + a.items.join(', ') + ')' : ''}: ${a.text}`).join('; ') : bootstrapNext(current, plan), nextActions: actions,
       workflowHash: current.bootstrap?.workflowHash ?? null, continuation, executionReservations: reservations,
       verification: Object.values(local).some(v => v.evidenceRef) ? 'LOCAL_ONLY_UNPROTECTED' : 'NOT_RUN', localVerification: local, protectedVerification: 'UNSATISFIED', acceptance, complete: acceptance.complete };

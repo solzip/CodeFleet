@@ -1,8 +1,27 @@
 // A projection of the existing Store, never a resume command or authority issuer.
 import { hash } from '../alpha/contract.mjs';
 import { bootstrapContext, task } from './tasks.mjs';
-import { continuationSnapshot } from './continuation.mjs';
+import { continuationSnapshot, pendingHostProposals } from './continuation.mjs';
 import { localTree } from '../verification/backends.mjs';
+
+// A checkpoint detects stale context; it is never an authenticator or execution grant.
+function recoveryExpectation(input, taskId) {
+  if (input === undefined) return {};
+  const checkpoint = input?.kind === 'ObjectiveRecovery' ? input.checkpoint
+    : input?.kind === 'ObjectiveRecoveryCheckpoint' ? input : null;
+  if (input?.kind === 'ObjectiveRecovery' && (input.taskId !== taskId || !checkpoint))
+    throw Error('Recovery report has no matching checkpoint');
+  const binding = checkpoint ? checkpoint.binding : input;
+  if (!binding || Object.keys(binding).sort().join(',') !== 'candidateHash,revision,taskHash,workflowHash' ||
+      !Number.isSafeInteger(binding.revision) || binding.revision < 1 ||
+      ['candidateHash', 'taskHash', 'workflowHash'].some(k => !/^[a-f0-9]{64}$/.test(binding[k])))
+    throw Error('Invalid recovery binding; conversation summaries are not authority');
+  if (checkpoint && (Object.keys(checkpoint).sort().join(',') !== 'binding,kind,observationHash,schemaVersion,taskId,workLogHash' ||
+      checkpoint.kind !== 'ObjectiveRecoveryCheckpoint' || checkpoint.schemaVersion !== 1 || checkpoint.taskId !== taskId ||
+      ['workLogHash','observationHash'].some(k => !/^[a-f0-9]{64}$/.test(checkpoint[k]))))
+    throw Error('Invalid recovery checkpoint; no approval fields are accepted');
+  return { binding, checkpoint };
+}
 
 // Inspect the existing schema; recovery never installs a missing extension.
 function inspectSchema(store) {
@@ -37,9 +56,7 @@ export async function recoverObjective(store, taskId, expected) {
   const block = reason => { if (!result.blockers.includes(reason)) result.blockers.push(reason); };
   try {
     inspectSchema(store);
-    if (expected && (Object.keys(expected).sort().join(',') !== 'candidateHash,revision,taskHash,workflowHash' ||
-        !Number.isSafeInteger(expected.revision) || ['candidateHash', 'taskHash', 'workflowHash'].some(k => !/^[a-f0-9]{64}$/.test(expected[k]))))
-      throw Error('Invalid recovery binding; conversation summaries are not authority');
+    const prior = recoveryExpectation(expected, taskId);
     const pending=task(store,taskId);
     if(!pending.bootstrap&&!pending.runId){
       const plan=store.readArtifact(pending.planRef),events=store.events(taskId);
@@ -59,6 +76,8 @@ export async function recoverObjective(store, taskId, expected) {
         verification:'NOT_RUN',protectedVerification:'UNSATISFIED'};
     }
     const { current, plan, workflow } = bootstrapContext(store, taskId);
+    result.contractRevision = current.contractRevision ?? 1;
+    result.contractHistory = current.bootstrap.contractHistory ?? [];
     const events = store.events(taskId), eventHash = hash(events);
     const candidateHash = await localTree(current.repo);
     result.binding = { revision: current.revision, workflowHash: workflow.workflowHash, taskHash: hash(current), candidateHash };
@@ -72,7 +91,8 @@ export async function recoverObjective(store, taskId, expected) {
       ? [e.body.revision + 1] : e.body?.planRef && Number.isSafeInteger(e.body.revision) ? [e.body.revision] : []);
     const lastRevision = revisions.at(-1);
     if (row.revision !== current.revision || lastRevision !== current.revision) block('TASK_WORKLOG_REVISION_MISMATCH');
-    if (expected && Object.keys(result.binding).some(k => result.binding[k] !== expected[k])) block('STALE_RECOVERY_BINDING');
+    const changes = prior.binding ? Object.keys(result.binding).filter(k => result.binding[k] !== prior.binding[k]) : [];
+    if (changes.length) block('STALE_RECOVERY_BINDING');
     const snapshot = await continuationSnapshot(store, taskId);
     result.workItems = snapshot.workItems; result.remaining = snapshot.remaining;
     result.budget = { ...snapshot.budget, cost: { taskAttemptBudgetUsd: current.settings.attemptBudgetUsd,
@@ -96,7 +116,8 @@ export async function recoverObjective(store, taskId, expected) {
             receipt.results.length !== run.contract.files.length || receipt.results.some(r => hash(r) !== hash(run.results[r.path])))
           block('MATERIALIZATION_RECEIPT_DEFECT');
       }
-      const validNow = Boolean(approval && approval.digest === run.contractHash && approval.expires > Date.now());
+      const validNow = Boolean(run.control !== 'cancel' && run.contract.workflowHash === workflow.workflowHash &&
+        approval && approval.digest === run.contractHash && approval.expires > Date.now());
       return { runId: r.id, itemId: run.itemId, state: run.state, filesetHash: run.contractHash, files: run.contract.files,
         materializationRef: run.materializationRef ?? null, results: run.results, approval: approval ?? null,
         approvalValidNow: validNow, alreadyApplied: run.state === 'COMPLETED', executionGranted: false };
@@ -105,6 +126,11 @@ export async function recoverObjective(store, taskId, expected) {
       ['RESERVED', 'STARTED', 'HUMAN_HANDOFF', 'MATERIALIZING', 'WAITING_HUMAN'].includes(run.state) ||
       run.kind === 'bootstrap-fileset' && run.state !== 'COMPLETED' && Object.keys(run.results ?? {}).length; })
       .map(r => ({ runId: r.id, state: JSON.parse(r.body).state, effects: 'UNCONFIRMED', resolution: 'RECONCILE_WITHOUT_RELAUNCH_OR_REFUND' }));
+    result.hostProposals = pendingHostProposals(store, taskId);
+    if (result.hostProposals.length) {
+      result.effects.push(...result.hostProposals);
+      block('HOST_PROPOSALS_UNCONFIRMED_NO_REPLAY');
+    }
     if (result.effects.length) block('UNCERTAIN_OR_ACTIVE_EFFECTS');
     if (snapshot.status === 'HUMAN_HANDOFF') block(snapshot.reason);
     let next = snapshot.next;
@@ -115,7 +141,18 @@ export async function recoverObjective(store, taskId, expected) {
     // Read-time consistency, not a lock or an execution grant. Every eventual effect rechecks its own fences.
     if (hash(task(store, taskId)) !== result.binding.taskHash || hash(store.events(taskId)) !== eventHash ||
         await localTree(current.repo) !== candidateHash) block('RECOVERY_CHANGED_DURING_INSPECTION');
-    result.observationHash = hash({ binding: result.binding, eventHash, filesets: result.filesets, leases: result.leases, reservations: result.reservations });
+    result.observationHash = hash({ binding: result.binding, eventHash, filesets: result.filesets, leases: result.leases,
+      reservations: result.reservations, workItems: result.workItems, budget: result.budget, judgments: result.judgments });
+    if (prior.checkpoint?.workLogHash && prior.checkpoint.workLogHash !== eventHash) changes.push('workLog');
+    if (prior.checkpoint?.observationHash && prior.checkpoint.observationHash !== result.observationHash) changes.push('executionState');
+    if (prior.checkpoint && changes.length) block('STALE_RECOVERY_CHECKPOINT');
+    result.synchronization = { status: expected ? changes.length ? 'CHANGED_REVIEW_REQUIRED' : 'MATCHED' : 'INITIAL_OBSERVATION',
+      compared: prior.checkpoint ? 'CHECKPOINT' : prior.binding ? 'LEGACY_BINDING_ONLY' : 'NONE', changes,
+      previousRevision: prior.binding?.revision ?? null, currentRevision: current.revision,
+      requiresFreshReview: changes.length > 0, automaticMigration: false,
+      retainedCompletedItems: snapshot.workItems.filter(i => ['PLAN_RECORDED','MATERIALIZED','LOCAL_PASSED','LOCAL_CHECKPOINT'].includes(i.state)).map(i => i.id) };
+    result.checkpoint = { kind: 'ObjectiveRecoveryCheckpoint', schemaVersion: 1, taskId,
+      binding: result.binding, workLogHash: eventHash, observationHash: result.observationHash };
     result.status = result.blockers.length ? (result.effects.length ? 'RECONCILE' : 'HUMAN_HANDOFF') : 'RECOVERED';
     result.next = result.blockers.length ? null : next;
     result.complete = !result.blockers.length && snapshot.complete === true;
