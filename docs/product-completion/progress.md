@@ -1,5 +1,37 @@
 # 진행 현황과 결정 목록
 
+2026-10-30 후속 [감독형 채택·Repair 연결 수정](../runs/2026-10-30/supervised-adoption-repair.md):
+기존 완료 Fileset 이력을 현재 계약·실패 Evidence·Repair 기준 해시와 대조하여 채택 이력을
+복구한다. 새 Repair의 Fileset 승인과 Verification Decision은 별도로 필요하다.
+실패→별도 승인 Repair→새 Candidate 검증→Judge→별도 프로세스 Recovery 조합이 통과했다.
+수정 후 Work Log 15 PASS, Host Core 127 PASS, 안전성 85 PASS, Legacy 324 PASS, 모두 exit 0이다.
+아래 감사의 Repair 차단 항목은 이 후속 Core 회귀로 해소됐다. 실제 Host 세션 간 연속성 수용은
+여전히 별도이며, 기존 완료 Live Objective·Evidence·예산은 변경하지 않았다.
+
+2026-10-30 수정 전 [통합 검토](../audits/2026-10-30/01-persistent-worklog-integration.md):
+[Todo 통합 Local 검증](../runs/2026-10-30/todo-integrated-verification-recovery.md)은 완료됐고,
+기존 Task Revision 11 / Contract Revision 2 / seq 77의 COMPLETE_LOCAL을 읽기 전용으로 복구했다.
+아래 준비·승인 대기 기록은 각 초기 시점의 상태다. 이번 Turn과 직전 검증 Turn은 같은 Host
+Thread이며 실제 새 CLI 프로세스 경계와 Context Compaction은 NOT_VERIFIED다.
+감독형 채택 후 실패하여 Repair Fileset으로 교체할 때 provenance 연결이 끊겨 Handoff에
+다시 차단되는 정적 검토 finding이 있어 통합 전 수정·조합 회귀가 필요하다.
+PUBLIC_DELEGATION_BLOCKED와 Protected UNSATISFIED를 유지한다.
+
+[감독형 직접 제안 연결](../runs/2026-10-30/supervised-proposal-continuation.md):
+저장된 제안의 계약·후보·파일 정합성을 검사하여 기존 Fileset 등록과 Native Review로
+연결한다. 채택 출처는 PROVIDER_REPORTED_ONLY, Handoff는 PREPARED로 보존한다.
+미확정 Dispatch는 RECONCILE이며 실제 Host 관측을 생성하지 않는다. Core 회귀와
+Live 읽기 대조 결과는 연결 기록에서 관리하며 실제 등록·적용·검증 승인은 별도다.
+
+2026-10-30 [Persistent Work Log 연결](../runs/2026-10-30/persistent-worklog.md):
+기존 SQLite·Event·Artifact에 지침 접수/판정·담당 Agent·전달 준비/미확정/전달/수신을
+연결하고, Contract Revision 적용과 영향받은 Agent 인계 준비를 원자적으로 기록한다.
+Recovery와 기존 실행 경계에서 미확정 인계·지침을 확인한다. 합성 Host 전송 및 실제
+Local 명령·프로세스 재개 테스트와 실제 Host Live 수용을 구분한다. 새로운 Live
+Objective는 준비됐으나 호출·전달·적용 승인은 대기 중이다. 기존 B/C는 재실행하지 않았다.
+실제 Host Context Compaction은 NOT_VERIFIED, PUBLIC_DELEGATION_BLOCKED 및 Protected
+UNSATISFIED를 유지한다.
+
 2026-10-30 후속 계약·Repair Core 작업: `EXISTING_LOCAL` 완료 Objective에
 기존 Criterion의 테스트 매핑 확대 또는 신규 Criterion·테스트를 감독형 Contract Revision으로
 추가할 수 있게 했다. Review에는 현재 Candidate와 별도 추가 Attempt 예산(최대 2회)을 묶는다.

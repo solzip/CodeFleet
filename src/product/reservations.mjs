@@ -7,6 +7,7 @@ import { localBackend, classifyLocalResult } from '../verification/backends.mjs'
 import { task, verifyTask, bootstrapContext, bootstrapView, archivedContractEvidence } from './tasks.mjs';
 import { bootstrapGuard } from '../hosts/workflow-authorization.mjs';
 import { validateEnvironmentRecovery, observeRecoveryPolicy, validRecoveryObservation } from './environment-recovery.mjs';
+import { requireCoordinatedWorkItem } from './work-log.mjs';
 
 // Same Store/SQLite, events, artifacts and runs lease. Never a protected Workflow
 // child: workflow_attempts retains its existing Run/source/graph FK contract.
@@ -217,6 +218,7 @@ function write(store, r) {
   store.db.prepare('UPDATE runs SET body=? WHERE id=?').run(JSON.stringify({ id: r.runId, kind: 'bootstrap-verification', state: r.state, contractHash: r.commandHash, reservation: r }), r.runId);
 }
 function fenced(store, r, binding, expected) {
+  requireCoordinatedWorkItem(store, binding.taskId, binding.itemId);
   const d = decision(store, r.decisionId); validDecision(store, d); currentBinding(store, binding);
   const live = record(store, r.requestId), lease = store.db.prepare('SELECT * FROM runs WHERE id=?').get(r.runId);
   if (live?.state !== expected || live.owner !== r.owner || live.fence !== r.fence || lease?.owner !== r.owner || lease.leaseUntil <= Date.now() || lease.control !== 'run') throw Error('Lease/fence lost or attempt no longer current');
@@ -314,6 +316,7 @@ export async function executeOfflineDecision(store, taskId, itemId, request, { d
   const monotonicStart = performance.now(), liveLimit = Math.min(b.timeBudgetMs, d.expires - Date.now());
   const r = tx(store, () => {
     if (record(store, requestId)) return null;
+    requireCoordinatedWorkItem(store, taskId, itemId);
     const fresh = decision(store, decisionId); validDecision(store, fresh); const current = currentBinding(store, b);
     if (fresh.consumed !== null || fresh.remaining !== 1) throw Error('Decision already consumed');
     const prior = store.db.prepare('SELECT body FROM bootstrap_reservations WHERE taskId=?').all(taskId).map(v => JSON.parse(v.body));

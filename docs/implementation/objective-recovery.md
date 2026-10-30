@@ -1,5 +1,107 @@
 # Objective recovery from the existing Store
 
+## Persistent coordination and directive reconciliation
+
+`objective work-log TASK` opens the existing Store read-only and returns recovery
+plus effective contract requirements/decisions, assignments, directive history,
+handoff packets/observations and existing Agent Messages. Messages retain
+PROVIDER_REPORTED_ONLY authority. Artifacts and events remain authoritative;
+the projection, conversation and checkpoint grant no execution permission.
+
+`objective assign TASK INPUT.json` records `{revision,itemId,agentId,reason}`.
+This is a manager scope declaration, not Host delegation or a capability claim.
+`objective directive TASK INPUT.json` records
+`{directiveId,revision,text,reason}` idempotently. Conflicting reuse of an ID is
+rejected. Pending interpretation conservatively stops new work until reconciled.
+
+`objective directive-review TASK DIRECTIVE_ID PROPOSAL.json` passes the Host's
+complete revised draft through the existing Contract Revision Review. It records
+affected WorkItems/dependents and assigned Agents, candidate binding, and the
+need for fresh approvals and evidence. It does not infer a revised contract from
+natural language alone. The existing exact `revision-accept` applies the contract,
+records the directive's actual outcome and prepares handoffs for affected assigned
+items in the same transaction. Unaffected work and consumed budgets stay intact.
+Global/unmapped changes remain conservatively global. Active leases and uncertain
+execution effects continue to prevent contract acceptance.
+
+`objective directive-decision TASK INPUT.json` accepts
+`{directiveId,revision,status,reason}` for an explicit USER_DECLARED disposition:
+DEFERRED, REJECTED or RETAINED_WITHOUT_CONTRACT_CHANGE. It revokes any linked pending
+review and records the reason; it cannot approve effects or alter the contract.
+
+`objective handoff TASK INPUT.json` accepts `{revision,itemId,reason}` and prepares
+a packet from the assigned scope/current contract. Preparation never means delivery.
+Trusted Host embedding functions in `src/product/work-log.mjs` distinguish
+PREPARED, DELIVERY_UNCONFIRMED, DELIVERED, ACKNOWLEDGED, UNDELIVERED and REJECTED_STALE.
+Delivery records uncertainty before invoking a separately authorized transport.
+Transport failure retains that uncertainty across restart and prohibits replay.
+Observed transport records can reconcile it without relaunch; acknowledgment must
+match the recipient, packet and current contract. Revision invalidates unsent old
+packets; in-flight old delivery remains observable until explicitly reconciled.
+
+No public CLI can forge a transport or receipt observation. These functions are
+trusted embedding seams, not authenticated public Host integrations. The current
+CLI can prepare, inspect and recover packets; automatic Host delivery and actual
+receipt observations need the Host adapter and separate authorization. A missing
+adapter remains a capability gap, never a successful delivery. Known undelivered
+packets remain pending for human handling; automatic retry is not implemented.
+
+Continuation skips items whose handoffs or prerequisite handoffs are pending,
+except for the exact supervised adoption below;
+independent eligible work can still be selected. Fileset submission/materialization
+and verification admission/fences recheck coordination. Recovery reports all
+unadopted pending handoffs conservatively as human handoff; uncertain transport is RECONCILE.
+An execution that becomes uncertain retains the existing Attempt, effects and
+budget. Fresh approvals and existing Capability checks are still mandatory.
+
+`test/work-log.test.mjs` combines synthetic transport observations with real local
+commands and separate OS processes. It is not Host Live or compaction evidence.
+Host Context Compaction remains NOT_VERIFIED. PUBLIC_DELEGATION_BLOCKED and
+Protected UNSATISFIED remain unchanged. See the
+[implementation record](../runs/2026-10-30/persistent-worklog.md).
+
+### Supervised adoption of an existing direct proposal
+
+`objective supervised-proposal-review TASK PROPOSAL_REF` is read-only. It checks
+the stored CurrentSessionDirectProposal and context packet against the current
+Task/contract revision, Candidate, WorkItem, exact file scope, content digests,
+byte sizes, source bases, dependencies and persisted recovery state. Only a
+current PREPARED handoff with no delivery observations qualifies. Active leases,
+uncertain effects and declared but unresolved Host dispatch remain blocked.
+This is Fileset registration eligibility, not execution approval or test evidence.
+
+After separate authorization to register,
+`objective supervised-proposal-register TASK PROPOSAL_REF` rechecks those bindings
+and uses the existing Fileset validator and Task transition to WAITING_APPROVAL.
+It retains PROVIDER_REPORTED_ONLY provenance in that exact Fileset. Registration
+does not apply files, consume verification budget or acknowledge the Handoff.
+`objective local-files-review TASK ITEM` then prepares the existing exact Native
+review; applying it still requires separate `local-files-accept` consent. Existing
+Policy, approval expiry, Candidate checks, Reservations and verification gates
+remain authoritative. No new approval engine or Host transport is introduced.
+
+Recovery projects the adoption from the current Fileset and proposal artifact;
+the Handoff remains PREPARED and visible in pendingHandoffs. Only the bound
+Fileset and its dependent work can continue through existing approval gates.
+Concurrent delivery of an adopted packet is refused. A stale contract or another
+unadopted pending Handoff still blocks its scope. DELIVERY_UNCONFIRMED retains
+RECONCILE and cannot enter this route. No review or adoption supplies a Host
+Turn/Message receipt, and HOST_ADAPTER_UNAVAILABLE remains a capability gap.
+
+For a replacement Repair Fileset, coordination can also resolve adoption through
+the existing completed Fileset in `bootstrap.history`. It must belong to the same
+WorkItem, packet and current contract/workflow, have an intact materialization
+receipt, and match the source digests in the exact recorded Local failure. The
+replacement must cite that failure and its base hashes must match those source
+digests. The original proposal and Fileset remain unchanged; their provenance is
+not copied onto the new code. This resolves only the coordination guard, not the
+new Fileset approval, candidate checks, lease, verification decision or budget.
+Expired historical approval does not erase adoption and cannot authorize Repair.
+Native Fileset review preparation and acceptance recheck coordination; recorded
+Native Fileset review revocation also prevents a fresh application. Duplicate
+completed acceptance remains a record-only response, never another application.
+See [combined repair regression](../runs/2026-10-30/supervised-adoption-repair.md).
+
 ## Environment-only reverification
 
 `objective environment-step TASK REQUEST.json ENVIRONMENT.json --revision N

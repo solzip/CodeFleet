@@ -7,6 +7,7 @@ import {continuationSnapshot,continueOfflineWorkItem} from './continuation.mjs';
 import {triageFailure,repairOfflineWorkItem} from './repair.mjs';
 import {enableReservations,issueLocalTrustDecision,issueLocalEnvironmentDecision,reservationStatus,inspectCompletedRepair} from './reservations.mjs';
 import {previewLocalCommand,localTree} from '../verification/backends.mjs';
+import {requireCoordinatedWorkItem} from './work-log.mjs';
 import {validateEnvironmentRecovery,observeRecoveryPolicy,isNativeLocalPolicy} from './environment-recovery.mjs';
 
 const label={authority:'EXPLICIT_LOCAL_TRUST',operatorAuthentication:'NOT_ESTABLISHED',verifierIndependence:'UNPROTECTED',protectedVerification:'UNSATISFIED',complete:false};
@@ -145,6 +146,7 @@ export async function nativeLocalStep(store,taskId,{request,proposal,revision,re
 
 // Exact supervised Fileset approval, not an authenticated public delegation.
 export async function prepareNativeFilesReview(store,taskId,itemId) {
+  requireCoordinatedWorkItem(store,taskId,itemId);
   const {current,workflow}=bootstrapContext(store,taskId);
   const snapshot=await continuationSnapshot(store,taskId);
   const run=store.get(current.bootstrap.filesets[itemId]);
@@ -158,6 +160,7 @@ export async function prepareNativeFilesReview(store,taskId,itemId) {
   if(!['WAITING_APPROVAL','READY'].includes(run.state))throw Error('Fileset effects require reconciliation');
   const review={kind:'NativeFilesReview',taskId,itemId,revision:current.revision,taskHash:hash(current),
     workflowHash:workflow.workflowHash,runId:run.id,filesetHash:run.contractHash,contentRef:run.contentRef,
+    ...(run.supervisedProposal ? {proposalProvenance:run.supervisedProposal,hostHandoffObservation:'NOT_ESTABLISHED_BY_REVIEW'} : {}),
     candidateHash:await localTree(current.repo),createdAt:Date.now(),expiresAt:Date.now()+3600000,maxMaterializations:1,
     publicDelegation:'PUBLIC_DELEGATION_BLOCKED',...label};
   const reviewHash=hash(review),reviewRef=store.artifact({review,reviewHash});
@@ -171,12 +174,14 @@ export async function acceptNativeFilesReview(store,reviewRef,{trust,acknowledge
   if(run.state==='COMPLETED'&&store.events(r.taskId).some(e=>e.type==='NATIVE_FILESET_REVIEW_ACCEPTED'&&e.body.reviewRef===reviewRef))
     return {...label,status:'RECORDED_NO_REPLAY',materializationRef:run.materializationRef};
   const expired=store.events(r.taskId).some(e=>e.type==='NATIVE_FILESET_REVIEW_EXPIRED'&&e.body.reviewRef===reviewRef);
+  const revoked=store.events(r.taskId).some(e=>e.type==='NATIVE_FILESET_REVIEW_REVOKED'&&e.body.reviewRef===reviewRef);
   if(Date.now()>=r.expiresAt&&!expired)store.event(r.taskId,'NATIVE_FILESET_REVIEW_EXPIRED',{reviewRef});
-  if(cancelled()||expired||Date.now()<r.createdAt||Date.now()>=r.expiresAt||hash(current)!==r.taskHash||current.revision!==r.revision||
+  if(cancelled()||expired||revoked||Date.now()<r.createdAt||Date.now()>=r.expiresAt||hash(current)!==r.taskHash||current.revision!==r.revision||
     current.bootstrap.filesets[r.itemId]!==r.runId||run.contractHash!==r.filesetHash||run.contentRef!==r.contentRef||
     (await bootstrapDrift(store,r.taskId)).length||await localTree(current.repo)!==r.candidateHash)
-    throw Error('Fileset review expired or task/candidate changed');
+    throw Error('Fileset review expired, revoked or task/candidate changed');
   if(!['WAITING_APPROVAL','READY'].includes(run.state)||Object.keys(run.results??{}).length)throw Error('RECONCILE: Fileset already started');
+  requireCoordinatedWorkItem(store,r.taskId,r.itemId);
   approveTask(store,r.taskId,{actor:'explicit-local-trust',workflowHash:r.filesetHash,expiresAt:r.expiresAt});
   store.event(r.taskId,'NATIVE_FILESET_REVIEW_ACCEPTED',{reviewRef,reviewHash:trust,trust:'SAME_USER_UNPROTECTED'});
   return {...await materializeTask(store,r.taskId,r.itemId,{freshOnly:true,cancelled}),...label};

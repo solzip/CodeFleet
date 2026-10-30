@@ -14,6 +14,10 @@ import { developmentProposalRequest, developmentProposalBatch, reviewDevelopment
 import { recoverObjective } from './recovery.mjs';
 import { prepareContractRevision, acceptContractRevision, revokeContractRevision } from './contract-revisions.mjs';
 import { repairProposalRequest } from './repair.mjs';
+import { assignWorkItem, recordDirective, decideDirective, prepareAgentHandoff } from './work-log.mjs';
+import { reconcileDirective } from './directives.mjs';
+import { reviewSupervisedProposal } from './continuation.mjs';
+import { submitBootstrapFiles } from './tasks.mjs';
 
 export const help = `codefleet-alpha objective plan|run "goal" [repository]
   [--local-existing] (explicit existing Git working-tree Local contract; no Git writes)
@@ -26,11 +30,17 @@ codefleet-alpha objective approve <task-id> --hash <workflowHash> --actor <name>
 codefleet-alpha objective run|resume <task-id> --allow-model
 codefleet-alpha objective status [task-id] | report <task-or-run-id>
 codefleet-alpha objective proposal-request <task-id> <item-id> (eligible source context only; no model call or execution approval)
+codefleet-alpha objective supervised-proposal-review <task-id> <proposal-ref> (read-only eligibility; no Host observation or execution)
+codefleet-alpha objective supervised-proposal-register <task-id> <proposal-ref> (explicit registration only; then separate local-files-review/accept)
 codefleet-alpha objective repair-proposal-request <task-id> (settled Local failure context; no model call or approval)
 codefleet-alpha objective proposal-batch <task-id> [OPTIONS.json] (maxAgents 1..3, parallelBenefit; proposal-only, no model grant)
 codefleet-alpha objective proposal-start <task-id> BATCH.json (record pending Host handoff; not permission or proof of invocation)
 codefleet-alpha objective proposal-results <task-id> BATCH.json RESULTS.json (validate all results, record proposal feedback; never apply or approve)
 codefleet-alpha objective recover <task-id> [RECOVERY.json|BINDING.json] (compare prior checkpoint; never execute, renew or replay)
+codefleet-alpha objective work-log <task-id> (persisted recovery and coordination; no execution)
+codefleet-alpha objective assign|directive|handoff <task-id> INPUT.json (record scope/directive/prepare handoff; never deliver)
+codefleet-alpha objective directive-review <task-id> <directive-id> PROPOSAL.json (existing exact contract review; no execution)
+codefleet-alpha objective directive-decision <task-id> INPUT.json (explicit defer/reject/retain with reason; never approves execution)
 codefleet-alpha objective revision-review <task-id> PROPOSAL.json (revision, full revised draft, optional additionalAttempts 0..2 and additionalTimeSeconds 0..120; no execution)
 codefleet-alpha objective revision-accept <review-ref> --trust <review-hash> --acknowledge-unisolated
 codefleet-alpha objective revision-revoke <review-ref> (revoke a prepared revision review)
@@ -95,6 +105,27 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
   const [action, ...rest] = argv;
   if (!action || ['help', '--help'].includes(action)) return { exitCode: 0, data: { schemaVersion: 1, help } };
   const { positional: args, options: o } = parse(rest);
+  if (['supervised-proposal-review', 'supervised-proposal-register'].includes(action)) {
+    if (args.length !== 2 || Object.keys(o).length) throw Error('Supervised proposal requires Task and stored proposal ref only');
+    const review = await reviewSupervisedProposal(store, args[0], args[1]);
+    return { exitCode: action === 'supervised-proposal-review' ? 0 : 2,
+      data: action === 'supervised-proposal-review' ? review :
+        await submitBootstrapFiles(store, args[0], review.input, { supervisedProposalRef: args[1] }) };
+  }
+  if (action === 'work-log') {
+    if (args.length !== 1 || Object.keys(o).length) throw Error('work-log requires Task only');
+    const data = await recoverObjective(store, args[0]);
+    return { exitCode: data.status === 'RECOVERED' ? 0 : 2, data };
+  }
+  if (['assign','directive','directive-decision','handoff'].includes(action)) {
+    if (args.length !== 2 || Object.keys(o).length) throw Error('Coordination requires Task and input only');
+    const fn = { assign: assignWorkItem, directive: recordDirective, 'directive-decision': decideDirective, handoff: prepareAgentHandoff }[action];
+    return { exitCode: 0, data: fn(store, args[0], await readResponse(args[1])) };
+  }
+  if (action === 'directive-review') {
+    if (args.length !== 3 || Object.keys(o).length) throw Error('directive-review requires Task, directive and proposal');
+    return { exitCode: 2, data: await reconcileDirective(store, args[0], args[1], await readResponse(args[2])) };
+  }
   if (action === 'proposal-start') {
     if (args.length !== 2 || Object.keys(o).length) throw Error('proposal-start requires Task and exact batch');
     return { exitCode: 0, data: await recordProposalDispatch(store, args[0], await readResponse(args[1])) };
@@ -278,7 +309,7 @@ export async function productCli(argv, directory) {
   try {
     requireDurableEntry(argv); // Before opening Store or reading caller JSON.
     if (!argv[0] || ['help', '--help'].includes(argv[0])) return await dispatchProduct(argv);
-    store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request'].includes(argv[0]) });
+    store = new Store(directory, { readOnly: ['recover', 'work-log', 'proposal-batch', 'repair-proposal-request', 'supervised-proposal-review'].includes(argv[0]) });
     return await dispatchProduct(argv, { store });
   }
   catch (e) { return { exitCode: 1, data: { schemaVersion: 1, status: 'BLOCKED_OR_UNSUPPORTED', error: e.message } }; }
