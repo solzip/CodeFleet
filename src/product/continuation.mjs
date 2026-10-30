@@ -21,6 +21,7 @@ export async function continuationSnapshot(store, taskId) {
   const report = await taskReport(store, taskId), current = task(store, taskId);
   const view = report.bootstrap, reservations = report.executionReservations ?? [];
   const attempts = reservations.filter(r => r.reservation);
+  const contractAttempts = attempts.filter(r => r.reservation.workflowHash === current.bootstrap?.workflowHash);
   // Corrupt Evidence cannot make an existing reservation disappear from budget.
   // A malformed time record is unknown/exhausted, never an implicit refund.
   const hasReservations = store.db.prepare("SELECT 1 FROM sqlite_master WHERE name='bootstrap_reservations'").get();
@@ -48,9 +49,24 @@ export async function continuationSnapshot(store, taskId) {
       r.state !== 'COMPLETED' && Object.keys(r.results ?? {}).length)) return handoff('UNCERTAIN_MATERIALIZATION_NO_REPLAY');
   if (current.settings.maxParallel !== 1) return handoff('SINGLE_AGENT_POLICY_REQUIRED');
   if (reservations.some(r => r.status === 'EVIDENCE_DEFECT') || view.items.some(i => i.state === 'EVIDENCE_INVALID')) return handoff('EVIDENCE_DEFECT');
-  if (view.drift.length || view.items.some(i => i.state === 'VERIFICATION_STALE')) return handoff('CANDIDATE_CHANGED');
+  // Materialization explicitly marks old verification stale after an approved
+  // source replacement. That state requires a new exact review, not a replay of
+  // the old Evidence. An inferred stale result or observed disk drift still
+  // means the candidate changed outside this transition.
+  const inferredStale = view.items.some(i => i.state === 'VERIFICATION_STALE' &&
+    current.bootstrap.states[i.id] !== 'VERIFICATION_STALE');
+  if (view.drift.length || inferredStale) return handoff('CANDIDATE_CHANGED');
   if (attempts.some(r => !terminal.has(r.status))) return handoff('UNCERTAIN_OR_ACTIVE_ATTEMPT_NO_REPLAY');
   if (report.complete) return { ...result, complete: true, status: 'COMPLETE_LOCAL', reason: report.acceptance.reason, next: null, remaining: [] };
+
+  const pendingReverification = view.items.find(i => i.kind === 'local-verification' &&
+    i.state === 'VERIFICATION_STALE' && current.bootstrap.states[i.id] === 'VERIFICATION_STALE' &&
+    !i.waitingOn.length);
+  if (pendingReverification) {
+    if (!budget.remainingAttempts || !budget.remainingTimeMs) return handoff('EXECUTION_BUDGET_EXHAUSTED');
+    return { ...result, status: 'AWAIT_OPERATOR', reason: 'Fresh exact decision required after approved source replacement',
+      next: { kind: 'RUN_LOCAL_VERIFICATION', itemId: pendingReverification.id } };
+  }
 
   const failed = view.items.find(i => i.state === 'LOCAL_FAILED');
   if (failed) {
@@ -67,7 +83,7 @@ export async function continuationSnapshot(store, taskId) {
       itemIds: view.items.filter(i => ancestors.has(i.id) && i.kind === 'local-edit').map(i => i.id),
       files: view.items.filter(i => ancestors.has(i.id) && i.kind === 'local-edit').flatMap(i => i.files).filter(p => !testFiles.has(p)),
       executionGranted: false, requiresNewExecutionDecision: true,
-      requiresNewReviewedTask: attempts.length > 1 || !budget.remainingAttempts,
+      requiresNewReviewedTask: contractAttempts.length > 1 || !budget.remainingAttempts,
       repairPath: 'TRUSTED_OFFLINE_BOUNDED_REPAIR_REVIEW' };
     result.environmentRecovery = { action: 'REVIEW_ENVIRONMENT_REVERIFICATION', evidenceRef: failed.verificationRef,
       eligibleForReview: attempts.length === 1 && budget.remainingAttempts > 0 && budget.remainingTimeMs > 0,

@@ -17,12 +17,15 @@ try {
   if (input.action === 'prepare') { console.log(JSON.stringify(await prepare(input.root,input.options))); }
   else {
     store = new Store(input.state, { readOnly: input.action === 'recover' }); const id = input.id; let result;
-    const request = item => ({ executable: process.execPath, args: ['--test', '--test-reporter=tap', 'test/normalize-title.test.mjs', ...(item === 'verify-integrated' ? ['test/create-todo.test.mjs'] : [])], directory: input.repo, timeoutMs: 10000 });
+    const request = item => ({ executable: process.execPath, args: ['--test', '--test-reporter=tap',
+      ...(item === 'verify-integrated' ? store.readArtifact(task(store,id).planRef).draft.plannedTests.map(t=>t.path) : ['test/normalize-title.test.mjs'])], directory: input.repo, timeoutMs: 10000 });
     if (input.action === 'recover') result = await recoverObjective(store, id, input.binding);
     if (input.action === 'revision-review') {
       const current=task(store,id),draft=structuredClone(store.readArtifact(current.planRef).draft);
-      draft.criteria.find(c=>c.id==='todo').description+='; each call returns a distinct object';
-      result=await prepareContractRevision(store,id,{revision:current.revision,draft});
+      if(input.draft)Object.assign(draft,input.draft);
+      else draft.criteria.find(c=>c.id==='todo').description+='; each call returns a distinct object';
+      result=await prepareContractRevision(store,id,{revision:current.revision,draft,
+        ...(input.additionalAttempts===undefined?{}:{additionalAttempts:input.additionalAttempts})});
     }
     if (input.action === 'revision-accept') result=await acceptContractRevision(store,input.reviewRef,{trust:input.trust,acknowledgeUnisolated:true});
     if (input.action === 'propose') {

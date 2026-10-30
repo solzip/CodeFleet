@@ -273,7 +273,9 @@ export function archivedContractEvidence(store, current, itemId, evidenceRef, ch
   const visit = id => { if (needed.has(id)) return; needed.add(id); workflow.items.find(n => n.id === id)?.dependencies.forEach(visit); };
   visit(itemId);
   const paths = workflow.items.filter(n => needed.has(n.id)).flatMap(n => n.files);
-  paths.push(...records.at(-1).plan.draft.plannedTests.map(t => t.path));
+  // A later contract may add a test for another criterion. Historical evidence
+  // must remain a dependency checkpoint for this unaffected WorkItem only.
+  paths.push(...store.readArtifact(first.before.planRef).draft.plannedTests.map(t => t.path));
   const digests = recordedDigests(store, current);
   return paths.every(p => evidence.fileDigests?.[p] && evidence.fileDigests[p] === digests[p]);
 }

@@ -2,7 +2,9 @@
 // Operator may approve Filesets and issue a fresh exact verification decision.
 import { hash } from '../alpha/contract.mjs';
 import { performance } from 'node:perf_hooks';
-import { task, bootstrapContext, submitBootstrapFiles, materializeTask, verifyTask } from './tasks.mjs';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { task, bootstrapContext, recordedDigests, submitBootstrapFiles, materializeTask, verifyTask } from './tasks.mjs';
 import { continuationSnapshot } from './continuation.mjs';
 import { executeOfflineDecision } from './reservations.mjs';
 import { validateRepairFileset } from '../workflow/bootstrap-files.mjs';
@@ -19,17 +21,48 @@ export async function repairWorkItem() {
   return result('AWAIT_APPROVAL', 'Authenticated public repair Operator binding unavailable');
 }
 
+// Read-only Host handoff. It supplies bounded source and failure context, never
+// invokes a model or converts its response into a Fileset approval.
+export async function repairProposalRequest(store, taskId) {
+  const triage=await triageFailure(store,taskId);
+  if (triage.action!=='DIAGNOSE' || !triage.snapshot?.repair)
+    throw Error(`Current settled test failure required: ${triage.action}`);
+  const current=task(store,taskId), {plan}=bootstrapContext(store,taskId);
+  const evidence=store.readArtifact(triage.snapshot.repair.evidenceRef);
+  const digests=recordedDigests(store,current), files=[];
+  for (const name of triage.snapshot.repair.files) {
+    const bytes=await readFile(path.join(current.repo,...name.split('/')));
+    if (hash(bytes)!==digests[name]) throw Error('RECONCILE: repair source changed during handoff');
+    files.push({path:name,baseSha256:digests[name],content:bytes.toString('utf8')});
+  }
+  if (hash(task(store,taskId))!==hash(current)) throw Error('RECONCILE: repair Task changed during handoff');
+  return {kind:'RepairProposalRequest',taskId,revision:current.revision,
+    contractRevision:current.contractRevision??1,workflowHash:current.bootstrap.workflowHash,
+    candidateTreeHash:evidence.command.candidateTreeHash,
+    failureEvidenceRef:triage.snapshot.repair.evidenceRef,
+    verificationItem:triage.snapshot.repair.verificationItem,
+    allowedItems:triage.snapshot.repair.itemIds,files,criteria:plan.draft.criteria,
+    verificationCommand:evidence.command,diagnostic:evidence.log.slice(0,16000),
+    remainingAttempts:triage.snapshot.budget.remainingAttempts,
+    proposalLimit:1,applyLimit:1,verificationLimit:1,
+    requestedModelLimits:{maxCalls:1,maxInputTokens:8000,maxOutputTokens:4000,maxDurationMs:60000,
+      authority:'REQUEST_ONLY'},
+    requiredProposalFields:['itemId','evidenceRef','hypothesis','diagnostic','files'],
+    modelInvocationGranted:false,executionGranted:false,approval:'EXACT_FILESET_REVIEW_REQUIRED'};
+}
+
 // Read-only classification. No issuance, proposal recording, execution or model.
 export async function triageFailure(store, taskId, { proposal, request, cancelled = () => false } = {}) {
   let snapshot;
   try { snapshot = await continuationSnapshot(store, taskId); }
   catch (e) { return result('RECONCILE', e.message); }
   const current = task(store, taskId), { plan, workflow } = bootstrapContext(store, taskId);
-  const reservations = snapshot.reservations.filter(r => r.reservation);
+  const reservations = snapshot.reservations.filter(r => r.reservation?.workflowHash === workflow.workflowHash);
   if (snapshot.reason === 'EVIDENCE_DEFECT' || snapshot.reason === 'CANDIDATE_CHANGED' ||
       snapshot.reservations.some(r => r.status === 'EVIDENCE_DEFECT') || reservations.some(r => !terminal.has(r.status)))
     return result('RECONCILE', 'Uncertain attempt, changed candidate or invalid evidence', { snapshot });
-  const started = store.events(taskId).filter(e => e.type === 'BOUNDED_REPAIR_STARTED');
+  const started = store.events(taskId).filter(e => e.type === 'BOUNDED_REPAIR_STARTED' &&
+    (e.body.contractRevision ?? 1) === (current.contractRevision ?? 1));
   if (started.length) {
     const finished = store.events(taskId).some(e => e.type === 'BOUNDED_REPAIR_FINISHED' && e.body.runId === started[0].body.runId);
     return result(finished ? 'HUMAN_HANDOFF' : 'RECONCILE', finished ? 'One-repair budget consumed; no repeated or no-progress loop' : 'Repair effects must be reconciled; never replay', { snapshot });
@@ -101,7 +134,8 @@ export async function repairOfflineWorkItem(store, taskId, { proposal, request, 
       if (hash(task(store, taskId)) !== expected) throw Error('RECONCILE: repair contract changed');
     };
     guard();
-    store.event(taskId, 'BOUNDED_REPAIR_STARTED', { runId, evidenceRef: triage.evidenceRef, proposalHash: triage.proposalHash,
+    store.event(taskId, 'BOUNDED_REPAIR_STARTED', { runId, contractRevision:task(store,taskId).contractRevision??1,
+      evidenceRef: triage.evidenceRef, proposalHash: triage.proposalHash,
       acceptanceHash: triage.acceptanceHash, deadline, maxRepairs: 1, action: 'AUTO_REPAIR_ELIGIBLE' });
     started = true;
     await hooks.started?.({ runId });

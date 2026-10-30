@@ -5,7 +5,7 @@ import {hash} from '../alpha/contract.mjs';
 import {task,verifyTask,approveTask,materializeTask,bootstrapContext,bootstrapDrift} from './tasks.mjs';
 import {continuationSnapshot,continueOfflineWorkItem} from './continuation.mjs';
 import {triageFailure,repairOfflineWorkItem} from './repair.mjs';
-import {enableReservations,issueLocalTrustDecision,issueLocalEnvironmentDecision,reservationStatus} from './reservations.mjs';
+import {enableReservations,issueLocalTrustDecision,issueLocalEnvironmentDecision,reservationStatus,inspectCompletedRepair} from './reservations.mjs';
 import {previewLocalCommand,localTree} from '../verification/backends.mjs';
 import {validateEnvironmentRecovery,observeRecoveryPolicy,isNativeLocalPolicy} from './environment-recovery.mjs';
 
@@ -108,8 +108,10 @@ export async function nativeLocalStep(store,taskId,{request,proposal,revision,re
   }
   const inspected=await verifyTask(store,taskId,itemId,request);
   const afterCommand=proposal?await previewLocalCommand(request,proposal.files):inspected.command;
+  const repair=proposal?null:inspectCompletedRepair(store,taskId,itemId,inspected);
   const review={taskId,revision,taskHash:hash(current),workflowHash:snapshot.workflowHash,itemId,requestId,expiresAt,
-    requestHash,proposalHash,beforeCommand:inspected.command,afterCommand,proposal:proposal??null,budget:snapshot.budget,...label};
+    requestHash,proposalHash,beforeCommand:inspected.command,afterCommand,proposal:proposal??null,
+    ...(repair?{repair}:{}),budget:snapshot.budget,...label};
   const reviewHash=hash(review);
   if(!trust&&!acknowledgeUnisolated) return {...label,action:'AWAIT_APPROVAL',reviewHash,review};
   if(!acknowledgeUnisolated||trust!==reviewHash) throw Error('Explicit trust of exact Local review required');
@@ -125,7 +127,7 @@ export async function nativeLocalStep(store,taskId,{request,proposal,revision,re
   };
   store.event(taskId,'NATIVE_LOCAL_REVIEW_ACCEPTED',{reviewHash,reviewRef:store.artifact(review),requestId,trust:'SAME_USER_UNPROTECTED'});
   if(!proposal) {
-    const decision=await issue();
+    const decision=await issue(repair?.runId);
     return present(await continueOfflineWorkItem(store,taskId,{...decision,request,cancelled}));
   }
   // Exact source and future command/candidate were reviewed together. Every
@@ -145,8 +147,14 @@ export async function nativeLocalStep(store,taskId,{request,proposal,revision,re
 export async function prepareNativeFilesReview(store,taskId,itemId) {
   const {current,workflow}=bootstrapContext(store,taskId);
   const snapshot=await continuationSnapshot(store,taskId);
-  if(snapshot.next?.itemId!==itemId||!['AWAIT_FILESET_APPROVAL','MATERIALIZE'].includes(snapshot.next?.kind))throw Error('Eligible Fileset review required');
   const run=store.get(current.bootstrap.filesets[itemId]);
+  const ordinary=snapshot.next?.itemId===itemId&&['AWAIT_FILESET_APPROVAL','MATERIALIZE'].includes(snapshot.next?.kind);
+  const repair=snapshot.reason==='FAILURE_REVIEW_REQUIRED_NO_AUTOMATIC_RETRY'&&
+    snapshot.repair?.itemIds.includes(itemId)&&
+    snapshot.workItems.some(i=>i.id===itemId&&i.state==='REPAIR_PROPOSED')&&
+    run.operation==='modify'&&run.contract?.repairOf?.verificationItem===snapshot.repair.verificationItem&&
+    run.contract.repairOf.evidenceRef===snapshot.repair.evidenceRef;
+  if(!ordinary&&!repair)throw Error('Eligible Fileset review required');
   if(!['WAITING_APPROVAL','READY'].includes(run.state))throw Error('Fileset effects require reconciliation');
   const review={kind:'NativeFilesReview',taskId,itemId,revision:current.revision,taskHash:hash(current),
     workflowHash:workflow.workflowHash,runId:run.id,filesetHash:run.contractHash,contentRef:run.contentRef,

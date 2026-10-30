@@ -2,13 +2,13 @@
 // Task transition. This is not an issuer, execution grant or second scheduler.
 import { randomUUID } from 'node:crypto';
 import { hash } from '../alpha/contract.mjs';
-import { exact } from '../intent/contract.mjs';
 import { validateBootstrapDraft, existingPaths, draftPaths } from '../intent/bootstrap.mjs';
 import { bootstrapDefinition, bootstrapStates, dependentsOf } from '../workflow/bootstrap.mjs';
 import { bootstrapContext, bootstrapDrift, effectiveStates, recordedDigests, task } from './tasks.mjs';
 import { reservationStatus } from './reservations.mjs';
 import { localTree } from '../verification/backends.mjs';
 import { bootstrapGuard } from '../hosts/workflow-authorization.mjs';
+import { gitStatus } from '../intent/probe.mjs';
 
 function settled(store, current) {
   if (bootstrapGuard(store, current.id)) throw Error('Signed Operator contract revision requires its own trusted approval; supervised route refused');
@@ -34,12 +34,16 @@ function impactOf(oldPlan, plan, oldWorkflow, workflow, states) {
   const globalChange = globals.some(k => hash(oldPlan.draft[k]) !== hash(plan.draft[k]));
   const signature = (draft, item) => hash({item,
     files: draft.plannedFiles.filter(f => item.files.includes(f.path)),
-    tests: draft.plannedTests,
+    tests: draft.plannedTests.filter(t => t.criteria.some(c => item.acceptanceCriteria.includes(c))),
     criteria: draft.criteria.filter(c => item.acceptanceCriteria.includes(c.id))});
   // Removing old criteria is not supported by this bounded route; no silent weakening.
   if (oldPlan.draft.criteria.some(c => !plan.draft.criteria.some(n => n.id === c.id))) throw Error('Removing acceptance criteria requires a separate contract review path');
-  if (oldPlan.draft.criteria.some(c => hash(c.tests) !== hash(plan.draft.criteria.find(n => n.id === c.id).tests)))
-    throw Error('Existing criterion test coverage cannot change through revision');
+  if (oldPlan.draft.requirements.some(r=>!plan.draft.requirements.includes(r)))
+    throw Error('Existing requirement cannot be removed through revision');
+  for (const c of oldPlan.draft.criteria) {
+    const next = plan.draft.criteria.find(n => n.id === c.id);
+    if (c.tests.some(p => !next.tests.includes(p))) throw Error('Existing criterion test coverage cannot be removed');
+  }
   if (hash(oldWorkflow.items.map(i=>i.id).sort()) !== hash(workflow.items.map(i=>i.id).sort()))
     throw Error('This revision route preserves WorkItem identities');
   const mapped = new Set(workflow.items.flatMap(i => i.acceptanceCriteria));
@@ -48,7 +52,14 @@ function impactOf(oldPlan, plan, oldWorkflow, workflow, states) {
   for (const item of workflow.items) {
     const old = oldItems.get(item.id);
     if (old.kind !== item.kind) throw Error('WorkItem capability kind cannot change through revision');
+    if (old.acceptanceCriteria.some(c=>!item.acceptanceCriteria.includes(c)))
+      throw Error('WorkItem acceptance criteria cannot be removed through revision');
     if (globalChange || unmappedChange || signature(oldPlan.draft, old) !== signature(plan.draft, item)) affected.add(item.id);
+  }
+  for (const criterion of plan.draft.criteria.filter(c=>!oldPlan.draft.criteria.some(o=>o.id===c.id))) {
+    if (!workflow.items.some(i=>i.kind==='local-verification'&&i.acceptanceCriteria.includes(criterion.id)) ||
+        !workflow.items.some(i=>i.kind==='local-edit'&&i.acceptanceCriteria.includes(criterion.id)))
+      throw Error('New criterion requires source and verification WorkItem mappings');
   }
   for (const id of [...affected]) {
     dependentsOf(oldWorkflow,id).forEach(x=>affected.add(x));
@@ -58,7 +69,14 @@ function impactOf(oldPlan, plan, oldWorkflow, workflow, states) {
   const reReview = workflow.items.filter(i=>i.kind==='local-edit' && states[i.id]!=='MATERIALIZED').map(i=>i.id);
   const preserved = workflow.items.filter(i=>!affected.has(i.id) &&
     ['PLAN_RECORDED','MATERIALIZED','LOCAL_PASSED','LOCAL_CHECKPOINT'].includes(states[i.id])).map(i=>i.id);
+  const reopenSource = workflow.items.filter(i=>i.kind==='local-edit' && affected.has(i.id) &&
+    (i.acceptanceCriteria.some(id=>{
+      const prior=oldPlan.draft.criteria.find(c=>c.id===id), next=plan.draft.criteria.find(c=>c.id===id);
+      return prior && next && prior.description!==next.description;
+    }) || hash(oldPlan.draft.plannedFiles.filter(f=>i.files.includes(f.path)))!==
+      hash(plan.draft.plannedFiles.filter(f=>i.files.includes(f.path))))).map(i=>i.id);
   return { affected:[...affected].sort(), preserved, reReview,
+    reopenSource,
     revalidate:workflow.items.filter(i=>i.kind==='local-verification' && affected.has(i.id)).map(i=>i.id),
     integratedVerificationRequired:true, globalChange:globalChange || unmappedChange };
 }
@@ -74,8 +92,13 @@ async function inspectRevision(store, taskId, draft) {
   if (hash(draft)===hash(oldPlan.draft)) throw Error('No semantic contract change');
   // The existing baseline and immutable tests remain pinned. Already created
   // NEW_PROJECT files are not reclassified as new files during revalidation.
-  if (hash(draft.plannedTests)!==hash(oldPlan.draft.plannedTests)) throw Error('Fixed test paths/mapping cannot change');
+  for (const old of oldPlan.draft.plannedTests) {
+    const next=draft.plannedTests.find(t=>t.path===old.path);
+    if (!next || old.criteria.some(c=>!next.criteria.includes(c))) throw Error('Existing test path/mapping cannot be removed');
+  }
   const existing=oldPlan.contractKind==='EXISTING_LOCAL';
+  if (!existing && hash(draft.plannedTests)!==hash(oldPlan.draft.plannedTests))
+    throw Error('New-project revision preserves fixed tests');
   if (!existing && hash(draft.plannedFiles)!==hash(oldPlan.draft.plannedFiles)) throw Error('New-project revision preserves planned files');
   const clarifications=Object.entries(current.clarifications??{}).map(([unknownId,ref])=>{
     const c=store.readArtifact(ref);if(c.kind!=='ObjectiveClarification'||c.taskId!==taskId||c.unknownId!==unknownId||c.grantsExecution!==false)throw Error('Invalid clarification');return {...c,ref};
@@ -83,7 +106,23 @@ async function inspectRevision(store, taskId, draft) {
   const validation=validateBootstrapDraft(draft,oldPlan.probe,oldPlan.intent.original,
     existing?await existingPaths(current.repo,draftPaths(draft)):[],clarifications,existing);
   if(validation.status!=='VALIDATED')throw Error('Revision Draft is not validated: '+validation.status);
-  const plan={...oldPlan,draft:structuredClone(draft),validation};
+  const addedTests=draft.plannedTests.filter(t=>!oldPlan.draft.plannedTests.some(o=>o.path===t.path)).map(t=>t.path);
+  let addedTestDigests={};
+  let baseline=oldPlan.baseline;
+  if (addedTests.length) {
+    if (!existing) throw Error('Only Existing Local can admit new test files');
+    const entries=await localTree(current.repo,[],{excludeGit:true,entries:true});
+    const recorded=recordedDigests(store,current), existingPaths=new Set(Object.keys(recorded));
+    const added=entries.filter(([p])=>!existingPaths.has(p));
+    if (added.length!==addedTests.length || added.some(([p])=>!addedTests.includes(p)) ||
+        entries.some(([p,,sha])=>existingPaths.has(p)&&recorded[p]!==sha))
+      throw Error('New test admission requires only the reviewed test additions');
+    addedTestDigests=Object.fromEntries(added.map(([p,,sha])=>[p,sha]));
+    const status=await gitStatus(current.repo);
+    if (status.error) throw Error('Cannot inspect added test status');
+    baseline={files:entries,status:status.entries};
+  }
+  const plan={...oldPlan,draft:structuredClone(draft),validation,...(addedTests.length?{baseline}:{})};
   const workflow=bootstrapDefinition(plan);plan.workflowPreview=workflow;
   const impact=impactOf(oldPlan,plan,oldWorkflow,workflow,states);
   if (!existing && impact.affected.some(id=>oldWorkflow.items.find(i=>i.id===id).kind==='local-edit' && states[id]==='MATERIALIZED'))
@@ -98,18 +137,27 @@ async function inspectRevision(store, taskId, draft) {
     if(item.files.some(p=>!workflow.items.find(i=>i.id===item.id).files.includes(p)))throw Error('Materialized file ownership cannot be removed');
   const candidateHash=await localTree(current.repo);
   if(hash(task(store,taskId))!==hash(current))throw Error('Task changed during revision inspection');
-  return {current,plan,workflow,impact,candidateHash};
+  return {current,plan,workflow,impact,candidateHash,addedTestDigests};
 }
 
 export async function prepareContractRevision(store,taskId,input) {
-  exact(input,['revision','draft'],'Contract revision proposal');
+  if (!input || typeof input!=='object' || !Object.hasOwn(input,'revision') ||
+      !Object.hasOwn(input,'draft') || Object.keys(input).some(k=>!['revision','draft','additionalAttempts','additionalTimeSeconds'].includes(k)))
+    throw Error('Invalid Contract revision proposal fields');
   if(input.revision!==task(store,taskId).revision)throw Error('Stale Task revision');
   const x=await inspectRevision(store,taskId,input.draft), now=Date.now();
+  const additionalAttempts=input.additionalAttempts??0;
+  if(!Number.isSafeInteger(additionalAttempts)||additionalAttempts<0||additionalAttempts>2||
+      x.current.settings.maxAttempts+additionalAttempts>5)throw Error('Additional contract Attempt budget exceeds bound');
+  const additionalTimeSeconds=input.additionalTimeSeconds??0;
+  if(!Number.isSafeInteger(additionalTimeSeconds)||additionalTimeSeconds<0||additionalTimeSeconds>120||
+      x.current.settings.timeoutSeconds+additionalTimeSeconds>1800)
+    throw Error('Additional contract time budget exceeds bound');
   const review={kind:'ContractRevisionReview',taskId,requestId:randomUUID(),issuedAt:now,expiresAt:now+3600000,
     taskRevision:x.current.revision,taskHash:hash(x.current),fromContractRevision:x.current.contractRevision??1,
     toContractRevision:(x.current.contractRevision??1)+1,workflowHash:x.current.bootstrap.workflowHash,
     nextWorkflowHash:x.workflow.workflowHash,candidateHash:x.candidateHash,draft:x.plan.draft,impact:x.impact,
-    settings:x.current.settings,acceptanceMode:x.current.acceptanceMode??'PROTECTED_REQUIRED',
+    settings:x.current.settings,additionalAttempts,additionalTimeSeconds,acceptanceMode:x.current.acceptanceMode??'PROTECTED_REQUIRED',
     authority:'EXPLICIT_LOCAL_TRUST',operatorAuthentication:'NOT_ESTABLISHED',executionGranted:false};
   const reviewRef=store.artifact({kind:'ContractRevisionReviewPacket',review});
   store.event(taskId,'CONTRACT_REVISION_REVIEW_PREPARED',{reviewRef,reviewHash:hash(review),executionGranted:false});
@@ -127,13 +175,23 @@ export async function acceptContractRevision(store,reviewRef,{trust,acknowledgeU
   if(r.kind!=='ContractRevisionReview'||hash(x.current)!==r.taskHash||x.current.revision!==r.taskRevision||x.candidateHash!==r.candidateHash||r.workflowHash!==x.current.bootstrap.workflowHash||
       x.workflow.workflowHash!==r.nextWorkflowHash||hash(x.impact)!==hash(r.impact)||
       hash(x.current.settings)!==hash(r.settings)||(x.current.acceptanceMode??'PROTECTED_REQUIRED')!==r.acceptanceMode||
+      !Number.isSafeInteger(r.additionalAttempts)||r.additionalAttempts<0||r.additionalAttempts>2||
+      x.current.settings.maxAttempts+r.additionalAttempts>5||
+      !Number.isSafeInteger(r.additionalTimeSeconds)||r.additionalTimeSeconds<0||r.additionalTimeSeconds>120||
+      x.current.settings.timeoutSeconds+r.additionalTimeSeconds>1800||
       r.fromContractRevision!==(x.current.contractRevision??1)||r.toContractRevision!==r.fromContractRevision+1)
     throw Error('Contract review binding changed');
   const previousTaskRef=store.artifact(x.current),planRef=store.artifact(x.plan),workflowRef=store.artifact(x.workflow);
   const receipt={kind:'ContractRevisionReceipt',taskId:r.taskId,contractRevision:r.toContractRevision,
     previousTaskRef,planRef,workflowRef,reviewRef,reviewHash:trust,impact:x.impact};
   const receiptRef=store.artifact(receipt),bootstrap=structuredClone(x.current.bootstrap);
-  const reopen=new Set([...x.impact.affected,...x.impact.reReview]);
+  // A completed source is still the candidate under review. Run the new tests
+  // first so an actual failure can authorize a bounded replacement Fileset.
+  const reopen=new Set([...x.impact.affected,...x.impact.reReview].filter(id=>{
+    const item=x.workflow.items.find(i=>i.id===id);
+    return item.kind!=='local-edit' || x.impact.reopenSource.includes(id) || !x.current.bootstrap.filesets[id] ||
+      store.get(x.current.bootstrap.filesets[id]).state!=='COMPLETED';
+  }));
   const states=bootstrapStates(x.workflow);
   for(const i of x.workflow.items)if(!reopen.has(i.id))states[i.id]=bootstrap.states[i.id];
   const oldFilesets={...bootstrap.filesets};
@@ -141,9 +199,13 @@ export async function acceptContractRevision(store,reviewRef,{trust,acknowledgeU
   // Keep completed filesets as ownership/provenance even when their source needs
   // a new replacement; submitBootstrapFiles handles this explicit revision marker.
   bootstrap.revisionReopen={...bootstrap.revisionReopen,...Object.fromEntries([...reopen].filter(id=>oldFilesets[id]&&store.get(oldFilesets[id]).state==='COMPLETED').map(id=>[id,oldFilesets[id]]))};
-  Object.assign(bootstrap,{workflowRef,workflowHash:x.workflow.workflowHash,states,digests:recordedDigests(store,x.current),
+  Object.assign(bootstrap,{workflowRef,workflowHash:x.workflow.workflowHash,states,
+    digests:{...recordedDigests(store,x.current),...x.addedTestDigests},
     contractHistory:[...(bootstrap.contractHistory??[]),receiptRef]});
-  const next={...x.current,revision:x.current.revision+1,contractRevision:r.toContractRevision,planRef,bootstrap};
+  const next={...x.current,revision:x.current.revision+1,contractRevision:r.toContractRevision,
+    coveragePolicy:'MAPPED_TEST_EVIDENCE_V1',settings:{...x.current.settings,
+      maxAttempts:x.current.settings.maxAttempts+r.additionalAttempts,
+      timeoutSeconds:x.current.settings.timeoutSeconds+r.additionalTimeSeconds},planRef,bootstrap};
   if(await localTree(x.current.repo)!==r.candidateHash)throw Error('Candidate changed before revision commit');
   store.db.exec('BEGIN IMMEDIATE');
   try {

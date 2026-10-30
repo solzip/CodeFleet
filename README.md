@@ -1,12 +1,14 @@
 # CodeFleet
 
+**CodeFleet — Host-Native AI Development Orchestration**
+
 **Autonomous Execution. Controlled Process. Verified Results.**
 
-CodeFleet은 **기존 Codex CLI와 Claude Code 안에서 사용하는 AI 개발 오케스트레이션 확장 도구**입니다. Host의 인증·모델·세션·도구를 활용하면서 자연어 목표를 Task와 Workflow/DAG로 정리하고, 역할·정책·승인·복구·독립 검증을 관리합니다.
+CodeFleet은 **Codex CLI와 Claude Code의 기존 모델·인증·세션·도구·Agent 기능을 활용하는 개발 오케스트레이션 확장 도구**입니다. 자연어 개발 목표를 계약으로 구체화하고 실제 구현·검증·오류 수정·복구를 조정합니다. 기본은 단일 Agent이며, 독립 작업에 이점이 있을 때 Host-Native Multi-Agent/Subagent를 활용합니다. AI의 성공 주장 대신 **현재 계약과 Candidate에 결합된 Evidence/Judge**로 완료를 판정합니다.
 
 기본 계획·분석에는 **Node.js와 Git, 사용하는 Host**가 필요합니다. Docker·WSL·별도 Linux 계정·직접 모델 API Key는 기본 설치 요건이 아닙니다. Docker는 기존 Alpha의 보호된 검증 Backend로 유지합니다.
 
-Host-Native Core는 main에 통합되어 오프라인 회귀 검증을 거쳤습니다. **실제 Host 세션의 수용 상태는 `HOST_LIVE_NOT_VERIFIED`입니다.** 설치·계획 경로와 보호 실행 경로의 준비 상태를 구분합니다.
+**Windows Codex의 실제 감독형 개발과 Local 검증을 수용했습니다.** 이 README는 기존 Host-Native Core와 감독형 개발·협업, 완료 이후 계약 변경과 실패 기반 Repair를 설명합니다. Repair 수용의 구현 기준은 [검증 커밋](https://github.com/solzip/CodeFleet/commit/0b96ffbc9bb3cbe701f28e6b5fa744a27d19cdd0)이며, 이전 checkout이나 설치된 런타임 snapshot에는 이 기능이 없을 수 있습니다. 이 결과를 Claude Code나 다른 OS의 검증 완료로 확대하지 않습니다.
 
 [제품 원칙](docs/PRODUCT_VISION.md) · [공식 아키텍처](docs/product-completion/architecture.md) · [현재 상태](docs/product-completion/progress.md) · [Host 설치·사용](docs/product-completion/host-native-guide.md) · [Core와 검증 Backend](docs/product-completion/host-core-guide.md) · [문서 색인](docs/INDEX.md) · [English](README.en.md)
 
@@ -24,12 +26,17 @@ AI가 코드를 작성하는 것과 합의한 범위 안에서 작업을 끝내�
 | --- | --- |
 | 목표와 Task | 자연어 목표 접수, 구조화된 Draft, 파일·테스트·기준 검토, 기존 Contract Validator 검사 |
 | Workflow/DAG | 작업 분해, 의존 관계, 조회, 실행 가능성 설명, 승인 요청 |
-| 역할과 협업 | Planner·Architect·Executor·Reviewer 역할, 단일 Agent 기본, 기존 Hybrid Scheduler의 제한된 병렬 후보 검증 |
+| 역할과 협업 | 단일 Agent 기본. 실제 Codex Subagent 협업·독립 작업의 병렬 실행 관측, 범위·의존성·파일 충돌 관리 |
 | 실행 제어 | Policy·Capability·승인 Revision, Lease, 재시도 예산, 취소·복구·중복 요청 처리 |
-| 검증 | Local / Container Backend, 계약·후보 Tree에 결합된 Evidence, 독립 Judge |
-| Host 연동 | Codex·Claude 프로젝트 Skill 설치와 로컬 준비 경로. 실제 Live 호출과 자동 Host Agent 위임은 미검증 |
+| 검증 | Local / Container Backend, 계약·Candidate에 결합된 Evidence/Judge. 검증된 Repair Core에서 필수 Criterion의 승인된 테스트 매핑·실행·무결성 확인 |
+| 계약 변경·Repair | 검증된 Repair Core에서 완료 Objective의 후속 Contract Revision → 실제 실패 → Host Agent 제안 → 감독형 적용 → 재검증 → Recovery 수용 |
+| Host 연동 | Codex·Claude 프로젝트 Skill 설치 지원. Windows Codex의 설치된 `$codefleet` Skill을 통한 실제 감독형 개발 수용; Claude 최종 Host Live는 미완료 |
 
-일반 목표를 접수할 수 있지만 실행 가능한 계약은 현재의 **제한된 Node·Java 수정 범위**를 따릅니다. 지원하지 않는 목표는 `NEEDS_INPUT` 또는 `CAPABILITY_GAP`으로 남습니다. 역할 이름이 있다는 사실은 여러 독립 Agent가 실제 실행됐다는 증거가 아닙니다.
+일반 목표를 접수할 수 있지만 실행은 선택한 계약과 Backend의 지원 범위를 따릅니다. 기존 Alpha의 Node·Java 수정 경로와 Existing Local의 승인된 텍스트 소스 생성·수정 경로를 구분합니다. 지원하지 않는 목표는 `NEEDS_INPUT` 또는 `CAPABILITY_GAP`으로 남습니다. 역할 이름이 있다는 사실은 여러 독립 Agent가 실제 실행됐다는 증거가 아닙니다.
+
+Windows Codex 수용에서 자연어 목표 → Draft → Validator → DAG, 실제 코드 생성과 감독형 Fileset 적용, 단일 Agent 및 실제 Subagent 협업을 확인했습니다. 독립 작업의 병렬 실행도 관측했지만 Multi-Agent의 일반적인 시간·비용 우위를 입증한 것은 아닙니다. [설치된 Skill 수용](docs/runs/2026-10-28/public-existing-local-v2.md)과 [협업·병렬 실행 기록](docs/runs/2026-10-28/manager-proposal-handoff.md)은 각 실행의 범위를 구분합니다.
+
+최신 Repair 수용에서는 B/C 각각 **30/30 PASS, COMPLETE_LOCAL**, Criterion Evidence Coverage와 별도 프로세스 Recovery·중복 실행 방지를 확인했습니다. 최종 Host Core 회귀도 전체 통과했습니다. 과거 모델 입력 토큰 초과 `POLICY_VIOLATION` 기록은 보존하며 소급 승인하지 않습니다. [제품 진행 기록의 최종 회귀 수치와 수용 근거](docs/product-completion/progress.md)에서 명령·종료 코드·검증 환경을 확인할 수 있습니다.
 
 ## 작동 원리
 
@@ -37,9 +44,18 @@ AI가 코드를 작성하는 것과 합의한 범위 안에서 작업을 끝내�
 Host에서 목표 분석 → Task Draft → Validator → Workflow/DAG
  → 정책·Capability 확인 → 승인 요청 → 허용된 실행 경로
  → 검증 Backend → Evidence → Judge
+완료 이후 변경 → 감독형 Contract Revision → 실제 실패 Evidence
+ → Host Agent Repair 제안 → 정확한 Fileset 승인·적용
+ → 새 Candidate의 독립 Local 재검증 → Evidence/Judge → Recovery
 ```
 
 Draft 작성과 DAG 준비는 실행 승인이 아닙니다. 필요한 Capability가 없는 WorkItem은 차단되고 후속 의존 작업은 기다립니다. 독립적으로 실행 가능한 작업은 계속 진행할 수 있지만 필수 검증이 남으면 전체 Workflow를 완료하지 않습니다.
+
+## Persistent Work Log & Continuous Development
+
+최종 제품은 Objective별로 목표·현재 지침, Contract Revision·WorkItem·DAG, 담당 Agent와 미완료 작업, 중요한 결정·근거·결과를 일관되게 관리해야 합니다. Fileset·Attempt·Evidence·예산·승인을 연결하고, 새 사용자 지침이 진행 중 작업에 미치는 영향과 Agent 간 전달·수신·미확정 인계를 추적해야 합니다.
+
+기존 SQLite·Persistent Work Log·Manager·Recovery를 활용해 세션 종료나 Context Compaction 이후에도 현재 계약과 실행 효과를 복구하고 다음 적격 작업을 안전하게 이어가는 구조입니다. 별도 상태 시스템을 추가하지 않습니다. **새 지침 자동 대조 → Agent 전달 → 진행 중 Context Recovery → 연속 실행의 전체 연결은 다음 P0 개발 대상**입니다. 현재의 별도 프로세스 Recovery 성공을 이 전체 기능의 완료로 보지 않으며, 인수인계 요약 자체는 실행 권한이나 Evidence가 아닙니다.
 
 ## 기본 설치
 
@@ -83,7 +99,7 @@ Windows Fixture는 LF 줄바꿈으로 준비하세요. CodeFleet은 Git을 `core
 Task Draft와 Workflow/DAG를 작성한 뒤 미검증 항목을 표시해 주세요.
 ```
 
-이 예시는 첫 Live 수용 시나리오이며 실제 성공 기록이 아닙니다. Host 도구 권한과 허용된 상태 기록 경로를 먼저 정하세요. Skill의 자연어 지침 자체는 보안 Sandbox가 아닙니다.
+이 예시는 계획 전용 시작 요청이며 위에 링크한 실제 개발 수용 기록과는 별개입니다. Host 도구 권한과 허용된 상태 기록 경로를 먼저 정하세요. Skill의 자연어 지침 자체는 보안 Sandbox가 아닙니다.
 
 모델 호출 없이 준비 경로를 직접 확인할 수도 있습니다. 아래 명령은 신뢰할 수 있는 CodeFleet checkout에서 실행합니다. `STATE`는 대상 저장소 밖의 준비 상태 디렉터리, `REPO`는 깨끗한 Fixture Git 저장소, `TASK`는 `plan` 결과의 taskId로 바꾸세요. 파일 경로와 기준은 실제 Fixture에 맞게 검토합니다.
 
@@ -107,7 +123,11 @@ Host가 작성한 의미 기반 Draft는 `host codex draft TASK proposal.json`�
 - **엄격한 H6 `codefleet-plan`**: 별도의 격리 프로필입니다. 일반 Skill과 혼동하지 마세요. [H6 구현과 자원 검증](docs/runs/2026-10-21/h6-uid-resource-recovery.md)을 참고하세요.
 - **Single-Agent / Hybrid**: 기본은 하나의 Host Agent가 역할을 나눠 추론하는 방식입니다. Hybrid는 계약에 명시된 WorkItem·의존성·예산에 따라 제한된 병렬 실행을 관리합니다. [오케스트레이션 안내](docs/product-completion/orchestration-guide.md)에 세부 계약이 있습니다.
 
+실제 Host Agent/Subagent 협업에서는 Manager가 파일 범위·입출력·의존성과 검증 책임을 배정합니다. Agent 응답은 제안이며 실행 승인이 아닙니다. 통합한 Candidate는 다시 검증해야 합니다. 선택적 협업의 실제 관측과 기존 Hybrid 후보 검증, 인증된 공개 사전 승인 위임은 서로 다른 범위입니다.
+
 현재 공개 Host 경로의 `requests`·`submit`·`run`·`resume`은 보호 실행 게이트에 의해 차단됩니다. 내부 오프라인 Fixture에서 검증한 H4 Linux IPC 경로를 일반 사용자 Live 실행 지원으로 해석하지 마세요. [Host 설치·실행 경계](docs/product-completion/host-native-guide.md)를 따르며 내부 모듈이나 Legacy 명령으로 우회하지 않습니다.
+
+이 보호 경로의 차단과 별개로, 정확한 Review와 명시적 동의를 요구하는 감독형 `objective` Fileset·Local 검증 경로를 수용했습니다. 공개 사전 승인 위임은 계속 `PUBLIC_DELEGATION_BLOCKED`입니다.
 
 ## Verification Backend와 Evidence
 
@@ -142,9 +162,16 @@ Host Core 테스트에는 Docker 없는 실제 준비 경로·Local 실행과 �
 
 ## 현재 상태와 다음 수용 검증
 
-Host-Native 계획·DAG·검증 계약의 오프라인 시험과 기존 Legacy·Alpha 경로를 유지합니다. 실제 Host Live, 자동 Host 위임, 일반 사용자 환경의 보호 실행 배포는 별도 수용 검증이 필요합니다. Linux Legacy 탐색 실패는 미해결이며 현재 Linux 필수 CI의 시험 범위와 구분합니다. Alpha 인증 확인도 오프라인 CI 성공에 포함되지 않습니다.
+| 구분 | 범위 |
+| --- | --- |
+| 실제 검증 | Windows Codex 감독형 개발, 승인된 파일 변경·Local 검증, 선택적 Host-Native 협업. 검증된 Repair Core의 감독형 후속 Contract Revision·Repair·Recovery |
+| 다음 P0 | Persistent Work Log → Directive Reconciliation → Agent Handoff → 진행 중 Context Recovery → Continuous Development |
+| 미완료·차단 | 인증된 공개 사전 승인 위임 `PUBLIC_DELEGATION_BLOCKED`, Protected 필수 Evidence `UNSATISFIED`, 완전 무인 자동 Repair |
+| 미검증 | 진행 중 Objective의 전체 Context Compaction·Agent 인수인계 E2E, Claude Code 최종 Host Live, Windows·macOS·Linux 전체 공식 호환성, 실제 브라우저 E2E 최종 수용, Multi-Agent의 일반적인 시간·비용 우위 |
 
-첫 Live 수용은 Codex `$codefleet` 또는 Claude `/codefleet`에서 공개 Fixture를 **분석만** 하고 Draft→Validator→DAG→상태·Evidence 조회를 확인하는 범위입니다. 소스 무변경, 승인·실행 권한 미생성, 미검증 항목 표기가 수용 조건입니다. 실행 전에 Host 버전·모델·Fixture/Skill Hash·읽기와 상태 쓰기 권한·네트워크·예산을 확정하고 별도 승인을 받아야 합니다. [기존 사전 점검](docs/runs/2026-10-20/first-host-native-acceptance-preflight.md)은 당시 기록이며 실행 전 조건을 다시 확인합니다.
+`COMPLETE_LOCAL`은 해당 계약과 Candidate의 Local 수락이며 전체 제품 완성이나 Protected 성공이 아닙니다. Host-Native 오프라인 시험과 기존 Legacy·Alpha 경로를 유지합니다. Linux Legacy 탐색 실패는 미해결이며 현재 Linux 필수 CI의 시험 범위와 구분합니다. Alpha 인증 확인도 오프라인 CI 성공에 포함되지 않습니다.
+
+[최초 분석 전용 Live 사전 점검](docs/runs/2026-10-20/first-host-native-acceptance-preflight.md)은 당시 기록으로 보존합니다. 새 실행에서는 Host 버전·모델·프로젝트/Skill Hash·권한·네트워크·예산과 정확한 승인을 다시 확인해야 합니다. 후속 개발 기준은 [제품 진행 기록](docs/product-completion/progress.md)과 [로드맵](docs/product-completion/roadmap.md)을 따릅니다.
 
 ## 설계 자료와 역사적 기록
 

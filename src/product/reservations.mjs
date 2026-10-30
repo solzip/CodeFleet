@@ -103,6 +103,22 @@ function validateRepairDecision(store, binding) {
   // Revalidate immutable terminal evidence, including counts and original grant.
   committedStatus(store, prior.decisionId, prior.requestId);
 }
+// Bind a separately materialized repair before presenting a new Local review.
+// Reuse the issuance checks; discovery grants neither a Decision nor an Attempt.
+export function inspectCompletedRepair(store, taskId, itemId, inspected) {
+  const current = task(store, taskId);
+  const prior = store.db.prepare('SELECT body FROM bootstrap_reservations WHERE taskId=?').all(taskId)
+    .map(r => JSON.parse(r.body)).filter(r => r.identity?.workflowHash === current.bootstrap.workflowHash);
+  if (!prior.some(r => r.state === 'LOCAL_FAILED')) return null;
+  if (prior.length !== 1 || prior[0].state !== 'LOCAL_FAILED' || prior[0].itemId !== itemId)
+    throw Error('One settled failure required; repair budget exhausted');
+  const run = completedRepairFor(store, prior[0]);
+  if (!run) throw Error('Approved completed repair required');
+  const repair = {runId: run.id, evidenceRef: prior[0].result.evidenceRef, priorRequestId: prior[0].requestId};
+  validateRepairDecision(store, {taskId, itemId, workflowHash: current.bootstrap.workflowHash,
+    command: inspected.command, fileDigests: inspected.fileDigests, repair});
+  return repair;
+}
 export function requireDurableOperator() {
   requireProductionHostIsolation();
   // A generic future Host deployment does not authenticate Bootstrap decisions.
@@ -136,7 +152,9 @@ export async function issueLocalTrustDecision(store, taskId, itemId, request, in
 }
 // Uses the same supervised Local boundary; never an authenticated public issuer.
 export async function issueLocalEnvironmentDecision(store, taskId, itemId, request, input, review, environmentRecovery) {
-  const prior = store.db.prepare('SELECT body FROM bootstrap_reservations WHERE taskId=?').all(taskId).map(r => JSON.parse(r.body));
+  const workflowHash=task(store,taskId).bootstrap.workflowHash;
+  const prior = store.db.prepare('SELECT body FROM bootstrap_reservations WHERE taskId=?').all(taskId)
+    .map(r => JSON.parse(r.body)).filter(r=>r.identity?.workflowHash===workflowHash);
   if (prior.length !== 1 || prior[0].state !== 'LOCAL_FAILED' || prior[0].requestId !== environmentRecovery.priorRequestId)
     throw Error('One settled failure required; environment recovery budget exhausted');
   committedStatus(store, prior[0].decisionId, prior[0].requestId);
@@ -151,7 +169,9 @@ export async function issueSignedOfflineDecision(store, taskId, itemId, request,
 }
 async function issueRepair(store, taskId, itemId, request, input, repairRunId, authorization) {
   const run = store.get(repairRunId);
-  const prior = store.db.prepare('SELECT body FROM bootstrap_reservations WHERE taskId=?').all(taskId).map(r => JSON.parse(r.body));
+  const workflowHash=task(store,taskId).bootstrap.workflowHash;
+  const prior = store.db.prepare('SELECT body FROM bootstrap_reservations WHERE taskId=?').all(taskId)
+    .map(r => JSON.parse(r.body)).filter(r=>r.identity?.workflowHash===workflowHash);
   if (prior.length !== 1 || prior[0].state !== 'LOCAL_FAILED' || prior[0].itemId !== itemId) throw Error('One settled failure required; repair budget exhausted');
   const repair = { runId: repairRunId, evidenceRef: run.contract?.repairOf?.evidenceRef, priorRequestId: prior[0].requestId };
   return issue(store, taskId, itemId, request, input, repair, authorization);
@@ -297,9 +317,10 @@ export async function executeOfflineDecision(store, taskId, itemId, request, { d
     const fresh = decision(store, decisionId); validDecision(store, fresh); const current = currentBinding(store, b);
     if (fresh.consumed !== null || fresh.remaining !== 1) throw Error('Decision already consumed');
     const prior = store.db.prepare('SELECT body FROM bootstrap_reservations WHERE taskId=?').all(taskId).map(v => JSON.parse(v.body));
-    const repairedFailure = b.repair && prior.length === 1 && prior[0].requestId === b.repair.priorRequestId && prior[0].state === 'LOCAL_FAILED';
-    const environmentFailure = b.environmentRecovery && prior.length === 1 && prior[0].requestId === b.environmentRecovery.priorRequestId && prior[0].state === 'LOCAL_FAILED';
-    if (prior.length >= current.settings.maxAttempts || (prior.some(a => a.state !== 'LOCAL_PASSED') && !repairedFailure && !environmentFailure) ||
+    const contractPrior=prior.filter(a=>a.identity?.workflowHash===b.workflowHash);
+    const repairedFailure = b.repair && contractPrior.length === 1 && contractPrior[0].requestId === b.repair.priorRequestId && contractPrior[0].state === 'LOCAL_FAILED';
+    const environmentFailure = b.environmentRecovery && contractPrior.length === 1 && contractPrior[0].requestId === b.environmentRecovery.priorRequestId && contractPrior[0].state === 'LOCAL_FAILED';
+    if (prior.length >= current.settings.maxAttempts || (contractPrior.some(a => a.state !== 'LOCAL_PASSED') && !repairedFailure && !environmentFailure) ||
         b.command.timeoutMs > b.timeBudgetMs || prior.reduce((n,a) => n + a.reservedTimeMs, 0) + b.command.timeoutMs > current.settings.timeoutSeconds * 1000) throw Error('HUMAN_HANDOFF: execution/time/consecutive failure budget exhausted');
     const now = Date.now(), owner = randomUUID(), runId = 'bootstrap-attempt-' + randomUUID();
     const identity = { decisionId, requestId, attemptId: runId, taskId, itemId, revision: b.revision, workflowHash: b.workflowHash,
