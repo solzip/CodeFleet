@@ -1,5 +1,21 @@
 # 진행 현황과 결정 목록
 
+2026-10-30 [Handoff 신뢰 경계 최종 수정](../runs/2026-10-30/undelivered-handoff-recovery-v2.md):
+내부 Embedding 보고는 EMBEDDING_REPORTED_ONLY이며 전달 효과는 DELIVERY_UNCONFIRMED로 남는다.
+`observed:true`·호출자 Receipt·과거 관측 라벨은 독립 인증이 아니다. 현재 Adapter에는 검증기가 없어
+종료·수신 확인은 fail-closed다. 미해결 인계가 있으면 계약 변경은 원자적으로 수락하되 새 인계 준비를
+보류한다. 아래 초기 구현의 종료 가능 주장은 이 후속 수정으로 대체되며, 당시 회귀 수치는 역사로 보존한다.
+최종 Host Core 135 PASS(Work Log 23개 포함), 관련 안전성 85 PASS, 각각 exit 0이다.
+실제 Host 관측·안전한 전달 실패 종료는 HOST_ADAPTER_UNAVAILABLE이며 Live 수용 완료가 아니다.
+
+2026-10-30 초기 [UNDELIVERED 인계 복구 수정](../runs/2026-10-30/undelivered-handoff-recovery.md):
+당시 내부 관측 보고의 `delivered:false`를 사용자 종료와 재준비의 근거로 사용했다. 이는 독립 인증이 아니었다.
+기존 인계의 UNDELIVERED 상태와 이력을 보존하며, 종료·재준비는 모델 호출이나 실행 승인을 부여하지 않는다.
+미확정 전달은 계약 변경 후에도 RECONCILE로 차단한다. 합성 관측 및 별도 프로세스 Recovery를 포함한
+Host Core 132 PASS(Work Log 20개 포함), 안전성 85 PASS, 각각 exit 0을 확인했다.
+실제 Host 전달 실패·세션 경계·Compaction 수용은 미검증이며 PUBLIC_DELEGATION_BLOCKED와
+Protected UNSATISFIED를 유지한다. 기존 완료 Live Objective와 Evidence·예산은 변경하지 않았다.
+
 2026-10-30 후속 [감독형 채택·Repair 연결 수정](../runs/2026-10-30/supervised-adoption-repair.md):
 기존 완료 Fileset 이력을 현재 계약·실패 Evidence·Repair 기준 해시와 대조하여 채택 이력을
 복구한다. 새 Repair의 Fileset 승인과 Verification Decision은 별도로 필요하다.

@@ -16,6 +16,14 @@ function atomic(store, fn) {
   catch (error) { store.db.exec('ROLLBACK'); throw error; }
 }
 
+// Structural validation of historical records is not Host authentication.
+function recordedNonDelivery(h, receipt) {
+  return receipt.kind === 'AgentHandoffObservation' && receipt.status === 'UNDELIVERED' &&
+    receipt.authority === 'HOST_TRANSPORT_OBSERVED' && receipt.handoffId === h.handoffId &&
+    receipt.packetRef === h.packetRef && receipt.details?.delivered === false &&
+    receipt.details.agentId === h.agentId && receipt.details.packetRef === h.packetRef && identity(receipt.details.messageId);
+}
+
 export function coordinationLog(store, taskId) {
   const current = task(store, taskId), events = store.events(taskId);
   const assignments = {}, handoffs = new Map(), directives = new Map();
@@ -40,13 +48,27 @@ export function coordinationLog(store, taskId) {
       const receipt = store.readArtifact(b.receiptRef);
       if (receipt.handoffId !== h.handoffId || receipt.packetRef !== h.packetRef || receipt.status !== b.status)
         throw Error('Handoff observation binding defect');
+      if (h.closure || b.status === 'UNDELIVERED' && (h.status !== 'DELIVERY_UNCONFIRMED' ||
+          b.authority !== 'HOST_TRANSPORT_OBSERVED' || !recordedNonDelivery(h, receipt)))
+        throw Error('Confirmed Host nondelivery observation required');
+      if (['DELIVERED','UNDELIVERED','ACKNOWLEDGED'].includes(b.status) ||
+          b.status === 'REJECTED_STALE' && h.status !== 'PREPARED')
+        h.observationBlocker = 'HOST_ADAPTER_UNAVAILABLE';
       h.status = b.status; h.observations.push({ ...b, seq: event.seq });
+    }
+    if (event.type === 'AGENT_HANDOFF_CLOSED') {
+      const h = handoffs.get(b.handoffId);
+      if (!h || h.closure || h.status !== 'UNDELIVERED' || b.receiptRef !== h.observations.at(-1)?.receiptRef ||
+          !recordedNonDelivery(h, store.readArtifact(b.receiptRef))) throw Error('Invalid nondelivery closure');
+      h.closure = { ...b, seq: event.seq };
+      h.observationBlocker = 'HOST_ADAPTER_UNAVAILABLE';
     }
   }
   const all = [...handoffs.values()].map(h => ({ ...h,
     stale: h.contractRevision !== (current.contractRevision ?? 1),
-    resolved: ['ACKNOWLEDGED', 'REJECTED_STALE'].includes(h.status) }));
+    resolved: !h.observationBlocker && h.status === 'REJECTED_STALE' }));
   return { authority: 'COORDINATION_ONLY', ...noGrant, assignments, directives: [...directives.values()],
+    hostObservation: 'HOST_ADAPTER_UNAVAILABLE',
     handoffs: all, pendingHandoffs: all.filter(h => !h.resolved),
     pendingDirectives: [...directives.values()].filter(d => ['PENDING_REVIEW','AWAIT_CONTRACT_APPROVAL'].includes(d.status)) };
 }
@@ -164,6 +186,13 @@ export function recordRevisionCoordination(store, current, next, receiptRef, rev
   for (const itemId of impact.affected) {
     const assignment = log.assignments[itemId];
     if (!assignment) continue;
+    const pending = coordinationLog(store, current.id).pendingHandoffs.filter(h => h.itemId === itemId);
+    if (pending.length) {
+      store.event(current.id, 'AGENT_HANDOFF_PREPARATION_DEFERRED', { itemId, agentId: assignment.agentId,
+        contractRevision: next.contractRevision, receiptRef, handoffIds: pending.map(h => h.handoffId),
+        reason: 'UNRESOLVED_PRIOR_HANDOFF', ...noGrant });
+      continue;
+    }
     prepareHandoffRecord(store, next, itemId, assignment.agentId, 'Contract revision changed assigned scope', receiptRef);
   }
 }
@@ -189,22 +218,34 @@ export function prepareAgentHandoff(store, taskId, input) {
     if (current.revision !== input.revision) throw Error('Stale handoff context');
     const assignment = log.assignments[input.itemId];
     if (!assignment) throw Error('Assign WorkItem before handoff');
-    if (log.pendingHandoffs.some(h => h.itemId === input.itemId && !h.stale)) throw Error('Pending handoff exists; do not duplicate delivery');
+    if (log.pendingHandoffs.some(h => h.itemId === input.itemId)) throw Error('Pending handoff exists; do not duplicate delivery');
     return prepareHandoffRecord(store, current, input.itemId, assignment.agentId, input.reason);
+  });
+}
+
+// No supported independent Host event verifier exists. Historical authority
+// labels and same-user embedding reports cannot authorize closure.
+export function closeUndeliveredHandoff(store, taskId, input) {
+  exact(input, ['revision','handoffId','reason']);
+  if (!text(input.reason)) throw Error('Handoff closure reason required');
+  return atomic(store, () => {
+    const current = task(store, taskId), h = coordinationLog(store, taskId).handoffs.find(h => h.handoffId === input.handoffId);
+    if (current.revision !== input.revision) throw Error('Stale handoff closure context');
+    if (!h || h.closure || h.status !== 'UNDELIVERED') throw Error('Confirmed undelivered handoff required; reconcile uncertain delivery');
+    throw Error('HOST_ADAPTER_UNAVAILABLE: independent nondelivery evidence required; closure not authorized');
   });
 }
 
 // Reconcile an interrupted delivery from actual Host transport records. Never
 // invoke the transport again or infer success from the mere existence of a packet.
 export function reconcileAgentHandoff(store, taskId, handoffId, receipt, { observed = false } = {}) {
-  if (observed !== true) throw Error('Trusted Host transport observation required');
+  if (observed !== true) throw Error('Trusted Host transport observation required; caller reports are not evidence');
   return atomic(store, () => {
     const h = coordinationLog(store, taskId).handoffs.find(h => h.handoffId === handoffId);
     if (!h || h.status !== 'DELIVERY_UNCONFIRMED' || receipt?.agentId !== h.agentId ||
         receipt?.packetRef !== h.packetRef || !identity(receipt.messageId) || typeof receipt.delivered !== 'boolean')
       throw Error('Unmatched delivery reconciliation');
-    return observe(store, taskId, h, h.stale ? 'REJECTED_STALE' : receipt.delivered ? 'DELIVERED' : 'UNDELIVERED',
-      receipt, 'HOST_TRANSPORT_OBSERVED');
+    throw Error('HOST_ADAPTER_UNAVAILABLE: observed=true and caller receipts do not authenticate Host events');
   });
 }
 
@@ -221,8 +262,10 @@ function observe(store, taskId, handoff, status, details, authority) {
 export async function deliverAgentHandoff(store, taskId, handoffId, transport) {
   if (typeof transport !== 'function') throw Error('Authorized Host transport required');
   const handoff = atomic(store, () => {
-    const h = coordinationLog(store, taskId).handoffs.find(h => h.handoffId === handoffId);
+    const log = coordinationLog(store, taskId), h = log.handoffs.find(h => h.handoffId === handoffId);
     if (!h || h.status !== 'PREPARED') throw Error('Handoff is not prepared; reconcile, never replay');
+    if (log.pendingHandoffs.some(other => other.itemId === h.itemId && other.handoffId !== h.handoffId))
+      throw Error('RECONCILE: prior handoff for this WorkItem remains unresolved');
     if (supervisedHandoffAdopted(store, taskId, h)) throw Error('Supervised Fileset adopted; no concurrent Host dispatch');
     if (h.stale) { observe(store, taskId, h, 'REJECTED_STALE', {}, 'CONTRACT_CHECK'); return null; }
     observe(store, taskId, h, 'DELIVERY_UNCONFIRMED', {}, 'HOST_TRANSPORT_PENDING');
@@ -234,11 +277,12 @@ export async function deliverAgentHandoff(store, taskId, handoffId, transport) {
   catch (error) { return { status: 'DELIVERY_UNCONFIRMED', reason: error.message, ...noGrant }; }
   return atomic(store, () => {
     const h = coordinationLog(store, taskId).handoffs.find(h => h.handoffId === handoffId);
-    if (h.stale) return observe(store, taskId, h, 'REJECTED_STALE', {}, 'CONTRACT_CHECK');
     if (h.status !== 'DELIVERY_UNCONFIRMED') throw Error('Handoff changed during transport');
-    if (!result || !identity(result.messageId) || result.agentId !== h.agentId || result.packetRef !== h.packetRef)
+    if (!result || typeof result.delivered !== 'boolean' || !identity(result.messageId) || result.agentId !== h.agentId || result.packetRef !== h.packetRef)
       return { status: 'DELIVERY_UNCONFIRMED', ...noGrant };
-    return observe(store, taskId, h, result.delivered === true ? 'DELIVERED' : 'UNDELIVERED', result, 'HOST_TRANSPORT_OBSERVED');
+    // Persist the embedding report at its actual trust level, retaining uncertain
+    // effects even for a claimed false result or a revision during dispatch.
+    return observe(store, taskId, h, 'DELIVERY_UNCONFIRMED', result, 'EMBEDDING_REPORTED_ONLY');
   });
 }
 
@@ -248,9 +292,9 @@ export function acknowledgeAgentHandoff(store, taskId, handoffId, receipt, { obs
   return atomic(store, () => {
     const h = coordinationLog(store, taskId).handoffs.find(h => h.handoffId === handoffId);
     if (!h) throw Error('Unknown handoff');
-    if (h.stale) return observe(store, taskId, h, 'REJECTED_STALE', {}, 'CONTRACT_CHECK');
+    if (h.closure || h.status !== 'DELIVERED') throw Error('Unmatched or closed handoff acknowledgment');
     if (h.status !== 'DELIVERED' || receipt?.agentId !== h.agentId || receipt?.packetRef !== h.packetRef ||
         receipt?.contractRevision !== h.contractRevision || !identity(receipt.messageId)) throw Error('Unmatched handoff acknowledgment');
-    return observe(store, taskId, h, 'ACKNOWLEDGED', receipt, 'HOST_RECEIPT_OBSERVED');
+    throw Error('HOST_ADAPTER_UNAVAILABLE: caller acknowledgment is not independent Host evidence');
   });
 }

@@ -14,7 +14,7 @@ import { developmentProposalRequest, developmentProposalBatch, reviewDevelopment
 import { recoverObjective } from './recovery.mjs';
 import { prepareContractRevision, acceptContractRevision, revokeContractRevision } from './contract-revisions.mjs';
 import { repairProposalRequest } from './repair.mjs';
-import { assignWorkItem, recordDirective, decideDirective, prepareAgentHandoff } from './work-log.mjs';
+import { assignWorkItem, recordDirective, decideDirective, prepareAgentHandoff, closeUndeliveredHandoff } from './work-log.mjs';
 import { reconcileDirective } from './directives.mjs';
 import { reviewSupervisedProposal } from './continuation.mjs';
 import { submitBootstrapFiles } from './tasks.mjs';
@@ -39,6 +39,7 @@ codefleet-alpha objective proposal-results <task-id> BATCH.json RESULTS.json (va
 codefleet-alpha objective recover <task-id> [RECOVERY.json|BINDING.json] (compare prior checkpoint; never execute, renew or replay)
 codefleet-alpha objective work-log <task-id> (persisted recovery and coordination; no execution)
 codefleet-alpha objective assign|directive|handoff <task-id> INPUT.json (record scope/directive/prepare handoff; never deliver)
+codefleet-alpha objective handoff-close <task-id> INPUT.json (requires independent nondelivery evidence; currently HOST_ADAPTER_UNAVAILABLE)
 codefleet-alpha objective directive-review <task-id> <directive-id> PROPOSAL.json (existing exact contract review; no execution)
 codefleet-alpha objective directive-decision <task-id> INPUT.json (explicit defer/reject/retain with reason; never approves execution)
 codefleet-alpha objective revision-review <task-id> PROPOSAL.json (revision, full revised draft, optional additionalAttempts 0..2 and additionalTimeSeconds 0..120; no execution)
@@ -117,9 +118,9 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     const data = await recoverObjective(store, args[0]);
     return { exitCode: data.status === 'RECOVERED' ? 0 : 2, data };
   }
-  if (['assign','directive','directive-decision','handoff'].includes(action)) {
+  if (['assign','directive','directive-decision','handoff','handoff-close'].includes(action)) {
     if (args.length !== 2 || Object.keys(o).length) throw Error('Coordination requires Task and input only');
-    const fn = { assign: assignWorkItem, directive: recordDirective, 'directive-decision': decideDirective, handoff: prepareAgentHandoff }[action];
+    const fn = { assign: assignWorkItem, directive: recordDirective, 'directive-decision': decideDirective, handoff: prepareAgentHandoff, 'handoff-close': closeUndeliveredHandoff }[action];
     return { exitCode: 0, data: fn(store, args[0], await readResponse(args[1])) };
   }
   if (action === 'directive-review') {

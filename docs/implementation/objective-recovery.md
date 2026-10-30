@@ -19,8 +19,8 @@ complete revised draft through the existing Contract Revision Review. It records
 affected WorkItems/dependents and assigned Agents, candidate binding, and the
 need for fresh approvals and evidence. It does not infer a revised contract from
 natural language alone. The existing exact `revision-accept` applies the contract,
-records the directive's actual outcome and prepares handoffs for affected assigned
-items in the same transaction. Unaffected work and consumed budgets stay intact.
+records the directive's actual outcome and prepares or defers handoffs for affected
+assigned items in the same transaction. Unaffected work and consumed budgets stay intact.
 Global/unmapped changes remain conservatively global. Active leases and uncertain
 execution effects continue to prevent contract acceptance.
 
@@ -31,20 +31,40 @@ review and records the reason; it cannot approve effects or alter the contract.
 
 `objective handoff TASK INPUT.json` accepts `{revision,itemId,reason}` and prepares
 a packet from the assigned scope/current contract. Preparation never means delivery.
-Trusted Host embedding functions in `src/product/work-log.mjs` distinguish
-PREPARED, DELIVERY_UNCONFIRMED, DELIVERED, ACKNOWLEDGED, UNDELIVERED and REJECTED_STALE.
-Delivery records uncertainty before invoking a separately authorized transport.
-Transport failure retains that uncertainty across restart and prohibits replay.
-Observed transport records can reconcile it without relaunch; acknowledgment must
-match the recipient, packet and current contract. Revision invalidates unsent old
-packets; in-flight old delivery remains observable until explicitly reconciled.
+The embedding callback records DELIVERY_UNCONFIRMED before invoking a separately
+authorized transport. Matched boolean results are retained as EMBEDDING_REPORTED_ONLY;
+they do not establish delivery, nondelivery or acknowledgment. Missing/malformed
+results and exceptions also leave uncertain effects. Restart cannot replay them.
 
-No public CLI can forge a transport or receipt observation. These functions are
-trusted embedding seams, not authenticated public Host integrations. The current
-CLI can prepare, inspect and recover packets; automatic Host delivery and actual
-receipt observations need the Host adapter and separate authorization. A missing
-adapter remains a capability gap, never a successful delivery. Known undelivered
-packets remain pending for human handling; automatic retry is not implemented.
+There is no supported independent Host event verifier in this adapter.
+`observed:true`, caller JSON and internal function invocation cannot establish
+HOST_TRANSPORT_OBSERVED or HOST_RECEIPT_OBSERVED. Reconciliation and acknowledgment
+fail closed without an independent verifier. Rejected caller receipts produce no
+observation events. This does not authenticate same-user embedding code or SQLite.
+
+`objective handoff-close TASK INPUT.json` accepts exactly
+`{revision,handoffId,reason}`, checks the current Task revision and old packet,
+but currently cannot authorize closure: HOST_ADAPTER_UNAVAILABLE.
+Historical UNDELIVERED, DELIVERED, ACKNOWLEDGED and closure records are preserved;
+their old authority labels do not prove independent observation. Recovery keeps
+them unresolved with an observationBlocker instead of granting new preparation.
+No new closure or observed-success record is manufactured.
+
+Contract Revision remains atomic. Unsent PREPARED packets can be rejected stale
+without claiming a delivery outcome. For each affected assigned WorkItem with
+another unresolved handoff, the revision records AGENT_HANDOFF_PREPARATION_DEFERRED
+instead of preparing a replacement. The contract can advance, but its previous
+delivery effect remains unresolved. Explicit preparation rechecks all pending
+handoffs, the current revision, workflow, WorkItem and assigned Agent.
+
+A valid independently grounded closure would be required before retrying a failed
+delivery. That positive transition is unavailable with the current adapter; it is
+not certified by synthetic fixtures. A historical closure label is insufficient.
+New preparation is currently possible only when no unresolved handoff remains
+(for example an unsent packet invalidated by an approved revision). Preparation
+does not call a model, retransmit a packet, grant execution, or acknowledge receipt.
+Uncertain dispatch remains RECONCILE; unverifiable historical observations remain
+HUMAN_HANDOFF. See [trust correction](../runs/2026-10-30/undelivered-handoff-recovery-v2.md).
 
 Continuation skips items whose handoffs or prerequisite handoffs are pending,
 except for the exact supervised adoption below;

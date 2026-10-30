@@ -29,6 +29,11 @@ async function directProposal(f) {
   const revision = await reconcileDirective(f.store,f.id,'supervised-change',{revision:old.revision,draft});
   await acceptContractRevision(f.store,revision.reviewRef,{trust:revision.reviewHash,acknowledgeUnisolated:true});
   const current = task(f.store,f.id), h = coordinationLog(f.store,f.id).pendingHandoffs[0];
+  return proposalForHandoff(f, h);
+}
+
+async function proposalForHandoff(f, h) {
+  const current = task(f.store, f.id);
   const inputRef = f.store.artifact({kind:'CurrentSessionProposalContext',taskId:f.id,taskRevision:current.revision,
     contractRevision:2,handoffId:h.handoffId,packetRef:h.packetRef,packet:f.store.readArtifact(h.packetRef)});
   const content = "import {normalizeTitle} from './normalize-title.mjs'; export const createTodo=input=>({title:normalizeTitle(input),completed:false});\n";
@@ -292,15 +297,7 @@ function assign(f, itemId, agentId = itemId + '-agent') {
 function handoff(f, itemId) {
   return prepareAgentHandoff(f.store, f.id, { revision: task(f.store, f.id).revision, itemId, reason: 'Review current assigned contract' });
 }
-async function acknowledge(f, h) {
-  const result = await deliverAgentHandoff(f.store, f.id, h.handoffId, async packet => ({
-    delivered: true, agentId: packet.agentId, packetRef: packet.packetRef, messageId: 'synthetic-delivery' }));
-  assert.equal(result.status, 'DELIVERED');
-  return acknowledgeAgentHandoff(f.store, f.id, h.handoffId, { agentId: h.agentId, packetRef: h.packetRef,
-    contractRevision: h.contractRevision, messageId: 'synthetic-ack' }, { observed: true });
-}
-
-test('directive -> exact revision -> affected Agent handoff -> process recovery -> once-only remaining work', async () => {
+test('directive -> revision -> supervised proposal (not Host ACK) -> process recovery -> once-only work', async () => {
   const f = await setup();
   try {
     assign(f, 'normalize'); assign(f, 'todo');
@@ -330,9 +327,10 @@ test('directive -> exact revision -> affected Agent handoff -> process recovery 
     assert.equal(restarted.budget.usedAttempts, before.budget.usedAttempts);
     assert.equal(restarted.reservations[0].evidenceRef, firstEvidence.evidenceRef);
     assert.equal(restarted.contextCompaction, 'NOT_VERIFIED');
-    await acknowledge(f, log.handoffs[0]);
+    const direct = await proposalForHandoff(f, log.handoffs[0]);
+    const reviewed = await reviewSupervisedProposal(f.store, f.id, direct.ref);
+    const proposal = await submitBootstrapFiles(f.store, f.id, reviewed.input, {supervisedProposalRef:direct.ref});
     assert.equal((await f.call('recover')).status, 'RECOVERED');
-    const proposal = await f.call('propose', { itemId: 'todo' });
     await f.call('approve', { filesetHash: proposal.approvalRequest.filesetHash });
     await f.call('materialize', { itemId: 'todo' });
     const lastDecision = await f.call('issue', { itemId: 'verify-integrated' });
@@ -342,9 +340,151 @@ test('directive -> exact revision -> affected Agent handoff -> process recovery 
     assert.equal(final.complete, true); assert.equal(final.budget.usedAttempts, 2);
     assert.equal(final.reservations.at(-1).evidenceRef, evidence.evidenceRef);
     assert.equal(final.protectedVerification, 'UNSATISFIED');
-    handoff(f, 'todo');
-    assert.equal((await continuationSnapshot(f.store, f.id)).complete, false);
+    assert.equal(coordinationLog(f.store,f.id).handoffs[0].status,'PREPARED');
+    assert.throws(()=>handoff(f,'todo'),/Pending/);
   } finally { f.store.close(); }
+});
+
+// Historical fixtures reproduce the old boolean-based seam, not independent evidence.
+function legacyNonDelivery(f,h) {
+  const receipt={kind:'AgentHandoffObservation',handoffId:h.handoffId,packetRef:h.packetRef,
+    status:'UNDELIVERED',authority:'HOST_TRANSPORT_OBSERVED',
+    details:{agentId:h.agentId,packetRef:h.packetRef,messageId:'legacy-claim',delivered:false}};
+  const receiptRef=f.store.artifact(receipt);
+  f.store.event(f.id,'AGENT_HANDOFF_OBSERVED',{handoffId:h.handoffId,receiptRef,status:'UNDELIVERED',authority:'HOST_TRANSPORT_OBSERVED'});
+  return receiptRef;
+}
+
+for(const revised of [false,true]) test(`handoff trust: legacy nondelivery cannot close or prepare, revised=${revised}`,async t=>{
+  const f=await setup();t.after(()=>f.store.close());
+  const p=await f.call('propose',{itemId:'normalize'});
+  await f.call('approve',{filesetHash:p.approvalRequest.filesetHash});
+  await f.call('materialize',{itemId:'normalize'});
+  const decision=await f.call('issue',{itemId:'verify-normalize'});
+  await f.call('execute',{itemId:'verify-normalize',decision});
+  assign(f,'todo');const h=handoff(f,'todo');let calls=0;
+  await deliverAgentHandoff(f.store,f.id,h.handoffId,async()=>{calls++;throw Error('interrupted');});
+  const receiptRef=legacyNonDelivery(f,h),before=await f.call('recover');
+  const preserved=()=>hash(['bootstrap_decisions','bootstrap_reservations','workflow_approvals','workflow_attempts']
+    .map(table=>f.store.db.prepare('SELECT * FROM '+table+' ORDER BY rowid').all()));
+  const priorRecords=preserved();
+  assert.equal(before.status,'HUMAN_HANDOFF');assert.throws(()=>handoff(f,'todo'),/Pending/);
+  if(revised) {
+    const current=task(f.store,f.id),draft=structuredClone(f.store.readArtifact(current.planRef).draft);
+    draft.criteria.find(c=>c.id==='todo').description+='; explicit identity';
+    recordDirective(f.store,f.id,{directiveId:'after-failure',revision:current.revision,text:'Clarify Todo',reason:'User instruction'});
+    const review=await reconcileDirective(f.store,f.id,'after-failure',{revision:current.revision,draft});
+    await acceptContractRevision(f.store,review.reviewRef,{trust:review.reviewHash,acknowledgeUnisolated:true});
+    assert.equal(task(f.store,f.id).contractRevision,2);
+    const deferred=f.store.events(f.id).filter(e=>e.type==='AGENT_HANDOFF_PREPARATION_DEFERRED');
+    assert.equal(deferred.length,1);assert.deepEqual(deferred[0].body.handoffIds,[h.handoffId]);
+    assert.equal(deferred[0].body.contractRevision,2);assert.equal(deferred[0].body.executionGranted,false);
+  }
+  const file=path.join(f.root,'close.json');
+  await writeFile(file,JSON.stringify({revision:task(f.store,f.id).revision,handoffId:h.handoffId,reason:'Request closure'}));
+  const closed=await productCli(['handoff-close',f.id,file],f.state);
+  assert.equal(closed.exitCode,1);assert.match(JSON.stringify(closed),/HOST_ADAPTER_UNAVAILABLE/);
+  assert.throws(()=>handoff(f,'todo'),/Pending/);
+  assert.throws(()=>assign(f,'todo','replacement-agent'),/Reconcile/);
+  await assert.rejects(deliverAgentHandoff(f.store,f.id,h.handoffId,async()=>{calls++;}),/reconcile/);
+  assert.throws(()=>acknowledgeAgentHandoff(f.store,f.id,h.handoffId,{}, {observed:true}),/Unmatched/);
+  const after=await f.call('recover'),historical=after.coordination.pendingHandoffs[0];
+  assert.equal(after.status,'HUMAN_HANDOFF');assert.equal(after.complete,false);
+  assert.equal(after.coordination.handoffs.length,1);assert.equal(historical.status,'UNDELIVERED');
+  assert.equal(historical.resolved,false);assert.equal(historical.closure,undefined);
+  assert.equal(historical.observationBlocker,'HOST_ADAPTER_UNAVAILABLE');
+  assert.equal(historical.observations.at(-1).receiptRef,receiptRef);
+  assert.equal(after.executionGranted,false);assert.equal(after.modelInvocationGranted,false);
+  assert.deepEqual(after.budget,before.budget);assert.deepEqual(after.reservations,before.reservations);
+  assert.equal(preserved(),priorRecords);assert.equal(calls,1);
+  assert.equal(f.store.events(f.id).some(e=>e.type==='AGENT_HANDOFF_CLOSED'),false);
+});
+
+for(const delivered of [false,true]) test(`handoff trust: embedding ${delivered} and observed=true cannot authenticate delivery`,async t=>{
+  const f=await setup();t.after(()=>f.store.close());assign(f,'todo');const h=handoff(f,'todo');let calls=0;
+  const receipt={agentId:h.agentId,packetRef:h.packetRef,messageId:'caller-message',delivered,contractRevision:h.contractRevision};
+  const result=await deliverAgentHandoff(f.store,f.id,h.handoffId,async()=>{calls++;return {...receipt,authority:'HOST_TRANSPORT_OBSERVED',observed:true};});
+  assert.equal(result.status,'DELIVERY_UNCONFIRMED');assert.equal(result.authority,'EMBEDDING_REPORTED_ONLY');
+  const before=hash(f.store.events(f.id));
+  for(const change of [{},{agentId:'other-agent'},{packetRef:'0'.repeat(64)}])
+    assert.throws(()=>reconcileAgentHandoff(f.store,f.id,h.handoffId,{...receipt,...change},{observed:true}),/HOST_ADAPTER_UNAVAILABLE|Unmatched/);
+  assert.equal(hash(f.store.events(f.id)),before);
+  assert.throws(()=>acknowledgeAgentHandoff(f.store,f.id,h.handoffId,receipt,{observed:true}),/Unmatched/);
+  await assert.rejects(deliverAgentHandoff(f.store,f.id,h.handoffId,async()=>{calls++;}),/reconcile/);
+  assert.throws(()=>handoff(f,'todo'),/Pending/);
+  const file=path.join(f.root,'close.json');
+  await writeFile(file,JSON.stringify({revision:task(f.store,f.id).revision,handoffId:h.handoffId,reason:'Caller failure claim'}));
+  assert.equal((await productCli(['handoff-close',f.id,file],f.state)).exitCode,1);
+  const after=await f.call('recover');assert.equal(after.status,'RECONCILE');assert.equal(calls,1);
+  assert.equal(after.coordination.pendingHandoffs[0].status,'DELIVERY_UNCONFIRMED');
+  assert.equal(after.coordination.hostObservation,'HOST_ADAPTER_UNAVAILABLE');
+  assert.equal(after.executionGranted,false);assert.equal(after.modelInvocationGranted,false);
+  assert.equal(f.store.events(f.id).some(e=>e.body.authority==='HOST_TRANSPORT_OBSERVED'),false);
+});
+
+test('handoff trust: revision during uncertain dispatch defers preparation; late caller false stays unresolved',async t=>{
+  const f=await setup();t.after(()=>f.store.close());assign(f,'todo');const h=handoff(f,'todo');let calls=0;
+  const current=task(f.store,f.id),draft=structuredClone(f.store.readArtifact(current.planRef).draft);
+  draft.criteria.find(c=>c.id==='todo').description+='; explicit identity';
+  recordDirective(f.store,f.id,{directiveId:'inflight',revision:current.revision,text:'Clarify Todo',reason:'User instruction'});
+  const review=await reconcileDirective(f.store,f.id,'inflight',{revision:current.revision,draft});
+  await deliverAgentHandoff(f.store,f.id,h.handoffId,async()=>{
+    calls++;await acceptContractRevision(f.store,review.reviewRef,{trust:review.reviewHash,acknowledgeUnisolated:true});
+    return {agentId:h.agentId,packetRef:h.packetRef,messageId:'missing-outcome'};
+  });
+  assert.equal(task(f.store,f.id).contractRevision,2);
+  assert.equal(coordinationLog(f.store,f.id).handoffs.length,1);
+  assert.throws(()=>handoff(f,'todo'),/Pending/);
+  assert.throws(()=>reconcileAgentHandoff(f.store,f.id,h.handoffId,
+    {agentId:h.agentId,packetRef:h.packetRef,messageId:'late-false',delivered:false},{observed:true}),/HOST_ADAPTER_UNAVAILABLE|Unmatched/);
+  await assert.rejects(deliverAgentHandoff(f.store,f.id,h.handoffId,async()=>{calls++;}),/reconcile/);
+  const after=await f.call('recover');assert.equal(after.status,'RECONCILE');assert.equal(calls,1);
+  assert.equal(after.coordination.pendingHandoffs[0].handoffId,h.handoffId);
+});
+
+test('handoff trust: legacy closure is preserved but cannot authorize fresh preparation',async t=>{
+  const f=await setup();t.after(()=>f.store.close());assign(f,'todo');const h=handoff(f,'todo');
+  await deliverAgentHandoff(f.store,f.id,h.handoffId,async()=>{throw Error('interrupted');});
+  const receiptRef=legacyNonDelivery(f,h);
+  f.store.event(f.id,'AGENT_HANDOFF_CLOSED',{handoffId:h.handoffId,receiptRef,revision:task(f.store,f.id).revision,reason:'Legacy closure'});
+  const after=await f.call('recover');
+  assert.equal(after.status,'HUMAN_HANDOFF');assert.equal(after.coordination.pendingHandoffs.length,1);
+  assert.ok(after.coordination.handoffs[0].closure);
+  assert.throws(()=>handoff(f,'todo'),/Pending/);
+  assert.throws(()=>acknowledgeAgentHandoff(f.store,f.id,h.handoffId,{}, {observed:true}),/closed|Unmatched/);
+});
+
+test('handoff trust: historical DELIVERED and ACKNOWLEDGED labels cannot resolve coordination',async t=>{
+  const f=await setup();t.after(()=>f.store.close());assign(f,'todo');const h=handoff(f,'todo');
+  await deliverAgentHandoff(f.store,f.id,h.handoffId,async()=>{throw Error('interrupted');});
+  for(const status of ['DELIVERED','ACKNOWLEDGED']) {
+    const authority=status==='DELIVERED'?'HOST_TRANSPORT_OBSERVED':'HOST_RECEIPT_OBSERVED';
+    const details={agentId:h.agentId,packetRef:h.packetRef,contractRevision:h.contractRevision,messageId:'legacy',delivered:true};
+    const receiptRef=f.store.artifact({kind:'AgentHandoffObservation',handoffId:h.handoffId,packetRef:h.packetRef,status,authority,details});
+    f.store.event(f.id,'AGENT_HANDOFF_OBSERVED',{handoffId:h.handoffId,receiptRef,status,authority});
+    if(status==='DELIVERED')assert.throws(()=>acknowledgeAgentHandoff(f.store,f.id,h.handoffId,details,{observed:true}),/HOST_ADAPTER_UNAVAILABLE/);
+    const log=coordinationLog(f.store,f.id);
+    assert.equal(log.pendingHandoffs[0].status,status);assert.equal(log.pendingHandoffs[0].resolved,false);
+    assert.throws(()=>handoff(f,'todo'),/Pending/);
+    assert.throws(()=>requireCoordinatedWorkItem(f.store,f.id,'todo'),/AGENT_HANDOFF_UNCONFIRMED/);
+  }
+  assert.equal((await f.call('recover')).status,'HUMAN_HANDOFF');
+});
+
+test('undelivered handoff: provider-labelled false observation is not closure evidence', async t=>{
+  const f=await setup();t.after(()=>f.store.close());assign(f,'todo');const h=handoff(f,'todo');
+  await deliverAgentHandoff(f.store,f.id,h.handoffId,async()=>{throw Error('synthetic lost transport');});
+  const file=path.join(f.root,'forged-close.json');
+  await writeFile(file,JSON.stringify({revision:task(f.store,f.id).revision,handoffId:h.handoffId,reason:'Caller claim',delivered:false}));
+  assert.equal((await productCli(['handoff-close',f.id,file],f.state)).exitCode,1);
+  const receiptRef=f.store.artifact({kind:'AgentHandoffObservation',handoffId:h.handoffId,packetRef:h.packetRef,
+    status:'UNDELIVERED',authority:'PROVIDER_REPORTED_ONLY',details:{agentId:h.agentId,packetRef:h.packetRef,messageId:'forged',delivered:false}});
+  f.store.event(f.id,'AGENT_HANDOFF_OBSERVED',{handoffId:h.handoffId,receiptRef,status:'UNDELIVERED',authority:'PROVIDER_REPORTED_ONLY'});
+  assert.throws(()=>coordinationLog(f.store,f.id),/Confirmed Host/);
+  await writeFile(file,JSON.stringify({revision:task(f.store,f.id).revision,handoffId:h.handoffId,reason:'Attempt closure'}));
+  assert.equal((await productCli(['handoff-close',f.id,file],f.state)).exitCode,1);
+  assert.equal(f.store.events(f.id).some(e=>e.type==='AGENT_HANDOFF_CLOSED'),false);
+  const after=await f.call('recover');assert.equal(after.complete,false);assert.notEqual(after.status,'RECOVERED');
 });
 
 test('preparation is not delivery; crash/unknown transport survives restart without replay', async () => {
@@ -360,11 +500,12 @@ test('preparation is not delivery; crash/unknown transport survives restart with
     assert.equal(calls, 1);
     assert.equal((await f.call('recover')).coordination.pendingHandoffs[0].status, 'DELIVERY_UNCONFIRMED');
     assert.equal((await continuationSnapshot(f.store, f.id)).next.itemId, 'todo');
-    reconcileAgentHandoff(f.store, f.id, h.handoffId, { agentId: h.agentId, packetRef: h.packetRef,
-      messageId: 'observed-after-restart', delivered: true }, { observed: true });
-    acknowledgeAgentHandoff(f.store, f.id, h.handoffId, { agentId: h.agentId, packetRef: h.packetRef,
-      contractRevision: h.contractRevision, messageId: 'receipt-after-restart' }, { observed: true });
-    assert.equal(coordinationLog(f.store, f.id).pendingHandoffs.length, 0);
+    assert.throws(()=>reconcileAgentHandoff(f.store, f.id, h.handoffId, { agentId: h.agentId, packetRef: h.packetRef,
+      messageId: 'observed-after-restart', delivered: true }, { observed: true }),/HOST_ADAPTER_UNAVAILABLE/);
+    assert.throws(()=>acknowledgeAgentHandoff(f.store, f.id, h.handoffId, { agentId: h.agentId, packetRef: h.packetRef,
+      contractRevision: h.contractRevision, messageId: 'receipt-after-restart' }, { observed: true }),/Unmatched/);
+    assert.equal(coordinationLog(f.store, f.id).pendingHandoffs.length, 1);
+    assert.equal((await f.call('recover')).status,'RECONCILE');
     assert.equal(calls, 1);
   } finally { f.store.close(); }
 });
