@@ -13,6 +13,7 @@ import { nativeLocalStep, nativeEnvironmentStep, prepareNativeLocalReview, accep
 import { developmentProposalRequest, developmentProposalBatch, reviewDevelopmentResults, recordProposalDispatch } from './continuation.mjs';
 import { recoverObjective } from './recovery.mjs';
 import { prepareContractRevision, acceptContractRevision, revokeContractRevision } from './contract-revisions.mjs';
+import { repairProposalRequest } from './repair.mjs';
 
 export const help = `codefleet-alpha objective plan|run "goal" [repository]
   [--local-existing] (explicit existing Git working-tree Local contract; no Git writes)
@@ -25,11 +26,12 @@ codefleet-alpha objective approve <task-id> --hash <workflowHash> --actor <name>
 codefleet-alpha objective run|resume <task-id> --allow-model
 codefleet-alpha objective status [task-id] | report <task-or-run-id>
 codefleet-alpha objective proposal-request <task-id> <item-id> (eligible source context only; no model call or execution approval)
+codefleet-alpha objective repair-proposal-request <task-id> (settled Local failure context; no model call or approval)
 codefleet-alpha objective proposal-batch <task-id> [OPTIONS.json] (maxAgents 1..3, parallelBenefit; proposal-only, no model grant)
 codefleet-alpha objective proposal-start <task-id> BATCH.json (record pending Host handoff; not permission or proof of invocation)
 codefleet-alpha objective proposal-results <task-id> BATCH.json RESULTS.json (validate all results, record proposal feedback; never apply or approve)
 codefleet-alpha objective recover <task-id> [RECOVERY.json|BINDING.json] (compare prior checkpoint; never execute, renew or replay)
-codefleet-alpha objective revision-review <task-id> PROPOSAL.json (revision and full revised draft; no execution)
+codefleet-alpha objective revision-review <task-id> PROPOSAL.json (revision, full revised draft, optional additionalAttempts 0..2 and additionalTimeSeconds 0..120; no execution)
 codefleet-alpha objective revision-accept <review-ref> --trust <review-hash> --acknowledge-unisolated
 codefleet-alpha objective revision-revoke <review-ref> (revoke a prepared revision review)
 codefleet-alpha objective reject|pause|cancel <task-id> [--actor <name>]
@@ -121,6 +123,10 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     if (args.length < 1 || args.length > 2 || Object.keys(o).length) throw Error('recover accepts Task ID and optional prior recovery report/checkpoint/binding only; no execution flags');
     const data = await recoverObjective(store, args[0], args[1] ? await readResponse(args[1]) : undefined);
     return { exitCode: data.status === 'RECOVERED' ? 0 : 2, data };
+  }
+  if (action === 'repair-proposal-request') {
+    if (args.length !== 1 || Object.keys(o).length) throw Error('repair-proposal-request accepts only a Task ID');
+    return { exitCode: 0, data: await repairProposalRequest(store,args[0]) };
   }
   enableTasks(store);
   if (action === 'revision-review') {
@@ -272,7 +278,7 @@ export async function productCli(argv, directory) {
   try {
     requireDurableEntry(argv); // Before opening Store or reading caller JSON.
     if (!argv[0] || ['help', '--help'].includes(argv[0])) return await dispatchProduct(argv);
-    store = new Store(directory, { readOnly: ['recover', 'proposal-batch'].includes(argv[0]) });
+    store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request'].includes(argv[0]) });
     return await dispatchProduct(argv, { store });
   }
   catch (e) { return { exitCode: 1, data: { schemaVersion: 1, status: 'BLOCKED_OR_UNSUPPORTED', error: e.message } }; }

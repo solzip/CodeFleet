@@ -1,6 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {CodexProposalEvents,proposalDispatchMessages} from '../scripts/lib/codex-proposal-events.mjs';
+import {CodexProposalEvents,proposalDispatchMessages,assessCodexProposalBudget} from '../scripts/lib/codex-proposal-events.mjs';
+
+test('Host proposal budget distinguishes runner bounds from post-turn tokens and blocks automatic acceptance',()=>{
+ const limits={maxPromptBytes:8000,maxDurationMs:60000,maxInputTokens:8000,maxOutputTokens:4000,maxRootTurns:1};
+ const evaluate=(overrides={})=>assessCodexProposalBudget({promptBytes:4000,elapsedMs:10000,rootTurns:1,
+  tokenUsage:{total:{inputTokens:7000,outputTokens:500}},limits,...overrides});
+ const within=evaluate();assert.equal(within.status,'WITHIN_OBSERVED_LIMITS');
+ assert.equal(within.enforcement.inputTokens,'HOST_POSTTURN_OBSERVATION_ONLY');
+ assert.equal(within.automaticAcceptanceAllowed,false);
+ const exceeded=evaluate({tokenUsage:{total:{inputTokens:9267,outputTokens:473}}});
+ assert.deepEqual(exceeded.violations,['OBSERVED_INPUT_TOKENS_EXCEEDED']);
+ assert.equal(exceeded.status,'POLICY_VIOLATION');
+ assert.equal(evaluate({promptBytes:9000}).violations[0],'PROMPT_BYTES_EXCEEDED');
+ const historical=evaluate({promptBytes:9000,promptPreflightApplied:false});
+ assert.equal(historical.status,'WITHIN_OBSERVED_LIMITS');
+ assert.equal(historical.enforcement.promptBytes,'NOT_APPLIED_AT_THIS_TURN');
+ assert.equal(historical.wouldExceedCurrentPromptByteCeiling,true);
+ assert.equal(evaluate({elapsedMs:60001}).violations[0],'DURATION_EXCEEDED');
+ assert.equal(evaluate({rootTurns:2}).violations[0],'ROOT_TURN_COUNT_MISMATCH');
+ assert.equal(evaluate({tokenUsage:null}).status,'NOT_VERIFIED');
+ assert.throws(()=>evaluate({promptBytes:-1}),/Invalid Host proposal budget/);
+});
 
 const event=(method,threadId,item)=>({method,params:{threadId,...(method.startsWith('turn/')?{turn:item}:{item})}});
 const start=(o,id,t,at)=>o.observe(event('turn/started',id,{id:t}),at);

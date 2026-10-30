@@ -112,6 +112,35 @@ export class CodexProposalEvents {
   }
 }
 
+// Host app-server has no per-turn token ceiling in this path. Bound the bytes
+// supplied by CodeFleet before dispatch; evaluate Host token usage only after
+// observation. Neither check grants Fileset approval or verification authority.
+export function assessCodexProposalBudget({ promptBytes, elapsedMs, tokenUsage, rootTurns, limits, promptPreflightApplied = true }) {
+  const { maxPromptBytes, maxDurationMs, maxInputTokens, maxOutputTokens, maxRootTurns } = limits;
+  if (![promptBytes, rootTurns, maxPromptBytes, maxDurationMs,
+    maxInputTokens, maxOutputTokens, maxRootTurns].every(n => Number.isSafeInteger(n) && n >= 0) ||
+      !Number.isFinite(elapsedMs) || elapsedMs < 0)
+    throw Error('Invalid Host proposal budget observation');
+  const total = tokenUsage?.total;
+  const observed = Number.isSafeInteger(total?.inputTokens) && Number.isSafeInteger(total?.outputTokens);
+  const violations = [];
+  if (promptPreflightApplied && promptBytes > maxPromptBytes) violations.push('PROMPT_BYTES_EXCEEDED');
+  if (elapsedMs > maxDurationMs) violations.push('DURATION_EXCEEDED');
+  if (rootTurns !== maxRootTurns) violations.push('ROOT_TURN_COUNT_MISMATCH');
+  if (observed && total.inputTokens > maxInputTokens) violations.push('OBSERVED_INPUT_TOKENS_EXCEEDED');
+  if (observed && total.outputTokens > maxOutputTokens) violations.push('OBSERVED_OUTPUT_TOKENS_EXCEEDED');
+  return { status: violations.length ? 'POLICY_VIOLATION' : observed ? 'WITHIN_OBSERVED_LIMITS' : 'NOT_VERIFIED',
+    violations, promptBytes, promptPreflightApplied,
+    wouldExceedCurrentPromptByteCeiling: promptBytes > maxPromptBytes, elapsedMs, rootTurns,
+    observedInputTokens: observed ? total.inputTokens : null,
+    observedOutputTokens: observed ? total.outputTokens : null,
+    enforcement: { rootTurns: 'RUNNER_ENFORCED', durationMs: 'RUNNER_TIMER_ENFORCED',
+      promptBytes: promptPreflightApplied ? 'RUNNER_PREFLIGHT_ENFORCEABLE' : 'NOT_APPLIED_AT_THIS_TURN',
+      inputTokens: 'HOST_POSTTURN_OBSERVATION_ONLY',
+      outputTokens: 'HOST_POSTTURN_OBSERVATION_ONLY', cost: 'UNKNOWN' },
+    automaticAcceptanceAllowed: false, modelInvocationGranted: false };
+}
+
 // Children inherit the already-bound Batch; the Manager need not regenerate
 // source/test text inside each spawn call. This reduces dispatch generation,
 // but is not a tool-access policy or proof of concurrent Host execution.

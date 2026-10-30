@@ -1,5 +1,28 @@
 # 진행 현황과 결정 목록
 
+2026-10-30 후속 계약·Repair Core 작업: `EXISTING_LOCAL` 완료 Objective에
+기존 Criterion의 테스트 매핑 확대 또는 신규 Criterion·테스트를 감독형 Contract Revision으로
+추가할 수 있게 했다. Review에는 현재 Candidate와 별도 추가 Attempt 예산(최대 2회)을 묶는다.
+완료된 소스 Fileset과 이전 Evidence를 보존하고 새 검증 WorkItem만 먼저 재개한다.
+읽기 전용 `objective repair-proposal-request <task-id>`는 실제 현재 실패에 한해
+Host Agent용 소스·기준 해시·실패 Evidence 패킷을 제공하며 모델 호출 권한은 주지 않는다.
+새 계약은 승인된 테스트 매핑·현재 Candidate·Local 실행 Evidence가 누락되면 Local 완료를
+거부한다. 합성 회귀에서 실제 실패 → 승인된 단일 Repair → 새 Candidate 재검증 →
+`COMPLETE_LOCAL` → 별도 프로세스 Recovery를 확인했다. 기존 Local 완료 기록은
+소급 변경하지 않았다. 이 기록은 Core 검증이며 B/C Codex Host Live, Protected 검증,
+인증된 공개 위임의 성공을 뜻하지 않는다.
+
+2026-10-30 후속 실제 Codex Host 수용: B/C의 Contract Revision 2에서 실제 실패를
+기록하고 Host 제안과 감독형 Fileset 적용을 거쳐 새 Candidate를 각각 30 PASS / 0 FAIL,
+exit 0으로 검증했다. 승인된 테스트 매핑 정책에서 B 6개·C 5개 Criterion의 실행과
+Evidence 무결성을 확인했다. Task Revision 16 / Contract Revision 2의 `COMPLETE_LOCAL`,
+별도 프로세스 `RECOVERED`, Decision·Attempt 일회성 소비 및 재실행 차단을 확인했다.
+최종 `npm.cmd run test:host-core`는 112 PASS / 0 FAIL, exit 0(Windows, Node 24.14.1)이다.
+로컬 원본 수용 기록은 무시된 실행 디렉터리의 `final-reverification-acceptance.json`과
+`final-host-core-result.json`에 보존하며 원본 모델 응답·SQLite·개인 경로는 공개하지 않는다.
+과거 모델 입력 토큰 초과 POLICY_VIOLATION은 유지한다. PUBLIC_DELEGATION_BLOCKED,
+Protected UNSATISFIED, 실제 브라우저 E2E 및 완전 무인 자동 Repair 미검증도 유지한다.
+
 2026-10-28 [Manager proposal handoff](../runs/2026-10-28/manager-proposal-handoff.md):
 기존 실제 자식 제안 두 개를 감독형 Fileset/Reservation 경로로 적용하고, 고정 테스트 14 PASS·독립 Local Evidence·COMPLETE_LOCAL·별도 프로세스 Recovery를 확인했다.
 후속 승인된 5개 Host 턴 비교에서 실제 자식 2개의 실행이 6.307초 중첩됐다. 제안 생성은 기본 Codex 21.346초, CodeFleet 단일 22.223초, Multi-Agent 46.580초로 이번 작업의 성능 이점은 입증되지 않았다.

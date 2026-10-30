@@ -5,12 +5,17 @@ import {existsSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {randomUUID} from 'node:crypto';
 import {command} from '../src/alpha/process.mjs';
 import {Store} from '../src/alpha/store.mjs';
 import {productCli} from '../src/product/cli.mjs';
-import {task} from '../src/product/tasks.mjs';
+import {task,approveTask,submitBootstrapFiles} from '../src/product/tasks.mjs';
 import {hash} from '../src/alpha/contract.mjs';
 import {prepareContractRevision,acceptContractRevision,revokeContractRevision} from '../src/product/contract-revisions.mjs';
+import {triageFailure,repairOfflineWorkItem} from '../src/product/repair.mjs';
+import {issueOfflineRepairDecision} from '../src/product/reservations.mjs';
+import {localTree} from '../src/verification/backends.mjs';
+import {continuationSnapshot} from '../src/product/continuation.mjs';
 const worker=path.resolve('test/fixtures/recovery-worker.mjs');
 test('contract revision preserves A and budgets, supersedes B approval and recovers in new processes',async()=>{
  const f=await setup();await f.apply('normalize');const a=await f.verify('verify-normalize');
@@ -42,6 +47,112 @@ test('contract revision preserves A and budgets, supersedes B approval and recov
 });
 async function call(input,exitCode=0){const r=await command(process.execPath,[worker,JSON.stringify(input)],{timeoutMs:30000});assert.equal(r.exitCode,exitCode,r.stdout+r.stderr);return r.stdout.length?JSON.parse(r.stdout):null;}
 async function setup(options){const root=await mkdtemp(path.join(tmpdir(),'cf-recovery-'));const f=await call({action:'prepare',root,options});f.call=(action,extra={},code=0)=>call({...f,action,...extra},code);f.apply=async itemId=>{const p=await f.call('propose',{itemId});await f.call('approve',{filesetHash:p.approvalRequest.filesetHash});return f.call('materialize',{itemId});};f.verify=async itemId=>{const decision=await f.call('issue',{itemId});return f.call('execute',{itemId,decision});};return f;}
+
+for(const variant of ['NEW_CRITERION','EXPANDED_MAPPING']) test(`completed Local objective ${variant} admits a boundary test and bounded repair`,async()=>{
+ const f=await setup({localExisting:true,acceptanceMode:'LOCAL_ONLY'});
+ await f.apply('normalize');await f.verify('verify-normalize');await f.apply('todo');
+ const original=await f.verify('verify-integrated');
+ const complete=await f.call('recover');assert.equal(complete.complete,true);
+ const s=new Store(f.state);const before=task(s,f.id),oldPlan=s.readArtifact(before.planRef);
+ const source=await readFile(path.join(f.repo,'src/create-todo.mjs'));
+ const boundary='test/title-limit.test.mjs';
+ await writeFile(path.join(f.repo,boundary),"import test from 'node:test'; import assert from 'node:assert/strict'; import {createTodo} from '../src/create-todo.mjs'; test('reject more than one hundred characters',()=>assert.throws(()=>createTodo('x'.repeat(101))));\n");
+ const draft=structuredClone(oldPlan.draft);
+ if(variant==='NEW_CRITERION'){
+  draft.plannedTests.push({path:boundary,criteria:['titleLimit']});
+  draft.criteria.push({id:'titleLimit',description:'Reject titles longer than one hundred characters',tests:[boundary]});
+  draft.workItems.find(i=>i.id==='todo').acceptanceCriteria.push('titleLimit');
+  draft.workItems.find(i=>i.id==='verify-integrated').acceptanceCriteria.push('titleLimit');
+ }else{
+  draft.plannedTests.push({path:boundary,criteria:['todo']});
+  draft.criteria.find(c=>c.id==='todo').tests.push(boundary);
+ }
+ await assert.rejects(prepareContractRevision(s,f.id,{revision:before.revision,draft,additionalAttempts:2,additionalTimeSeconds:121}),
+  /Additional contract time budget exceeds bound/);
+ const review=await prepareContractRevision(s,f.id,{revision:before.revision,draft,additionalAttempts:2,additionalTimeSeconds:30});
+ assert.ok(review.review.impact.affected.includes('verify-integrated'));
+ assert.equal(review.review.additionalTimeSeconds,30);
+ await acceptContractRevision(s,review.reviewRef,{trust:review.reviewHash,acknowledgeUnisolated:true});
+ const changed=task(s,f.id);assert.equal(changed.coveragePolicy,'MAPPED_TEST_EVIDENCE_V1');
+ assert.equal(changed.settings.timeoutSeconds,before.settings.timeoutSeconds+30);
+ assert.equal(changed.bootstrap.states.todo,'MATERIALIZED');
+ assert.equal(changed.bootstrap.verifications['verify-integrated'],undefined);
+ s.close();
+ assert.deepEqual(await readFile(path.join(f.repo,'src/create-todo.mjs')),source);
+ const pending=await f.call('recover');assert.equal(pending.complete,false);assert.equal(pending.next?.itemId,'verify-integrated',JSON.stringify(pending));
+ const premature=await command(process.execPath,['src/alpha/cli.mjs','--state',f.state,'objective','repair-proposal-request',f.id]);
+ assert.equal(premature.exitCode,1);assert.match(premature.stdout.toString('utf8'),/Current settled test failure required/);
+ const failed=await f.verify('verify-integrated');assert.equal(failed.status,'LOCAL_FAILED');assert.ok(failed.failed>0);
+ const after=await f.call('recover');assert.equal(after.complete,false);assert.equal(after.contractRevision,2);
+ assert.equal(after.budget.usedAttempts,3);assert.equal(after.budget.remainingAttempts,2);
+ assert.equal(after.reservations.at(-1).evidenceRef,failed.evidenceRef);
+ const handoff=await command(process.execPath,['src/alpha/cli.mjs','--state',f.state,'objective','repair-proposal-request',f.id]);
+ assert.equal(handoff.exitCode,0,handoff.stdout+handoff.stderr);
+ const packet=JSON.parse(handoff.stdout);
+ assert.equal(packet.failureEvidenceRef,failed.evidenceRef);
+ assert.equal(packet.modelInvocationGranted,false);assert.equal(packet.executionGranted,false);
+ const read=new Store(f.state,{readOnly:true});try{
+   const triage=await triageFailure(read,f.id);assert.equal(triage.action,'DIAGNOSE');
+   assert.equal(read.readArtifact(original.evidenceRef).status,'LOCAL_PASSED');
+   assert.equal(packet.files.find(x=>x.path==='src/create-todo.mjs')?.baseSha256,
+    read.readArtifact(failed.evidenceRef).fileDigests['src/create-todo.mjs']);
+ }finally{read.close();}
+ const repairStore=new Store(f.state);try{
+  const evidence=repairStore.readArtifact(failed.evidenceRef);
+  const content="import {normalizeTitle} from './normalize-title.mjs'; export function createTodo(input) { const title=normalizeTitle(input); if(title.length>100) throw Error('Too long'); return {title,completed:false}; }\n";
+  const request={executable:process.execPath,args:['--test','--test-reporter=tap',...draft.plannedTests.map(t=>t.path)],directory:f.repo,timeoutMs:10000};
+  const proposal={itemId:'todo',evidenceRef:failed.evidenceRef,hypothesis:'The title length is unchecked',diagnostic:'not ok',
+    files:[{path:'src/create-todo.mjs',baseSha256:evidence.fileDigests['src/create-todo.mjs'],content}]};
+  const operator={
+   async approveRepair({taskId,approvalRequest}){
+    const native=await import('../src/product/native-local.mjs');
+    const review=await native.prepareNativeFilesReview(repairStore,taskId,proposal.itemId);
+    assert.equal(review.review.filesetHash,approvalRequest.filesetHash);
+    assert.equal(review.review.candidateHash,await localTree(f.repo));
+    await assert.rejects(native.acceptNativeFilesReview(repairStore,review.reviewRef,{trust:'0'.repeat(64),acknowledgeUnisolated:true}),/consent/);
+    assert.equal(repairStore.get(approvalRequest.runId).state,'WAITING_APPROVAL');
+    approveTask(repairStore,taskId,{actor:'compiled-recovery-test-policy',workflowHash:approvalRequest.filesetHash,expiresAt:Date.now()+90000});
+   },
+   async issueVerification({taskId,itemId,runId,revision,commandHash,request,deadline}){
+    const resumed=await continuationSnapshot(repairStore,taskId);
+    assert.equal(resumed.status,'AWAIT_OPERATOR');
+    assert.deepEqual(resumed.next,{kind:'RUN_LOCAL_VERIFICATION',itemId});
+    assert.equal(resumed.budget.remainingAttempts,2);
+    return issueOfflineRepairDecision(repairStore,taskId,itemId,request,{decisionId:randomUUID(),requestId:randomUUID(),
+      actor:'compiled-recovery-test-policy',revision,commandHash,acknowledgeUnisolated:true,
+      expiresAt:Math.min(Date.now()+90000,deadline),maxExecutions:1,maxConsecutiveFailures:1,timeBudgetMs:request.timeoutMs},runId);
+   }
+  };
+  let repaired;
+  if(variant==='EXPANDED_MAPPING') {
+   const native=await import('../src/product/native-local.mjs');
+   await submitBootstrapFiles(repairStore,f.id,{revision:task(repairStore,f.id).revision,itemId:proposal.itemId,
+    repair:{verificationItem:'verify-integrated',evidenceRef:failed.evidenceRef},files:proposal.files});
+   const files=await native.prepareNativeFilesReview(repairStore,f.id,proposal.itemId);
+   await native.acceptNativeFilesReview(repairStore,files.reviewRef,{trust:files.reviewHash,acknowledgeUnisolated:true});
+   const review=await native.prepareNativeLocalReview(repairStore,f.id,{request});
+   assert.equal(review.review.repair.evidenceRef,failed.evidenceRef);
+   assert.equal(review.review.repair.runId,files.review.runId);
+   await assert.rejects(native.acceptNativeLocalReview(repairStore,review.reviewRef,{trust:'0'.repeat(64),acknowledgeUnisolated:true}),/Exact prepared/);
+   const changedCommand={...request,timeoutMs:request.timeoutMs-1};
+   await assert.rejects(native.prepareNativeLocalReview(repairStore,f.id,{request:changedCommand}),/Repair verification command changed/);
+   repaired=await native.acceptNativeLocalReview(repairStore,review.reviewRef,{trust:review.reviewHash,acknowledgeUnisolated:true});
+   const replay=await native.acceptNativeLocalReview(repairStore,review.reviewRef,{trust:review.reviewHash,acknowledgeUnisolated:true});
+   assert.equal(replay.action,'RECONCILE_OR_RECORDED');
+   assert.equal(replay.snapshot.budget.usedAttempts,4);
+  } else repaired=await repairOfflineWorkItem(repairStore,f.id,{proposal,request,operator});
+  assert.equal(repaired.execution?.status,'LOCAL_PASSED',JSON.stringify(repaired));
+  assert.equal(repaired.snapshot.complete,true,JSON.stringify(repaired.snapshot));
+  assert.equal(repaired.snapshot.budget.usedAttempts,4);
+ }finally{repairStore.close();}
+ const recovered=await f.call('recover');assert.equal(recovered.complete,true,JSON.stringify(recovered.blockers));
+ assert.equal(recovered.budget.usedAttempts,4);
+ const testBytes=await readFile(path.join(f.repo,boundary));
+ await writeFile(path.join(f.repo,boundary),Buffer.concat([testBytes,Buffer.from('// changed after verification\n')]));
+ const drift=await f.call('recover');assert.equal(drift.complete,false);assert.equal(drift.budget.usedAttempts,4);
+ await writeFile(path.join(f.repo,boundary),testBytes);
+ assert.equal((await f.call('recover')).complete,true);
+});
 test('P0-C A: new processes recover A, admit B and connect fresh integrated Evidence without replay',async()=>{
  const f=await setup();await f.apply('normalize');const a=await f.verify('verify-normalize');
  const before=await f.call('recover');assert.equal(before.status,'RECOVERED',JSON.stringify(before.blockers));assert.equal(before.next.itemId,'todo');assert.equal(before.budget.usedAttempts,1);
