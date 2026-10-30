@@ -11,13 +11,15 @@ import { readyBatch } from '../workflow/definition.mjs';
 import { validateFileset } from '../workflow/bootstrap-files.mjs';
 import { localTree } from '../verification/backends.mjs';
 import { exact } from '../intent/contract.mjs';
+import { coordinationLog, requireCoordinatedWorkItem, supervisedHandoffAdopted } from './work-log.mjs';
+import { recoverObjective } from './recovery.mjs';
 
 const satisfied = new Set(['PLAN_RECORDED', 'MATERIALIZED', 'LOCAL_PASSED', 'LOCAL_CHECKPOINT']);
 const terminal = new Set(['LOCAL_PASSED', 'LOCAL_FAILED', 'INCONCLUSIVE']);
 
 // Recomputed from the existing Task, artifacts, events and reservations on every
 // call, including restart. This projection is never a second persistent store.
-export async function continuationSnapshot(store, taskId) {
+export async function continuationSnapshot(store, taskId, { preparedProposalItem = null } = {}) {
   const report = await taskReport(store, taskId), current = task(store, taskId);
   const view = report.bootstrap, reservations = report.executionReservations ?? [];
   const attempts = reservations.filter(r => r.reservation);
@@ -44,6 +46,8 @@ export async function continuationSnapshot(store, taskId) {
       .filter(([, v]) => v.judgment).map(([id, v]) => [id, v.judgment])) };
   const handoff = reason => ({ ...result, reason });
   if (!view || current.state === 'REJECTED') return handoff('VALIDATED_WORKFLOW_REQUIRED');
+  result.coordination = coordinationLog(store, taskId);
+  if (result.coordination.pendingDirectives.length) return handoff('DIRECTIVE_REVIEW_REQUIRED');
   const filesetRuns = Object.values(current.bootstrap.filesets).map(id => store.get(id));
   if (filesetRuns.some(r => ['MATERIALIZING', 'WAITING_HUMAN'].includes(r.state) ||
       r.state !== 'COMPLETED' && Object.keys(r.results ?? {}).length)) return handoff('UNCERTAIN_MATERIALIZATION_NO_REPLAY');
@@ -57,12 +61,15 @@ export async function continuationSnapshot(store, taskId) {
     current.bootstrap.states[i.id] !== 'VERIFICATION_STALE');
   if (view.drift.length || inferredStale) return handoff('CANDIDATE_CHANGED');
   if (attempts.some(r => !terminal.has(r.status))) return handoff('UNCERTAIN_OR_ACTIVE_ATTEMPT_NO_REPLAY');
+  if (report.complete && result.coordination.pendingHandoffs.some(h => !supervisedHandoffAdopted(store, taskId, h))) return handoff('AGENT_HANDOFF_UNCONFIRMED');
   if (report.complete) return { ...result, complete: true, status: 'COMPLETE_LOCAL', reason: report.acceptance.reason, next: null, remaining: [] };
 
   const pendingReverification = view.items.find(i => i.kind === 'local-verification' &&
     i.state === 'VERIFICATION_STALE' && current.bootstrap.states[i.id] === 'VERIFICATION_STALE' &&
     !i.waitingOn.length);
   if (pendingReverification) {
+    try { requireCoordinatedWorkItem(store, taskId, pendingReverification.id); }
+    catch (error) { return handoff(error.message); }
     if (!budget.remainingAttempts || !budget.remainingTimeMs) return handoff('EXECUTION_BUDGET_EXHAUSTED');
     return { ...result, status: 'AWAIT_OPERATOR', reason: 'Fresh exact decision required after approved source replacement',
       next: { kind: 'RUN_LOCAL_VERIFICATION', itemId: pendingReverification.id } };
@@ -92,7 +99,11 @@ export async function continuationSnapshot(store, taskId) {
     return handoff('FAILURE_REVIEW_REQUIRED_NO_AUTOMATIC_RETRY');
   }
   if (view.items.some(i => i.state === 'INCONCLUSIVE')) return handoff('INCONCLUSIVE_EVIDENCE');
-  const action = bootstrapActions(view)[0];
+  const actions = bootstrapActions(view);
+  const action = actions.map(a => ({ ...a, items: a.items.filter(id => {
+    try { requireCoordinatedWorkItem(store, taskId, id, { preparedProposalItem }); return true; } catch { return false; }
+  }) })).find(a => a.items.length);
+  if (!action && result.coordination.pendingHandoffs.length) return handoff('AGENT_HANDOFF_UNCONFIRMED');
   const itemId = action?.items[0] ?? null;
   if (action?.kind === 'RUN_LOCAL_VERIFICATION' && itemId) {
     if (!budget.remainingAttempts || !budget.remainingTimeMs) return handoff('EXECUTION_BUDGET_EXHAUSTED');
@@ -109,9 +120,63 @@ export async function continuationSnapshot(store, taskId) {
 
 export async function continueWorkItem() { requireDurableOperator(); }
 
+// Read-only eligibility of an already stored proposal. No model call, adoption,
+// approval or Host observation is produced by this inspection.
+export async function reviewSupervisedProposal(store, taskId, proposalRef) {
+  const proposal = store.readArtifact(proposalRef);
+  const { current, workflow, plan } = bootstrapContext(store, taskId);
+  const log = coordinationLog(store, taskId);
+  const h = log.handoffs.find(h => h.handoffId === proposal.handoffId);
+  if (proposal.kind !== 'CurrentSessionDirectProposal' || proposal.taskId !== taskId ||
+      proposal.taskRevision !== current.revision || proposal.contractRevision !== (current.contractRevision ?? 1) ||
+      proposal.authority !== 'PROVIDER_REPORTED_ONLY' || proposal.executionGranted !== false ||
+      proposal.origin !== 'CURRENT_ASSISTANT_SESSION_NOT_DELEGATED_AGENT' ||
+      !h || h.stale || h.status !== 'PREPARED' || h.observations.length || proposal.packetRef !== h.packetRef ||
+      h.planRef !== current.planRef || h.workflowHash !== workflow.workflowHash || h.workflowRef !== current.bootstrap.workflowRef ||
+      hash(h.item) !== hash(workflow.items.find(i => i.id === h.itemId)))
+    throw Error('Supervised proposal contract, revision or packet mismatch');
+  const context = store.readArtifact(proposal.inputRef), packet = store.readArtifact(h.packetRef);
+  if (context.kind !== 'CurrentSessionProposalContext' || context.taskId !== taskId ||
+      context.taskRevision !== current.revision || context.contractRevision !== proposal.contractRevision ||
+      context.handoffId !== h.handoffId || context.packetRef !== h.packetRef || hash(context.packet) !== hash(packet))
+    throw Error('Supervised proposal context packet mismatch');
+  const recovery = await recoverObjective(store, taskId);
+  if (recovery.effects?.length || recovery.blockers.some(b => b !== 'AGENT_HANDOFF_UNCONFIRMED'))
+    throw Error('RECONCILE: ' + recovery.blockers.join(', '));
+  if (recovery.binding?.candidateHash !== proposal.candidateHash) throw Error('Supervised proposal candidate changed');
+  const snapshot = await continuationSnapshot(store, taskId, { preparedProposalItem: h.itemId });
+  const eligible = snapshot.workItems.find(i => i.id === h.itemId && i.kind === 'local-edit' &&
+    i.state === 'PENDING_FILESET' && !i.waitingOn.length);
+  requireCoordinatedWorkItem(store, taskId, h.itemId, { preparedProposalItem: h.itemId });
+  if (snapshot.status !== 'HOST_ACTION_REQUIRED' || !eligible) throw Error('Eligible supervised source proposal required');
+  const fixedTests = new Set(plan.draft.plannedTests.map(t => t.path));
+  if (h.item.files.some(p => fixedTests.has(p))) throw Error('Fixed tests cannot be adopted as source proposals');
+  const files = validateFileset({ revision: current.revision, itemId: h.itemId,
+    files: proposal.files?.map(({path,content}) => ({path,content})) }, workflow, h.itemId);
+  const digests = recordedDigests(store, current);
+  for (const f of files) {
+    const source = proposal.files.find(p => p.path === f.path);
+    if (source.sha256 !== f.sha256 || source.bytes !== f.bytes || source.baseSha256 !== (digests[f.path] ?? null))
+      throw Error('Supervised proposal content hash, size or base mismatch');
+  }
+  if (files.every(f => f.sha256 === digests[f.path])) throw Error('No-op supervised proposal');
+  if (hash(task(store, taskId)) !== recovery.binding.taskHash ||
+      hash(store.events(taskId)) !== recovery.workLog.hash || await localTree(current.repo) !== proposal.candidateHash)
+    throw Error('Supervised proposal changed during inspection');
+  const input = { revision: current.revision, itemId: h.itemId,
+    files: files.map(({path,content}) => ({path,content,...(plan.contractKind === 'EXISTING_LOCAL' ? {baseSha256:digests[path] ?? null} : {})})) };
+  return { kind: 'SupervisedProposalReview', taskId, proposalRef, packetRef: h.packetRef,
+    contractRevision: proposal.contractRevision, binding: recovery.binding, workLogHash: recovery.workLog.hash,
+    input, files, authority: 'PROVIDER_REPORTED_ONLY', eligibility: 'EXACT_FILESET_REGISTRATION_ONLY',
+    executionGranted: false, modelInvocationGranted: false, hostHandoff: h.status,
+    verification: 'NOT_RUN', protectedVerification: 'UNSATISFIED',
+    requiredNextApprovals: ['FILESET_REGISTRATION', 'EXACT_FILESET_APPLY', 'FRESH_VERIFICATION_DECISION'] };
+}
+
 // Data-only handoff to the existing Host. This never calls a model or grants
 // fileset/execution authority. Re-query after each approved verification.
 export async function developmentProposalRequest(store, taskId, itemId) {
+  requireCoordinatedWorkItem(store, taskId, itemId);
   const snapshot = await continuationSnapshot(store, taskId);
   const eligible = snapshot.workItems.find(i => i.id === itemId && i.kind === 'local-edit' &&
     i.state === 'PENDING_FILESET' && !i.waitingOn.length);

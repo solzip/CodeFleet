@@ -197,7 +197,7 @@ Host Core 테스트에는 Docker 없는 실제 준비 경로·Local 실행과 �
 | 당시 수용된 한계 / 미확인 | 1 / 27건 <!-- fact: findings-accepted-limit = 1 --> <!-- fact: findings-unchecked = 27 --> |
 | Legacy 테스트 기준 | 통과 324 / 실패 0 <!-- fact: tests-passing = 324 --> <!-- fact: tests-failing = 0 --> |
 | 규칙 조건 인용 커버리지 | 545줄 중 345줄, 63.3%. 구현 완성률이 아님 <!-- fact: condition-lines = 545 --> <!-- fact: conditions-covered = 345 --> <!-- fact: coverage-percent = 63.3 --> |
-| 색인에 기록된 감사·실행 기록 | 135편 <!-- fact: audit-run-records = 135 --> |
+| 색인에 기록된 감사·실행 기록 | 143편 <!-- fact: audit-run-records = 143 --> |
 
 테스트 수치 선언은 문서 검사에서 생성된 Legacy 결과와 대조하며, 새 환경에서 시험을 실행했다는 증거를 대신하지 않습니다.
 

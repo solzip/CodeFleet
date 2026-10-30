@@ -24,9 +24,22 @@ CodeFleet은 기존 Codex CLI·Claude Code의 모델·인증·세션을 사용�
 
 `docs/audits/`·`docs/runs/`·`docs/archive/`의 전 문서를 시간 역순으로 나열한다. 규약은 `docs/CONVENTIONS.md`, 결함 등재 현황은 `docs/REGISTER.md`.
 
-작성 기준: 2026-10-28. 전수 142개 문서 (감사 41 · 실행 94 · 아카이브 7). <!-- fact: docs-indexed = 142 --> <!-- fact: docs-on-disk = 142 -->
+작성 기준: 2026-10-30. 전수 150개 문서 (감사 42 · 실행 101 · 아카이브 7). <!-- fact: docs-indexed = 150 --> <!-- fact: docs-on-disk = 150 -->
 
 현재 공개 사용 제품 계획은 [제품 완성 문서](product-completion/README.md)에 있다. 기존 아카이브의 실측과 새 제품 계획을 구분하며, 구현 상태는 새 진행 현황에서 관리한다.
+
+## 2026-10-30
+
+| Date | Document | Type | Result | Follow-up |
+| --- | --- | --- | --- | --- |
+| 10-30 | `audits/2026-10-30/01-persistent-worklog-integration.md` | Core integration audit | Completed Objective recovered unchanged; same Host Thread observed | Repair-after-supervised-adoption blocks integration; new Host process unverified |
+| 10-30 | `runs/2026-10-30/supervised-adoption-repair.md` | Supervised Repair continuity | Historical adoption linked through exact completed history; fresh Repair approval required | Scoped regressions and Git integration review; no Live replay |
+| 10-30 | `runs/2026-10-30/undelivered-handoff-recovery.md` | Initial nondelivery recovery | Historical closure implementation; trust assumptions superseded by v2 | Initial synthetic regression, not independent Host authentication |
+| 10-30 | `runs/2026-10-30/undelivered-handoff-recovery-v2.md` | Handoff trust correction | Embedding reports stay uncertain; unresolved handoffs defer new preparation during revision | Independent Host verification and nondelivery closure unavailable |
+| 10-30 | `runs/2026-10-30/persistent-worklog.md` | Persistent coordination | Directive, handoff and guarded recovery connected; local tests | Separate Host Live supervision and acceptance pending |
+| 10-30 | `runs/2026-10-30/supervised-proposal-continuation.md` | Supervised proposal continuation | Exact proposal intake separated from Host delivery observation | Separate Live registration and apply approvals |
+| 10-30 | `runs/2026-10-30/todo-fileset-review-prepared.md` | Approved Live registration | Stored Todo Fileset registered and Native Review prepared once; no source writes | Exact Fileset Apply approval pending |
+| 10-30 | `runs/2026-10-30/todo-integrated-verification-recovery.md` | Supervised Local verification | Integrated tests pass and separate-process recovery restores COMPLETE_LOCAL | New Host session observation remains unverified; Git integration unapproved |
 
 ## 2026-10-28
 

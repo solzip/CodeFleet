@@ -15,6 +15,8 @@ import { bootstrapDefinition, validateBootstrapWorkflow, bootstrapStates, assess
 import { validateFileset, filesetManifest, createFiles, validateRepairFileset, repairManifest, modifyFiles } from '../workflow/bootstrap-files.mjs';
 import { inspectLocalCommand, localBackend, localTree } from '../verification/backends.mjs';
 import { bootstrapGuard } from '../hosts/workflow-authorization.mjs';
+import { requireCoordinatedWorkItem } from './work-log.mjs';
+import { reviewSupervisedProposal } from './continuation.mjs';
 
 export function enableTasks(store) {
   store.enableCollaboration();
@@ -404,7 +406,10 @@ async function repositoryPreflight(current, plan, workflow) {
   return probe;
 }
 // Host file contents are untrusted proposals; this records them and requests review.
-export async function submitBootstrapFiles(store, id, input) {
+export async function submitBootstrapFiles(store, id, input, { supervisedProposalRef = null } = {}) {
+  const supervised = supervisedProposalRef ? await reviewSupervisedProposal(store, id, supervisedProposalRef) : null;
+  if (supervised && hash(input) !== hash(supervised.input)) throw Error('Supervised Fileset differs from reviewed proposal');
+  requireCoordinatedWorkItem(store, id, input?.itemId, { preparedProposalItem: supervised?.input.itemId });
   const { current, plan, workflow } = bootstrapContext(store, id);
   if (input?.revision !== current.revision) throw Error('Fileset revision stale; read status first');
   if (input && Object.hasOwn(input, 'repair')) return submitRepairFiles(store, current, plan, workflow, input);
@@ -431,10 +436,17 @@ export async function submitBootstrapFiles(store, id, input) {
   const replacing=existing&&files.every(f=>f.baseSha256!==null);
   const { manifest, filesetHash } = (replacing ? repairManifest : filesetManifest)({ ...(existing?{kind:'ExistingLocalFileset',purpose:'EXISTING_LOCAL_DEVELOPMENT'}:{}), taskId: id, itemId, workflowHash: workflow.workflowHash, probeRef: plan.probe.probeHash, root: plan.probe.root }, files);
   const run = { id: `${id}-${itemId}-r${current.revision}`, kind: 'bootstrap-fileset', ...(replacing?{operation:'modify'}:{}), taskId: id, itemId, repo: plan.probe.root, contract: manifest, contractHash: filesetHash,
+    ...(supervised ? {supervisedProposal: {proposalRef: supervisedProposalRef, packetRef: supervised.packetRef, contractRevision: supervised.contractRevision,
+      candidateHash: supervised.binding.candidateHash, authority: 'PROVIDER_REPORTED_ONLY', executionGranted: false}} : {}),
     contentRef: store.artifact({ manifest, files }), revision: 1, state: 'WAITING_APPROVAL', results: {}, authority: 'PROVIDER_REPORTED_ONLY' };
   store.enableWorkflows();
+  if (supervised && (hash(task(store,id)) !== supervised.binding.taskHash ||
+      hash(store.events(id)) !== supervised.workLogHash || await localTree(current.repo) !== supervised.binding.candidateHash))
+    throw Error('Supervised proposal changed before registration');
   store.db.exec('BEGIN IMMEDIATE');
   try {
+    if (supervised && (hash(task(store,id)) !== supervised.binding.taskHash || hash(store.events(id)) !== supervised.workLogHash))
+      throw Error('Supervised proposal changed before registration');
     if (prior) {
       store.db.prepare('DELETE FROM workflow_approvals WHERE runId=?').run(prior);
       store.db.prepare("UPDATE runs SET control='cancel' WHERE id=?").run(prior);
@@ -485,6 +497,7 @@ async function submitRepairFiles(store, current, plan, workflow, input) {
 }
 const OUTCOMES = { MATERIALIZED: ['COMPLETED', 'MATERIALIZED'], CONFLICT: ['WAITING_HUMAN', 'CONFLICT'], FAILED: ['WAITING_HUMAN', 'MATERIALIZATION_FAILED'], INTERRUPTED: ['WAITING_HUMAN', 'INTERRUPTED'] };
 export async function materializeTask(store, id, itemId, { now = Date.now(), guard, hooks = {}, cancelled = () => false, freshOnly = false } = {}) {
+  requireCoordinatedWorkItem(store, id, itemId);
   const { current, plan, workflow } = bootstrapContext(store, id);
   const runId = current.bootstrap.filesets[itemId];
   if (!runId) throw Error(`No fileset proposed for ${itemId}`);
@@ -509,6 +522,7 @@ export async function materializeTask(store, id, itemId, { now = Date.now(), gua
   const probe = await repositoryPreflight(current, plan, workflow);
   const owner = store.claim(runId);
   const fence = () => {
+    requireCoordinatedWorkItem(store, id, itemId);
     const lease = store.db.prepare('SELECT owner,leaseUntil,control FROM runs WHERE id=?').get(runId);
     const live = store.db.prepare('SELECT * FROM workflow_approvals WHERE runId=? AND revision=?').get(runId, run.revision);
     if (cancelled() || lease.owner !== owner || lease.leaseUntil <= Date.now() || lease.control !== 'run') throw Error('RECONCILE: repair lease or cancellation changed');
@@ -551,6 +565,7 @@ export async function materializeTask(store, id, itemId, { now = Date.now(), gua
 // covers executable bytes, arguments and the whole tree, so a trust given before
 // any file changed can never authorize a run against the changed files.
 export async function verifyTask(store, id, itemId, request, { trust, acknowledgeUnisolated = false, cancelled = () => false, backend = localBackend() } = {}) {
+  requireCoordinatedWorkItem(store, id, itemId);
   if (trust !== undefined && store.db.prepare("SELECT 1 FROM sqlite_master WHERE name='bootstrap_decisions'").get() &&
       store.db.prepare('SELECT 1 FROM bootstrap_decisions WHERE taskId=?').get(id)) throw Error('Durable decision required for this task; command hash is not an execution grant');
   const { current, plan, workflow } = bootstrapContext(store, id);
@@ -568,13 +583,17 @@ export async function verifyTask(store, id, itemId, request, { trust, acknowledg
   if (trust === undefined) return { status: 'TRUST_REQUIRED', itemId, commandHash: spec.commandHash, command: spec, fileDigests: sorted(digests),
     reason: 'Review the exact executable, arguments and tree, then pass --trust <commandHash> --acknowledge-unisolated' };
   const token = await backend.authorize(request, { reviewedCommandHash: trust, acknowledgeUnisolatedExecution: acknowledgeUnisolated });
-  const result = await backend.verify({ ...request, token, cancelled, contractHash: workflow.workflowHash });
+  requireCoordinatedWorkItem(store, id, itemId);
+  const result = await backend.verify({ ...request, token, contractHash: workflow.workflowHash,
+    beforeSpawn: () => requireCoordinatedWorkItem(store, id, itemId),
+    cancelled: () => { try { requireCoordinatedWorkItem(store, id, itemId); return cancelled(); } catch { return true; } } });
   const { log, stderr, status, reason, ...observed } = result;
   const evidence = { kind: 'BootstrapLocalVerification', schemaVersion: 1, taskId: id, itemId, workflowHash: workflow.workflowHash, taskRevision: current.revision,
     fileDigests: sorted(digests), command: spec, status, reason, observed, log, stderr,
     authority: 'LOCAL_EXECUTED', verifierIndependence: 'UNPROTECTED', protectedVerification: 'UNSATISFIED', complete: false, recordedAt: new Date().toISOString() };
   const evidenceRef = store.artifact(evidence);
   try {
+    requireCoordinatedWorkItem(store, id, itemId);
     update(store, current, { ...current, revision: current.revision + 1, bootstrap: { ...current.bootstrap, digests: sorted(digests),
       states: { ...current.bootstrap.states, [itemId]: status }, verifications: { ...(current.bootstrap.verifications ?? {}), [itemId]: evidenceRef } } },
     'BOOTSTRAP_LOCAL_VERIFICATION_RECORDED', { itemId, status, evidenceRef, commandHash: spec.commandHash });
