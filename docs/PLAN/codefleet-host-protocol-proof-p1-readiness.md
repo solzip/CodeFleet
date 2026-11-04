@@ -1,7 +1,7 @@
 # CodeFleet Host Protocol Proof P1 Readiness
 
 > **Prepared:** 2026-11-04
-> **Status:** `P1_CLIENT_HARDENING_COMPLETE / FIXTURE_CLIENT_SYNC_REQUIRED / P1_NOT_AUTHORIZED / HOST_PROTOCOL_UNVERIFIED / M1_NOT_AUTHORIZED`
+> **Status:** `P1_FIXTURE_SYNCED / P1_READY_FOR_OWNER_APPROVAL / HOST_PROTOCOL_UNVERIFIED / M1_NOT_AUTHORIZED`
 > **Authority:** preparation evidence only; this document grants no App Server, model, CodeFleet Operator, P2/P3, or M1 execution authority.
 > **Protocol reference:** [Codex App Server](https://developers.openai.com/codex/app-server/)
 
@@ -67,7 +67,28 @@ Original prepared SHA-256 388442E6ED0549A51E450EB7AC10EE602DFC22BDD4933B9CE569F3
 Hardened source SHA-256 45E930E65FE48267D2D469E8E4C372651DBFEEA333110A9A89DB1C3207779DA9
 ```
 
-The external Fixture was deliberately not modified in this hardening task. Its copied client and manifest therefore still bind the original prepared client hash. P1 cannot be approved or run until a separately authorized Fixture synchronization copies the hardened client, updates the manifest client hash, recomputes the manifest hash, confirms the Fixture is otherwise unchanged, and records those new values. The client will reject the stale Fixture before spawn.
+The external Fixture was deliberately not modified in the earlier hardening task. A subsequent owner-authorized synchronization at Git baseline `4f78f14176529c87d25a61953472595385ccf62d` replaced only the Fixture client and the manifest's `proofClient.sha256` value. The synchronized state is recorded below; this synchronization is not P1 execution approval.
+
+### B.1 Authorized Fixture synchronization
+
+Actual non-Git changes:
+
+- `<PROOF_CLIENT>` was replaced with the exact GitHub-baseline client;
+- `<PROOF_ROOT>\fixture-manifest.json` changed only at `proofClient.sha256`;
+- `<PROOF_INPUT>`, `<PROOF_ARTIFACTS>`, `<PROOF_OUTPUT>`, path bindings, and every other manifest value were unchanged.
+
+The only Git-tracked change in this synchronization task is this readiness document. The Fixture client and manifest remain external and are not staged or committed.
+
+| Identity | Before | After |
+| --- | --- | --- |
+| Proof Client SHA-256 | `388442E6ED0549A51E450EB7AC10EE602DFC22BDD4933B9CE569F3A63F31BCED` | `45E930E65FE48267D2D469E8E4C372651DBFEEA333110A9A89DB1C3207779DA9` |
+| Fixture manifest SHA-256 | `6C40FE873B65F2C2CFCBD89C4EFD8322B67050F37514F5BD9583CCE0BD48A9B4` | `9452C006EC8C252A749DEFC75D3BC040CBA72BD9C07320DB80D9E8320BBA8802` |
+| Input SHA-256 | `4422903953D9E13F4393177E5A851C37E759A8DE57EDBB4E3CA09EB6B69F84B8` | unchanged |
+| Codex executable SHA-256 | `9D563EE4E0441FF9D59D612013E0460DDF8E5709735C2D9F6B98B7EF8CA4EB42` | unchanged |
+
+Post-sync verification found exactly the four approved root entries, exactly one client file, zero Artifact entries, no `proof-output.txt`, and zero links/Junctions. Manifest input and client hashes match the actual files. Running the synchronized client without `--execute` returned `mode:dry-run`, `appServerStarted:false`, the three-method outbound allowlist, and the four required identity hashes. No App Server process, Thread, Turn, model, tool, or Host protocol interaction ran.
+
+The current link and citation checks exited 0. `check:facts` exited 1 because prohibited product tests were not run and the existing measurement sink remained empty, leaving the same 15 existing anchors unmeasured. The failure is retained; no fact baseline or claim was changed.
 
 The installed host was observed as Codex CLI `0.166.0`. The native Windows `codex.exe` SHA-256 is:
 
@@ -136,7 +157,7 @@ The current link and citation checks exited 0. `check:facts` again exited 1 beca
 
 | Revision | `CONFIRMED` | `PROPOSED` for separately approved P1 | `OPEN` / `UNVERIFIED` |
 | --- | --- | --- | --- |
-| R1 Fixture | original isolated non-Git Fixture snapshot exists; input hash remains historical | separately authorize hardened-client copy and manifest rebind before P1 | new Fixture client/manifest hashes; Host sandbox enforcement; later P3 write destination and cleanup authority |
+| R1 Fixture | isolated non-Git Fixture synchronized; input/client/manifest hashes bound; artifacts empty; output absent; no links/Junctions | retain Fixture after P1 on failure; cleanup only under separate instruction | Host sandbox enforcement; later P3 write destination and cleanup authority |
 | R2 Host protocol | CLI `0.166.0`; native executable hash; shell-free direct launch; stable JSONL sequence encoded and fake-process tested | one `stdio://` process; fixed `initialize` id 1, `initialized`, `model/list` id 2 | installed-version Notification completeness, actual response schema/fields, process lifecycle, authentication metadata, runtime events |
 | R3 Authority/budget | P1 has 0 Threads, 0 model Turns, 0 retries; P2/P3 prohibited | one process, 5-minute wall timeout, existing Host login only, no new login/API key | P1 execution approval; enforceable monetary cap and actual cost are `UNKNOWN`; model usage/rate-limit reporting |
 | R4 Acceptance | offline client checks pass; fail-closed conditions implemented | accept only matching IDs/results, model list array, clean bounded shutdown, redacted evidence, and unchanged Fixture output | all live observations; approval/sandbox/tool/Turn/recovery behavior belongs to later separately approved phases |
@@ -147,7 +168,7 @@ The earlier approval-contract examples in sections 3.1, 3.3, and 7 remain prepar
 
 The product owner is asked to approve only the following atomic action:
 
-1. After separately authorized Fixture synchronization, run `<PROOF_CLIENT>` only if its SHA-256 is `45E930E65FE48267D2D469E8E4C372651DBFEEA333110A9A89DB1C3207779DA9` and the newly recorded manifest hash matches.
+1. Run `<PROOF_CLIENT>` only if its SHA-256 is `45E930E65FE48267D2D469E8E4C372651DBFEEA333110A9A89DB1C3207779DA9` and the manifest SHA-256 is `9452C006EC8C252A749DEFC75D3BC040CBA72BD9C07320DB80D9E8320BBA8802`.
 2. Permit it to launch the reviewed `<CODEX_EXE>` with SHA-256 `9D563E...EB42` exactly once as `app-server --listen stdio:// --strict-config`, without a shell.
 3. Permit only `initialize` id 1, `initialized`, and `model/list` id 2 over local stdio JSONL.
 4. Permit existing Host metadata/auth service access only if `model/list` requires it; prohibit new login, credential creation/copying, API-key creation, network tools, model Turns, tools, Threads, approvals, retries, and P2/P3.
@@ -167,7 +188,7 @@ node "<PROOF_CLIENT>" --execute `
   --codex-sha256 "9D563EE4E0441FF9D59D612013E0460DDF8E5709735C2D9F6B98B7EF8CA4EB42" `
   --client-sha256 "45E930E65FE48267D2D469E8E4C372651DBFEEA333110A9A89DB1C3207779DA9" `
   --input-sha256 "4422903953D9E13F4393177E5A851C37E759A8DE57EDBB4E3CA09EB6B69F84B8" `
-  --manifest-sha256 "<APPROVED_UPDATED_MANIFEST_SHA256>" --timeout-ms 300000
+  --manifest-sha256 "9452C006EC8C252A749DEFC75D3BC040CBA72BD9C07320DB80D9E8320BBA8802" --timeout-ms 300000
 Remove-Item Env:CODEFLEET_P1_HANDSHAKE_APPROVED
 ```
 
@@ -186,18 +207,17 @@ The observed schema, response fields, notifications, stderr presence, and termin
 
 The following were not run: App Server, schema generation, actual Host communication, `thread/start`, `turn/start`, `thread/resume`, approvals, model Turn, tool execution, P2, P3, product tests, Pilot, CodeFleet Runtime/State, merge, or M1 implementation.
 
-P1 remains blocked first on separately authorized Fixture client/manifest synchronization and verification, then on explicit owner approval binding the exact command, all four hashes, one-process/five-minute/no-retry budget, existing-login metadata access, Notification policy, and two-file artifact policy. The live protocol and runtime observations remain `UNVERIFIED`. P2/P3 require new, independent authority even if P1 succeeds.
+Fixture synchronization is complete. P1 still requires explicit owner execution approval binding the exact command, all four hashes, one-process/five-minute/no-retry budget, existing-login metadata access, Notification policy, and two-file artifact policy. The installed-version Notification allowlist completeness, live response schema, authentication metadata behavior, process lifecycle, and all Host runtime observations remain `UNVERIFIED`. P2/P3 require new, independent authority even if P1 succeeds.
 
 Stop P1 immediately on any hash/baseline mismatch, unexpected Fixture content, unknown server method, malformed JSON, mismatched ID, protocol error, request for login/credential/approval, attempted Thread/Turn/tool creation, output outside `<PROOF_ARTIFACTS>`, timeout, process restart, retry, or uncertain side effect. Preserve the Fixture and report the failure; do not broaden authority or auto-repair.
 
 ## I. Current determination
 
 ```text
-P1_CLIENT_HARDENING_COMPLETE
-FIXTURE_CLIENT_SYNC_REQUIRED
-P1_NOT_AUTHORIZED
+P1_FIXTURE_SYNCED
+P1_READY_FOR_OWNER_APPROVAL
 HOST_PROTOCOL_UNVERIFIED
 M1_NOT_AUTHORIZED
 ```
 
-This preparation is `DOCUMENTED` and locally verified at the offline-client level only. It is not Host Live or Protected Evidence.
+This preparation is `DOCUMENTED` and locally verified at the offline-client and Fixture-identity levels only. P1 was not run. It is not Host Live or Protected Evidence.
