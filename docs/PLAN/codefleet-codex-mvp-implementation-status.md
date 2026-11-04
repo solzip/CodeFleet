@@ -23,7 +23,8 @@ The existing Controller, SQLite Store, DAG readiness/reservation, Evidence/Judge
 | Existing Controller/Workflow Store | Optional successor overlay, bounded unknown subscription usage grant, Repair generation dispatch, destination intent, post-apply Objective gate | Integration authored; not Host-Live accepted |
 | `src/product/destination-evidence.mjs` | Scoped Local post-delivery criterion checks with independent observation and explicit grant | Code and tests authored; unprotected Local |
 | `src/product/objective-status.mjs` | Read-only Objective status projection: reobserve actual target; never equate artifact-only COMPLETED with Objective COMPLETE | Code and tests authored; live not run |
-| `src/product/codex-mvp-facade.mjs` | Trusted facade joining existing Codex planning, Bootstrap Fileset, approved Controller Workflows and delivered-tree reporting without a second scheduler | Code and denial tests authored; not a public Host execution route |
+| `src/product/codex-mvp-facade.mjs` | Trusted facade joining existing Codex planning, reviewed Contract/DAG → pending Workflow, Bootstrap Fileset, approved Controller Workflows and delivered-tree reporting without a second scheduler | Code and denial tests authored; not a public Host execution route |
+| `src/product/codex-reviewed-workflow.mjs` | Promotes persisted VALIDATED Codex planning result to an exact pending-approval Workflow only after independent hash-bound scope review; deterministic idempotent creation | Code and acceptance/denial/stale-binding tests authored; no run grant |
 | `test/codex-mvp-joined-fixture.test.mjs` | Synthetic two-dependent-WorkItem joined trace: persisted A before B, candidate, approved local delivery, criterion Judge and current target drift detection | Fake Host and fake verifier only; never Host Live or product E2E acceptance |
 | Repair Generation 3+ | Contiguous immutable generations reference the latest FAILED attempt rather than blindly reopening generation 1 | Code and regression test authored |
 
@@ -41,7 +42,7 @@ The existing Controller, SQLite Store, DAG readiness/reservation, Evidence/Judge
 
 1. Validate syntax, module imports and workflow/repair/delivery negative tests locally; resolve any discovered gaps without weakening default policies.
 2. Bind authenticated supervised-local/approved protected admission to the proposed trusted Host and delivered-tree interfaces, without exposing a public bypass.
-3. The trusted facade exposes existing planning and pre-HEAD Bootstrap proposal modules. Complete and independently verify their actual Draft/Contract/DAG-to-approved-Workflow transition, especially the user-facing entry UX; do not mistake submitted proposals for approved implementation.
+3. The trusted facade now connects persisted VALIDATED Host planning to a reviewed, still-unapproved Workflow/DAG. The final user-facing Host Skill/CLI entry, authenticated grant authority and native Host Live acceptance remain incomplete; do not mistake a submitted plan for authorized implementation.
 4. Review and test the authored criterion-indexed destination evidence producer and read-only Objective status projection against the real target tree; integrate their visibility into a trusted user-facing surface.
 5. Demonstrate A→B continuity, bounded real Repair, crash/restart reconciliation, and new/existing repository acceptance with approved fixtures and actual Codex Host.
 6. Measure interventions, time, known/unknown cost and compare to baseline Codex development where feasible.

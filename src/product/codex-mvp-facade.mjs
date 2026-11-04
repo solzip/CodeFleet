@@ -13,6 +13,7 @@ import { createCodexManagedHostExecution } from '../hosts/codex-managed-host-exe
 import { planWithCodexManagedThread } from '../hosts/codex-managed-planning.mjs';
 import { proposeNewProjectFileset } from '../hosts/codex-bootstrap-files.mjs';
 import { readDeliveredObjectiveStatus } from './objective-status.mjs';
+import { prepareReviewedCodexWorkflow } from './codex-reviewed-workflow.mjs';
 
 const invalid = detail => { throw Error('Codex MVP trusted embedding: ' + detail); };
 const exactText = input => typeof input === 'string' && input.length > 0;
@@ -20,7 +21,7 @@ const callable = input => typeof input === 'function';
 
 export function createCodexMvpFacade(store, {
   executable, model, enableHostTurns = false,
-  authorizePlanning, authorizeBootstrap, authorizeWorkflow,
+  authorizePlanning, authorizeBootstrap, authorizeWorkflow, authorizeReviewedWorkflow,
   authorizeWorkspace, workspaceWrite = false,
   verificationBackend, unknownCostBudget, repairPolicy,
   destinationDelivery, developmentPolicy, workItemPolicy,
@@ -80,6 +81,15 @@ export function createCodexMvpFacade(store, {
     },
     // NEW_PROJECT pre-HEAD is handled by the existing Bootstrap/Fileset
     // contracts. A proposed Fileset does not materialize or authorize files.
+    // Convert only a persisted, independently reviewed validated Host planning
+    // result into an unapproved Workflow. No attempts or model effects.
+    async prepareReviewedExistingWorkflow(repo, sessionId) {
+      if (!callable(authorizeReviewedWorkflow))
+        invalid('Exact independent planning scope review required');
+      return prepareReviewedCodexWorkflow(store, repo, sessionId, {
+        authorizeReview:authorizeReviewedWorkflow
+      });
+    },
     async proposeBootstrapFiles(taskId, itemId) {
       available();
       if (!callable(authorizeBootstrap)) invalid('Exact Bootstrap planning grant required');
