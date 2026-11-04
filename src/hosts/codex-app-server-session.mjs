@@ -5,6 +5,7 @@
 import { spawn } from 'node:child_process';
 import { isAbsolute } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
+import { environment } from '../alpha/process.mjs';
 
 const NOTIFICATIONS = new Set([
   'account/updated', 'account/rateLimits/updated', 'remoteControl/status/changed',
@@ -142,7 +143,10 @@ export async function runCodexReadOnlyTurn({ executable, cwd, model, prompt, out
       timeoutMs < 1 || timeoutMs > 180000) reject('Invalid bounded App Server execution parameters');
   const protocol = createCodexTurnProtocol({ cwd, model, prompt, outputSchema, workspaceWrite });
   const child = spawnImpl(executable, ['app-server', '--listen', 'stdio://', '--strict-config'], {
-    cwd, shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe']
+    cwd, shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...environment('local'),
+      ...(process.env.CODEX_HOME && isAbsolute(process.env.CODEX_HOME)
+        ? { CODEX_HOME: process.env.CODEX_HOME } : {}) }
   });
   return await new Promise((resolve, rejectPromise) => {
     let settled = false, stdoutBytes = 0, stderrBytes = 0, buffer = '';
