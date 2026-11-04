@@ -1,76 +1,189 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import {
   HandshakeState,
+  LIMITS,
   assertAllowedOutbound,
   initializeRequest,
+  minimalProtocolRecord,
   parseJsonLine,
   redact,
-  terminateChild,
-  withTimeout,
+  runProof,
+  sha256File,
 } from "./p1-appserver-handshake.mjs";
 
-test("accepts only the fixed initialize and model/list response sequence", () => {
+const sourceClient = fileURLToPath(new URL("./p1-appserver-handshake.mjs", import.meta.url));
+const fakeServer = fileURLToPath(new URL("./p1-appserver-fake.mjs", import.meta.url));
+
+async function fixture(t) {
+  const root = await mkdtemp(join(tmpdir(), "codefleet-p1-fake-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const artifacts = join(root, "proof-artifacts");
+  const clientDir = join(root, "proof-client");
+  const client = join(clientDir, basename(sourceClient));
+  const input = join(root, "input.txt");
+  const manifest = join(root, "fixture-manifest.json");
+  await mkdir(artifacts);
+  await mkdir(clientDir);
+  await cp(sourceClient, client);
+  await writeFile(input, "CODEFLEET_HOST_PROTOCOL_PROOF_P1_INPUT_V1\n", "utf8");
+  const inputSha256 = await sha256File(input);
+  const clientSha256 = await sha256File(client);
+  await writeFile(manifest, `${JSON.stringify({
+    manifestVersion: 1,
+    proofRoot: "<PROOF_ROOT>",
+    artifacts: "<PROOF_ARTIFACTS>",
+    input: { path: "<PROOF_INPUT>", sha256: inputSha256 },
+    proofClient: { path: "<PROOF_CLIENT>", sha256: clientSha256 },
+    proofOutput: { path: "<PROOF_OUTPUT>", exists: false },
+    artifactCount: 0,
+    linksOrJunctions: false,
+  }, null, 2)}\n`, "utf8");
+  return {
+    root, artifacts, client, manifest,
+    options: {
+      codexExe: process.execPath,
+      fixture: root,
+      artifacts,
+      manifest,
+      codexSha256: await sha256File(process.execPath),
+      clientSha256,
+      inputSha256,
+      manifestSha256: await sha256File(manifest),
+      timeoutMs: 250,
+    },
+  };
+}
+
+async function runScenario(t, scenario, overrides = {}) {
+  const prepared = await fixture(t);
+  const dependencies = {
+    clientPath: prepared.client,
+    platform: "test",
+    command: process.execPath,
+    commandArgs: [fakeServer, scenario],
+    spawnImpl: spawn,
+    shutdownMs: 250,
+  };
+  return { prepared, promise: runProof({ ...prepared.options, ...overrides }, dependencies) };
+}
+
+test("state distinguishes allowed notification from server request and unknown notification", () => {
   const state = new HandshakeState();
-  const next = state.accept({ id: 1, result: { userAgent: "codex" } });
-  assert.deepEqual(next.map((message) => message.method), ["initialized", "model/list"]);
-  assert.deepEqual(state.accept({ id: 2, result: { data: [] } }), []);
-  assert.equal(state.complete, true);
+  assert.deepEqual(state.accept({ method: "account/updated", params: { email: "omit" } }), []);
+  assert.throws(() => state.accept({ id: 10, method: "account/chatgptAuthTokens/refresh", params: {} }), /server request/);
+  assert.throws(() => state.accept({ method: "unverified/event", params: {} }), /server notification/);
 });
 
-test("rejects malformed JSON", () => {
-  assert.throws(() => parseJsonLine("{"), /malformed JSONL/);
+test("parsing rejects malformed and oversized JSONL", () => {
+  assert.throws(() => parseJsonLine("{"), /malformed/);
+  assert.throws(() => parseJsonLine(`{"x":"${"x".repeat(LIMITS.lineBytes)}"}`), /size limit/);
 });
 
-test("rejects mismatched and duplicate response IDs", () => {
-  assert.throws(() => new HandshakeState().accept({ id: 2, result: {} }), /ID mismatch/);
-  const state = new HandshakeState();
-  state.accept({ id: 1, result: {} });
-  assert.throws(() => state.accept({ id: 1, result: {} }), /ID mismatch/);
-});
-
-test("rejects unapproved outbound and inbound methods", () => {
+test("outbound allowlist rejects thread and experimental methods", () => {
   assert.throws(() => assertAllowedOutbound({ method: "thread/start" }), /not approved/);
-  assert.throws(() => new HandshakeState().accept({ id: 99, method: "approval/request", params: {} }), /unapproved server/);
-  assert.doesNotThrow(() => assertAllowedOutbound(initializeRequest()));
-});
-
-test("rejects experimentalApi", () => {
   const request = initializeRequest();
   request.params.capabilities = { experimentalApi: true };
   assert.throws(() => assertAllowedOutbound(request), /experimentalApi/);
 });
 
-test("timeout fails closed", async () => {
-  await assert.rejects(withTimeout(new Promise(() => {}), 10), /timeout/);
+test("minimal records omit account, credential, descriptions, and notification params", () => {
+  const notification = minimalProtocolRecord("in", { method: "account/updated", params: { token: "secret" } });
+  const models = minimalProtocolRecord("in", { id: 2, result: { data: [{ id: "m", supportedReasoningEfforts: [{ reasoningEffort: "low", description: "omit" }], credential: "omit" }] } });
+  assert.deepEqual(notification, { direction: "in", kind: "notification", method: "account/updated" });
+  assert.deepEqual(models.result.data[0].supportedReasoningEfforts, ["low"]);
+  assert.equal(JSON.stringify(models).includes("credential"), false);
+  assert.equal(JSON.stringify(models).includes("description"), false);
 });
 
-test("termination closes stdin and kills a live child", () => {
-  const calls = [];
-  terminateChild({ stdin: { end: () => calls.push("end") }, exitCode: null, signalCode: null, kill: () => calls.push("kill") });
-  assert.deepEqual(calls, ["end", "kill"]);
+test("redaction removes secrets and user paths", () => {
+  const output = redact({ token: "abc", detail: "Bearer abc.def", path: "C:\\Users\\private\\proof" });
+  assert.equal(JSON.stringify(output).includes("abc"), false);
+  assert.equal(output.path, "<USER_HOME>\\proof");
 });
 
-test("redacts secrets and private paths", () => {
-  const value = redact({ token: "abc", detail: "Bearer abc.def", path: "C:\\private\\proof" }, [["C:\\private", "<HOME>"]]);
-  assert.deepEqual(value, { token: "<REDACTED>", detail: "Bearer <REDACTED>", path: "<HOME>\\proof" });
+test("fake process completes handshake, exits zero, and writes hashed minimal evidence", async (t) => {
+  const { prepared, promise } = await runScenario(t, "success");
+  const result = await promise;
+  assert.equal(result.passed, true);
+  assert.equal(result.termination.confirmed, true);
+  assert.equal(result.termination.code, 0);
+  assert.equal(result.termination.forced, false);
+  const transcript = await readFile(join(prepared.artifacts, "p1-redacted-transcript.jsonl"), "utf8");
+  assert.equal(await sha256File(join(prepared.artifacts, "p1-redacted-transcript.jsonl")), result.transcriptSha256);
+  assert.equal(/never-record|credential|email|account/.test(transcript), false);
+  assert.match(transcript, /fake-model/);
 });
 
-test("default CLI is dry-run and does not require or launch Codex", () => {
-  const client = fileURLToPath(new URL("./p1-appserver-handshake.mjs", import.meta.url));
-  const result = spawnSync(process.execPath, [client], { encoding: "utf8", shell: false });
+test("documented stable notification is accepted but its params are omitted", async (t) => {
+  const { prepared, promise } = await runScenario(t, "notification");
+  await promise;
+  const transcript = await readFile(join(prepared.artifacts, "p1-redacted-transcript.jsonl"), "utf8");
+  assert.match(transcript, /account\/updated/);
+  assert.equal(transcript.includes("private@example.test"), false);
+  assert.equal(transcript.includes("never-record"), false);
+});
+
+for (const [scenario, pattern] of [
+  ["mismatch", /ID mismatch/],
+  ["malformed", /malformed JSONL/],
+  ["request", /server request/],
+  ["unknown-notification", /server notification/],
+  ["crash", /exited before handshake/],
+  ["missing", /timeout/],
+  ["oversize", /size limit/],
+  ["stdout-limit", /stdout exceeded/],
+  ["stderr-limit", /stderr exceeded/],
+  ["no-exit", /forced termination/],
+]) {
+  test(`fake process scenario ${scenario} fails closed and records minimal failure evidence`, async (t) => {
+    const { prepared, promise } = await runScenario(t, scenario);
+    await assert.rejects(promise, pattern);
+    const result = JSON.parse(await readFile(join(prepared.artifacts, "p1-result.json"), "utf8"));
+    assert.equal(result.passed, false);
+    assert.equal(result.termination.confirmed, true);
+    assert.equal(JSON.stringify(result).includes("never-record"), false);
+  });
+}
+
+for (const key of ["codexSha256", "clientSha256", "inputSha256", "manifestSha256"]) {
+  test(`${key} mismatch blocks before spawn`, async (t) => {
+    const prepared = await fixture(t);
+    let spawnCalls = 0;
+    await assert.rejects(runProof({ ...prepared.options, [key]: "0".repeat(64) }, {
+      clientPath: prepared.client,
+      platform: "test",
+      spawnImpl: () => { spawnCalls += 1; throw new Error("must not spawn"); },
+    }), /hash mismatch before spawn/);
+    assert.equal(spawnCalls, 0);
+  });
+}
+
+test("artifact path mismatch blocks before spawn", async (t) => {
+  const prepared = await fixture(t);
+  let spawnCalls = 0;
+  await assert.rejects(runProof({ ...prepared.options, artifacts: prepared.root }, {
+    clientPath: prepared.client,
+    platform: "test",
+    spawnImpl: () => { spawnCalls += 1; throw new Error("must not spawn"); },
+  }), /artifact path/);
+  assert.equal(spawnCalls, 0);
+});
+
+test("default CLI remains dry-run", () => {
+  const result = spawnSync(process.execPath, [sourceClient], { encoding: "utf8", shell: false });
   assert.equal(result.status, 0, result.stderr);
-  const output = JSON.parse(result.stdout);
-  assert.equal(output.mode, "dry-run");
-  assert.equal(output.appServerStarted, false);
+  assert.deepEqual(JSON.parse(result.stdout).requiredIdentityHashes, ["codex", "client", "input", "manifest"]);
 });
 
-test("execute mode fails before spawn without separate approval acknowledgement", () => {
-  const client = fileURLToPath(new URL("./p1-appserver-handshake.mjs", import.meta.url));
-  const result = spawnSync(process.execPath, [client, "--execute"], { encoding: "utf8", shell: false, env: {} });
+test("execution acknowledgement is necessary but explicitly not sufficient", () => {
+  const result = spawnSync(process.execPath, [sourceClient, "--execute"], { encoding: "utf8", shell: false, env: {} });
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /approval acknowledgement is missing/);
+  assert.match(result.stderr, /does not replace owner approval or hash verification/);
 });
