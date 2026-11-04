@@ -10,6 +10,8 @@ import { ProviderError, requireProposal } from '../providers/interface.mjs';
 import { createRegistry, selectProvider } from '../providers/registry.mjs';
 import { readyBatch, validateWorkflow } from '../workflow/definition.mjs';
 import { predecessorInput, applyPredecessorOverlay } from '../workflow/predecessor-context.mjs';
+import { applyLocalDelivery } from '../product/controlled-delivery.mjs';
+import { evaluateDeliveredObjective } from '../product/objective-judge.mjs';
 import { delegate, sendMessage, receiveMessages } from '../workflow/collaboration.mjs';
 import * as workflowStore from '../workflow/persistence.mjs';
 import { matchTestIdentity } from './verifier.mjs';
@@ -282,8 +284,12 @@ async function executeWorkflow(store, id, dependencies, options) {
       else run.states[attempt.itemId] = 'SUCCEEDED';
       workflowStore.finish(store, run, owner, attempt, 'SUCCEEDED');
     }
-    const selectedRepo = await repository(run.repo); guard();
-    if (selectedRepo.base !== run.base) throw Error('Workflow baseline changed');
+    // A delivered local tree is intentionally Git-dirty. Never attempt a
+    // second delivery merely because verification/re-entry was interrupted.
+    if (!run.deliveryReceiptRef) {
+      const selectedRepo = await repository(run.repo); guard();
+      if (selectedRepo.base !== run.base) throw Error('Workflow baseline changed');
+    } else guard();
     const registry = dependencies.hostExecution ? null : dependencies.workflowRegistry ?? createRegistry();
     const choose = async () => {
       if (dependencies.hostExecution) { guard(); return dependencies.hostExecution.select(run); }
@@ -299,10 +305,60 @@ async function executeWorkflow(store, id, dependencies, options) {
       run.unknownCostAttempts = records.reduce((s, a) => s + store.get(a.childId).unknownCostAttempts, 0);
       if (run.unknownCostAttempts || run.reportedCostUsd > source.maxAttempts * source.attemptBudgetUsd) return save('WAITING_HUMAN', 'Workflow cost unknown or exhausted');
       if (run.finalRunId) {
-        const finalChild = store.get(run.finalRunId); accepted(finalChild);
+        const finalChild = store.get(run.finalRunId), finalPatch = accepted(finalChild);
         if (run.contract.schemaVersion === 2 && (!finalChild.candidatePaths || await candidateHash(finalChild.candidateDirectory, finalChild.candidatePaths) !== finalChild.candidateHash)) throw Error('Final candidate tree changed after verification');
         guard();
-        return save('COMPLETED', 'All required WorkItems and integrated candidate independently verified; local artifacts only');
+        // Default and historical behavior stays artifact-only. A separately
+        // enabled delivery path requires an independently trusted grant and
+        // verified criterion-indexed observations on the DELIVERED tree.
+        const deliveryService = dependencies.destinationDelivery;
+        if (!deliveryService) return save('COMPLETED', 'All required WorkItems and integrated candidate independently verified; local artifacts only');
+        if (typeof deliveryService.authorize !== 'function' || typeof deliveryService.verify !== 'function')
+          throw Error('Exact destination grant and independent post-apply verifier required');
+        if (run.destinationDeliveryIntentRef && !run.deliveryReceiptRef)
+          return save('RECONCILING', 'Uncertain destination delivery; never replay an external effect');
+        if (!run.deliveryReceiptRef) {
+          const delivered = await applyLocalDelivery({
+            destination:run.repo,base:run.base,files:finalPatch.changedFiles,
+            candidatePaths:finalChild.candidatePaths,verifiedCandidateHash:finalChild.candidateHash,
+            runId:run.id,revision:run.revision,authorize:deliveryService.authorize,
+            cancelled:()=>leaseLost || store.get(run.id).control !== 'run',
+            persistIntent:async localIntent=>{
+              // Called only AFTER trusted owner approval and clean baseline
+              // preflight, BEFORE any filesystem staging or rename.
+              run.destinationDeliveryIntentRef = store.artifact({
+                ...localIntent,acceptedHash:finalChild.acceptedHash,
+                evidenceHash:finalChild.evidenceHash,
+                integrationHash:run.integrationHash
+              });
+              save('DELIVERING', 'Approved destination intent committed before filesystem effects');
+              return run.destinationDeliveryIntentRef;
+            }
+          });
+          run.deliveryReceiptRef = store.artifact(delivered);
+          save('DELIVERED_NOT_VERIFIED', 'Actual destination bytes observed; independent criterion verification pending');
+        }
+        const receipt = store.readArtifact(run.deliveryReceiptRef);
+        if (receipt.targetTreeHash !== finalChild.candidateHash)
+          throw Error('Delivered destination tree differs from integrated Candidate');
+        // The trusted post-apply service must persist its own Evidence first.
+        const observations = await deliveryService.verify({
+          run,delivery:receipt,contract:source,candidate:finalChild
+        });
+        if (!observations || !Array.isArray(observations.criteria) ||
+            typeof observations.readVerifiedEvidence !== 'function')
+          throw Error('Independent destination Evidence unavailable');
+        const decision = evaluateDeliveredObjective({
+          objectiveId:run.id,revision:run.revision,candidateHash:finalChild.candidateHash,
+          delivery:receipt,criteria:observations.criteria,
+          evidenceRefs:observations.evidenceRefs,
+          readVerifiedEvidence:observations.readVerifiedEvidence
+        });
+        run.objectiveDecisionRef = store.artifact(decision);
+        if (decision.complete !== true) return save(
+          decision.outcome === 'HUMAN_HANDOFF' ? 'WAITING_HUMAN' : 'DELIVERED_NOT_VERIFIED',
+          decision.reason);
+        return save('COMPLETED', 'All mandatory Objective criteria independently verified on delivered destination tree');
       }
       run.workItemBlocks = {};
       for (const n of run.contract.items) if (run.states[n.id] !== 'SUCCEEDED') {
@@ -405,6 +461,7 @@ async function executeWorkflow(store, id, dependencies, options) {
     if (leaseLost) throw error;
     const control = store.get(id).control;
     if (run.contract.schemaVersion === 2) { delete run.acceptedHash; delete run.evidenceHash; delete run.candidateHash; }
-    return save(control === 'cancel' ? 'CANCELLED' : control === 'pause' ? 'PAUSED' : 'WAITING_HUMAN', error.message);
+    const uncertainDelivery = Boolean(run.destinationDeliveryIntentRef && !run.deliveryReceiptRef);
+    return save(uncertainDelivery ? 'RECONCILING' : control === 'cancel' ? 'CANCELLED' : control === 'pause' ? 'PAUSED' : 'WAITING_HUMAN', error.message);
   } finally { clearInterval(heartbeat); store.release(id, owner); }
 }
