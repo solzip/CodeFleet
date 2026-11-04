@@ -37,7 +37,17 @@ export function evaluateDeliveredObjective({
     }
     let evidence;
     try { evidence = readVerifiedEvidence(ref); } catch { results.push({ id: criterion.id, status: 'EVIDENCE_UNREADABLE' }); continue; }
-    if (!evidence || evidence.objectiveId !== objectiveId ||
+    // A trusted reader must supply a complete, typed observation. An
+    // authority string alone cannot promote a Local (UNPROTECTED) result to
+    // Protected Evidence or transform an incomplete check into acceptance.
+    if (!evidence || evidence.kind !== 'OBJECTIVE_CRITERION_OBSERVATION_V1' ||
+        evidence.complete !== true ||
+        typeof evidence.verificationBackend !== 'string' || !evidence.verificationBackend ||
+        evidence.protection !== (evidence.authority === 'PROTECTED_EXECUTED'
+          ? 'PROTECTED' : 'UNPROTECTED') ||
+        (evidence.authority === 'PROTECTED_EXECUTED' &&
+          evidence.verificationBackend.toLowerCase() === 'local') ||
+        evidence.objectiveId !== objectiveId ||
         evidence.revision !== revision || evidence.criterionId !== criterion.id ||
         evidence.targetTreeHash !== delivery.targetTreeHash ||
         !Object.hasOwn(AUTHORITY, evidence.authority) ||

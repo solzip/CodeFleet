@@ -107,7 +107,7 @@ test('joined synthetic two-WorkItem Objective: A persisted before B, local deliv
           objectiveId:run.id,revision:run.revision,criterionId:'C1',
           targetTreeHash:delivery.targetTreeHash,authority:'LOCAL_EXECUTED',
           independentObserver:true,commandHash:'a'.repeat(64),
-          observationHash:'b'.repeat(64),tests:2,passed:2,failed:0,
+          observationHash:'b'.repeat(64),complete:true,tests:2,passed:2,failed:0,
           skipped:0,todo:0,exitCode:0,interrupted:false,truncated:false,
           integrity:'MATCHED',verificationBackend:'SYNTHETIC_TEST_ONLY',
           protection:'UNPROTECTED'

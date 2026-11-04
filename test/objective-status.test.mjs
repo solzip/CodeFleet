@@ -20,7 +20,9 @@ const child = () => ({id:'final-1',workflowParent:'objective-1',
 const decision = () => ({outcome:'COMPLETE',complete:true,objectiveId:'objective-1',
   revision:1,targetTreeHash:SHA,authority:'LOCAL_EXECUTED',
   criteria:[{id:'criterion-a',status:'SATISFIED',authority:'LOCAL_EXECUTED',evidenceRef:'evidence-a'}]});
-const evidence = () => ({objectiveId:'objective-1',revision:1,criterionId:'criterion-a',
+const evidence = () => ({kind:'OBJECTIVE_CRITERION_OBSERVATION_V1',
+  complete:true,verificationBackend:'local',protection:'UNPROTECTED',
+  objectiveId:'objective-1',revision:1,criterionId:'criterion-a',
   targetTreeHash:SHA,authority:'LOCAL_EXECUTED',independentObserver:true,
   commandHash:SHA,observationHash:OTHER,tests:1,passed:1,failed:0,skipped:0,todo:0,
   exitCode:0,interrupted:false,truncated:false,integrity:'MATCHED'});
@@ -196,4 +198,16 @@ test('Objective status refuses delivered roots reached through a symlinked ances
  const result=await readDeliveredObjectiveStatus(x.store,'objective-1');
  assert.equal(result.objectiveComplete,false);
  assert.equal(result.status,'BLOCKED');
+});
+
+test('read-only COMPLETE projection rejects incomplete or mislabeled saved criterion Evidence',async()=>{
+ for(const evidenceOverride of [
+   {kind:'MODEL_REPORTED_RESULT'},{complete:false},
+   {verificationBackend:undefined},{protection:'PROTECTED'},
+   {authority:'PROTECTED_EXECUTED',protection:'PROTECTED'}
+ ]) {
+   const x=fixture({evidenceOverride});
+   const result=await readDeliveredObjectiveStatus(x.store,'objective-1',{observeTree:x.observeTree});
+   assert.equal(result.objectiveComplete,false,JSON.stringify(evidenceOverride));
+ }
 });

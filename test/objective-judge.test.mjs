@@ -6,7 +6,9 @@ const tree='a'.repeat(64);
 const delivery={status:'DELIVERED_NOT_VERIFIED',runId:'goal',revision:1,
   candidateHash:tree,targetTreeHash:tree,semanticCriteriaVerified:false};
 const criteria=[{id:'C1',requiredAuthority:'LOCAL_EXECUTED'},{id:'C2',requiredAuthority:'LOCAL_EXECUTED'}];
-const evidence=id=>({objectiveId:'goal',revision:1,criterionId:id,
+const evidence=id=>({kind:'OBJECTIVE_CRITERION_OBSERVATION_V1',
+  complete:true,verificationBackend:'local',protection:'UNPROTECTED',
+  objectiveId:'goal',revision:1,criterionId:id,
   targetTreeHash:tree,authority:'LOCAL_EXECUTED',independentObserver:true,
   commandHash:'b'.repeat(64),observationHash:'c'.repeat(64),
   tests:1,passed:1,failed:0,skipped:0,todo:0,exitCode:0,integrity:'MATCHED'});
@@ -59,7 +61,8 @@ test('subjective criterion is not self-scored by CodeFleet',()=>{
 });
 test('protected evidence supports protected COMPLETE only when both observed',()=>{
   const a=args();a.criteria=[{id:'C1',requiredAuthority:'PROTECTED_EXECUTED'}];
-  a.readVerifiedEvidence=()=>({...evidence('C1'),authority:'PROTECTED_EXECUTED'});
+  a.readVerifiedEvidence=()=>({...evidence('C1'),authority:'PROTECTED_EXECUTED',
+    verificationBackend:'container',protection:'PROTECTED'});
   assert.equal(evaluateDeliveredObjective(a).protection,'PROTECTED');
 });
 
@@ -71,4 +74,27 @@ test('a delivered receipt from another Objective or revision cannot be replayed'
    assert.equal(result.complete,false,JSON.stringify(invalid));
    assert.equal(result.outcome,'INCOMPLETE');
  }
+});
+
+// These are pure-Judge regression inputs, not claimed Host/OS verification.
+test('an incomplete, untyped or inconsistently protected observation cannot complete an Objective',()=>{
+  const baseline=args();
+  for(const delta of [
+    {kind:'MODEL_REPORTED_RESULT'}, {complete:false}, {complete:undefined},
+    {verificationBackend:''}, {verificationBackend:undefined},
+    {protection:'PROTECTED'}
+  ]) {
+    const a={...baseline,readVerifiedEvidence:ref=>({...baseline.readVerifiedEvidence(ref),...delta})};
+    assert.equal(evaluateDeliveredObjective(a).complete,false,JSON.stringify(delta));
+  }
+  const protectedOnly={...baseline,criteria:[{id:'C1',requiredAuthority:'PROTECTED_EXECUTED'}],
+    evidenceRefs:{C1:'e1'}};
+  for(const delta of [
+    {authority:'PROTECTED_EXECUTED'}, // Local protection label must not upgrade
+    {authority:'PROTECTED_EXECUTED',protection:'PROTECTED'}, // backend still Local
+    {authority:'PROTECTED_EXECUTED',verificationBackend:'container'}, // UNPROTECTED label
+  ]) {
+    const a={...protectedOnly,readVerifiedEvidence:()=>({...evidence('C1'),...delta})};
+    assert.equal(evaluateDeliveredObjective(a).complete,false,JSON.stringify(delta));
+  }
 });

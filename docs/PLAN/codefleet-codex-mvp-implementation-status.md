@@ -165,3 +165,19 @@ grant and source drift during review. This is a pre-effect guard only, not
 atomic OS-level confinement against simultaneous path swaps. Native Codex Host
 Live and final Objective acceptance remain UNVERIFIED. The new head requires
 its own Windows/Linux CI before calling this change tested.
+
+## Delivered-tree Objective Evidence type and protection consistency (offline CI pending)
+
+The independent Objective Judge now requires a typed, explicitly complete
+criterion observation with a nonempty verification-backend identity and a
+protection label consistent with its claimed authority. A Local backend cannot
+self-upgrade to `PROTECTED_EXECUTED` by changing the authority field, and an
+incomplete or untyped observation cannot satisfy an Objective merely because
+its test counts and hashes resemble a PASS. The read-only delivered Objective
+status projection reuses this predicate and thus rejects the same stale or
+mislabeled persisted Evidence. Offline negative tests cover both direct judging
+and formerly COMPLETE status re-evaluation, while the synthetic joined fixture
+continues to identify its fake Local observer. This is schema/authority
+consistency checking, **not** attestation of an isolated verification backend,
+Host Live proof or owner-criterion binding. The new head needs its own
+Windows/Linux CI before reporting offline PASS.
