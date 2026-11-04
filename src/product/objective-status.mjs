@@ -43,11 +43,12 @@ export async function readDeliveredObjectiveStatus(store, objectiveId, {
       : 'No delivered target with accepted candidate Evidence',
       common.candidateAvailable ? 'VERIFIED_CANDIDATE_AVAILABLE' : 'INCOMPLETE',common);
   }
-  let delivered, child, decision;
+  let delivered, child, decision, required;
   try {
     delivered = store.readArtifact(run.deliveryReceiptRef);
     child = store.get(run.finalRunId);
     if (run.objectiveDecisionRef) decision = store.readArtifact(run.objectiveDecisionRef);
+    if (run.objectiveCriteriaRef) required = store.readArtifact(run.objectiveCriteriaRef);
   } catch {
     return incomplete(run,'Delivery or Objective Evidence is unreadable','BLOCKED', common);
   }
@@ -70,7 +71,19 @@ export async function readDeliveredObjectiveStatus(store, objectiveId, {
     return incomplete(run,'Delivered target is observed but mandatory criteria lack a final independent decision',
       'DELIVERED_NOT_VERIFIED',common);
   const criteria = Array.isArray(decision.criteria) ? decision.criteria : [];
-  const trustedDecision = decision.outcome === 'COMPLETE' &&
+  // The Controller pinned this separately from its decision on the delivered
+  // revision. Never reconstruct the mandatory set from a COMPLETE verdict.
+  const mandatory = Array.isArray(required?.criteria) ? required.criteria : [];
+  const trustedMandatory = required?.kind === 'OBJECTIVE_MANDATORY_CRITERIA_V1' &&
+    required.objectiveId === run.id && required.revision === run.revision &&
+    required.workflowHash === run.contractHash &&
+    required.deliveryReceiptRef === run.deliveryReceiptRef &&
+    mandatory.length > 0 && mandatory.length === criteria.length &&
+    mandatory.every((item, index) => item && item.id === criteria[index]?.id &&
+      typeof item.id === 'string' &&
+      ['LOCAL_EXECUTED','PROTECTED_EXECUTED','OWNER_REVIEW'].includes(item.requiredAuthority)) &&
+    new Set(mandatory.map(item => item.id)).size === mandatory.length;
+  const trustedDecision = trustedMandatory && decision.outcome === 'COMPLETE' &&
     decision.complete === true && decision.objectiveId === run.id &&
     decision.revision === run.revision &&
     decision.targetTreeHash === delivered.targetTreeHash &&
@@ -86,9 +99,7 @@ export async function readDeliveredObjectiveStatus(store, objectiveId, {
   // downgraded or inconsistent records. No commands or Host Turns are run.
   let verifiedDecision = false;
   if (run.state === 'COMPLETED' && trustedDecision) {
-    const reviewedCriteria = criteria.map(criterion => ({
-      id: criterion.id, requiredAuthority: criterion.authority
-    }));
+    const reviewedCriteria = mandatory;
     const evidenceRefs = Object.fromEntries(criteria.map(criterion =>
       [criterion.id, criterion.evidenceRef]));
     try {

@@ -396,9 +396,18 @@ async function executeWorkflow(store, id, dependencies, options) {
         if (!observations || !Array.isArray(observations.criteria) ||
             typeof observations.readVerifiedEvidence !== 'function')
           throw Error('Independent destination Evidence unavailable');
+        // Pin the mandatory criterion contract independently of the verdict.
+        // A later read-only projection must not infer the required set from a
+        // possibly truncated or altered COMPLETE decision artifact.
+        const mandatoryCriteria = structuredClone(observations.criteria);
+        run.objectiveCriteriaRef = store.artifact({
+          kind:'OBJECTIVE_MANDATORY_CRITERIA_V1',objectiveId:run.id,
+          revision:run.revision,workflowHash:run.contractHash,
+          deliveryReceiptRef:run.deliveryReceiptRef,criteria:mandatoryCriteria
+        });
         const decision = evaluateDeliveredObjective({
           objectiveId:run.id,revision:run.revision,candidateHash:finalChild.candidateHash,
-          delivery:receipt,criteria:observations.criteria,
+          delivery:receipt,criteria:mandatoryCriteria,
           evidenceRefs:observations.evidenceRefs,
           readVerifiedEvidence:observations.readVerifiedEvidence
         });

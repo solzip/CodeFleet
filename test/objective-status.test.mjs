@@ -6,6 +6,7 @@ const SHA = 'a'.repeat(64), OTHER = 'b'.repeat(64);
 const run = () => ({kind:'workflow',id:'objective-1',revision:1,state:'COMPLETED',
   finalRunId:'final-1',acceptedHash:'accepted-1',repo:'/approved-target',
   deliveryReceiptRef:'delivery-1',objectiveDecisionRef:'decision-1',
+  objectiveCriteriaRef:'criteria-1',contractHash:SHA,
   reportedCostUsd:0,unknownCostAttempts:2});
 const delivery = () => ({status:'DELIVERED_NOT_VERIFIED',runId:'objective-1',revision:1,
   candidateHash:SHA,targetTreeHash:SHA,semanticCriteriaVerified:false});
@@ -20,10 +21,14 @@ const evidence = () => ({objectiveId:'objective-1',revision:1,criterionId:'crite
   commandHash:SHA,observationHash:OTHER,tests:1,passed:1,failed:0,skipped:0,todo:0,
   exitCode:0,interrupted:false,truncated:false,integrity:'MATCHED'});
 function fixture({current=SHA,runOverride={},deliveryOverride={},childOverride={},
- decisionOverride={},evidenceOverride={},evidenceMissing=false}={}){
+ decisionOverride={},criteriaOverride={},evidenceOverride={},evidenceMissing=false}={}){
  const r={...run(),...runOverride};
  const blobs={'delivery-1':{...delivery(),...deliveryOverride},
    'decision-1':{...decision(),...decisionOverride},
+   'criteria-1':{kind:'OBJECTIVE_MANDATORY_CRITERIA_V1',
+     objectiveId:'objective-1',revision:1,workflowHash:SHA,
+     deliveryReceiptRef:'delivery-1',
+     criteria:[{id:'criterion-a',requiredAuthority:'LOCAL_EXECUTED'}],...criteriaOverride},
    ...(evidenceMissing?{}:{'evidence-a':{...evidence(),...evidenceOverride}})};
  return { store:{get:id=>id==='objective-1'?r:id==='final-1'?{...child(),...childOverride}:null,
    readArtifact:ref=>blobs[ref]},observeTree:async (repo,files)=>{
@@ -103,4 +108,26 @@ test('falsely promoted protected decision cannot rely on Local criterion Evidenc
      evidenceRef:'evidence-a'}]}});
  const status=await readDeliveredObjectiveStatus(x.store,'objective-1',{observeTree:x.observeTree});
  assert.equal(status.objectiveComplete,false);
+});
+
+test('COMPLETE cannot erase a mandatory criterion from the independently pinned set',async()=>{
+ const x=fixture({criteriaOverride:{criteria:[
+   {id:'criterion-a',requiredAuthority:'LOCAL_EXECUTED'},
+   {id:'criterion-b',requiredAuthority:'LOCAL_EXECUTED'}]}});
+ const result=await readDeliveredObjectiveStatus(x.store,'objective-1',{observeTree:x.observeTree});
+ assert.equal(result.objectiveComplete,false);
+ assert.equal(result.status,'INCOMPLETE');
+});
+test('missing or stale mandatory-criterion snapshot cannot promote a verdict',async()=>{
+ for(const change of [
+   {runOverride:{objectiveCriteriaRef:null}},
+   {criteriaOverride:{workflowHash:OTHER}},
+   {criteriaOverride:{deliveryReceiptRef:'older-delivery'}},
+   {criteriaOverride:{revision:2}},
+   {criteriaOverride:{criteria:[{id:'criterion-a',requiredAuthority:'OWNER_REVIEW'}]}}
+ ]) {
+   const x=fixture(change);
+   const result=await readDeliveredObjectiveStatus(x.store,'objective-1',{observeTree:x.observeTree});
+   assert.equal(result.objectiveComplete,false,JSON.stringify(change));
+ }
 });

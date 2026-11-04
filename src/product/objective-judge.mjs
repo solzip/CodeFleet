@@ -13,6 +13,7 @@ export function evaluateDeliveredObjective({
   if (!objectiveId || !Number.isInteger(revision) || !/^[a-f0-9]{64}$/.test(candidateHash ?? ''))
     return fail('Objective identity and verified Candidate missing');
   if (!delivery || delivery.status !== 'DELIVERED_NOT_VERIFIED' ||
+      delivery.runId !== objectiveId || delivery.revision !== revision ||
       delivery.candidateHash !== candidateHash || delivery.targetTreeHash !== candidateHash ||
       delivery.semanticCriteriaVerified !== false)
     return fail('Candidate was not correctly delivered and independently observed');

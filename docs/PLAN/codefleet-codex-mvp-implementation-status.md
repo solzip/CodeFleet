@@ -80,3 +80,16 @@ Missing, stale or downgraded Evidence and a forged PROTECTED decision are not
 accepted from a decision artifact alone. Offline negative regression tests were
 added; this is still not Host Live acceptance or an execution authorization.
 The change needs its own Windows/Linux GitHub Actions run before claiming CI PASS.
+
+## Immutable mandatory criterion snapshot for Objective reporting
+
+The Controller now persists a separate content-addressed criterion-set snapshot
+bound to the Workflow revision, workflow hash and exact delivery receipt before
+recording a final Objective decision. Read-only Objective status re-evaluates the
+full pinned set, rather than reconstructing its requirements from the final
+verdict; missing, mismatched or truncated sets cannot yield COMPLETE. The pure
+Judge also rejects delivery receipts from a different Objective or revision.
+Negative offline tests cover deleted/stale snapshots and cross-Objective replay.
+This does **not** prove that the trusted destination verifier was initially
+configured from owner-approved criteria, nor constitute Host Live acceptance.
+The new head requires its own Windows/Linux CI before any PASS claim.

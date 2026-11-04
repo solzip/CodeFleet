@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { evaluateDeliveredObjective } from '../src/product/objective-judge.mjs';
 
 const tree='a'.repeat(64);
-const delivery={status:'DELIVERED_NOT_VERIFIED',candidateHash:tree,targetTreeHash:tree,semanticCriteriaVerified:false};
+const delivery={status:'DELIVERED_NOT_VERIFIED',runId:'goal',revision:1,
+  candidateHash:tree,targetTreeHash:tree,semanticCriteriaVerified:false};
 const criteria=[{id:'C1',requiredAuthority:'LOCAL_EXECUTED'},{id:'C2',requiredAuthority:'LOCAL_EXECUTED'}];
 const evidence=id=>({objectiveId:'goal',revision:1,criterionId:id,
   targetTreeHash:tree,authority:'LOCAL_EXECUTED',independentObserver:true,
@@ -60,4 +61,14 @@ test('protected evidence supports protected COMPLETE only when both observed',()
   const a=args();a.criteria=[{id:'C1',requiredAuthority:'PROTECTED_EXECUTED'}];
   a.readVerifiedEvidence=()=>({...evidence('C1'),authority:'PROTECTED_EXECUTED'});
   assert.equal(evaluateDeliveredObjective(a).protection,'PROTECTED');
+});
+
+test('a delivered receipt from another Objective or revision cannot be replayed',()=>{
+ for(const invalid of [
+   {runId:'other-objective'},{revision:2},{runId:undefined},{revision:undefined}
+ ]) {
+   const result=evaluateDeliveredObjective({...args(),delivery:{...delivery,...invalid}});
+   assert.equal(result.complete,false,JSON.stringify(invalid));
+   assert.equal(result.outcome,'INCOMPLETE');
+ }
 });
