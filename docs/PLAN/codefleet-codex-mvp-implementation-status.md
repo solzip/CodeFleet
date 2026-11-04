@@ -71,3 +71,12 @@ acceptance after code completion.
 ## Workspace-write grant-time Candidate drift guard
 
 An asynchronously reviewed supervised Host workspace-write grant is now tied to a second complete Candidate tree observation immediately **after** exact-grant approval and **before** the first write-enabled Host Turn. Changed approved source bytes, out-of-scope bytes, file modes or tree entries stop the Turn with `UNKNOWN_NO_REPLAY` instead of accepting a stale `baseTreeHash`. Two isolated negative regression tests assert that the transport is not invoked after grant-time drift. This narrows a local time-of-check/time-of-use window; it does **not** provide OS confinement, prove post-check immunity to races, authorize the Host, or constitute Host Live acceptance. The previous `ba44534c` GitHub Actions run succeeded on Windows and Linux; this new commit requires its **own** CI result before any offline PASS claim.
+
+## Current read-only Objective Evidence revalidation
+
+The Objective status projection now re-runs the existing independent delivered-tree
+Judge against each persisted criterion Evidence reference before presenting COMPLETE.
+Missing, stale or downgraded Evidence and a forged PROTECTED decision are not
+accepted from a decision artifact alone. Offline negative regression tests were
+added; this is still not Host Live acceptance or an execution authorization.
+The change needs its own Windows/Linux GitHub Actions run before claiming CI PASS.

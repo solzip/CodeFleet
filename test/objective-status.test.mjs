@@ -8,17 +8,23 @@ const run = () => ({kind:'workflow',id:'objective-1',revision:1,state:'COMPLETED
   deliveryReceiptRef:'delivery-1',objectiveDecisionRef:'decision-1',
   reportedCostUsd:0,unknownCostAttempts:2});
 const delivery = () => ({status:'DELIVERED_NOT_VERIFIED',runId:'objective-1',revision:1,
-  candidateHash:SHA,targetTreeHash:SHA});
+  candidateHash:SHA,targetTreeHash:SHA,semanticCriteriaVerified:false});
 const child = () => ({id:'final-1',workflowParent:'objective-1',
   workflowRevision:1,candidateHash:SHA,candidatePaths:['src/a.js'],
   repo:'/approved-target'});
 const decision = () => ({outcome:'COMPLETE',complete:true,objectiveId:'objective-1',
   revision:1,targetTreeHash:SHA,authority:'LOCAL_EXECUTED',
-  criteria:[{id:'criterion-a',status:'SATISFIED',evidenceRef:'evidence-a'}]});
-function fixture({current=SHA,runOverride={},deliveryOverride={},childOverride={},decisionOverride={}}={}){
+  criteria:[{id:'criterion-a',status:'SATISFIED',authority:'LOCAL_EXECUTED',evidenceRef:'evidence-a'}]});
+const evidence = () => ({objectiveId:'objective-1',revision:1,criterionId:'criterion-a',
+  targetTreeHash:SHA,authority:'LOCAL_EXECUTED',independentObserver:true,
+  commandHash:SHA,observationHash:OTHER,tests:1,passed:1,failed:0,skipped:0,todo:0,
+  exitCode:0,interrupted:false,truncated:false,integrity:'MATCHED'});
+function fixture({current=SHA,runOverride={},deliveryOverride={},childOverride={},
+ decisionOverride={},evidenceOverride={},evidenceMissing=false}={}){
  const r={...run(),...runOverride};
  const blobs={'delivery-1':{...delivery(),...deliveryOverride},
-   'decision-1':{...decision(),...decisionOverride}};
+   'decision-1':{...decision(),...decisionOverride},
+   ...(evidenceMissing?{}:{'evidence-a':{...evidence(),...evidenceOverride}})};
  return { store:{get:id=>id==='objective-1'?r:id==='final-1'?{...child(),...childOverride}:null,
    readArtifact:ref=>blobs[ref]},observeTree:async (repo,files)=>{
      assert.equal(repo,'/approved-target');
@@ -73,4 +79,28 @@ test('unreadable target or evidence cannot be treated as complete',async()=>{
  const r=await readDeliveredObjectiveStatus(x.store,'objective-1',{
    observeTree:async()=>{throw Error('not accessible')}});
  assert.equal(r.status,'BLOCKED');
+});
+
+test('missing referenced independent criterion artifact cannot preserve COMPLETE',async()=>{
+ const x=fixture({evidenceMissing:true});
+ const result=await readDeliveredObjectiveStatus(x.store,'objective-1',{observeTree:x.observeTree});
+ assert.equal(result.objectiveComplete,false);
+ assert.equal(result.status,'INCOMPLETE');
+});
+test('stale or downgraded criterion Evidence invalidates a previously COMPLETE decision',async()=>{
+ for(const evidenceOverride of [
+   {targetTreeHash:OTHER},{revision:2},{authority:'PROVIDER_REPORTED_ONLY'},
+   {independentObserver:false},{skipped:1},{tests:0,passed:0}
+ ]) {
+   const x=fixture({evidenceOverride});
+   const status=await readDeliveredObjectiveStatus(x.store,'objective-1',{observeTree:x.observeTree});
+   assert.equal(status.objectiveComplete,false,JSON.stringify(evidenceOverride));
+ }
+});
+test('falsely promoted protected decision cannot rely on Local criterion Evidence',async()=>{
+ const x=fixture({decisionOverride:{authority:'PROTECTED_EXECUTED',
+   criteria:[{id:'criterion-a',status:'SATISFIED',authority:'PROTECTED_EXECUTED',
+     evidenceRef:'evidence-a'}]}});
+ const status=await readDeliveredObjectiveStatus(x.store,'objective-1',{observeTree:x.observeTree});
+ assert.equal(status.objectiveComplete,false);
 });

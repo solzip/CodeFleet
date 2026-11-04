@@ -3,6 +3,7 @@
 // Reobserve the user's current target tree before presenting a COMPLETE claim.
 // This module does not create approval, regenerate evidence, or call a Host.
 import { candidateHash } from '../alpha/workspace.mjs';
+import { evaluateDeliveredObjective } from './objective-judge.mjs';
 
 const SHA = /^[a-f0-9]{64}$/;
 const trustedSha = value => typeof value === 'string' && SHA.test(value);
@@ -79,8 +80,36 @@ export async function readDeliveredObjectiveStatus(store, objectiveId, {
       criterion.status === 'SATISFIED' && typeof criterion.id === 'string' &&
       typeof criterion.evidenceRef === 'string' && criterion.evidenceRef.length > 0) &&
     new Set(criteria.map(criterion => criterion.id)).size === criteria.length;
-  if (run.state !== 'COMPLETED' || !trustedDecision)
-    return incomplete(run,'A current independently accepted mandatory-criterion decision is absent',
+  // A persisted COMPLETE decision is a verdict, not a substitute for its
+  // referenced criterion Evidence. Re-run the same independent Judge against
+  // the current immutable Evidence refs; fail closed on missing, stale,
+  // downgraded or inconsistent records. No commands or Host Turns are run.
+  let verifiedDecision = false;
+  if (run.state === 'COMPLETED' && trustedDecision) {
+    const reviewedCriteria = criteria.map(criterion => ({
+      id: criterion.id, requiredAuthority: criterion.authority
+    }));
+    const evidenceRefs = Object.fromEntries(criteria.map(criterion =>
+      [criterion.id, criterion.evidenceRef]));
+    try {
+      const rejudged = evaluateDeliveredObjective({
+        objectiveId: run.id, revision: run.revision,
+        candidateHash: child.candidateHash, delivery: delivered,
+        criteria: reviewedCriteria, evidenceRefs,
+        readVerifiedEvidence: ref => store.readArtifact(ref)
+      });
+      verifiedDecision = rejudged.complete === true &&
+        rejudged.authority === decision.authority &&
+        rejudged.criteria.length === criteria.length &&
+        rejudged.criteria.every((criterion, index) =>
+          criterion.id === criteria[index].id &&
+          criterion.status === criteria[index].status &&
+          criterion.authority === criteria[index].authority &&
+          criterion.evidenceRef === criteria[index].evidenceRef);
+    } catch { /* unreadable or malformed persisted Evidence is not accepted */ }
+  }
+  if (!verifiedDecision)
+    return incomplete(run,'Current independently accepted criterion Evidence is missing or inconsistent',
       decision?.outcome === 'HUMAN_HANDOFF' ? 'HUMAN_HANDOFF' : 'INCOMPLETE',common);
   return base(run,'COMPLETE','All delivered-tree criteria were previously accepted and target bytes still match',{
     ...common, targetTreeHash: delivered.targetTreeHash,
