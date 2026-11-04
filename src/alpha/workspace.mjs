@@ -56,6 +56,18 @@ export async function candidateHash(directory, names) {
   const root = await lstat(directory);
   if (!root.isDirectory() || root.isSymbolicLink())
     throw Error('Candidate tree root must be a real directory');
+  // A real leaf directory is not enough: an intermediate junction or symlink
+  // redirects reads outside the approved Candidate / delivered repository.
+  // Walk every ancestor without resolving links and fail closed before I/O.
+  const absolute = path.resolve(directory);
+  let ancestor = path.parse(absolute).root;
+  const components = path.relative(ancestor, absolute).split(path.sep).filter(Boolean);
+  for (const component of components.slice(0, -1)) {
+    ancestor = path.join(ancestor, component);
+    const stat = await lstat(ancestor);
+    if (!stat.isDirectory() || stat.isSymbolicLink())
+      throw Error('Candidate tree ancestor is a symlink or non-directory');
+  }
   const rows = [];
   for (const name of [...names].sort()) {
     // Byte equality alone is not a safe observation: readFile follows links.

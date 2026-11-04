@@ -140,3 +140,15 @@ The new commit requires its own Windows/Linux CI before calling these tests PASS
 ## Reviewed planning repository identity and request integrity (offline CI pending)
 
 The trusted `prepareReviewedCodexWorkflow` bridge now binds the persisted VALIDATED planning request to the canonical repository identity from the original Host code discovery, not only its Git baseline SHA. The exact independent review scope includes the canonical target root and hashed repository ID. Before and after asynchronous review the bridge verifies the target's identity, stored planning-request digest and result, preventing replay into a second clean clone with the same commit or acceptance of a changed raw request. The existing `createWorkflow` still independently rejects dirty or changed baselines; these checks do **not** grant execution, prove Host authentication or accept an Objective. Regression fixtures cover same-HEAD cross-repository replay and changed request bytes before/during review. The new head requires separate Windows/Linux CI before these tests can be reported as passing.
+
+## Candidate root ancestor link boundary (offline CI pending)
+
+The shared regular-file observer now checks every existing directory ancestor
+of the Candidate or delivered repository root with `lstat`, not just the root
+and its descendants. A real final directory reached through a symlinked parent
+or Windows junction is rejected before reading context files or reevaluating a
+persisted COMPLETE Objective. Regression tests exercise both the Host context
+manifest and delivered-tree read-only Objective status on the same-byte target.
+This is a pre-read guard rather than OS confinement or atomic protection from
+filesystem races. Existing Host Live and final Objective acceptance remain
+UNVERIFIED. The new commit requires its own Windows/Linux CI results.

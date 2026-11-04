@@ -68,3 +68,23 @@ test('context refuses a symlinked Candidate root before reading files', async t 
   await assert.rejects(context(linkedRoot, { context: ['a.js'], tests: [] }),
     /root must be a real directory/);
 });
+
+// A link in the path ABOVE the Candidate root is not caught by lstat(root).
+// The final Candidate directory and all source leaves are ordinary files.
+test('context refuses an ordinary Candidate reached via a symlinked ancestor', async t => {
+  const { root, candidate } = await fixture(t);
+  await writeFile(join(candidate, 'a.js'), 'outside approved root traversal');
+  const linkedParent = join(root, 'linked-parent');
+  try {
+    await symlink(root, linkedParent, process.platform === 'win32' ? 'junction' : 'dir');
+  } catch (error) {
+    if (['EPERM', 'EACCES', 'ENOTSUP', 'EINVAL'].includes(error.code)) {
+      t.skip('Symlinks not supported by this runner');
+      return;
+    }
+    throw error;
+  }
+  await assert.rejects(context(join(linkedParent, 'candidate'), {
+    context: ['a.js'], tests: []
+  }), /Candidate tree ancestor is a symlink/);
+});

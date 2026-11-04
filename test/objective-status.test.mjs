@@ -173,3 +173,27 @@ test('Candidate tree observation rejects path traversal before any file read',as
  assert.match(observed,/^[a-f0-9]{64}$/);
  await assert.rejects(candidateHash(root,['../outside.js']),/Unsafe tracked Candidate path/);
 });
+
+// A saved COMPLETE must not survive access through a linked ancestor of the
+// delivered repository, even if the leaf and the bytes are still ordinary.
+test('Objective status refuses delivered roots reached through a symlinked ancestor',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'codefleet-linked-parent-objective-'));
+ t.after(()=>rm(root,{recursive:true,force:true}));
+ const actual=join(root,'delivered');
+ await mkdir(join(actual,'src'),{recursive:true});
+ await writeFile(join(actual,'src','a.js'),'export const answer = 42;');
+ const actualHash=await candidateHash(actual,['src/a.js']);
+ const linked=join(root,'linked-parent');
+ try { await symlink(root,linked,process.platform === 'win32' ? 'junction' : 'dir'); }
+ catch(error) {
+  if (['EPERM','EACCES','ENOTSUP','EINVAL'].includes(error.code)) {t.skip('Symlinks not supported by this runner');return;}
+  throw error;
+ }
+ const redirected=join(linked,'delivered');
+ const x=fixture({runOverride:{repo:redirected},childOverride:{repo:redirected,candidateHash:actualHash},
+  deliveryOverride:{candidateHash:actualHash,targetTreeHash:actualHash},
+  decisionOverride:{targetTreeHash:actualHash},evidenceOverride:{targetTreeHash:actualHash}});
+ const result=await readDeliveredObjectiveStatus(x.store,'objective-1');
+ assert.equal(result.objectiveComplete,false);
+ assert.equal(result.status,'BLOCKED');
+});
