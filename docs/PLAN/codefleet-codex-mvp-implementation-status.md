@@ -152,3 +152,16 @@ manifest and delivered-tree read-only Objective status on the same-byte target.
 This is a pre-read guard rather than OS confinement or atomic protection from
 filesystem races. Existing Host Live and final Objective acceptance remain
 UNVERIFIED. The new commit requires its own Windows/Linux CI results.
+
+## Delivery destination ancestry and grant-time drift (offline CI pending)
+
+Supervised Local delivery now rejects repository roots reached through a
+symlinked ancestor or Windows Junction before owner grant or filesystem effect.
+After asynchronous exact-scope owner approval, and before storing the effect
+intent or creating sibling stage files, delivery rechecks the Git baseline,
+canonical repository root, parent directory types and original target bytes.
+Offline regression fixtures cover an ancestor link, a parent swapped during
+grant and source drift during review. This is a pre-effect guard only, not
+atomic OS-level confinement against simultaneous path swaps. Native Codex Host
+Live and final Objective acceptance remain UNVERIFIED. The new head requires
+its own Windows/Linux CI before calling this change tested.

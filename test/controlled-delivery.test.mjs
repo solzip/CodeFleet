@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdtemp, mkdir, writeFile, readFile, readdir, rename, symlink, rm } from 'node:fs/promises';
+import { join, dirname, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import { git } from '../src/alpha/workspace.mjs';
 import { hash } from '../src/alpha/contract.mjs';
@@ -81,4 +81,56 @@ test('delivery intent preserves candidate and source identity',()=>{
     destination:process.cwd(),candidateHash:'b'.repeat(64),files:{'src/a.js':changed}});
   assert.equal(intent.kind,'EXACT_LOCAL_DELIVERY_INTENT_V1');
   assert.ok(intent.fileHashes['src/a.js']);
+});
+
+test('linked ancestor of otherwise regular destination blocks delivery before grant',async t=>{
+  const f=await fixture(t);
+  const outer=await mkdtemp(join(tmpdir(),'cf-delivery-ancestor-'));
+  t.after(()=>rm(outer,{recursive:true,force:true}));
+  const alias=join(outer,'redirected-parent');
+  try { await symlink(dirname(f.root),alias,process.platform==='win32'?'junction':'dir'); }
+  catch(error) {
+    if (['EPERM','EACCES','ENOTSUP'].includes(error.code)) {
+      t.skip('Directory links/Junctions unavailable on this runner');return;
+    }
+    throw error;
+  }
+  const destination=join(alias,basename(f.root));
+  await assert.rejects(applyLocalDelivery({...f.opts,destination}),/ancestor link\/Junction/);
+  assert.deepEqual(f.counts(),{grants:0,intents:0});
+  assert.equal(await readFile(join(f.root,'src/a.js'),'utf8'),original);
+});
+
+test('linked source parent swapped during asynchronous grant cannot stage or persist',async t=>{
+  const f=await fixture(t);
+  const source=join(f.root,'src'),moved=join(f.root,'src-saved');
+  let granted=false;
+  const authorize=async()=>{
+    granted=true;
+    await rename(source,moved);
+    await symlink(process.platform==='win32'?moved:'src-saved',source,
+      process.platform==='win32'?'junction':'dir');
+    return true;
+  };
+  try {
+    await assert.rejects(applyLocalDelivery({...f.opts,authorize}),
+      /pending changes|link\/Junction|Destination target changed/);
+  } catch(error) {
+    if (['EPERM','EACCES','ENOTSUP'].includes(error.code)) {
+      t.skip('Directory links/Junctions unavailable on this runner');return;
+    }
+    throw error;
+  }
+  assert.equal(granted,true);
+  assert.equal(f.counts().intents,0);
+  assert.equal(await readFile(join(moved,'a.js'),'utf8'),original);
+  assert.deepEqual((await readdir(moved)).filter(n=>n.startsWith('.codefleet-stage-')),[]);
+});
+
+test('dirty target introduced during exact owner review fails before effect intent',async t=>{
+  const f=await fixture(t);
+  const authorize=async()=>{await writeFile(join(f.root,'src/a.js'),'dirty during review');return true;};
+  await assert.rejects(applyLocalDelivery({...f.opts,authorize}),/pending changes/);
+  assert.equal(f.counts().intents,0);
+  assert.equal(await readFile(join(f.root,'src/a.js'),'utf8'),'dirty during review');
 });

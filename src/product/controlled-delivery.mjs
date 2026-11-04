@@ -9,6 +9,24 @@ import { filePath, hash } from '../alpha/contract.mjs';
 import { repository, candidateHash } from '../alpha/workspace.mjs';
 
 const digest = buffer => createHash('sha256').update(buffer).digest('hex');
+// A regular destination reached through a linked ancestor is not the same
+// approved lexical workspace. realpath() alone hides that redirection.
+async function requireUnlinkedDestinationRoot(root) {
+  const absolute = path.resolve(root);
+  const volumeRoot = path.parse(absolute).root;
+  let current = volumeRoot;
+  const check = async directory => {
+    const stat = await lstat(directory);
+    if (!stat.isDirectory() || stat.isSymbolicLink())
+      throw Error('Destination root or ancestor link/Junction unsupported');
+  };
+  await check(current);
+  for (const part of path.relative(volumeRoot, absolute).split(path.sep).filter(Boolean)) {
+    current = path.join(current, part);
+    await check(current);
+  }
+}
+
 const exactFiles = (files, allowed) => {
   if (!files || typeof files !== 'object' || Array.isArray(files) ||
       !Object.keys(files).length || Object.keys(files).length > 20) throw Error('Delivery requires bounded changed files');
@@ -40,6 +58,7 @@ export async function applyLocalDelivery({ destination, base, files, candidatePa
       !candidatePaths.length || new Set(candidatePaths).size !== candidatePaths.length)
     throw Error('Delivery destination and candidate path list required');
   exactFiles(files, candidatePaths);
+  await requireUnlinkedDestinationRoot(root);
   const intent = deliveryIntent({ runId, revision, base, destination: root,
     candidateHash: verifiedCandidateHash, files });
   const selected = await repository(root);
@@ -47,7 +66,6 @@ export async function applyLocalDelivery({ destination, base, files, candidatePa
   const normalized = p => process.platform === 'win32' ? p.toLowerCase() : p;
   if (normalized(repoRoot) !== normalized(resolvedRoot) || selected.base !== base)
     throw Error('Destination Git baseline/status changed; no apply');
-  if ((await lstat(root)).isSymbolicLink()) throw Error('Destination root link or Junction unsupported');
   if (cancelled()) throw Error('Delivery cancelled before effect');
   const targets = [];
   for (const [name, value] of Object.entries(files).sort(([a], [b]) => a.localeCompare(b))) {
@@ -76,6 +94,30 @@ export async function applyLocalDelivery({ destination, base, files, candidatePa
   const granted = await authorize(Object.freeze({ ...intent, originalHashes:
     Object.fromEntries(targets.map(t => [t.name, t.originalSha256])) }));
   if (granted !== true) throw Error('Exact supervised Local delivery not granted');
+  // Owner review may be asynchronous. Revalidate the clean Git baseline,
+  // lexical parent chain and changed targets BEFORE intent persistence/staging.
+  await requireUnlinkedDestinationRoot(root);
+  const stillRoot = await realpath(root);
+  const stillSelected = await repository(root);
+  if (normalized(stillRoot) !== normalized(resolvedRoot) ||
+      normalized(await realpath(stillSelected.repo)) !== normalized(resolvedRoot) ||
+      stillSelected.base !== base)
+    throw Error('Destination root or Git baseline changed during delivery grant');
+  for (const target of targets) {
+    let ancestor = path.dirname(target.dest);
+    while (ancestor !== root) {
+      const stat = await lstat(ancestor);
+      if (!stat.isDirectory() || stat.isSymbolicLink())
+        throw Error('Destination parent link/Junction changed during delivery grant');
+      const next = path.dirname(ancestor);
+      if (next === ancestor) throw Error('Destination path escaped root');
+      ancestor = next;
+    }
+    const file = await lstat(target.dest);
+    if (!file.isFile() || file.isSymbolicLink() ||
+        digest(await readFile(target.dest)) !== target.originalSha256)
+      throw Error('Destination target changed during delivery grant');
+  }
   if (cancelled()) throw Error('Delivery cancelled before intent');
   const intentRef = await persistIntent(intent);
   if (typeof intentRef !== 'string' || !intentRef) throw Error('Durable delivery intent not acknowledged');
