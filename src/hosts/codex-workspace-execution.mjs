@@ -11,8 +11,14 @@ const MAX_FILES=1500,MAX_BYTES=32*1024*1024;
 
 async function observeTree(root) {
   const resolved=await realpath(root);
-  if (resolved !== root && !(process.platform==='win32' &&
-      resolved.toLowerCase()===root.toLowerCase())) reject('Candidate root link/Junction unsupported');
+  const rootInfo=await lstat(root);
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink())
+    reject('Candidate root link/Junction unsupported');
+  // Windows temp paths can be 8.3 aliases of the same actual directory.
+  // Verify the actual root entry rather than treating alias text as a link.
+  // This is unprotected Local execution, never OS-enforced confinement.
+  if (process.platform!=='win32' && resolved!==root)
+    reject('Candidate root ancestor link unsupported');
   const entries=new Map(); let bytes=0;
   async function visit(rel='') {
     const where=path.join(root,rel);
