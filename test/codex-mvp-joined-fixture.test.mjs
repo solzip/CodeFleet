@@ -3,7 +3,7 @@
 // remains necessary. This proves the code paths join without a second engine.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, realpath, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Store } from '../src/alpha/store.mjs';
@@ -94,7 +94,7 @@ test('joined synthetic two-WorkItem Objective: A persisted before B, local deliv
     destinationDelivery:{
       authorize:async scope=>{
         assert.equal(scope.runId,f.workflow.id);
-        assert.equal(scope.destination,f.repo);
+        // Git for Windows may return a long canonical path while %TEMP% uses\n        // its 8.3 alias; compare resolved filesystem identities instead.\n        assert.equal((await realpath(scope.destination)).toLowerCase(),\n          (await realpath(f.repo)).toLowerCase());
         return true;
       },
       verify:async ({run,delivery,candidate})=>{
