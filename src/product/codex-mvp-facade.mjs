@@ -14,6 +14,7 @@ import { planWithCodexManagedThread } from '../hosts/codex-managed-planning.mjs'
 import { proposeNewProjectFileset } from '../hosts/codex-bootstrap-files.mjs';
 import { readDeliveredObjectiveStatus } from './objective-status.mjs';
 import { prepareReviewedCodexWorkflow } from './codex-reviewed-workflow.mjs';
+import { bootstrapContext, materializeTask, verifyTask } from './tasks.mjs';
 
 const invalid = detail => { throw Error('Codex MVP trusted embedding: ' + detail); };
 const exactText = input => typeof input === 'string' && input.length > 0;
@@ -22,7 +23,7 @@ const callable = input => typeof input === 'function';
 export function createCodexMvpFacade(store, {
   executable, model, enableHostTurns = false,
   authorizePlanning, authorizeBootstrap, authorizeWorkflow, authorizeReviewedWorkflow,
-  authorizeWorkspace, workspaceWrite = false,
+  authorizeWorkspace, workspaceWrite = false,\n  authorizeBootstrapMaterialization, authorizeBootstrapVerification,\n  bootstrapVerifierBackend,
   verificationBackend, unknownCostBudget, repairPolicy,
   destinationDelivery, developmentPolicy, workItemPolicy,
   transport,
@@ -95,6 +96,62 @@ export function createCodexMvpFacade(store, {
       if (!callable(authorizeBootstrap)) invalid('Exact Bootstrap planning grant required');
       return proposeNewProjectFileset(store, taskId, itemId, {
         executable, model, authorize: authorizeBootstrap, ...invokeTransport
+      });
+    },
+    // Materialize only an existing exact-approved Fileset through the current
+    // Bootstrap Controller. This is LOCAL UNPROTECTED and never a Host approval.
+    async materializeApprovedBootstrap(taskId, itemId) {
+      if (!callable(authorizeBootstrapMaterialization))
+        invalid('Independent exact Bootstrap materialization grant required');
+      const initial=bootstrapContext(store,taskId);
+      if (initial.plan?.contractKind !== 'NEW_PROJECT' &&
+          initial.plan?.contractKind !== 'EXISTING_LOCAL')
+        invalid('Current Bootstrap task and scoped Fileset required');
+      const runId=initial.current?.bootstrap?.filesets?.[itemId];
+      if (!runId) invalid('No current approved Fileset for WorkItem');
+      const fileSet=store.get(runId);
+      const scope=Object.freeze({
+        kind:'CODEFLEET_BOOTSTRAP_MATERIALIZATION_SCOPE_V1',
+        taskId,itemId,runId,revision:initial.current.revision,
+        workflowHash:initial.workflow.workflowHash,
+        filesetHash:fileSet.contractHash,
+        repo:initial.plan.probe.root,protection:'UNPROTECTED',
+        goalEffect:'APPROVED_EXACT_LOCAL_FILESET'
+      });
+      if (await authorizeBootstrapMaterialization(scope)!==true)
+        invalid('Exact Bootstrap materialization grant denied');
+      const fresh=bootstrapContext(store,taskId);
+      if (fresh.current.revision !== scope.revision ||
+          fresh.workflow.workflowHash !== scope.workflowHash ||
+          fresh.current.bootstrap?.filesets?.[itemId] !== runId ||
+          store.get(runId).contractHash !== scope.filesetHash)
+        invalid('Bootstrap scope changed during review');
+      // materializeTask independently checks the exact workflow approval, lease,
+      // pending dependencies, file hashes and destination drift before writes.
+      return materializeTask(store,taskId,itemId,{freshOnly:true});
+    },
+    async verifyApprovedBootstrap(taskId,itemId,command) {
+      if (!callable(authorizeBootstrapVerification))
+        invalid('Independent exact Bootstrap verification grant required');
+      // Preview is read-only and yields the hash of the executable, arguments
+      // and current target bytes; it does not create a command grant.
+      const preview=await verifyTask(store,taskId,itemId,command);
+      if (preview?.status !== 'TRUST_REQUIRED' ||
+          !preview.commandHash || !preview.fileDigests)
+        invalid('Exact Local command preview unavailable');
+      const scope=Object.freeze({
+        kind:'CODEFLEET_BOOTSTRAP_LOCAL_CHECK_SCOPE_V1',
+        taskId,itemId,commandHash:preview.commandHash,
+        fileDigests:structuredClone(preview.fileDigests),
+        protection:'UNPROTECTED'
+      });
+      if (await authorizeBootstrapVerification(scope)!==true)
+        invalid('Exact Bootstrap verification grant denied');
+      // verifyTask reinspects the executable/tree and rejects changed command
+      // identity; its local backend records real command results.
+      return verifyTask(store,taskId,itemId,command,{
+        trust:preview.commandHash,acknowledgeUnisolated:true,
+        ...(bootstrapVerifierBackend?{backend:bootstrapVerifierBackend}:{})
       });
     },
     async runExistingWorkflow(runId, options = {}) {

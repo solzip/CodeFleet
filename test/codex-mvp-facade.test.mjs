@@ -69,3 +69,11 @@ test('planning Host cwd must match the approved repo path',async()=>{
    cwd:process.cwd()}),/cwd must equal/);
  assert.equal(calls,0);
 });
+
+test('Bootstrap filesystem effects remain unavailable without independent grants',async()=>{
+ const {store}=fixture();
+ const api=createCodexMvpFacade(store,{executable:process.execPath,model:'fixture',
+   enableHostTurns:true});
+ await assert.rejects(api.materializeApprovedBootstrap('task','item'),/materialization grant required/);
+ await assert.rejects(api.verifyApprovedBootstrap('task','item',{}),/verification grant required/);
+});

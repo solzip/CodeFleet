@@ -56,3 +56,14 @@ The experimental `createCodexMvpFacade` composes existing modules behind an embe
 ## Synthetic joined trace
 
 A new synthetic nonproduction fixture exercises the entire Workflow+delivery+Objective projection code path using explicit fake Host receipts and a fake independent observer. The test must never be described as an actual Codex model Turn, protected execution, or product MVP acceptance. It is included in `npm run test:codex-mvp` and GitHub CI. Native Codex final independent validation remains deferred under the user's instruction.
+
+## NEW_PROJECT supervised Local bridge
+
+The trusted Codex MVP facade additionally exposes approved Fileset materialization
+through existing `materializeTask` and separately approved exact local verification
+through `verifyTask`. It does not authorize a Fileset, create approval, bypass the
+bootstrap owner or production OS isolation gates, or claim PROTECTED Evidence.
+A model-produced proposal alone cannot modify the target. Every grant comes from
+the trusted embedding, and the underlying store/lease/revision checks remain in
+charge. This path still needs native Host Live and full NEW_PROJECT objective
+acceptance after code completion.
