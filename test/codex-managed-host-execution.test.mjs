@@ -17,7 +17,8 @@ function fixture({ reserved = true, approved = true, control = 'run' } = {}) {
     contract: graph, contractHash: hash(graph), providerId: null };
   const child = { id: 'child-1', workflowParent: parent.id, workflowFence: 'owner-1',
     workflowItemId: 'a', workflowRevision: 1, workflowGraphHash: parent.contractHash,
-    state: 'READY', contract, contractHash: hash(contract) };
+    state: 'GENERATING', attempts: 1, costPending: true,
+    candidateDirectory: process.cwd(), contract, contractHash: hash(contract) };
   const store = {
     get(id) {
       if (id === parent.id) return parent;
@@ -62,11 +63,12 @@ test('disabled by default, cannot select or execute', async () => {
 test('approved reservation may create a proposal-only result with observed Host receipt', async () => {
   const x = fixture(); let called = 0;
   const h = createCodexManagedHostExecution(x.store, {
-    enabled: true, model: 'model-fixture', cwd: process.cwd(), executable: process.execPath,
+    enabled: true, model: 'model-fixture', executable: process.execPath,
     transport: async call => {
       called++; assert.equal(call.outputSchema.required[0], 'summary');
       assert.match(call.prompt, /workItemId/);
       assert.equal(call.timeoutMs, 1000);
+      assert.equal(call.cwd, x.child.candidateDirectory);
       return receipt();
     }
   });

@@ -25,9 +25,11 @@ function currentReservation(store, child) {
       active[0].revision !== parent.revision || active[0].status !== 'STARTED') fail('No exact active Attempt reservation');
   const persisted = store.get(child.id);
   if (persisted.workflowParent !== parent.id || persisted.workflowFence !== lease.owner ||
-      persisted.workflowItemId !== child.workflowItemId || persisted.state !== 'READY' ||
-      persisted.contractHash !== hash(child.contract)) fail('Child reservation binding mismatch');
-  return parent;
+      persisted.workflowItemId !== child.workflowItemId || persisted.state !== 'GENERATING' ||
+      persisted.attempts !== 1 || persisted.costPending !== true ||
+      persisted.contractHash !== hash(child.contract) ||
+      !persisted.candidateDirectory) fail('Child reservation binding mismatch');
+  return { parent, candidateDirectory: persisted.candidateDirectory };
 }
 
 function makePrompt(request, child) {
@@ -47,7 +49,7 @@ function makePrompt(request, child) {
 }
 
 export function createCodexManagedHostExecution(store, {
-  executable, model, enabled = false, transport = runCodexReadOnlyTurn, cwd,
+  executable, model, enabled = false, transport = runCodexReadOnlyTurn,
 } = {}) {
   if (!store || typeof transport !== 'function') fail('Store and bounded Host transport required');
   return {
@@ -64,16 +66,17 @@ export function createCodexManagedHostExecution(store, {
     },
     async execute(child, request) {
       if (!enabled) fail('Host Live is disabled');
-      currentReservation(store, child);
+      const { candidateDirectory } = currentReservation(store, child);
       if (request.cancelled?.()) fail('Cancelled or no longer admitted');
       validateRequest({ ...request, mode: 'PROPOSAL_ONLY' });
       if (hash(request.contract) !== child.contractHash) fail('Contract hash changed');
-      if (!cwd || typeof cwd !== 'string') fail('Explicit isolated Host cwd required');
+      // Never let model/request/config choose Host cwd. The Controller snapshots
+      // the isolated candidate before invoking the reserved child proposal.
       const prompt = makePrompt(request, child);
       // A bounded separate Host Turn is a potentially billable effect even when
       // its sandbox is read-only; the parent Attempt has already been reserved.
       const receipt = await transport({
-        executable, cwd, model, prompt, outputSchema: responseSchema,
+        executable, cwd: candidateDirectory, model, prompt, outputSchema: responseSchema,
         timeoutMs: Math.min(request.timeoutMs, 180000), cancelled: request.cancelled,
       });
       currentReservation(store, child);

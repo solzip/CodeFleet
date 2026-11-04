@@ -17,7 +17,7 @@ Branch: `work/codex-mvp-vertical`.
   `executeWorkflow(..., {hostExecution})` seam. It requires an already-reserved
   Workflow child, live parent lease, current Workflow approval and revision
   binding **before** it calls a Host transport, and rechecks after the Turn.
-  It only returns an untrusted `PROPOSAL_ONLY` result; the existing Controller
+  The Turn cwd is read from the child's persisted isolated candidate directory,\n  never accepted from Host output or an external adapter override. The child\n  must have entered the existing `GENERATING` state with a reserved billable\n  attempt before any Turn. It only returns an untrusted `PROPOSAL_ONLY` result; the existing Controller
   remains responsible for applying proposed edits in an isolated candidate,
   running verification and using the existing Judge. Cost remains `UNKNOWN`.
 - Focused protocol and adapter tests (the latter uses a fake Store and a fake
