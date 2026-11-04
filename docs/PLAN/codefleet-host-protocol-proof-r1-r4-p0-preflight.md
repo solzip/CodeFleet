@@ -6,6 +6,8 @@
 > **Scope:** installed Codex CLI/App Server and a proposed external Fixture, read-only inspection only  
 > **Authority:** this report is not a CodeFleet Operator grant, Host Protocol Proof result, M1 implementation approval, Git authority, or Protected Evidence.
 
+Public path notation: `<PROOF_ROOT>` denotes the originally inspected disposable candidate under the current user's local temporary directory. This redaction does not change the historical P0 observation or its `NOT_RUN` status.
+
 ## 0. Executive result
 
 The local installation exposes an experimental Codex App Server with `stdio://` as its default transport. The installed binary contains protocol symbols for `initialize`, `thread/start`, `turn/start`, `thread/resume`, approval events, terminal Turn events, token usage and rate-limit events. This establishes local presence only; it does not prove that the lifecycle, approval binding, sandbox enforcement, result provenance, recovery or cost controls work as required by Execution Contract R3.
@@ -115,7 +117,7 @@ Schema generation writes files and was therefore not run. App Server and daemon 
 Proposed path:
 
 ```text
-C:\Users\윤솔\AppData\Local\Temp\codefleet-host-protocol-proof-r1-r4
+<PROOF_ROOT>
 ```
 
 Observed properties:
@@ -285,7 +287,7 @@ Contract:
   5F1FB400230742D90DB7FD66494C8F2489F3425C8C9D47A0E13F48DAD0530274
 
 Fixture:
-  C:\Users\윤솔\AppData\Local\Temp\codefleet-host-protocol-proof-r1-r4
+  <PROOF_ROOT>
 
 Fixture baseline/hash:
   OPEN — bind after separately authorized preparation.
