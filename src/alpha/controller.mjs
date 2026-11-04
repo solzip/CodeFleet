@@ -350,7 +350,7 @@ async function executeWorkflow(store, id, dependencies, options) {
             }) : false;
         guard();
         if (granted !== true)
-          return save('WAITING_HUMAN', 'Unknown subscription cost requires bounded owner authorization');
+          return save('WAITING_HUMAN', 'Workflow cost unknown; bounded owner authorization required');
       }
       if (run.finalRunId) {
         const finalChild = store.get(run.finalRunId), finalPatch = accepted(finalChild);
