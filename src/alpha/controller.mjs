@@ -12,6 +12,7 @@ import { readyBatch, validateWorkflow } from '../workflow/definition.mjs';
 import { predecessorInput, applyPredecessorOverlay } from '../workflow/predecessor-context.mjs';
 import { applyLocalDelivery } from '../product/controlled-delivery.mjs';
 import { evaluateDeliveredObjective } from '../product/objective-judge.mjs';
+import { approvedDevelopmentBaseline } from './development-baseline.mjs';
 import { delegate, sendMessage, receiveMessages } from '../workflow/collaboration.mjs';
 import * as workflowStore from '../workflow/persistence.mjs';
 import { matchTestIdentity } from './verifier.mjs';
@@ -134,7 +135,27 @@ export async function execute(store, id, dependencies = {}, options = {}) {
     }
     const baseline = store.readArtifact(run.baselineHash);
     if (!isFailingBaseline(baseline)) {
-      save('WAITING_HUMAN', 'Alpha requires an executed failing regression test before code generation. Add a test for the requested behavior and create a new run.'); return run;
+      // Development work may have a green baseline. A trusted integration
+      // must authorize this exact run/contract/baseline; ordinary Alpha
+      // regressions and unsupported/empty evidence remain fail-closed.
+      const authorized = typeof dependencies.developmentBaseline?.authorize === 'function'
+        ? await dependencies.developmentBaseline.authorize({
+            runId:run.id,base:run.base,contractHash:run.contractHash,
+            baselineHash:run.baselineHash,baseline
+          }) : false;
+      guard();
+      if (authorized !== true) {
+        save('WAITING_HUMAN', 'Green baseline development requires explicit trusted authorization'); return run;
+      }
+      run.developmentBaselineRef = store.artifact({
+        kind:'APPROVED_GREEN_BASELINE_V1',runId:run.id,base:run.base,
+        contractHash:run.contractHash,baselineHash:run.baselineHash,
+        authorizedBy:'TRUSTED_INTEGRATION'
+      });
+      if (!approvedDevelopmentBaseline(store,run)) {
+        save('WAITING_HUMAN', 'Green baseline lacks independent protected test evidence'); return run;
+      }
+      save('READY', 'Independent green baseline explicitly admitted for development');
     }
     let current = { ...originals }; let feedback = null;
     if (run.proposalHash) {
@@ -257,7 +278,7 @@ async function executeWorkflow(store, id, dependencies, options) {
       if (hash(expected) !== child.contractHash) throw Error('ChangeSet contract differs from approved WorkItem');
     }
     const patch = store.readArtifact(child.acceptedHash), evidence = store.readArtifact(child.evidenceHash);
-    if (patch.contractHash !== child.contractHash || evidence.contractHash !== child.contractHash || patch.candidateHash !== child.candidateHash || evidence.candidateHash !== child.candidateHash || judge(evidence).outcome !== 'ACCEPT' || !isFailingBaseline(store.readArtifact(child.baselineHash))) throw Error('Child verification evidence invalid');
+    if (patch.contractHash !== child.contractHash || evidence.contractHash !== child.contractHash || patch.candidateHash !== child.candidateHash || evidence.candidateHash !== child.candidateHash || judge(evidence).outcome !== 'ACCEPT' || !approvedDevelopmentBaseline(store,child)) throw Error('Child verification evidence invalid');
     if (Object.keys(patch.changedFiles).some(f => !child.contract.files.includes(f))) throw Error('Accepted patch outside contract');
     return patch;
   };
@@ -303,7 +324,24 @@ async function executeWorkflow(store, id, dependencies, options) {
       run.attempts = records.filter(a => a.itemId !== 'final').length;
       run.reportedCostUsd = records.reduce((s, a) => s + store.get(a.childId).reportedCostUsd, 0);
       run.unknownCostAttempts = records.reduce((s, a) => s + store.get(a.childId).unknownCostAttempts, 0);
-      if (run.unknownCostAttempts || run.reportedCostUsd > source.maxAttempts * source.attemptBudgetUsd) return save('WAITING_HUMAN', 'Workflow cost unknown or exhausted');
+      if (run.reportedCostUsd > source.maxAttempts * source.attemptBudgetUsd)
+        return save('WAITING_HUMAN', 'Workflow reported-cost budget exhausted');
+      if (run.unknownCostAttempts) {
+        // Codex subscription usage is often not convertible to USD. Never
+        // report zero cost, but permit continued *bounded* WorkItems if an
+        // independently trusted owner grant covers that exact unknown-usage
+        // count. No policy means the historical fail-closed behavior.
+        const granted = typeof dependencies.unknownCostBudget?.authorize === 'function'
+          ? await dependencies.unknownCostBudget.authorize({
+              workflowId:run.id,revision:run.revision,workflowHash:run.contractHash,
+              unknownCostTurns:run.unknownCostAttempts,
+              maxWorkItemAttempts:source.maxAttempts,
+              reportedCostUsd:run.reportedCostUsd
+            }) : false;
+        guard();
+        if (granted !== true)
+          return save('WAITING_HUMAN', 'Unknown subscription cost requires bounded owner authorization');
+      }
       if (run.finalRunId) {
         const finalChild = store.get(run.finalRunId), finalPatch = accepted(finalChild);
         if (run.contract.schemaVersion === 2 && (!finalChild.candidatePaths || await candidateHash(finalChild.candidateDirectory, finalChild.candidatePaths) !== finalChild.candidateHash)) throw Error('Final candidate tree changed after verification');

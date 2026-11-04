@@ -1,5 +1,6 @@
 import { hash } from './contract.mjs';
-import { judge, isFailingBaseline } from './judge.mjs';
+import { judge } from './judge.mjs';
+import { approvedDevelopmentBaseline } from './development-baseline.mjs';
 import { candidateHash } from './workspace.mjs';
 import { validateWorkflow } from '../workflow/definition.mjs';
 import { attempts } from '../workflow/persistence.mjs';
@@ -36,7 +37,7 @@ export async function verifiedEvidence(store, run) {
 function inspect(store, run) {
   if (hash(run.contract) !== run.contractHash || !run.acceptedHash || !run.evidenceHash) throw Error('No fixed verified candidate');
   const accepted = store.readArtifact(run.acceptedHash), evidence = store.readArtifact(run.evidenceHash);
-  if (accepted.contractHash !== run.contractHash || evidence.contractHash !== run.contractHash || accepted.candidateHash !== run.candidateHash || evidence.candidateHash !== run.candidateHash || judge(evidence).outcome !== 'ACCEPT' || !isFailingBaseline(store.readArtifact(run.baselineHash))) throw Error('Verification evidence invalid');
+  if (accepted.contractHash !== run.contractHash || evidence.contractHash !== run.contractHash || accepted.candidateHash !== run.candidateHash || evidence.candidateHash !== run.candidateHash || judge(evidence).outcome !== 'ACCEPT' || !approvedDevelopmentBaseline(store,run) throw Error('Verification evidence invalid');
   if (!accepted.changedFiles || !Object.keys(accepted.changedFiles).length || Object.keys(accepted.changedFiles).some(f => !run.contract.files.includes(f))) throw Error('Accepted patch outside contract');
   return { accepted, evidence };
 }

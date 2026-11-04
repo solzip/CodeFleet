@@ -11,10 +11,11 @@ function fixture({ reserved = true, approved = true, control = 'run' } = {}) {
     maxAttempts: 1, timeoutSeconds: 120, attemptBudgetUsd: 1,
     delivery: { mode: 'local' }
   });
-  const graph = { schemaVersion: 1, requiredCapabilities: [], policySnapshotRef: null };
-  graph.policySnapshotRef = hash(policyFor(graph));
+  const graphBody = { schemaVersion: 1, requiredCapabilities: [],
+    policySnapshotRef: hash(policyFor({ schemaVersion: 1 })) };
+  const graph = { ...graphBody, workflowHash: hash(graphBody) };
   const parent = { id: 'parent-1', kind: 'workflow', revision: 1,
-    contract: graph, contractHash: hash(graph), providerId: null };
+    contract: graph, contractHash: graph.workflowHash, providerId: null };
   const child = { id: 'child-1', workflowParent: parent.id, workflowFence: 'owner-1',
     workflowItemId: 'a', workflowRevision: 1, workflowGraphHash: parent.contractHash,
     state: 'GENERATING', attempts: 1, costPending: true,

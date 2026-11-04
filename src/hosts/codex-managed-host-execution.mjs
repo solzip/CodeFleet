@@ -4,6 +4,7 @@
 // Controller's applyEdits -> independent Verifier -> Judge workflow.
 import { runCodexReadOnlyTurn } from './codex-app-server-session.mjs';
 import { approval, attempts } from '../workflow/persistence.mjs';
+import { policyFor } from '../workflow/definition.mjs';
 import { hash, applyEdits } from '../alpha/contract.mjs';
 import { validateRequest, responseSchema } from '../providers/interface.mjs';
 
@@ -55,7 +56,9 @@ export function createCodexManagedHostExecution(store, {
   return {
     async select(run) {
       if (!enabled) fail('Disabled until separate Host Live and scope approval');
-      if (run.kind !== 'workflow' || !run.contract || run.contractHash !== hash(run.contract)) fail('Invalid workflow');
+      if (run.kind !== 'workflow' || !run.contract ||
+          run.contractHash !== run.contract.workflowHash ||
+          run.contract.policySnapshotRef !== hash(policyFor(run.contract))) fail('Invalid workflow');
       approval(store, run);
       // Do not claim tools, protected execution, or real filesystem writes.
       const allowed = new Set(['non_interactive_execution','structured_output','proposal_only']);
