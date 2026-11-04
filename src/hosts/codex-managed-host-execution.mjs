@@ -3,12 +3,14 @@
 // Host output is untrusted proposal data and always goes through the existing
 // Controller's applyEdits -> independent Verifier -> Judge workflow.
 import { runCodexReadOnlyTurn } from './codex-app-server-session.mjs';
+import { captureCodexWorkspaceEdits } from './codex-workspace-execution.mjs';
 import { approval, attempts } from '../workflow/persistence.mjs';
 import { policyFor } from '../workflow/definition.mjs';
 import { hash, applyEdits } from '../alpha/contract.mjs';
 import { validateRequest, responseSchema } from '../providers/interface.mjs';
 
-const PROVIDER_ID = 'codex-app-server-read-only';
+const READ_ONLY_PROVIDER = 'codex-app-server-read-only';
+const WORKSPACE_PROVIDER = 'codex-app-server-workspace';
 const fail = message => { throw Error('Codex managed Host: ' + message); };
 const isObject = value => value && typeof value === 'object' && !Array.isArray(value);
 
@@ -51,6 +53,7 @@ function makePrompt(request, child) {
 
 export function createCodexManagedHostExecution(store, {
   executable, model, enabled = false, transport = runCodexReadOnlyTurn,
+  workspaceWrite = false, authorizeWorkspace,
 } = {}) {
   if (!store || typeof transport !== 'function') fail('Store and bounded Host transport required');
   return {
@@ -60,11 +63,14 @@ export function createCodexManagedHostExecution(store, {
           run.contractHash !== run.contract.workflowHash ||
           run.contract.policySnapshotRef !== hash(policyFor(run.contract))) fail('Invalid workflow');
       approval(store, run);
-      // Do not claim tools, protected execution, or real filesystem writes.
+      // Protected execution is never inferred from Host sandbox policy.
       const allowed = new Set(['non_interactive_execution','structured_output','proposal_only']);
+      if (workspaceWrite && typeof authorizeWorkspace !== 'function')
+        fail('Workspace-write requires independent exact supervised Local approval');
       if (run.contract.requiredCapabilities?.some(capability => !allowed.has(capability))) fail('Required Host capability not established');
-      if (run.providerId && run.providerId !== PROVIDER_ID) fail('Host route switch requires new workflow');
-      return { providerId: PROVIDER_ID, strategy: 'APP_SERVER_READ_ONLY_PROPOSAL',
+      const providerId=workspaceWrite?WORKSPACE_PROVIDER:READ_ONLY_PROVIDER;
+      if (run.providerId && run.providerId !== providerId) fail('Host route switch requires new workflow');
+      return { providerId, strategy:workspaceWrite?'APP_SERVER_ISOLATED_WORKSPACE':'APP_SERVER_READ_ONLY_PROPOSAL',
         authority: 'PROVIDER_REPORTED_ONLY', protectedVerified: false, rejected: {} };
     },
     async execute(child, request) {
@@ -74,14 +80,24 @@ export function createCodexManagedHostExecution(store, {
       validateRequest({ ...request, mode: 'PROPOSAL_ONLY' });
       if (hash(request.contract) !== child.contractHash) fail('Contract hash changed');
       // Never let model/request/config choose Host cwd. The Controller snapshots
-      // the isolated candidate before invoking the reserved child proposal.
-      const prompt = makePrompt(request, child);
-      // A bounded separate Host Turn is a potentially billable effect even when
-      // its sandbox is read-only; the parent Attempt has already been reserved.
-      const receipt = await transport({
-        executable, cwd: candidateDirectory, model, prompt, outputSchema: responseSchema,
-        timeoutMs: Math.min(request.timeoutMs, 180000), cancelled: request.cancelled,
-      });
+      // the isolated candidate before invoking the reserved child.
+      // Both modes are reserved/billable effects, never silently retried.
+      const captured = workspaceWrite
+        ? await captureCodexWorkspaceEdits({
+            candidateDirectory,contract:request.contract,context:request.files,
+            executable,model,transport,approved:authorizeWorkspace,
+            timeoutMs:Math.min(request.timeoutMs,180000),cancelled:request.cancelled
+          })
+        : null;
+      const receipt = captured
+        ? { ...captured.hostReceipt,text:JSON.stringify(captured.proposal),
+            executionMode:'HOST_WORKSPACE_WRITE_UNPROTECTED',
+            protectedVerified:false,authority:'PROVIDER_REPORTED_ONLY' }
+        : await transport({
+            executable,cwd:candidateDirectory,model,
+            prompt:makePrompt(request,child),outputSchema:responseSchema,
+            timeoutMs:Math.min(request.timeoutMs,180000),cancelled:request.cancelled
+          });
       currentReservation(store, child);
       if (request.cancelled?.()) fail('Attempt no longer admitted after Host Turn');
       if (!isObject(receipt) || receipt.terminalStatus !== 'completed' ||
@@ -94,12 +110,15 @@ export function createCodexManagedHostExecution(store, {
       applyEdits(request.contract, request.files, proposal);
       const safeReceipt = {
         threadId: receipt.threadId, turnId: receipt.turnId,
-        terminalStatus: receipt.terminalStatus, executionMode: 'HOST_READ_ONLY_PROPOSAL',
+        terminalStatus: receipt.terminalStatus,
+        executionMode: workspaceWrite?'HOST_WORKSPACE_WRITE_UNPROTECTED':'HOST_READ_ONLY_PROPOSAL',
         authority: 'PROVIDER_REPORTED_ONLY',
+        ...(captured?{candidateBeforeHash:captured.hostReceipt.candidateBeforeHash,
+          toolItems:captured.hostReceipt.toolItems}:{}),
       };
       // Preserve a source-grounded result with UNKNOWN subscription cost.
       return {
-        kind: 'ProviderExecutionResult', provider: { id: PROVIDER_ID },
+        kind: 'ProviderExecutionResult', provider: { id: workspaceWrite?WORKSPACE_PROVIDER:READ_ONLY_PROVIDER },
         mode: 'PROPOSAL_ONLY', status: 'PROPOSED', error: null,
         authority: 'PROVIDER_REPORTED_ONLY', proposal, cost: null,
         costAuthority: 'UNKNOWN_HOST_SUBSCRIPTION', hostSessionCost: null,

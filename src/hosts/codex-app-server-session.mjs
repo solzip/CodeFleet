@@ -28,7 +28,7 @@ const reject = reason => { throw new CodexTurnProtocolError(reason); };
 const recordId = value => typeof value === 'string' && value.length > 0 && value.length <= 128;
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 
-export function createCodexTurnProtocol({ cwd, model, prompt, outputSchema } = {}) {
+export function createCodexTurnProtocol({ cwd, model, prompt, outputSchema, workspaceWrite = false } = {}) {
   if (!isAbsolute(cwd ?? '') || !recordId(model) ||
       typeof prompt !== 'string' || !prompt.trim() || Buffer.byteLength(prompt) > 160000 ||
       !object(outputSchema)) reject('Explicit cwd, model, bounded prompt and output schema required');
@@ -36,14 +36,28 @@ export function createCodexTurnProtocol({ cwd, model, prompt, outputSchema } = {
   let threadId = null;
   let turnId = null;
   let finalMessage = null;
+  const toolItems = new Map();
   const notifications = new Map();
   const started = [{ id: 1, method: 'initialize', params: { clientInfo: {
     name: 'codefleet', title: 'CodeFleet Reserved Turn', version: '0.1'
   } } }];
   const count = method => notifications.set(method, (notifications.get(method) ?? 0) + 1);
   const safeItem = item => {
-    if (!object(item) || !INERT_ITEMS.has(item.type)) reject('Host tool or unknown item encountered; effect is uncertain');
-    if (item.type === 'agentMessage' && typeof item.text === 'string') finalMessage = item.text;
+    if (!object(item)) reject('Invalid Host item; effect is uncertain');
+    if (INERT_ITEMS.has(item.type)) {
+      if (item.type === 'agentMessage' && typeof item.text === 'string') finalMessage = item.text;
+      return;
+    }
+    if (!workspaceWrite || !recordId(item.id) ||
+        !['fileChange','commandExecution'].includes(item.type))
+      reject('Host tool or unknown item encountered; effect is uncertain');
+    // Provenance only: never treat a host tool status as independently
+    // observed files, execution confinement or Objective evidence.
+    toolItems.set(item.id, { id:item.id, type:item.type,
+      status:typeof item.status === 'string' ? item.status : 'UNKNOWN',
+      ...(item.type === 'commandExecution' && Number.isInteger(item.exitCode)
+        ? { exitCode:item.exitCode } : {}) });
+    if (toolItems.size > 100) reject('Host tool item count exceeded');
   };
   return {
     start() { return structuredClone(started); },
@@ -80,7 +94,8 @@ export function createCodexTurnProtocol({ cwd, model, prompt, outputSchema } = {
         return [
           { method: 'initialized', params: {} },
           { id: 2, method: 'thread/start', params: {
-            cwd, model, ephemeral: true, approvalPolicy: 'never', sandbox: 'read-only',
+            cwd, model, ephemeral: true, approvalPolicy: 'never',
+            sandbox: workspaceWrite ? 'workspace-write' : 'read-only',
             serviceName: 'codefleet-reserved-proposal'
           } }
         ];
@@ -91,7 +106,10 @@ export function createCodexTurnProtocol({ cwd, model, prompt, outputSchema } = {
         phase = 'STARTING_TURN';
         return [{ id: 3, method: 'turn/start', params: {
           threadId, input: [{ type: 'text', text: prompt, text_elements: [] }],
-          approvalPolicy: 'never', sandboxPolicy: { type: 'readOnly', networkAccess: false },
+          approvalPolicy: 'never', sandboxPolicy: workspaceWrite
+            ? { type:'workspaceWrite',writableRoots:[cwd],networkAccess:false,
+                excludeTmpdirEnvVar:true,excludeSlashTmp:true }
+            : { type: 'readOnly', networkAccess: false },
           model, outputSchema
         } }];
       }
@@ -108,7 +126,9 @@ export function createCodexTurnProtocol({ cwd, model, prompt, outputSchema } = {
       return { threadId, turnId, text: finalMessage,
         notifications: Object.fromEntries([...notifications].sort(([a], [b]) => a.localeCompare(b))),
         terminalStatus: 'completed', authority: 'PROVIDER_REPORTED_ONLY',
-        executionMode: 'HOST_READ_ONLY_PROPOSAL', protectedVerified: false };
+        toolItems:[...toolItems.values()],executionMode:workspaceWrite
+          ? 'HOST_WORKSPACE_WRITE_UNPROTECTED' : 'HOST_READ_ONLY_PROPOSAL',
+        protectedVerified: false };
     }
   };
 }
@@ -116,10 +136,11 @@ export function createCodexTurnProtocol({ cwd, model, prompt, outputSchema } = {
 // A single process, thread and Turn. No retries, login mutation, approvals,
 // CLI publication, external model API, or fallback to another Host.
 export async function runCodexReadOnlyTurn({ executable, cwd, model, prompt, outputSchema,
-  timeoutMs = 120000, cancelled = () => false, spawnImpl = spawn } = {}) {
+  timeoutMs = 120000, cancelled = () => false, spawnImpl = spawn,
+  workspaceWrite = false } = {}) {
   if (!isAbsolute(executable ?? '') || !Number.isInteger(timeoutMs) ||
       timeoutMs < 1 || timeoutMs > 180000) reject('Invalid bounded App Server execution parameters');
-  const protocol = createCodexTurnProtocol({ cwd, model, prompt, outputSchema });
+  const protocol = createCodexTurnProtocol({ cwd, model, prompt, outputSchema, workspaceWrite });
   const child = spawnImpl(executable, ['app-server', '--listen', 'stdio://', '--strict-config'], {
     cwd, shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe']
   });

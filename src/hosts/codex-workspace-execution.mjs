@@ -1,0 +1,95 @@
+// Supervised UNPROTECTED Codex Host filesystem execution.
+// Writes happen only in an ephemeral Controller-owned Candidate. This adapter
+// inspects actual bytes instead of trusting model-reported patch content.
+import path from 'node:path';
+import { readdir, lstat, readFile, realpath } from 'node:fs/promises';
+import { hash, applyEdits } from '../alpha/contract.mjs';
+import { runCodexReadOnlyTurn } from './codex-app-server-session.mjs';
+
+const reject = reason => { const error=Error(reason); error.effectStatus='UNKNOWN_NO_REPLAY'; throw error; };
+const MAX_FILES=1500,MAX_BYTES=32*1024*1024;
+
+async function observeTree(root) {
+  const resolved=await realpath(root);
+  if (resolved !== root && !(process.platform==='win32' &&
+      resolved.toLowerCase()===root.toLowerCase())) reject('Candidate root link/Junction unsupported');
+  const entries=new Map(); let bytes=0;
+  async function visit(rel='') {
+    const where=path.join(root,rel);
+    if ((await lstat(where)).isSymbolicLink()) reject('Linked candidate directory forbidden');
+    for (const name of (await readdir(where)).sort()) {
+      if (name === '.git') reject('Candidate must not contain a Git control directory');
+      const relative=rel?rel+'/'+name:name, target=path.join(root,relative);
+      const st=await lstat(target);
+      if (st.isSymbolicLink()) reject('Candidate symlink/Junction forbidden');
+      if (st.isDirectory()) await visit(relative);
+      else if (st.isFile()) {
+        bytes+=st.size;
+        if (bytes>MAX_BYTES || entries.size>=MAX_FILES) reject('Candidate snapshot bound exceeded');
+        entries.set(relative,{mode:st.mode & 0o777,bytes:await readFile(target)});
+      } else reject('Candidate non-regular filesystem entry forbidden');
+    }
+  }
+  await visit();
+  return entries;
+}
+export async function captureCodexWorkspaceEdits({candidateDirectory, contract, context,
+  transport, model, executable, approved, timeoutMs=120000, cancelled=()=>false}={}) {
+  if (!approved || typeof approved !== 'function' ||
+      !path.isAbsolute(candidateDirectory??'') || !contract ||
+      !context || !path.isAbsolute(executable??'') ||
+      typeof model !== 'string' || !model || typeof transport !== 'function')
+    reject('Exact trusted supervised Host execution configuration required');
+  const before=await observeTree(candidateDirectory);
+  const allowed=new Set(contract.files);
+  const initialTree = [...before].map(([name,entry])=>[name,hash(entry.bytes),entry.mode]);
+  for(const name of allowed){
+    if (!before.has(name) || !context[name] || !Buffer.from(context[name]).equals(before.get(name).bytes))
+      reject('Candidate source/context does not match approved WorkItem');
+  }
+  const approvedScope={kind:'HOST_WORKSPACE_WRITE_UNPROTECTED_V1',
+    root:candidateDirectory,baseTreeHash:hash(initialTree),
+    contractHash:hash(contract),allowedFiles:[...allowed].sort(),model,timeoutMs};
+  if(await approved(Object.freeze({...approvedScope}))!==true) reject('Supervised Host workspace write not granted');
+  if(cancelled())reject('Candidate execution cancelled before Host Turn');
+  const prompt=JSON.stringify({goal:contract.goal,approvedScope,files:contract.files,
+    instructions:'Use Codex Host tools only to edit the explicitly allowed existing source files under this candidate root. '+
+      'Do not change tests, install dependencies, access network/credentials, commit, deploy or write outside root. '+
+      'Return JSON with summary only; test and objective acceptance are performed independently by CodeFleet.'});
+  const receipt=await transport({executable,cwd:candidateDirectory,model,prompt,
+    outputSchema:{type:'object',additionalProperties:false,required:['summary'],properties:{summary:{type:'string'}}},
+    timeoutMs,cancelled,workspaceWrite:true});
+  if (receipt?.terminalStatus!=='completed' || receipt.protectedVerified!==false ||
+      !receipt.threadId || !receipt.turnId || receipt.executionMode!=='HOST_WORKSPACE_WRITE_UNPROTECTED')
+    reject('Missing live Host filesystem Turn receipt');
+  const after=await observeTree(candidateDirectory);
+  if (before.size!==after.size || [...before.keys()].some(file=>!after.has(file)))
+    reject('Host introduced or deleted files outside approved replace-only scope');
+  const edits=[];
+  for(const [file,prior] of before){
+    const current=after.get(file);
+    if(current.mode!==prior.mode)reject('Host changed file mode');
+    if(!current.bytes.equals(prior.bytes)){
+      if(!allowed.has(file))reject('Host changed out-of-scope file');
+      const oldText=prior.bytes.toString('utf8'),newText=current.bytes.toString('utf8');
+      if(!oldText || Buffer.from(oldText).compare(prior.bytes)!==0 ||
+          Buffer.from(newText).compare(current.bytes)!==0 ||
+          newText.includes('\0') || Buffer.byteLength(newText)>64000)
+        reject('Host changed binary or oversized source');
+      edits.push({path:file,oldText,newText});
+    }
+  }
+  if(!edits.length)reject('Host Turn did not produce a source change');
+  const proposal={summary:'Changes observed from isolated Codex Host filesystem',edits};
+  // Keep the legacy Proposal/Verifier pipeline: verify exact edit scope on
+  // original baseline. Never classify tool events as independent Evidence.
+  applyEdits(contract,context,proposal);
+  return { proposal, hostReceipt:{
+    threadId:receipt.threadId,turnId:receipt.turnId,terminalStatus:'completed',
+    toolItems:receipt.toolItems??[],authority:'PROVIDER_REPORTED_ONLY',
+    source:'ACTUAL_CANDIDATE_BYTE_OBSERVATION',candidateBeforeHash:hash(initialTree),
+    protectedVerified:false
+  },mode:'HOST_WORKSPACE_WRITE_UNPROTECTED',cost:null,
+    hostSessionCostStatus:'UNKNOWN' };
+}
+export const supervisedWorkspaceTransport = runCodexReadOnlyTurn;

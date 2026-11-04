@@ -3,7 +3,7 @@
 // This capability must be injected by a trusted integration after an explicit
 // exact-scope owner grant; caller-supplied agent text is never authorization.
 import { randomUUID, createHash } from 'node:crypto';
-import { lstat, realpath, readFile, writeFile, rename, unlink } from 'node:fs/promises';
+import { lstat, realpath, readFile, writeFile, rename, unlink, chmod } from 'node:fs/promises';
 import path from 'node:path';
 import { filePath, hash } from '../alpha/contract.mjs';
 import { repository, candidateHash } from '../alpha/workspace.mjs';
@@ -68,7 +68,8 @@ export async function applyLocalDelivery({ destination, base, files, candidatePa
     const before = await readFile(dest);
     const after = Buffer.from(value, 'utf8');
     if (digest(before) === digest(after)) throw Error('No changed file content in delivery');
-    targets.push({ name, dest, after, originalSha256: digest(before), afterSha256: digest(after) });
+    targets.push({ name, dest, after, mode: status.mode & 0o777,
+      originalSha256: digest(before), afterSha256: digest(after) });
   }
   // Treat grant result as an independently verified exact matching decision.
   // Merely passing a text actor or Host consent does not satisfy this callback.
@@ -85,7 +86,8 @@ export async function applyLocalDelivery({ destination, base, files, candidatePa
     // is recorded. Temporary sibling files are also controlled write effects.
     for (const t of targets) {
       const stage = path.join(path.dirname(t.dest), '.codefleet-stage-' + randomUUID());
-      await writeFile(stage, t.after, { flag: 'wx', mode: 0o600 });
+      await writeFile(stage, t.after, { flag: 'wx', mode: t.mode });
+      await chmod(stage,t.mode);
       stages.push(stage);
     }
     for (let i = 0; i < targets.length; i++) {
