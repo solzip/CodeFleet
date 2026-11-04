@@ -1,3 +1,7 @@
+import { mkdtemp,mkdir,writeFile,rm,symlink } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { candidateHash } from '../src/alpha/workspace.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readDeliveredObjectiveStatus } from '../src/product/objective-status.mjs';
@@ -130,4 +134,39 @@ test('missing or stale mandatory-criterion snapshot cannot promote a verdict',as
    const result=await readDeliveredObjectiveStatus(x.store,'objective-1',{observeTree:x.observeTree});
    assert.equal(result.objectiveComplete,false,JSON.stringify(change));
  }
+});
+
+test('current Objective status rejects a same-byte symlink substituted after COMPLETE',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'codefleet-symlink-objective-'));
+ t.after(()=>rm(root,{recursive:true,force:true}));
+ await mkdir(join(root,'src'));
+ const target=join(root,'src','a.js'),content='export const approved = 1;';
+ await writeFile(target,content);
+ const targetHash=await candidateHash(root,['src/a.js']);
+ const x=fixture({
+  runOverride:{repo:root},
+  childOverride:{repo:root,candidateHash:targetHash},
+  deliveryOverride:{candidateHash:targetHash,targetTreeHash:targetHash},
+  decisionOverride:{targetTreeHash:targetHash},
+  evidenceOverride:{targetTreeHash:targetHash}
+ });
+ const first=await readDeliveredObjectiveStatus(x.store,'objective-1');
+ assert.equal(first.status,'COMPLETE');
+ await writeFile(join(root,'src','same.js'),content);
+ await rm(target);
+ try { await symlink('same.js',target,'file'); }
+ catch(error) {
+  if (['EPERM','EACCES','ENOTSUP'].includes(error.code)) {t.skip('Symlink creation not permitted on this runner');return;}
+  throw error;
+ }
+ const changed=await readDeliveredObjectiveStatus(x.store,'objective-1');
+ assert.equal(changed.objectiveComplete,false);
+ assert.equal(changed.status,'BLOCKED');
+});
+
+test('Candidate tree observation rejects path traversal before any file read',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'codefleet-unsafe-observation-'));
+ t.after(()=>rm(root,{recursive:true,force:true}));
+ await writeFile(join(root,'safe.js'),'safe');
+ await assert.rejects(candidateHash(root,['../outside.js']),/Unsafe relative file path/);
 });

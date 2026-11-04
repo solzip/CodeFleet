@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp,mkdir,writeFile,rm } from 'node:fs/promises';
+import { mkdtemp,mkdir,writeFile,rm,symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { hash } from '../src/alpha/contract.mjs';
@@ -133,4 +133,23 @@ test('revocation during a running Local check prevents successful Evidence persi
   candidate:f.candidate,cancelled:()=>cancelled}),/cancelled or grant revoked/);
  assert.equal(invoked,true);
  assert.equal(artifacts,0);
+});
+
+test('same-byte symlink substitution after delivery cannot create criterion Evidence',async t=>{
+ const f=await fixture(t);let granted=false;
+ const copy=join(f.root,'src/copy.js'),target=join(f.root,'src/a.js');
+ await writeFile(copy,'export const answer = 42;');
+ await rm(target);
+ try { await symlink('copy.js',target,'file'); }
+ catch(error) {
+  if (['EPERM','EACCES','ENOTSUP'].includes(error.code)) {t.skip('Symlink creation not permitted on this runner');return;}
+  throw error;
+ }
+ const verifier=createLocalDestinationVerifier(f.store,{
+  criteria:f.criteria,commandSpecs:f.commandSpecs,
+  obtainGrant:async()=>{granted=true;return true;}
+ });
+ await assert.rejects(verifier.verify({run:f.run,delivery:f.delivery,
+  candidate:f.candidate,cancelled:()=>false}),/symlink or nonregular/);
+ assert.equal(granted,false);
 });

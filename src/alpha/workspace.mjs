@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { command, requireSuccess } from './process.mjs';
-import { hash } from './contract.mjs';
+import { filePath, hash } from './contract.mjs';
 
 export async function git(repo, args, options = {}) {
   return command('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.autocrlf=false', '-c', 'commit.gpgSign=false', '-C', repo, ...args], options);
@@ -44,7 +44,28 @@ export async function context(directory, contract) {
   return files;
 }
 export async function candidateHash(directory, names) {
+  if (!path.isAbsolute(directory ?? '') || !Array.isArray(names) ||
+      !names.length || names.length > 1500 || new Set(names).size !== names.length)
+    throw Error('Candidate tree requires bounded, unique paths and an absolute root');
+  const root = await lstat(directory);
+  if (!root.isDirectory() || root.isSymbolicLink())
+    throw Error('Candidate tree root must be a real directory');
   const rows = [];
-  for (const name of [...names].sort()) rows.push([name, hash(await readFile(path.join(directory, name)))]);
+  for (const name of [...names].sort()) {
+    // Byte equality alone is not a safe observation: readFile follows links.
+    // Recheck every path component before reading, including unchanged files
+    // that were present in the delivered tree but not written by delivery.
+    filePath(name);
+    const parts = name.split('/');
+    let current = directory;
+    for (let index = 0; index < parts.length; index++) {
+      current = path.join(current, parts[index]);
+      const stat = await lstat(current);
+      if (stat.isSymbolicLink() ||
+          (index === parts.length - 1 ? !stat.isFile() : !stat.isDirectory()))
+        throw Error('Candidate tree contains a symlink or nonregular path: ' + name);
+    }
+    rows.push([name, hash(await readFile(current))]);
+  }
   return hash(rows);
 }

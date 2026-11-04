@@ -108,3 +108,18 @@ revocation during asynchronous grant, and cancellation during a running check.
 This narrows the Local path only: it does not provide OS isolation, eliminate all
 races, prove Host Live execution or bind the initial criterion set to owner-approved
 requirements. The new head needs its own Windows/Linux CI result.
+
+## Regular-file boundary for Candidate and delivered Objective observations
+
+The shared `candidateHash` observer now rejects symlinked/nonregular file
+entries and symlinked parents before reading bytes, including same-byte link
+substitution after Local delivery and unchanged tracked paths. It also rejects
+unsafe relative paths and non-directory/symlink roots. The post-delivery Local
+criterion producer and the read-only Objective status projection use this same
+fail-closed observer. Negative tests cover a same-byte substituted link at the
+verification boundary, the formerly COMPLETE read-only status, and path traversal.
+Symlink creation may be unavailable on some Windows CI runners; such a case
+is reported as a test skip rather than falsely called verified. This inspection
+does not create OS confinement, guarantee atomicity against concurrent swaps,
+or yet attest all file modes. The previous `327fdc6` Windows/Linux CI succeeded;
+the new head requires fresh CI before any PASS claim.
