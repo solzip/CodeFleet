@@ -41,7 +41,7 @@
     "anchors:baseline": "node ./scripts/check-doc-facts.mjs --update-baseline",
     "coverage:baseline": "node ./scripts/check-rule-coverage.mjs --update-baseline",
     "coverage:uncovered": "node ./scripts/check-rule-coverage.mjs --list-uncovered",
-    "test:codex-mvp": "node --test test/codex-app-server-session.test.mjs test/codex-managed-host-execution.test.mjs test/codex-managed-planning.test.mjs test/workflow-predecessor-context.test.mjs test/controlled-delivery.test.mjs test/objective-judge.test.mjs test/development-baseline.test.mjs test/repair-generations.test.mjs test/codex-bootstrap-files.test.mjs test/destination-evidence.test.mjs test/codex-workspace-execution.test.mjs test/objective-status.test.mjs test/objective-status-cli.test.mjs test/codex-mvp-facade.test.mjs"
+    "test:codex-mvp": "node --test test/codex-app-server-session.test.mjs test/codex-managed-host-execution.test.mjs test/codex-managed-planning.test.mjs test/workflow-predecessor-context.test.mjs test/controlled-delivery.test.mjs test/objective-judge.test.mjs test/development-baseline.test.mjs test/repair-generations.test.mjs test/codex-bootstrap-files.test.mjs test/destination-evidence.test.mjs test/codex-workspace-execution.test.mjs test/objective-status.test.mjs test/objective-status-cli.test.mjs test/codex-mvp-facade.test.mjs test/codex-mvp-joined-fixture.test.mjs"
   },
   "engines": {
     "node": ">=24.14.1"

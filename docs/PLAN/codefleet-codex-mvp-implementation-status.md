@@ -24,6 +24,7 @@ The existing Controller, SQLite Store, DAG readiness/reservation, Evidence/Judge
 | `src/product/destination-evidence.mjs` | Scoped Local post-delivery criterion checks with independent observation and explicit grant | Code and tests authored; unprotected Local |
 | `src/product/objective-status.mjs` | Read-only Objective status projection: reobserve actual target; never equate artifact-only COMPLETED with Objective COMPLETE | Code and tests authored; live not run |
 | `src/product/codex-mvp-facade.mjs` | Trusted facade joining existing Codex planning, Bootstrap Fileset, approved Controller Workflows and delivered-tree reporting without a second scheduler | Code and denial tests authored; not a public Host execution route |
+| `test/codex-mvp-joined-fixture.test.mjs` | Synthetic two-dependent-WorkItem joined trace: persisted A before B, candidate, approved local delivery, criterion Judge and current target drift detection | Fake Host and fake verifier only; never Host Live or product E2E acceptance |
 | Repair Generation 3+ | Contiguous immutable generations reference the latest FAILED attempt rather than blindly reopening generation 1 | Code and regression test authored |
 
 ## Actual implementation versus acceptance
@@ -50,3 +51,7 @@ The Draft PR must not be merged or labelled `HOST_LIVE_VERIFIED` / `CODEX_MVP_AC
 ## Trusted facade scope
 
 The experimental `createCodexMvpFacade` composes existing modules behind an embedding-owned `enableHostTurns` switch and exact-scope grant callbacks. It neither authenticates an Operator by itself nor supplies a public CodeFleet command. A production CLI cannot pass untrusted callbacks as authorization. The existing fail-closed public isolation boundary remains unchanged. The facade's workflow runner may return an artifact-only candidate status rather than Objective COMPLETE.
+
+## Synthetic joined trace
+
+A new synthetic nonproduction fixture exercises the entire Workflow+delivery+Objective projection code path using explicit fake Host receipts and a fake independent observer. The test must never be described as an actual Codex model Turn, protected execution, or product MVP acceptance. It is included in `npm run test:codex-mvp` and GitHub CI. Native Codex final independent validation remains deferred under the user's instruction.
