@@ -2,6 +2,7 @@ import { mkdtemp,mkdir,writeFile,rm,symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { candidateHash } from '../src/alpha/workspace.mjs';
+import { hash } from '../src/alpha/contract.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readDeliveredObjectiveStatus } from '../src/product/objective-status.mjs';
@@ -10,7 +11,7 @@ const SHA = 'a'.repeat(64), OTHER = 'b'.repeat(64);
 const run = () => ({kind:'workflow',id:'objective-1',revision:1,state:'COMPLETED',
   finalRunId:'final-1',acceptedHash:'accepted-1',repo:'/approved-target',
   deliveryReceiptRef:'delivery-1',objectiveDecisionRef:'decision-1',
-  objectiveCriteriaRef:'criteria-1',contractHash:SHA,
+  objectiveCriteriaRef:'criteria-1',objectiveApprovedCriteriaRef:'approved-1',contractHash:SHA,
   reportedCostUsd:0,unknownCostAttempts:2});
 const delivery = () => ({status:'DELIVERED_NOT_VERIFIED',runId:'objective-1',revision:1,
   candidateHash:SHA,targetTreeHash:SHA,semanticCriteriaVerified:false});
@@ -27,14 +28,18 @@ const evidence = () => ({kind:'OBJECTIVE_CRITERION_OBSERVATION_V1',
   commandHash:SHA,observationHash:OTHER,tests:1,passed:1,failed:0,skipped:0,todo:0,
   exitCode:0,interrupted:false,truncated:false,integrity:'MATCHED'});
 function fixture({current=SHA,runOverride={},deliveryOverride={},childOverride={},
- decisionOverride={},criteriaOverride={},evidenceOverride={},evidenceMissing=false}={}){
+ decisionOverride={},criteriaOverride={},approvedOverride={},evidenceOverride={},evidenceMissing=false}={}){
  const r={...run(),...runOverride};
  const blobs={'delivery-1':{...delivery(),...deliveryOverride},
    'decision-1':{...decision(),...decisionOverride},
    'criteria-1':{kind:'OBJECTIVE_MANDATORY_CRITERIA_V1',
      objectiveId:'objective-1',revision:1,workflowHash:SHA,
-     deliveryReceiptRef:'delivery-1',
+     approvedCriteriaRef:'approved-1',deliveryReceiptRef:'delivery-1',
      criteria:[{id:'criterion-a',requiredAuthority:'LOCAL_EXECUTED'}],...criteriaOverride},
+   'approved-1':{kind:'OBJECTIVE_APPROVED_CRITERIA_V1',
+     objectiveId:'objective-1',revision:1,workflowHash:SHA,
+     criteriaHash:hash([{id:'criterion-a',requiredAuthority:'LOCAL_EXECUTED'}]),
+     criteria:[{id:'criterion-a',requiredAuthority:'LOCAL_EXECUTED'}],...approvedOverride},
    ...(evidenceMissing?{}:{'evidence-a':{...evidence(),...evidenceOverride}})};
  return { store:{get:id=>id==='objective-1'?r:id==='final-1'?{...child(),...childOverride}:null,
    readArtifact:ref=>blobs[ref]},observeTree:async (repo,files)=>{
@@ -210,4 +215,18 @@ test('read-only COMPLETE projection rejects incomplete or mislabeled saved crite
    const result=await readDeliveredObjectiveStatus(x.store,'objective-1',{observeTree:x.observeTree});
    assert.equal(result.objectiveComplete,false,JSON.stringify(evidenceOverride));
  }
+});
+
+test('post-delivery Evidence cannot replace a missing or changed pre-effect criterion approval',async()=>{
+  for(const change of [
+    {runOverride:{objectiveApprovedCriteriaRef:null}},
+    {approvedOverride:{criteria:[{id:'criterion-a',requiredAuthority:'OWNER_REVIEW'}]}},
+    {approvedOverride:{workflowHash:OTHER}},
+    {criteriaOverride:{approvedCriteriaRef:'obsolete-approval'}},
+    {approvedOverride:{criteriaHash:OTHER}},
+  ]) {
+    const x=fixture(change);
+    const result=await readDeliveredObjectiveStatus(x.store,'objective-1',{observeTree:x.observeTree});
+    assert.equal(result.objectiveComplete,false,JSON.stringify(change));
+  }
 });

@@ -181,3 +181,24 @@ continues to identify its fake Local observer. This is schema/authority
 consistency checking, **not** attestation of an isolated verification backend,
 Host Live proof or owner-criterion binding. The new head needs its own
 Windows/Linux CI before reporting offline PASS.
+
+## Pre-effect owner criterion scope binding (fresh CI required)
+
+The supervised Local delivery Controller now requires an explicit bounded
+`destinationDelivery.approvedCriteria` set supplied by the trusted embedding.
+Before any destination mutation, the exact owner delivery grant receives the
+Workflow hash and canonical mandatory criterion set/hash; the Controller
+persists that reviewed set alongside the pre-effect delivery intent. The
+post-delivery independent verifier may supply Evidence, **not** change, omit
+or downgrade the originally reviewed criteria. Recovery refuses to complete
+an already-delivered Objective without the original pre-effect criterion
+record or if a new verifier supplies different requirements. The read-only
+Objective projection requires the persisted approval and decision criterion
+snapshots to match; legacy delivered outcomes without this binding fail
+closed instead of being automatically grandfathered in. The Local verifier
+exposes a defensive copy of its configured criteria; it cannot grant itself
+new authority. Regression coverage includes the synthetic joined path,
+criterion normalization and former COMPLETE revalidation against changed or
+absent original approval. This still relies on a trusted embedding's owner
+grant, not model-supplied authentication, Host Live or protected verification.
+New Windows/Linux CI is necessary before declaring these offline tests PASS.

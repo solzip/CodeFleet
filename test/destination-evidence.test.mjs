@@ -153,3 +153,14 @@ test('same-byte symlink substitution after delivery cannot create criterion Evid
   candidate:f.candidate,cancelled:()=>false}),/symlink or nonregular/);
  assert.equal(granted,false);
 });
+
+test('Local verifier exposes a defensive copy of the exact criteria approved before delivery',async t=>{
+  const f=await fixture(t);
+  const verifier=createLocalDestinationVerifier(f.store,{
+    criteria:f.criteria,commandSpecs:f.commandSpecs,obtainGrant:async()=>true
+  });
+  assert.deepEqual(verifier.approvedCriteria,f.criteria);
+  verifier.approvedCriteria[0].requiredAuthority='OWNER_REVIEW';
+  f.criteria[0].requiredAuthority='OWNER_REVIEW';
+  assert.equal(verifier.approvedCriteria[0].requiredAuthority,'LOCAL_EXECUTED');
+});

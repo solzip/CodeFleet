@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluateDeliveredObjective } from '../src/product/objective-judge.mjs';
+import { evaluateDeliveredObjective, requireTrustedObjectiveCriteria } from '../src/product/objective-judge.mjs';
 
 const tree='a'.repeat(64);
 const delivery={status:'DELIVERED_NOT_VERIFIED',runId:'goal',revision:1,
@@ -96,5 +96,19 @@ test('an incomplete, untyped or inconsistently protected observation cannot comp
   ]) {
     const a={...protectedOnly,readVerifiedEvidence:()=>({...evidence('C1'),...delta})};
     assert.equal(evaluateDeliveredObjective(a).complete,false,JSON.stringify(delta));
+  }
+});
+
+test('mandatory Objective criteria are bounded, unique and normalized before approval',()=>{
+  const source=[{requiredAuthority:'LOCAL_EXECUTED',id:'C1',description:'Source behavior passes'}];
+  const pinned=requireTrustedObjectiveCriteria(source);
+  assert.deepEqual(pinned,[{id:'C1',requiredAuthority:'LOCAL_EXECUTED',description:'Source behavior passes'}]);
+  source[0].requiredAuthority='OWNER_REVIEW';
+  assert.equal(pinned[0].requiredAuthority,'LOCAL_EXECUTED');
+  for(const invalid of [[],[{id:'C1',requiredAuthority:'LOCAL_EXECUTED'},
+    {id:'C1',requiredAuthority:'LOCAL_EXECUTED'}],
+    [{id:'C1',requiredAuthority:'MODEL_REPORTED'}],
+    [{id:'C1',requiredAuthority:'LOCAL_EXECUTED',unexpected:'unsupervised'}]]) {
+    assert.throws(()=>requireTrustedObjectiveCriteria(invalid),/mandatory Objective criterion/);
   }
 });

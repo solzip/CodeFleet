@@ -11,7 +11,7 @@ import { createRegistry, selectProvider } from '../providers/registry.mjs';
 import { readyBatch, validateWorkflow } from '../workflow/definition.mjs';
 import { predecessorInput, applyPredecessorOverlay } from '../workflow/predecessor-context.mjs';
 import { applyLocalDelivery } from '../product/controlled-delivery.mjs';
-import { evaluateDeliveredObjective } from '../product/objective-judge.mjs';
+import { evaluateDeliveredObjective, requireTrustedObjectiveCriteria } from '../product/objective-judge.mjs';
 import { approvedDevelopmentBaseline } from './development-baseline.mjs';
 import { delegate, sendMessage, receiveMessages } from '../workflow/collaboration.mjs';
 import * as workflowStore from '../workflow/persistence.mjs';
@@ -363,15 +363,35 @@ async function executeWorkflow(store, id, dependencies, options) {
         if (!deliveryService) return save('COMPLETED', 'All required WorkItems and integrated candidate independently verified; local artifacts only');
         if (typeof deliveryService.authorize !== 'function' || typeof deliveryService.verify !== 'function')
           throw Error('Exact destination grant and independent post-apply verifier required');
+        // Mandatory criteria must be approved before any effect; a verifier
+        // response after delivery cannot choose, omit or downgrade them.
+        const approvedCriteria = requireTrustedObjectiveCriteria(deliveryService.approvedCriteria);
+        const reviewedCriterionContract = {
+          kind:'OBJECTIVE_APPROVED_CRITERIA_V1',objectiveId:run.id,
+          revision:run.revision,workflowHash:run.contractHash,
+          criteriaHash:hash(approvedCriteria),criteria:approvedCriteria
+        };
+        if (run.objectiveApprovedCriteriaRef) {
+          const persisted = store.readArtifact(run.objectiveApprovedCriteriaRef);
+          if (hash(persisted) !== hash(reviewedCriterionContract))
+            throw Error('Approved Objective criteria changed after delivery authorization');
+        } else if (run.deliveryReceiptRef)
+          throw Error('Delivered Objective lacks a pre-effect approved criterion contract');
         if (run.destinationDeliveryIntentRef && !run.deliveryReceiptRef)
           return save('RECONCILING', 'Uncertain destination delivery; never replay an external effect');
         if (!run.deliveryReceiptRef) {
           const delivered = await applyLocalDelivery({
             destination:run.repo,base:run.base,files:finalPatch.changedFiles,
             candidatePaths:finalChild.candidatePaths,verifiedCandidateHash:finalChild.candidateHash,
-            runId:run.id,revision:run.revision,authorize:deliveryService.authorize,
+            runId:run.id,revision:run.revision,
+            authorize:localIntent=>deliveryService.authorize(Object.freeze({
+              ...localIntent,workflowHash:run.contractHash,
+              objectiveCriteriaHash:reviewedCriterionContract.criteriaHash,
+              objectiveCriteria:structuredClone(approvedCriteria)
+            })),
             cancelled:()=>leaseLost || store.get(run.id).control !== 'run',
             persistIntent:async localIntent=>{
+              run.objectiveApprovedCriteriaRef = store.artifact(reviewedCriterionContract);
               // Called only AFTER trusted owner approval and clean baseline
               // preflight, BEFORE any filesystem staging or rename.
               run.destinationDeliveryIntentRef = store.artifact({
@@ -403,10 +423,16 @@ async function executeWorkflow(store, id, dependencies, options) {
         // Pin the mandatory criterion contract independently of the verdict.
         // A later read-only projection must not infer the required set from a
         // possibly truncated or altered COMPLETE decision artifact.
-        const mandatoryCriteria = structuredClone(observations.criteria);
+        const observedCriteria = requireTrustedObjectiveCriteria(observations.criteria);
+        if (hash(observedCriteria) !== reviewedCriterionContract.criteriaHash)
+          throw Error('Destination verifier criterion set differs from owner-reviewed delivery grant');
+        if (!run.objectiveApprovedCriteriaRef)
+          throw Error('Pre-effect Objective criterion approval missing');
+        const mandatoryCriteria = approvedCriteria;
         run.objectiveCriteriaRef = store.artifact({
           kind:'OBJECTIVE_MANDATORY_CRITERIA_V1',objectiveId:run.id,
           revision:run.revision,workflowHash:run.contractHash,
+          approvedCriteriaRef:run.objectiveApprovedCriteriaRef,
           deliveryReceiptRef:run.deliveryReceiptRef,criteria:mandatoryCriteria
         });
         const decision = evaluateDeliveredObjective({

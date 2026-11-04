@@ -3,6 +3,7 @@
 // Reobserve the user's current target tree before presenting a COMPLETE claim.
 // This module does not create approval, regenerate evidence, or call a Host.
 import { candidateHash } from '../alpha/workspace.mjs';
+import { hash } from '../alpha/contract.mjs';
 import { evaluateDeliveredObjective } from './objective-judge.mjs';
 
 const SHA = /^[a-f0-9]{64}$/;
@@ -43,12 +44,13 @@ export async function readDeliveredObjectiveStatus(store, objectiveId, {
       : 'No delivered target with accepted candidate Evidence',
       common.candidateAvailable ? 'VERIFIED_CANDIDATE_AVAILABLE' : 'INCOMPLETE',common);
   }
-  let delivered, child, decision, required;
+  let delivered, child, decision, required, approved;
   try {
     delivered = store.readArtifact(run.deliveryReceiptRef);
     child = store.get(run.finalRunId);
     if (run.objectiveDecisionRef) decision = store.readArtifact(run.objectiveDecisionRef);
     if (run.objectiveCriteriaRef) required = store.readArtifact(run.objectiveCriteriaRef);
+    if (run.objectiveApprovedCriteriaRef) approved = store.readArtifact(run.objectiveApprovedCriteriaRef);
   } catch {
     return incomplete(run,'Delivery or Objective Evidence is unreadable','BLOCKED', common);
   }
@@ -74,9 +76,17 @@ export async function readDeliveredObjectiveStatus(store, objectiveId, {
   // The Controller pinned this separately from its decision on the delivered
   // revision. Never reconstruct the mandatory set from a COMPLETE verdict.
   const mandatory = Array.isArray(required?.criteria) ? required.criteria : [];
-  const trustedMandatory = required?.kind === 'OBJECTIVE_MANDATORY_CRITERIA_V1' &&
+  const trustedApproval = approved?.kind === 'OBJECTIVE_APPROVED_CRITERIA_V1' &&
+    approved.objectiveId === run.id && approved.revision === run.revision &&
+    approved.workflowHash === run.contractHash &&
+    Array.isArray(approved.criteria) && approved.criteria.length > 0 &&
+    approved.criteriaHash === hash(approved.criteria);
+  const trustedMandatory = trustedApproval &&
+    required?.kind === 'OBJECTIVE_MANDATORY_CRITERIA_V1' &&
     required.objectiveId === run.id && required.revision === run.revision &&
     required.workflowHash === run.contractHash &&
+    required.approvedCriteriaRef === run.objectiveApprovedCriteriaRef &&
+    hash(mandatory) === approved.criteriaHash &&
     required.deliveryReceiptRef === run.deliveryReceiptRef &&
     mandatory.length > 0 && mandatory.length === criteria.length &&
     mandatory.every((item, index) => item && item.id === criteria[index]?.id &&

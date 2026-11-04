@@ -6,6 +6,7 @@ import path from 'node:path';
 import { hash } from '../alpha/contract.mjs';
 import { candidateHash } from '../alpha/workspace.mjs';
 import { localBackend, inspectLocalCommand } from '../verification/backends.mjs';
+import { requireTrustedObjectiveCriteria } from './objective-judge.mjs';
 
 const sha = x => typeof x === 'string' && /^[a-f0-9]{64}$/.test(x);
 
@@ -14,12 +15,13 @@ export function createLocalDestinationVerifier(store, {
 } = {}) {
   if (!store || !Array.isArray(criteria) || !criteria.length ||
       !commandSpecs || typeof obtainGrant !== 'function') throw Error('Trusted criterion commands and grant callback required');
-  const approvedCriteria = structuredClone(criteria);
-  const specs = structuredClone(commandSpecs);
-  if (new Set(approvedCriteria.map(c=>c.id)).size !== approvedCriteria.length ||
-      approvedCriteria.some(c=>!c.id || !['LOCAL_EXECUTED','OWNER_REVIEW'].includes(c.requiredAuthority)))
+  const approvedCriteria = requireTrustedObjectiveCriteria(criteria);
+  if (approvedCriteria.some(c => !['LOCAL_EXECUTED','OWNER_REVIEW'].includes(c.requiredAuthority)))
     throw Error('Invalid Local criterion/authority contract');
+  const specs = structuredClone(commandSpecs);
   return {
+    // Expose a defensive copy to the Controller for pre-effect scope approval.
+    get approvedCriteria() { return structuredClone(approvedCriteria); },
     // This is called by the trusted Controller only AFTER a destination delivery
     // has been durably recorded. No verification command gets its own grant from
     // any model output or CLI-supplied actor string.

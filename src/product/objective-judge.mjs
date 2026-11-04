@@ -5,6 +5,24 @@ export const OBJECTIVE_OUTCOMES = Object.freeze([
   'COMPLETE', 'REPAIR', 'BLOCKED', 'INCOMPLETE', 'HUMAN_HANDOFF'
 ]);
 const AUTHORITY = Object.freeze({ LOCAL_EXECUTED: 1, PROTECTED_EXECUTED: 2 });
+
+// Normalize a bounded owner-reviewed criterion set before hashing it for
+// delivery approval. The destination verifier cannot redefine this set.
+export function requireTrustedObjectiveCriteria(criteria) {
+  if (!Array.isArray(criteria) || !criteria.length || criteria.length > 50 ||
+      criteria.some(c => !c || typeof c !== 'object' || Array.isArray(c) ||
+        typeof c.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(c.id) ||
+        !['LOCAL_EXECUTED','PROTECTED_EXECUTED','OWNER_REVIEW'].includes(c.requiredAuthority) ||
+        Object.keys(c).some(k => !['id','requiredAuthority','description'].includes(k)) ||
+        (c.description !== undefined && (typeof c.description !== 'string' ||
+          !c.description.trim() || c.description.length > 4000))) ||
+      new Set(criteria.map(c => c.id)).size !== criteria.length)
+    throw Error('Trusted mandatory Objective criterion set missing or invalid');
+  return criteria.map(c => ({
+    id:c.id,requiredAuthority:c.requiredAuthority,
+    ...(c.description === undefined ? {} : { description:c.description })
+  }));
+}
 const fail = (reason, outcome = 'INCOMPLETE', results = []) => ({ outcome, reason, criteria: results, complete: false });
 
 export function evaluateDeliveredObjective({

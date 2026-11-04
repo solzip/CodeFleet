@@ -93,7 +93,11 @@ test('joined synthetic two-WorkItem Objective: A persisted before B, local deliv
       grants.push(req);return req.unknownCostTurns<=2;
     }},
     destinationDelivery:{
+      approvedCriteria:[{id:'C1',requiredAuthority:'LOCAL_EXECUTED'}],
       authorize:async scope=>{
+        assert.equal(scope.workflowHash,f.workflow.contractHash);
+        assert.deepEqual(scope.objectiveCriteria,[{id:'C1',requiredAuthority:'LOCAL_EXECUTED'}]);
+        assert.equal(scope.objectiveCriteriaHash,hash(scope.objectiveCriteria));
         assert.equal(scope.runId,f.workflow.id);
         // Git for Windows may return a long canonical path while %TEMP% uses\n        // its 8.3 alias; compare resolved filesystem identities instead.\n        assert.equal((await realpath(scope.destination)).toLowerCase(),\n          (await realpath(f.repo)).toLowerCase());
         return true;
@@ -125,6 +129,12 @@ test('joined synthetic two-WorkItem Objective: A persisted before B, local deliv
   assert.deepEqual(hostTurns,['a','b']);
   assert.ok(grants.length>=1);
   assert.equal(recorded.length,1);
+  const completedRun=f.store.get(f.workflow.id);
+  const approved=f.store.readArtifact(completedRun.objectiveApprovedCriteriaRef);
+  const pinned=f.store.readArtifact(completedRun.objectiveCriteriaRef);
+  assert.equal(approved.kind,'OBJECTIVE_APPROVED_CRITERIA_V1');
+  assert.equal(approved.criteriaHash,hash(pinned.criteria));
+  assert.equal(pinned.approvedCriteriaRef,completedRun.objectiveApprovedCriteriaRef);
   const events=f.store.events(f.workflow.id);
   const acceptedA=events.find(e=>e.type==='ATTEMPT_RECONCILED'&&e.body.itemId==='a');
   const reservedB=events.find(e=>e.type==='ATTEMPT_RESERVED'&&e.body.itemId==='b');
