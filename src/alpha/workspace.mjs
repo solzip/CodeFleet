@@ -63,7 +63,7 @@ export async function candidateHash(directory, names) {
         /[\\:\u0000-\u001f\u007f]/.test(name) ||
         parts.some(part => !part || part === '.' || part === '..' ||
           /[. ]$/.test(part) || part.toLowerCase() === '.git' ||
-          /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\\.|$)/i.test(part)))
+          /^(con|prn|aux|nul|com[0-9]|lpt[0-9])([.]|$)/i.test(part)))
       throw Error('Unsafe tracked Candidate path: ' + String(name));
     let current = directory;
     for (let index = 0; index < parts.length; index++) {

@@ -168,7 +168,7 @@ test('Candidate tree observation rejects path traversal before any file read',as
  const root=await mkdtemp(join(tmpdir(),'codefleet-unsafe-observation-'));
  t.after(()=>rm(root,{recursive:true,force:true}));
  await writeFile(join(root,'safe.js'),'safe');
- await writeFile(join(root,'.gitattributes'),'* text=auto\\n');
+ await writeFile(join(root,'.gitattributes'),'sample');
  const observed=await candidateHash(root,['.gitattributes','safe.js']);
  assert.match(observed,/^[a-f0-9]{64}$/);
  await assert.rejects(candidateHash(root,['../outside.js']),/Unsafe tracked Candidate path/);
