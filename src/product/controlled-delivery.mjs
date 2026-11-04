@@ -133,27 +133,43 @@ export async function applyLocalDelivery({ destination, base, files, candidatePa
       normalized(await realpath(stillSelected.repo)) !== normalized(resolvedRoot) ||
       stillSelected.base !== base)
     throw Error('Destination root or Git baseline changed during delivery grant');
-  for (const target of targets) {
+  // A trusted persistence callback can take time. Check the same lexical
+  // targets after the durable intent and immediately before each rename too:
+  // byte equality alone must not accept a newly substituted symlink/Junction.
+  const assertTargetStillApproved = async target => {
     let ancestor = path.dirname(target.dest);
     while (ancestor !== root) {
       const stat = await lstat(ancestor);
       if (!stat.isDirectory() || stat.isSymbolicLink())
-        throw Error('Destination parent link/Junction changed during delivery grant');
+        throw Error('Destination parent link/Junction changed during delivery');
       const next = path.dirname(ancestor);
       if (next === ancestor) throw Error('Destination path escaped root');
       ancestor = next;
     }
     const file = await lstat(target.dest);
     if (!file.isFile() || file.isSymbolicLink() ||
+        (file.mode & 0o777) !== target.mode ||
         digest(await readFile(target.dest)) !== target.originalSha256)
-      throw Error('Destination target changed during delivery grant');
-  }
+      throw Error('Destination target changed during delivery');
+  };
+  for (const target of targets) await assertTargetStillApproved(target);
   if (cancelled()) throw Error('Delivery cancelled before intent');
   const intentRef = await persistIntent(intent);
   if (typeof intentRef !== 'string' || !intentRef) throw Error('Durable delivery intent not acknowledged');
   let touched = 0;
   const stages = [];
   try {
+    // Persistence is asynchronous and may have been followed by another actor's
+    // write or path swap. Revalidate before the first sibling stage-file effect.
+    await requireUnlinkedDestinationRoot(root);
+    const postIntentRoot = await realpath(root);
+    const postIntentRepository = await repository(root);
+    if (normalized(postIntentRoot) !== normalized(resolvedRoot) ||
+        normalized(await realpath(postIntentRepository.repo)) !== normalized(resolvedRoot) ||
+        postIntentRepository.base !== base)
+      throw Error('Destination root or Git baseline changed after durable intent');
+    for (const target of targets) await assertTargetStillApproved(target);
+    if (cancelled()) throw Error('Delivery cancelled after durable intent');
     // No external effects until all original files are preflighted and intent
     // is recorded. Temporary sibling files are also controlled write effects.
     for (const t of targets) {
@@ -164,8 +180,8 @@ export async function applyLocalDelivery({ destination, base, files, candidatePa
     }
     for (let i = 0; i < targets.length; i++) {
       if (cancelled()) throw Error('Delivery cancelled after staging');
-      const current = await readFile(targets[i].dest);
-      if (digest(current) !== targets[i].originalSha256) throw Error('Destination changed during apply');
+      await requireUnlinkedDestinationRoot(root);
+      await assertTargetStillApproved(targets[i]);
       await rename(stages[i], targets[i].dest);
       touched++;
     }

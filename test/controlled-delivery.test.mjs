@@ -134,3 +134,53 @@ test('dirty target introduced during exact owner review fails before effect inte
   assert.equal(f.counts().intents,0);
   assert.equal(await readFile(join(f.root,'src/a.js'),'utf8'),'dirty during review');
 });
+
+test('parent symlink introduced after durable intent cannot receive stage files',async t=>{
+  const f=await fixture(t);
+  const originalParent=join(f.root,'src'),moved=join(f.root,'moved-src');
+  let persisted=false;
+  const persistIntent=async()=>{
+    persisted=true;
+    await rename(originalParent,moved);
+    await symlink(process.platform==='win32'?moved:'moved-src',originalParent,
+      process.platform==='win32'?'junction':'dir');
+    return 'intent-ref';
+  };
+  try {
+    await assert.rejects(applyLocalDelivery({...f.opts,persistIntent}),
+      /DESTINATION_UNCERTAIN/);
+  } catch(error) {
+    if (['EPERM','EACCES','ENOTSUP'].includes(error.code)) {
+      t.skip('Directory links/Junctions unavailable on this runner');return;
+    }
+    throw error;
+  }
+  assert.equal(persisted,true);
+  assert.equal(await readFile(join(moved,'a.js'),'utf8'),original);
+  assert.deepEqual((await readdir(moved)).filter(name=>name.startsWith('.codefleet-stage-')),[]);
+});
+
+test('same-byte target symlink introduced after durable intent is rejected before rename',async t=>{
+  const f=await fixture(t);
+  const dest=join(f.root,'src/a.js'),backup=join(f.root,'src/original.js');
+  let persisted=false;
+  const persistIntent=async()=>{
+    persisted=true;
+    await rename(dest,backup);
+    await symlink('original.js',dest,'file');
+    return 'intent-ref';
+  };
+  try {
+    await assert.rejects(applyLocalDelivery({...f.opts,persistIntent}),
+      /DESTINATION_UNCERTAIN/);
+  } catch(error) {
+    if (['EPERM','EACCES','ENOTSUP'].includes(error.code)) {
+      t.skip('File symlink creation unavailable on this runner');return;
+    }
+    throw error;
+  }
+  assert.equal(persisted,true);
+  assert.equal(await readFile(backup,'utf8'),original);
+  assert.equal(await readFile(dest,'utf8'),original);
+  assert.deepEqual((await readdir(join(f.root,'src'))).filter(name=>name.startsWith('.codefleet-stage-')),[]);
+});

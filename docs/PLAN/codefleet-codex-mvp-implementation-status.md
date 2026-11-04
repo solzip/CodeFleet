@@ -219,3 +219,16 @@ Historical delivery records without this link are not grandfathered into
 COMPLETE. Synthetic joined-fixture and negative status tests exercise this
 consistency invariant. It does not authenticate the embedding, prove Host Live
 or attest protected verification. New Windows/Linux CI must pass separately.
+
+## Post-intent destination path integrity (new offline CI required)
+
+The supervised Local delivery path now repeats the clean Git baseline, lexical
+root/ancestor, regular-file type, original-byte and mode checks **after** the
+asynchronous durable intent callback and **before** creating any sibling stage
+files. It also rechecks root, parent and target types, bytes and modes immediately
+before each staged rename. A same-byte symlink substitution or parent Junction
+introduced while recording the intent is treated as `DESTINATION_UNCERTAIN`
+and never produces a Delivery receipt. Regression cases simulate both post-intent
+path swaps. This narrows observable time-of-check/time-of-use windows but cannot
+provide atomicity or OS-level confinement; Host Live remains UNVERIFIED.
+The new head requires its own Windows/Linux CI result before an offline PASS claim.
