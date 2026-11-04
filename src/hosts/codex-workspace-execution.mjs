@@ -57,6 +57,14 @@ export async function captureCodexWorkspaceEdits({candidateDirectory, contract, 
     root:candidateDirectory,baseTreeHash:hash(initialTree),
     contractHash:hash(contract),allowedFiles:[...allowed].sort(),model,timeoutMs};
   if(await approved(Object.freeze({...approvedScope}))!==true) reject('Supervised Host workspace write not granted');
+  // Grant review can be asynchronous. Never hand the Host a write-enabled Turn
+  // for a Candidate that changed while its exact base-tree grant was pending.
+  // This is a drift check, not an OS sandbox or a Host permission substitute.
+  const afterGrant=await observeTree(candidateDirectory);
+  const afterGrantHash=hash([...afterGrant].map(([name,entry])=>
+    [name,hash(entry.bytes),entry.mode]));
+  if(afterGrantHash!==approvedScope.baseTreeHash)
+    reject('Candidate snapshot changed during Host workspace authorization');
   if(cancelled())reject('Candidate execution cancelled before Host Turn');
   const prompt=JSON.stringify({goal:contract.goal,approvedScope,files:contract.files,
     instructions:'Use Codex Host tools only to edit the explicitly allowed existing source files under this candidate root. '+

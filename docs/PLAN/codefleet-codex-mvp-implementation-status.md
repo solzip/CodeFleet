@@ -67,3 +67,7 @@ A model-produced proposal alone cannot modify the target. Every grant comes from
 the trusted embedding, and the underlying store/lease/revision checks remain in
 charge. This path still needs native Host Live and full NEW_PROJECT objective
 acceptance after code completion.
+
+## Workspace-write grant-time Candidate drift guard
+
+An asynchronously reviewed supervised Host workspace-write grant is now tied to a second complete Candidate tree observation immediately **after** exact-grant approval and **before** the first write-enabled Host Turn. Changed approved source bytes, out-of-scope bytes, file modes or tree entries stop the Turn with `UNKNOWN_NO_REPLAY` instead of accepting a stale `baseTreeHash`. Two isolated negative regression tests assert that the transport is not invoked after grant-time drift. This narrows a local time-of-check/time-of-use window; it does **not** provide OS confinement, prove post-check immunity to races, authorize the Host, or constitute Host Live acceptance. The previous `ba44534c` GitHub Actions run succeeded on Windows and Linux; this new commit requires its **own** CI result before any offline PASS claim.

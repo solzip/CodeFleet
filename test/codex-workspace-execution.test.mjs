@@ -46,6 +46,30 @@ test('approval denial causes zero Host calls and source remains unchanged',async
  assert.equal(called,false);
  assert.equal(await readFile(join(f.root,'src/a.js'),'utf8'),'export const value = 1;');
 });
+test('approved source drift during an asynchronous workspace grant prevents a Host Turn',async t=>{
+ const f=await fixture(t);let called=false;
+ await assert.rejects(captureCodexWorkspaceEdits({candidateDirectory:f.root,
+  contract:f.contract,context:f.context,executable:process.execPath,model:'fixture',
+  approved:async scope=>{
+   assert.equal(scope.baseTreeHash.length,64);
+   await writeFile(join(f.root,'src/a.js'),'export const value = 99;');
+   return true;
+  },transport:async()=>{called=true;return hostReceipt();}}),
+  /Candidate snapshot changed during Host workspace authorization/);
+ assert.equal(called,false);
+ assert.equal(await readFile(join(f.root,'src/a.js'),'utf8'),'export const value = 99;');
+});
+test('out-of-scope drift during workspace authorization blocks before Host Turn',async t=>{
+ const f=await fixture(t);let called=false;
+ await assert.rejects(captureCodexWorkspaceEdits({candidateDirectory:f.root,
+  contract:f.contract,context:f.context,executable:process.execPath,model:'fixture',
+  approved:async()=>{
+   await writeFile(join(f.root,'src/b.js'),'unreviewed during grant');
+   return true;
+  },transport:async()=>{called=true;return hostReceipt();}}),
+  /Candidate snapshot changed during Host workspace authorization/);
+ assert.equal(called,false);
+});
 test('out-of-scope file changes are detected from actual bytes',async t=>{
  const f=await fixture(t);
  await assert.rejects(captureCodexWorkspaceEdits({candidateDirectory:f.root,
