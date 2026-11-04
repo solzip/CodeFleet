@@ -165,6 +165,7 @@ test('current Objective status rejects a same-byte symlink substituted after COM
   runOverride:{repo:root},
   childOverride:{repo:root,candidateHash:targetHash},
   deliveryOverride:{candidateHash:targetHash,targetTreeHash:targetHash},
+  intentOverride:{destination:root,candidateHash:targetHash},
   decisionOverride:{targetTreeHash:targetHash},
   evidenceOverride:{targetTreeHash:targetHash}
  });
@@ -210,6 +211,7 @@ test('Objective status refuses delivered roots reached through a symlinked ances
  const redirected=join(linked,'delivered');
  const x=fixture({runOverride:{repo:redirected},childOverride:{repo:redirected,candidateHash:actualHash},
   deliveryOverride:{candidateHash:actualHash,targetTreeHash:actualHash},
+  intentOverride:{destination:redirected,candidateHash:actualHash},
   decisionOverride:{targetTreeHash:actualHash},evidenceOverride:{targetTreeHash:actualHash}});
  const result=await readDeliveredObjectiveStatus(x.store,'objective-1');
  assert.equal(result.objectiveComplete,false);
