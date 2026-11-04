@@ -33,8 +33,14 @@ export async function snapshot(repo, base, target) {
   return entries.map(e => e.name);
 }
 export async function context(directory, contract) {
+  const names = [...new Set([...contract.context, ...contract.tests])];
+  // The context manifest feeds an autonomous Host Turn. A regular leaf alone
+  // does not prove its parent directories stay within this candidate: readFile
+  // follows symlinked parents. Enforce the same portable regular-file boundary
+  // used by the Candidate and delivered-tree observers before consuming bytes.
+  if (names.length) await candidateHash(directory, names);
   const files = {}; let bytes = 0;
-  for (const name of new Set([...contract.context, ...contract.tests])) {
+  for (const name of names) {
     const stat = await lstat(path.join(directory, name));
     if (!stat.isFile() || stat.isSymbolicLink()) throw Error('Context must be regular files');
     const body = await readFile(path.join(directory, name), 'utf8'); bytes += Buffer.byteLength(body);

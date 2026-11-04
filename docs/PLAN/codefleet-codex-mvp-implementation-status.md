@@ -123,3 +123,16 @@ is reported as a test skip rather than falsely called verified. This inspection
 does not create OS confinement, guarantee atomicity against concurrent swaps,
 or yet attest all file modes. The previous `327fdc6` Windows/Linux CI succeeded;
 the new head requires fresh CI before any PASS claim.
+
+## Context manifest path boundary (offline regression pending)
+
+Before a trusted Alpha Controller builds the pinned context manifest for a Host Turn,
+`context()` now invokes the same `candidateHash` regular-file observer used for
+Candidate and delivered-tree observations on the complete requested source/test
+set. This blocks absolute/traversal paths, symlinked parent directories and
+symlinked Candidate roots before reading a file into Host context, even if the
+final file itself is regular and readable. Offline regression fixtures cover
+normal portable hidden files, out-of-root traversal, symlinked parents and
+symlinked roots. This is a best-effort pre-read boundary, not atomic filesystem
+confinement against concurrent swaps, nor an authorization to run a Host.
+The new commit requires its own Windows/Linux CI before calling these tests PASS.
