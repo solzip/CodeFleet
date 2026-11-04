@@ -11,7 +11,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 export const APPROVAL_ENV = "CODEFLEET_P1_HANDSHAKE_APPROVED";
 export const APPROVAL_VALUE = "P1_APP_SERVER_HANDSHAKE_APPROVED";
 export const ALLOWED_OUTBOUND_METHODS = new Set(["initialize", "initialized", "model/list"]);
-export const ALLOWED_SERVER_NOTIFICATIONS = new Set(["account/updated", "account/rateLimits/updated"]);
+// Codex rust-v0.166.0 defines remoteControl/status/changed as a non-experimental
+// ServerNotification. It is accepted inbound only; params are intentionally discarded.
+// https://github.com/openai/codex/blob/rust-v0.166.0/codex-rs/app-server-protocol/src/protocol/common.rs
+// https://github.com/openai/codex/blob/rust-v0.166.0/codex-rs/app-server-protocol/schema/typescript/ServerNotificationEnvelope.ts
+export const ALLOWED_SERVER_NOTIFICATIONS = new Set(["account/updated", "account/rateLimits/updated", "remoteControl/status/changed"]);
 export const LIMITS = Object.freeze({ lineBytes: 256 * 1024, stdoutBytes: 2 * 1024 * 1024, stderrBytes: 64 * 1024, manifestBytes: 64 * 1024, shutdownMs: 2_000 });
 
 const HASH_PATTERN = /^[A-F0-9]{64}$/;
@@ -50,12 +54,13 @@ export function minimalProtocolRecord(direction, message) {
 }
 
 export class HandshakeState {
-  constructor() { this.expectedId = 1; this.complete = false; }
+  constructor() { this.expectedId = 1; this.complete = false; this.notificationCounts = new Map(); }
   accept(message) {
     if (this.complete) throw new Error("message received after handshake completion");
     if (Object.hasOwn(message, "method")) {
       if (Object.hasOwn(message, "id")) throw new Error(`unapproved server request: ${String(message.method)}`);
       if (!ALLOWED_SERVER_NOTIFICATIONS.has(message.method)) throw new Error(`unapproved server notification: ${String(message.method)}`);
+      this.notificationCounts.set(message.method, (this.notificationCounts.get(message.method) ?? 0) + 1);
       return [];
     }
     if (!Object.hasOwn(message, "id") || message.id !== this.expectedId) throw new Error(`response ID mismatch: expected ${this.expectedId}`);
@@ -186,7 +191,8 @@ export async function runProof(options, dependencies = {}) {
   if (!termination.confirmed) failure = failure ?? new Error("App Server termination could not be confirmed");
   if (!failure && termination.forced) failure = new Error("App Server required forced termination after handshake");
   if (!failure && termination.code !== 0) failure = new Error(`App Server exited with nonzero status ${termination.code}`);
-  const result = await writeEvidence(paths, transcript, { status: failure ? "P1_FAILED" : "P1_HANDSHAKE_OBSERVED", passed: !failure && termination.confirmed && termination.code === 0, command: ["<CODEX_EXE>", "app-server", "--listen", "stdio://", "--strict-config"], elapsedMs: Date.now() - started, stdoutBytes, stderrBytes, termination, error: failure ? redact(failure.message, replacements) : null });
+  const notificationCounts = Object.fromEntries([...state.notificationCounts].sort(([left], [right]) => left.localeCompare(right)));
+  const result = await writeEvidence(paths, transcript, { status: failure ? "P1_FAILED" : "P1_HANDSHAKE_OBSERVED", passed: !failure && termination.confirmed && termination.code === 0, command: ["<CODEX_EXE>", "app-server", "--listen", "stdio://", "--strict-config"], elapsedMs: Date.now() - started, stdoutBytes, stderrBytes, notificationCounts, termination, error: failure ? redact(failure.message, replacements) : null });
   if (!result.passed) throw Object.assign(new Error(result.error ?? "P1 failed"), { evidence: result });
   return result;
 }

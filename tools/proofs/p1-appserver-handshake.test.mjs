@@ -77,8 +77,16 @@ async function runScenario(t, scenario, overrides = {}) {
 test("state distinguishes allowed notification from server request and unknown notification", () => {
   const state = new HandshakeState();
   assert.deepEqual(state.accept({ method: "account/updated", params: { email: "omit" } }), []);
+  assert.deepEqual(state.accept({ method: "remoteControl/status/changed", params: { serverName: "omit" } }), []);
+  assert.equal(state.notificationCounts.get("remoteControl/status/changed"), 1);
   assert.throws(() => state.accept({ id: 10, method: "account/chatgptAuthTokens/refresh", params: {} }), /server request/);
   assert.throws(() => state.accept({ method: "unverified/event", params: {} }), /server notification/);
+});
+
+test("duplicate response ID is rejected after the state advances", () => {
+  const state = new HandshakeState();
+  state.accept({ id: 1, result: {} });
+  assert.throws(() => state.accept({ id: 1, result: {} }), /ID mismatch/);
 });
 
 test("parsing rejects malformed and oversized JSONL", () => {
@@ -130,10 +138,22 @@ test("documented stable notification is accepted but its params are omitted", as
   assert.equal(transcript.includes("never-record"), false);
 });
 
+test("remote-control status notification is receive-only, counted, and params are omitted", async (t) => {
+  const { prepared, promise } = await runScenario(t, "remote-control-notification");
+  const result = await promise;
+  const transcript = await readFile(join(prepared.artifacts, "p1-redacted-transcript.jsonl"), "utf8");
+  const records = transcript.trim().split("\n").map((line) => JSON.parse(line));
+  assert.equal(result.notificationCounts["remoteControl/status/changed"], 1);
+  assert.equal(records.filter((record) => record.direction === "in" && record.method === "remoteControl/status/changed").length, 1);
+  assert.deepEqual(records.filter((record) => record.direction === "out").map((record) => record.method), ["initialize", "initialized", "model/list"]);
+  assert.equal(/serverName|installationId|environmentId|never-record/.test(transcript), false);
+});
+
 for (const [scenario, pattern] of [
   ["mismatch", /ID mismatch/],
   ["malformed", /malformed JSONL/],
   ["request", /server request/],
+  ["remote-control-request", /server request/],
   ["unknown-notification", /server notification/],
   ["crash", /exited before handshake/],
   ["missing", /timeout/],

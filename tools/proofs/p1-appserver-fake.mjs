@@ -18,7 +18,9 @@ rl.on("line", (line) => {
     }
     if (scenario === "stderr-limit") process.stderr.write("x".repeat(70_000));
     if (scenario === "request") send({ id: 77, method: "account/chatgptAuthTokens/refresh", params: { token: "never-record" } });
+    if (scenario === "remote-control-request") send({ id: 77, method: "remoteControl/status/changed", params: { serverName: "never-record", installationId: "never-record", environmentId: "never-record" } });
     if (scenario === "notification") send({ method: "account/updated", params: { email: "private@example.test", token: "never-record" } });
+    if (scenario === "remote-control-notification") send({ method: "remoteControl/status/changed", params: { serverName: "never-record", installationId: "never-record", environmentId: "never-record" } });
     if (scenario === "unknown-notification") send({ method: "unverified/event", params: { secret: "never-record" } });
     send({ id: 1, result: { userAgent: "fake", platformFamily: "test", platformOs: "test", account: { email: "never-record" } } });
   } else if (message.method === "model/list" && scenario !== "missing") {
