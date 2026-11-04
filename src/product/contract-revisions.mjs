@@ -9,6 +9,7 @@ import { reservationStatus } from './reservations.mjs';
 import { localTree } from '../verification/backends.mjs';
 import { bootstrapGuard } from '../hosts/workflow-authorization.mjs';
 import { gitStatus } from '../intent/probe.mjs';
+import { recordRevisionCoordination } from './work-log.mjs';
 
 function settled(store, current) {
   if (bootstrapGuard(store, current.id)) throw Error('Signed Operator contract revision requires its own trusted approval; supervised route refused');
@@ -225,6 +226,7 @@ export async function acceptContractRevision(store,reviewRef,{trust,acknowledgeU
       store.db.prepare('UPDATE bootstrap_decisions SET revoked=? WHERE taskId=? AND consumed IS NULL AND revoked IS NULL').run(Date.now(),r.taskId);
     if(store.db.prepare('UPDATE product_tasks SET revision=?,body=? WHERE id=? AND revision=?').run(next.revision,JSON.stringify(next),r.taskId,r.taskRevision).changes!==1)throw Error('Task revision conflict');
     store.event(r.taskId,'CONTRACT_REVISION_APPLIED',{revision:next.revision,planRef,receiptRef,contractRevision:next.contractRevision,reviewRef,reviewHash:trust,executionGranted:false});
+    recordRevisionCoordination(store,x.current,next,receiptRef,reviewRef,x.impact);
     store.db.exec('COMMIT');
   } catch(e){store.db.exec('ROLLBACK');throw e;}
   return {action:'CONTRACT_REVISED',taskId:r.taskId,revision:next.revision,contractRevision:next.contractRevision,receiptRef,
