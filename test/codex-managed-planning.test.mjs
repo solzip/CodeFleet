@@ -10,7 +10,8 @@ import { planWithCodexManagedThread, planningOutputSchema } from '../src/hosts/c
 const goal='Repair arithmetic behavior in src/a.js with test/a.test.js and independently verify results.';
 async function setup(t) {
   const root=await mkdtemp(join(tmpdir(),'cf-planning-turn-'));
-  t.after(()=>rm(root,{recursive:true,force:true}));
+  let activeStore;
+  t.after(async()=>{ activeStore?.close(); await rm(root,{recursive:true,force:true}); });
   const repo=join(root,'repo');
   await mkdir(join(repo,'src'),{recursive:true});
   await mkdir(join(repo,'test'));
@@ -20,8 +21,7 @@ async function setup(t) {
     const result=await git(repo,args);
     assert.equal(result.exitCode,0,result.stderr.toString());
   }
-  const store=new Store(join(root,'state'));
-  t.after(()=>store.close());
+  const store=new Store(join(root,'state')); activeStore=store;
   return {repo,store,settings:{executable:process.execPath,model:'fixture-model',cwd:repo}};
 }
 function proposedReceipt(call) {

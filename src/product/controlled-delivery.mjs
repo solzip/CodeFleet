@@ -43,15 +43,26 @@ export async function applyLocalDelivery({ destination, base, files, candidatePa
   const intent = deliveryIntent({ runId, revision, base, destination: root,
     candidateHash: verifiedCandidateHash, files });
   const selected = await repository(root);
-  if (selected.repo !== root || selected.base !== base) throw Error('Destination Git baseline/status changed; no apply');
-  const resolvedRoot = await realpath(root);
-  if (resolvedRoot !== root) throw Error('Destination root link or Junction unsupported');
+  const resolvedRoot = await realpath(root), repoRoot = await realpath(selected.repo);
+  const normalized = p => process.platform === 'win32' ? p.toLowerCase() : p;
+  if (normalized(repoRoot) !== normalized(resolvedRoot) || selected.base !== base)
+    throw Error('Destination Git baseline/status changed; no apply');
+  if ((await lstat(root)).isSymbolicLink()) throw Error('Destination root link or Junction unsupported');
   if (cancelled()) throw Error('Delivery cancelled before effect');
   const targets = [];
   for (const [name, value] of Object.entries(files).sort(([a], [b]) => a.localeCompare(b))) {
     const dest = path.join(root, name);
+    let ancestor = path.dirname(dest);
+    while (ancestor !== root) {
+      if ((await lstat(ancestor)).isSymbolicLink()) throw Error('Destination parent link/Junction unsupported');
+      const next = path.dirname(ancestor);
+      if (next === ancestor) throw Error('Destination path escaped root');
+      ancestor = next;
+    }
     const parent = await realpath(path.dirname(dest));
-    if (parent !== path.dirname(dest)) throw Error('Destination parent symlink/Junction unsupported');
+    const relative = path.relative(resolvedRoot,parent);
+    if (relative.startsWith('..') || path.isAbsolute(relative))
+      throw Error('Destination parent path escaped approved root');
     const status = await lstat(dest);
     if (!status.isFile() || status.isSymbolicLink()) throw Error('Destination file is not regular');
     const before = await readFile(dest);

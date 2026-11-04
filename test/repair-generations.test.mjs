@@ -14,7 +14,8 @@ const source=()=>({schemaVersion:1,goal:'Repair an arithmetic regression using a
  files:['src/a.js'],context:['src/a.js'],tests:['test/a.test.js'],maxAttempts:3,
  timeoutSeconds:120,attemptBudgetUsd:1,delivery:{mode:'local'}});
 async function setup(t){
- const root=await mkdtemp(join(tmpdir(),'cf-repair-gen-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tmpdir(),'cf-repair-gen-'));let activeStore;
+ t.after(async()=>{ activeStore?.close(); await rm(root,{recursive:true,force:true}); });
  const repo=join(root,'repo');await mkdir(join(repo,'src'),{recursive:true});await mkdir(join(repo,'test'));
  await writeFile(join(repo,'src/a.js'),'module.exports = (x,y)=>x+y;');
  await writeFile(join(repo,'test/a.test.js'),'// regression fixture');
@@ -22,7 +23,7 @@ async function setup(t){
    const r=await git(repo,args);assert.equal(r.exitCode,0,r.stderr.toString());
  }
  const gitHead=await git(repo,['rev-parse','HEAD']);const base=gitHead.stdout.toString().trim();
- const store=new Store(join(root,'state'));t.after(()=>store.close());
+ const store=new Store(join(root,'state'));activeStore=store;
  const contract=source(),graph=definition(contract,{workflowId:'repair',base,items:[{
   id:'a',dependencies:[],priority:0,files:['src/a.js'],tests:['test/a.test.js'],
   acceptanceCriteria:['Arithmetic regression independently verified']

@@ -23,7 +23,7 @@ test('predecessor input derives actual verified patch and exact evidence refs', 
   const r=predecessorInput(graph,'c',{ a:'SUCCEEDED',b:'SUCCEEDED' },rows,getChild,accepted,1);
   assert.deepEqual(Object.keys(r.changes),['src/a.js','src/b.js']);
   assert.deepEqual(r.manifest.orderedAncestors,['a','b']);
-  assert.equal(r.manifest.sources[0].evidenceHash,'evidence-a');
+  assert.equal(r.manifest.sources[0].evidenceHash,'evidence-child-a');
 });
 test('a missing dependency outcome or stale revision blocks the child', () => {
   assert.throws(()=>predecessorInput(graph,'c',{a:'FAILED',b:'SUCCEEDED'},rows,getChild,accepted,1),/not accepted/);
