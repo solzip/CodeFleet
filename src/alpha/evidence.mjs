@@ -13,8 +13,18 @@ export async function verifiedEvidence(store, run) {
     validateWorkflow(run.contract, source);
     if (run.state !== 'COMPLETED' || !run.finalRunId || hash(store.readArtifact(run.graphRef)) !== hash(run.contract)) throw Error('Workflow final verification incomplete');
     const records = attempts(store, run.id);
-    if (records.length !== run.contract.items.length + 1 || records.some(a => a.status !== 'SUCCEEDED')) throw Error('Workflow attempts incomplete');
-    for (const a of records) {
+    const expectedItems = new Set([...run.contract.items.map(n=>n.id),'final']);
+    const acceptedRows = [];
+    for (const itemId of expectedItems) {
+      const history = records.filter(a=>a.itemId===itemId);
+      if (!history.length || history.some(a=>a.status==='STARTED') ||
+          history.at(-1).status !== 'SUCCEEDED' ||
+          history.slice(0,-1).some(a=>a.status!=='FAILED'))
+        throw Error('Workflow Attempt history lacks a terminal accepted generation');
+      acceptedRows.push(history.at(-1));
+    }
+    if (records.some(a=>!expectedItems.has(a.itemId))) throw Error('Unexpected Workflow Attempt identity');
+    for (const a of acceptedRows) {
       const c = store.get(a.childId), node = run.contract.items.find(n => n.id === a.itemId);
       const final = a.itemId === 'final';
       if (c.workflowParent !== run.id || c.base !== run.base || (!final && !node) || c.contractHash !== hash({ ...source, files: final ? source.files : node.files, tests: final ? source.tests : node.tests, maxAttempts: 1 })) throw Error('Workflow child contract mismatch');

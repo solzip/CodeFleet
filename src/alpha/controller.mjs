@@ -15,6 +15,7 @@ import { evaluateDeliveredObjective } from '../product/objective-judge.mjs';
 import { approvedDevelopmentBaseline } from './development-baseline.mjs';
 import { delegate, sendMessage, receiveMessages } from '../workflow/collaboration.mjs';
 import * as workflowStore from '../workflow/persistence.mjs';
+import { enableRepairStorage, reserveRepairGeneration } from '../workflow/repair-generations.mjs';
 import { matchTestIdentity } from './verifier.mjs';
 import { deliver } from './delivery.mjs';
 import { workflowGuard } from '../hosts/workflow-authorization.mjs';
@@ -157,7 +158,13 @@ export async function execute(store, id, dependencies = {}, options = {}) {
       }
       save('READY', 'Independent green baseline explicitly admitted for development');
     }
-    let current = { ...originals }; let feedback = null;
+    let current = { ...originals };
+    let feedback = run.repairEvidenceRef ? {
+      ...store.readArtifact(run.repairEvidenceRef),
+      previousProposal: run.repairProposalRef
+        ? store.readArtifact(run.repairProposalRef).proposal : null,
+      repairGeneration: run.repairGeneration
+    } : null;
     if (run.proposalHash) {
       const previous = store.readArtifact(run.proposalHash);
       current = applyEdits(run.contract, originals, previous.proposal);
@@ -283,6 +290,9 @@ async function executeWorkflow(store, id, dependencies, options) {
     return patch;
   };
   try {
+    // Explicitly trusted integration opt-in. Ordinary Stores and historical
+    // Workflow users never migrate their state as a side effect of inspection.
+    if (dependencies.repairPolicy?.enableStorage === true) enableRepairStorage(store);
     if (run.state === 'COMPLETED' && run.contract.schemaVersion === 2) {
       const child = store.get(run.finalRunId); accepted(child);
       if (!child.candidatePaths || await candidateHash(child.candidateDirectory, child.candidatePaths) !== child.candidateHash) throw Error('Final candidate tree changed after verification');
@@ -400,7 +410,7 @@ async function executeWorkflow(store, id, dependencies, options) {
       }
       run.workItemBlocks = {};
       for (const n of run.contract.items) if (run.states[n.id] !== 'SUCCEEDED') {
-        const prior = records.find(a => a.itemId === n.id);
+        const prior = records.filter(a => a.itemId === n.id).at(-1);
         const admission = policyAdmission(run, n.id, dependencies.workItemPolicy);
         const operator = workflowGuard(store, run)?.admission(run, n.id);
         const reasons = prior ? ['Previous attempt requires review; no replay'] :
@@ -411,20 +421,47 @@ async function executeWorkflow(store, id, dependencies, options) {
           run.workItemBlocks[n.id] = reasons.length ? reasons : ['Dependencies not satisfied'];
         } else run.states[n.id] = 'READY';
       }
-      const nodes = readyBatch(run.contract, run.states);
+      let nodes = readyBatch(run.contract, run.states);
       const final = run.contract.items.every(n => run.states[n.id] === 'SUCCEEDED');
+      let repairNode = null;
+      if (!nodes.length && !final && typeof dependencies.repairPolicy?.authorize === 'function') {
+        for (const item of run.contract.items) {
+          if (run.states[item.id] === 'SUCCEEDED' ||
+              item.dependencies.some(d => run.states[d] !== 'SUCCEEDED')) continue;
+          const history = records.filter(a => a.itemId === item.id);
+          const last = history.at(-1);
+          if (!last || last.status !== 'FAILED' || history.length >=
+              (dependencies.repairPolicy.maxGenerations ?? 2)) continue;
+          const previous = store.get(last.childId);
+          if (!previous.lastEvidenceHash) continue;
+          const granted = await dependencies.repairPolicy.authorize({
+            runId:run.id,revision:run.revision,workflowHash:run.contractHash,
+            itemId:item.id,previousChildId:last.childId,
+            failureEvidenceRef:previous.lastEvidenceHash,
+            nextGeneration:(last.generation ?? 1)+1,
+            remainingAttemptBudget:source.maxAttempts-run.attempts
+          });
+          guard();
+          if (granted !== true) continue;
+          run.states[item.id] = 'READY'; repairNode = item;
+          nodes = [item]; break;
+        }
+      }
       run.workflowStagesComplete = final;
       if (!nodes.length && !final) return save('WAITING_HUMAN', 'WorkItem capability, approval or dependency gates unsatisfied');
       const selection = await choose(); run.providerId ??= selection.providerId;
       const changes = {};
-      if (final) for (const a of records) {
+      if (final) for (const a of records.filter(a=>a.status==='SUCCEEDED' && a.itemId!=='final')) {
         const child = store.get(a.childId), patch = accepted(child);
         for (const [file, body] of Object.entries(patch.changedFiles)) {
           if (Object.hasOwn(changes, file)) throw Error('ChangeSet file conflict');
           changes[file] = body;
         }
       }
-      if (final) run.integrationHash = store.artifact({ base: run.base, revision: run.revision, graphHash: run.contractHash, children: records.map(a => a.childId), changes });
+      if (final) run.integrationHash = store.artifact({ base: run.base, revision: run.revision,
+        graphHash: run.contractHash, children: records.filter(a=>a.status==='SUCCEEDED').map(a => a.childId),
+        repairHistory: records.filter(a=>(a.generation ?? 1)>1).map(a=>({itemId:a.itemId,generation:a.generation,status:a.status})),
+        changes });
       save(final ? 'VERIFYING' : 'RUNNING', final ? 'Serial integration candidate' : 'Dependency-ready batch');
       const batch = [];
       // Reserve before launching; a crash in this window remains unresolved and
@@ -438,7 +475,12 @@ async function executeWorkflow(store, id, dependencies, options) {
           ? predecessorInput(run.contract, itemId, run.states, records,
               childId => store.get(childId), accepted, run.revision)
           : null;
-        const child = workflowStore.reserve(store, run, owner, itemId, contract);
+        const child = repairNode && itemId === repairNode.id
+          ? reserveRepairGeneration(store,run,owner,itemId,contract,{
+              expectedFailureEvidenceRef:store.get(records.filter(a=>a.itemId===itemId).at(-1).childId).lastEvidenceHash,
+              maxGenerations:dependencies.repairPolicy.maxGenerations ?? 2
+            })
+          : workflowStore.reserve(store, run, owner, itemId, contract);
         activeChildren.add(child.id);
         if (inherited) {
           const inputRef = store.artifact(inherited.manifest);
@@ -489,7 +531,9 @@ async function executeWorkflow(store, id, dependencies, options) {
           run.finalRunId = child.id; run.finalContractHash = child.contractHash;
           run.acceptedHash = response.acceptedHash; run.evidenceHash = response.evidenceHash; run.candidateHash = response.candidateHash;
         }
-        workflowStore.finish(store, run, owner, { itemId }, success ? 'SUCCEEDED' : 'FAILED');
+        workflowStore.finish(store, run, owner,
+          { itemId,generation:child.repairGeneration ?? 1 },
+          success ? 'SUCCEEDED' : 'FAILED');
         failed ||= !success;
       }
       guard();
