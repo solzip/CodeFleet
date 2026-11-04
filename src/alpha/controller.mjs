@@ -9,6 +9,7 @@ import { propose } from './provider.mjs';
 import { ProviderError, requireProposal } from '../providers/interface.mjs';
 import { createRegistry, selectProvider } from '../providers/registry.mjs';
 import { readyBatch, validateWorkflow } from '../workflow/definition.mjs';
+import { predecessorInput, applyPredecessorOverlay } from '../workflow/predecessor-context.mjs';
 import { delegate, sendMessage, receiveMessages } from '../workflow/collaboration.mjs';
 import * as workflowStore from '../workflow/persistence.mjs';
 import { matchTestIdentity } from './verifier.mjs';
@@ -337,19 +338,42 @@ async function executeWorkflow(store, id, dependencies, options) {
       for (const node of final ? [null] : nodes) {
         const itemId = final ? 'final' : node.id;
         const contract = validateContract({ ...source, files: final ? source.files : node.files, tests: final ? source.tests : node.tests, maxAttempts: 1 });
+        // Bind every accepted ancestor's actual verified code before any new
+        // WorkItem is launched. A terminal state or model summary is insufficient.
+        const inherited = node
+          ? predecessorInput(run.contract, itemId, run.states, records,
+              childId => store.get(childId), accepted, run.revision)
+          : null;
         const child = workflowStore.reserve(store, run, owner, itemId, contract);
         activeChildren.add(child.id);
-        batch.push({ node, itemId, child });
+        if (inherited) {
+          const inputRef = store.artifact(inherited.manifest);
+          store.event(child.id, 'WORKITEM_PREDECESSOR_INPUT_BOUND', {
+            parentRunId: run.id, itemId, inputRef, manifestHash: hash(inherited.manifest)
+          });
+        }
+        batch.push({ node, itemId, child, inherited });
         if (!final) run.states[itemId] = 'RUNNING';
       }
-      const responses = await Promise.allSettled(batch.map(async ({ node, child }) => {
+      const responses = await Promise.allSettled(batch.map(async ({ node, child, inherited }) => {
+        // The existing child Controller still constructs its candidate from
+        // pinned Git. Overlay the immutable, accepted ancestors into ONLY
+        // that isolated snapshot before context, baseline tests or Host calls.
+        const snapshotWithPredecessors = inherited
+          ? async (repo, base, directory) => {
+              const names = await (dependencies.snapshot ?? snapshot)(repo, base, directory);
+              await applyPredecessorOverlay(directory, names, inherited.changes);
+              return names;
+            }
+          : dependencies.snapshot ?? snapshot;
         const channels = run.contract.schemaVersion === 2 && !final
           ? Object.fromEntries(Object.keys(node.roles).map(role => {
             const token = delegate(store, run.id, child.id, owner, role);
             return [role, { assignment: token.assignment, send: message => sendMessage(store, token, message), read: correlationId => receiveMessages(store, token, correlationId) }];
           })) : null;
         if (channels && dependencies.collaborate) await dependencies.collaborate(channels);
-        return execute(store, child.id, { ...dependencies, propose: async request => {
+        return execute(store, child.id, { ...dependencies,
+          snapshot: snapshotWithPredecessors, propose: async request => {
           guard();
           if (final) return { cost: 0, proposal: { summary: 'Host integration of independently verified disjoint edits', edits: Object.entries(changes).map(([file, body]) => ({ path: file, oldText: request.files[file], newText: body })) } };
           await choose();
