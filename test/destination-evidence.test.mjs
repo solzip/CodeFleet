@@ -12,7 +12,8 @@ async function fixture(t){
  await mkdir(join(root,'src'));await writeFile(join(root,'src/a.js'),'export const answer = 42;');
  const targetHash=hash([['src/a.js',hash(Buffer.from('export const answer = 42;'))]]);
  const run={id:'run-1',revision:1,repo:root,contractHash:'a'.repeat(64)};
- const delivery={status:'DELIVERED_NOT_VERIFIED',candidateHash:targetHash,targetTreeHash:targetHash};
+ const delivery={status:'DELIVERED_NOT_VERIFIED',runId:run.id,revision:run.revision,
+  semanticCriteriaVerified:false,candidateHash:targetHash,targetTreeHash:targetHash};
  const candidate={repo:root,candidateHash:targetHash,candidatePaths:['src/a.js']};
  const recorded=new Map();
  const store={artifact:e=>{const ref=hash(e);recorded.set(ref,e);return ref;},
@@ -35,7 +36,7 @@ test('trusted grant and actual local test result create criterion Evidence for d
     };}
   }
  });
- const result=await verifier.verify({run:f.run,delivery:f.delivery,candidate:f.candidate});
+ const result=await verifier.verify({run:f.run,delivery:f.delivery,candidate:f.candidate,cancelled:()=>false});
  assert.equal(approvals,1);assert.equal(verifications,1);
  const observed=result.readVerifiedEvidence(result.evidenceRefs.C1);
  assert.equal(observed.kind,'OBJECTIVE_CRITERION_OBSERVATION_V1');
@@ -48,26 +49,88 @@ test('denied command grant causes zero test execution',async t=>{
  const verifier=createLocalDestinationVerifier(f.store,{criteria:f.criteria,
   commandSpecs:f.commandSpecs,obtainGrant:async()=>false,
   backend:{authorize:async()=>{invoked=true;},verify:async()=>{invoked=true;}}});
- await assert.rejects(verifier.verify({run:f.run,delivery:f.delivery,candidate:f.candidate}),/approval missing/);
+ await assert.rejects(verifier.verify({run:f.run,delivery:f.delivery,candidate:f.candidate,cancelled:()=>false}),/approval missing/);
  assert.equal(invoked,false);
 });
 test('unapplied Candidate and drifted bytes cannot satisfy destination Evidence',async t=>{
  const f=await fixture(t);
  const verifier=createLocalDestinationVerifier(f.store,{criteria:f.criteria,commandSpecs:f.commandSpecs,obtainGrant:async()=>true});
- await assert.rejects(verifier.verify({run:f.run,delivery:{...f.delivery,status:'VERIFIED_CANDIDATE_AVAILABLE'},candidate:f.candidate}),/binding absent/);
+ await assert.rejects(verifier.verify({run:f.run,delivery:{...f.delivery,status:'VERIFIED_CANDIDATE_AVAILABLE'},candidate:f.candidate,cancelled:()=>false}),/binding absent/);
  await writeFile(join(f.root,'src/a.js'),'untrusted drift');
- await assert.rejects(verifier.verify({run:f.run,delivery:f.delivery,candidate:f.candidate}),/changed/);
+ await assert.rejects(verifier.verify({run:f.run,delivery:f.delivery,candidate:f.candidate,cancelled:()=>false}),/changed/);
 });
 test('missing criterion command fails before any approval grant',async t=>{
  const f=await fixture(t);let requested=false;
  const verifier=createLocalDestinationVerifier(f.store,{criteria:f.criteria,commandSpecs:{},
   obtainGrant:async()=>{requested=true;return true;}});
- await assert.rejects(verifier.verify({run:f.run,delivery:f.delivery,candidate:f.candidate}),/command missing/);
+ await assert.rejects(verifier.verify({run:f.run,delivery:f.delivery,candidate:f.candidate,cancelled:()=>false}),/command missing/);
  assert.equal(requested,false);
 });
 test('subjective criteria remain unresolved and cannot be auto-granted',async t=>{
  const f=await fixture(t);
  const verifier=createLocalDestinationVerifier(f.store,{criteria:[{id:'owner',requiredAuthority:'OWNER_REVIEW'}],commandSpecs:{},obtainGrant:async()=>{throw Error('no');}});
- const result=await verifier.verify({run:f.run,delivery:f.delivery,candidate:f.candidate});
+ const result=await verifier.verify({run:f.run,delivery:f.delivery,candidate:f.candidate,cancelled:()=>false});
  assert.deepEqual(result.evidenceRefs,{});
+});
+
+
+test('missing live coordinator fence cannot run a destination command',async t=>{
+ const f=await fixture(t);let granted=false;
+ const verifier=createLocalDestinationVerifier(f.store,{criteria:f.criteria,
+  commandSpecs:f.commandSpecs,obtainGrant:async()=>{granted=true;return true;}});
+ await assert.rejects(verifier.verify({run:f.run,delivery:f.delivery,candidate:f.candidate}),
+  /cancellation fence required/);
+ assert.equal(granted,false);
+});
+
+test('a receipt for another Objective, revision or Candidate cannot create Evidence',async t=>{
+ const f=await fixture(t);let granted=false;
+ const verifier=createLocalDestinationVerifier(f.store,{criteria:f.criteria,
+  commandSpecs:f.commandSpecs,obtainGrant:async()=>{granted=true;return true;}});
+ for(const change of [
+  {runId:'different-objective'}, {revision:2},
+  {candidateHash:'f'.repeat(64)}, {semanticCriteriaVerified:true}
+ ]) {
+  await assert.rejects(verifier.verify({
+   run:f.run,delivery:{...f.delivery,...change},candidate:f.candidate,
+   cancelled:()=>false
+  }),/binding absent/,JSON.stringify(change));
+ }
+ assert.equal(granted,false);
+});
+
+test('revocation during an asynchronous grant prevents any Local command',async t=>{
+ const f=await fixture(t);let cancelled=false,invoked=false;
+ const verifier=createLocalDestinationVerifier(f.store,{
+  criteria:f.criteria,commandSpecs:f.commandSpecs,
+  obtainGrant:async()=>{cancelled=true;return true;},
+  backend:{authorize:async()=>{invoked=true;},verify:async()=>{invoked=true;}}
+ });
+ await assert.rejects(verifier.verify({run:f.run,delivery:f.delivery,
+  candidate:f.candidate,cancelled:()=>cancelled}),/cancelled or grant revoked/);
+ assert.equal(invoked,false);
+});
+
+test('revocation during a running Local check prevents successful Evidence persistence',async t=>{
+ const f=await fixture(t);let cancelled=false,artifacts=0,invoked=false;
+ const artifact=f.store.artifact;
+ f.store.artifact=value=>{artifacts++;return artifact(value);};
+ const verifier=createLocalDestinationVerifier(f.store,{
+  criteria:f.criteria,commandSpecs:f.commandSpecs,obtainGrant:async()=>true,
+  backend:{
+   authorize:async()=>Object.freeze({token:true}),
+   verify:async request=>{
+    invoked=true;
+    assert.equal(request.cancelled(),false);
+    cancelled=true;
+    return {status:'LOCAL_PASSED',evidenceIntegrity:'MATCHED',integrity:true,
+     executionAuthority:'LOCAL_EXECUTED',exitCode:0,tests:1,passed:1,
+     failed:0,skipped:0,todo:0,interrupted:false,truncated:false};
+   }
+  }
+ });
+ await assert.rejects(verifier.verify({run:f.run,delivery:f.delivery,
+  candidate:f.candidate,cancelled:()=>cancelled}),/cancelled or grant revoked/);
+ assert.equal(invoked,true);
+ assert.equal(artifacts,0);
 });

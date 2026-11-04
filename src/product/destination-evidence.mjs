@@ -23,16 +23,27 @@ export function createLocalDestinationVerifier(store, {
     // This is called by the trusted Controller only AFTER a destination delivery
     // has been durably recorded. No verification command gets its own grant from
     // any model output or CLI-supplied actor string.
-    async verify({ run, delivery, candidate }) {
+    async verify({ run, delivery, candidate, cancelled }) {
+      if (typeof cancelled !== 'function')
+        throw Error('Trusted destination verification cancellation fence required');
       if (delivery?.status !== 'DELIVERED_NOT_VERIFIED' ||
-          !sha(delivery.targetTreeHash) || delivery.targetTreeHash !== candidate?.candidateHash ||
+          !sha(delivery.targetTreeHash) || !sha(candidate?.candidateHash) ||
+          delivery.targetTreeHash !== candidate.candidateHash ||
+          delivery.candidateHash !== candidate.candidateHash ||
+          delivery.runId !== run?.id || delivery.revision !== run?.revision ||
+          delivery.semanticCriteriaVerified !== false ||
           run?.repo !== candidate?.repo || !Array.isArray(candidate.candidatePaths))
         throw Error('Delivered-tree verification binding absent');
+      const guard = () => {
+        if (cancelled()) throw Error('Destination verification cancelled or grant revoked');
+      };
+      guard();
       if (await candidateHash(run.repo,candidate.candidatePaths) !== delivery.targetTreeHash)
         throw Error('Destination changed before criterion verification');
       const evidenceRefs = {};
       const criteriaCopy = structuredClone(approvedCriteria);
       for (const criterion of criteriaCopy) {
+        guard();
         if (criterion.requiredAuthority === 'OWNER_REVIEW') continue;
         const command = specs[criterion.id];
         if (!command || command.directory !== run.repo || !path.isAbsolute(command.executable) ||
@@ -40,8 +51,9 @@ export function createLocalDestinationVerifier(store, {
           throw Error('Exact approved criterion command missing');
         const request = { executable:command.executable,args:[...command.args],
           directory:run.repo,timeoutMs:command.timeoutMs,
-          contractHash:run.contractHash, cancelled:()=>false };
+          contractHash:run.contractHash, cancelled };
         const inspected = await inspectLocalCommand(request);
+        guard();
         const granted = await obtainGrant(Object.freeze({
           objectiveId:run.id,revision:run.revision,criterionId:criterion.id,
           targetTreeHash:delivery.targetTreeHash,commandHash:inspected.commandHash,
@@ -49,18 +61,23 @@ export function createLocalDestinationVerifier(store, {
           protection:'UNPROTECTED'
         }));
         if (granted !== true) throw Error('Exact Local verification approval missing');
+        guard();
         const token = await backend.authorize(request,{
           reviewedCommandHash:inspected.commandHash,
           acknowledgeUnisolatedExecution:true
         });
+        guard();
         const observed = await backend.verify({ ...request,token,
           beforeSpawn:async () => {
+            guard();
             if (await candidateHash(run.repo,candidate.candidatePaths)!==delivery.targetTreeHash)
               throw Error('Destination changed before verification command');
           }
         });
+        guard();
         if (await candidateHash(run.repo,candidate.candidatePaths)!==delivery.targetTreeHash)
           throw Error('Destination changed after verification command');
+        guard();
         const complete = observed.status === 'LOCAL_PASSED' &&
           observed.evidenceIntegrity === 'MATCHED' && observed.integrity === true &&
           observed.executionAuthority === 'LOCAL_EXECUTED' && observed.exitCode === 0 &&
@@ -87,6 +104,7 @@ export function createLocalDestinationVerifier(store, {
         evidenceRefs[criterion.id]=store.artifact(evidence);
         if (!complete) break; // no false PASS or unauthorized subsequent effects
       }
+      guard();
       return {
         criteria:criteriaCopy,evidenceRefs,
         readVerifiedEvidence:ref=>store.readArtifact(ref),

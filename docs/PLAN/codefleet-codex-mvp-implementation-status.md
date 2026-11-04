@@ -93,3 +93,18 @@ Negative offline tests cover deleted/stale snapshots and cross-Objective replay.
 This does **not** prove that the trusted destination verifier was initially
 configured from owner-approved criteria, nor constitute Host Live acceptance.
 The new head requires its own Windows/Linux CI before any PASS claim.
+
+## Live cancellation and exact receipt binding for delivered-tree Local checks
+
+The trusted post-apply Local destination verifier now requires an explicit coordinator
+cancellation callback, and checks the delivery receipt's Objective ID, revision,
+Candidate hash and unverified status before any grant or subprocess. The Workflow
+Controller supplies its live lease/approval/control/time-budget guard as that callback,
+rechecks the guard after verification, and the Local backend receives it for process
+cancellation. A revoked/expired approval, cancellation or lost coordinator fence can
+no longer leave a successful criterion artifact on this verification path. Negative
+offline tests cover a missing fence, cross-Objective/revision receipt reuse,
+revocation during asynchronous grant, and cancellation during a running check.
+This narrows the Local path only: it does not provide OS isolation, eliminate all
+races, prove Host Live execution or bind the initial criterion set to owner-approved
+requirements. The new head needs its own Windows/Linux CI result.

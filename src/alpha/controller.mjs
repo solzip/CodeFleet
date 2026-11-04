@@ -391,8 +391,12 @@ async function executeWorkflow(store, id, dependencies, options) {
           throw Error('Delivered destination tree differs from integrated Candidate');
         // The trusted post-apply service must persist its own Evidence first.
         const observations = await deliveryService.verify({
-          run,delivery:receipt,contract:source,candidate:finalChild
+          run,delivery:receipt,contract:source,candidate:finalChild,
+          // Keep the coordinator's live lease, approval, control and time
+          // budget authoritative throughout potentially long Local checks.
+          cancelled: () => { try { guard(); return false; } catch { return true; } }
         });
+        guard();
         if (!observations || !Array.isArray(observations.criteria) ||
             typeof observations.readVerifiedEvidence !== 'function')
           throw Error('Independent destination Evidence unavailable');
