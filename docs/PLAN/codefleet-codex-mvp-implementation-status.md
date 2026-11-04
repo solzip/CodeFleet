@@ -136,3 +136,7 @@ normal portable hidden files, out-of-root traversal, symlinked parents and
 symlinked roots. This is a best-effort pre-read boundary, not atomic filesystem
 confinement against concurrent swaps, nor an authorization to run a Host.
 The new commit requires its own Windows/Linux CI before calling these tests PASS.
+
+## Reviewed planning repository identity and request integrity (offline CI pending)
+
+The trusted `prepareReviewedCodexWorkflow` bridge now binds the persisted VALIDATED planning request to the canonical repository identity from the original Host code discovery, not only its Git baseline SHA. The exact independent review scope includes the canonical target root and hashed repository ID. Before and after asynchronous review the bridge verifies the target's identity, stored planning-request digest and result, preventing replay into a second clean clone with the same commit or acceptance of a changed raw request. The existing `createWorkflow` still independently rejects dirty or changed baselines; these checks do **not** grant execution, prove Host authentication or accept an Objective. Regression fixtures cover same-HEAD cross-repository replay and changed request bytes before/during review. The new head requires separate Windows/Linux CI before these tests can be reported as passing.

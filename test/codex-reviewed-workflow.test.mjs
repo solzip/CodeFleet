@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp,mkdir,writeFile,rm } from 'node:fs/promises';
+import { mkdtemp,mkdir,writeFile,rm,realpath } from 'node:fs/promises';
 import { join } from 'node:path';
+import { hash } from '../src/alpha/contract.mjs';
 import { tmpdir } from 'node:os';
 import { Store } from '../src/alpha/store.mjs';
 import { git } from '../src/alpha/workspace.mjs';
@@ -48,6 +49,8 @@ test('a validated Codex plan yields a pending approval Workflow, not execution',
  assert.equal(created.state,'WAITING_APPROVAL');
  assert.equal(reviews.length,1);
  assert.equal(reviews[0].executionGranted,false);
+ assert.equal(reviews[0].repositoryRoot,await realpath(x.repo));
+ assert.equal(reviews[0].repositoryId,hash(await realpath(x.repo)));
  const workflow=x.store.get(created.workflowId);
  assert.equal(workflow.kind,'workflow');
  assert.equal(workflow.state,'WAITING_APPROVAL');
@@ -84,4 +87,47 @@ test('unresolved Host result cannot become an approved execution contract',async
  await assert.rejects(prepareReviewedCodexWorkflow(x.store,x.repo,x.request.sessionId,{
    authorizeReview:async()=>true
  }),/unavailable/);
+});
+
+// Two clean clones can share exactly the same baseline SHA. Planning grants
+// and reviewed Workflows must still be scoped to the originally observed repo.
+test('same-commit second repository cannot reuse a validated planning session',async t=>{
+ const x=await fixture(t);
+ const other=join(x.repo,'..','other-repo');
+ const cloned=await git(x.repo,['clone',x.repo,other]);
+ assert.equal(cloned.exitCode,0,cloned.stderr.toString());
+ let requested=false;
+ await assert.rejects(prepareReviewedCodexWorkflow(x.store,other,x.request.sessionId,{
+   authorizeReview:async()=>{requested=true;return true;}
+ }),/repository identity differs/);
+ assert.equal(requested,false);
+ assert.equal(x.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
+});
+test('changed persisted planning request is rejected before review',async t=>{
+ const x=await fixture(t);
+ const row=x.store.db.prepare('SELECT body FROM host_planning WHERE id=?').get(x.request.sessionId);
+ const body=JSON.parse(row.body);
+ body.objective+=' unreviewed change';
+ x.store.db.prepare('UPDATE host_planning SET body=? WHERE id=?')
+   .run(JSON.stringify(body),x.request.sessionId);
+ let requested=false;
+ await assert.rejects(prepareReviewedCodexWorkflow(x.store,x.repo,x.request.sessionId,{
+   authorizeReview:async()=>{requested=true;return true;}
+ }),/planning outcome unavailable/);
+ assert.equal(requested,false);
+ assert.equal(x.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
+});
+test('changed planning request during async review cannot reuse the initial scope',async t=>{
+ const x=await fixture(t);
+ await assert.rejects(prepareReviewedCodexWorkflow(x.store,x.repo,x.request.sessionId,{
+   authorizeReview:async()=>{
+     const row=x.store.db.prepare('SELECT body FROM host_planning WHERE id=?').get(x.request.sessionId);
+     const body=JSON.parse(row.body);
+     body.objective+=' changed during review';
+     x.store.db.prepare('UPDATE host_planning SET body=? WHERE id=?')
+       .run(JSON.stringify(body),x.request.sessionId);
+     return true;
+   }
+ }),/planning outcome unavailable/);
+ assert.equal(x.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
 });

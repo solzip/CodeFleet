@@ -1,6 +1,7 @@
 // Promote an independently reviewed, persisted Host planning result into a
 // pending-approval Workflow. This does NOT authorize execution, reserve any
 // Attempt or trust model-supplied approval claims.
+import { realpath } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import { hash } from '../alpha/contract.mjs';
 import { validateWorkflow } from '../workflow/definition.mjs';
@@ -10,9 +11,10 @@ function fail(reason) { throw Error('Reviewed Codex plan: ' + reason); }
 function planRow(store, sessionId) {
   if (typeof sessionId !== 'string' || !/^[a-f0-9-]{36}$/i.test(sessionId))
     fail('A real bound planning session ID is required');
-  const row=store.db.prepare('SELECT status,body,result,resultHash FROM host_planning WHERE id=?')
+  const row=store.db.prepare('SELECT status,body,digest,result,resultHash FROM host_planning WHERE id=?')
     .get(sessionId);
-  if (!row || row.status !== 'SUBMITTED' || typeof row.result !== 'string' ||
+  if (!row || row.status !== 'SUBMITTED' || typeof row.body !== 'string' ||
+      hash(row.body) !== row.digest || typeof row.result !== 'string' ||
       hash(row.result) !== row.resultHash) fail('Persisted valid planning outcome unavailable');
   const body=JSON.parse(row.body),result=JSON.parse(row.result);
   if (body.sessionId !== sessionId || result?.kind !== 'HostPlanningResult' ||
@@ -41,9 +43,18 @@ export async function prepareReviewedCodexWorkflow(store, repo, sessionId, {
       typeof authorizeReview !== 'function')
     fail('Trusted Store, absolute repo and explicit review callback required');
   const initial=planRow(store,sessionId);
+  // A baseline commit is portable across clones. Never turn a reviewed plan
+  // for repository A into a Workflow for repository B merely because both
+  // repositories happen to have the same HEAD and source bytes.
+  const reviewedRoot=await realpath(repo);
+  const repositoryId=hash(reviewedRoot);
+  if (initial.body.context?.discovery?.repositoryId !== repositoryId ||
+      initial.result.plan?.discovery?.repositoryId !== repositoryId)
+    fail('Planning repository identity differs from reviewed target');
   const scope=Object.freeze({
     kind:'CODEFLEET_REVIEWED_PLANNING_CONTRACT_V1',
     sessionId, objectiveHash:hash(initial.body.objective),
+    repositoryRoot:reviewedRoot, repositoryId,
     baseline:initial.body.baseline, workflowHash:initial.workflow.workflowHash,
     sourceContractHash:hash(initial.source),
     files:[...initial.source.files],tests:[...initial.source.tests],
@@ -54,7 +65,13 @@ export async function prepareReviewedCodexWorkflow(store, repo, sessionId, {
   // The review callback may be asynchronous; never accept a stale result
   // or silently rebind a grant to different model output/scope.
   const current=planRow(store,sessionId);
-  if (current.row.resultHash !== initial.row.resultHash ||
+  // Review is asynchronous: a changed planning request or redirected repo
+  // requires another exact review, even when the result hash has not changed.
+  if (await realpath(repo) !== reviewedRoot ||
+      current.body.context?.discovery?.repositoryId !== repositoryId ||
+      current.result.plan?.discovery?.repositoryId !== repositoryId ||
+      current.row.digest !== initial.row.digest ||
+      current.row.resultHash !== initial.row.resultHash ||
       current.row.status !== initial.row.status ||
       current.workflow.workflowHash !== scope.workflowHash ||
       hash(current.source) !== scope.sourceContractHash)
@@ -62,7 +79,7 @@ export async function prepareReviewedCodexWorkflow(store, repo, sessionId, {
   // Deterministic command ID allows safe idempotent creation after an
   // interruption but does not provide an execution approval.
   const commandId='planning-'+sessionId;
-  const run=await createWorkflow(store,repo,current.workflow,current.source,commandId);
+  const run=await createWorkflow(store,reviewedRoot,current.workflow,current.source,commandId);
   return { workflowId:run.id, workflowHash:run.contractHash,
     sourceContractHash:scope.sourceContractHash,
     state:run.state,executionGranted:false,approved:false,
