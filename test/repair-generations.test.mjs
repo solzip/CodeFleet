@@ -85,3 +85,33 @@ test('legacy Store requires deliberate opt-in; no automatic table migration',asy
   expectedFailureEvidenceRef:f.failureRef
  }),/not enabled/);
 });
+
+test('failed repair generation 2 may create immutable generation 3 once',async t=>{
+ const f=await setup(t);
+ enableRepairStorage(f.store);f.run.states.a='READY';f.store.save(f.run,f.owner,'REPAIR_REVIEWED');
+ const second=reserveRepairGeneration(f.store,f.run,f.owner,'a',f.childContract,{
+  expectedFailureEvidenceRef:f.failureRef,maxGenerations:3
+ });
+ const secondFailure=f.store.artifact({authority:'HARNESS_EXECUTED',tests:1,passed:0,failed:1,exitCode:1});
+ const previous=f.store.get(second.id);
+ previous.state='WAITING_HUMAN';previous.lastEvidenceHash=secondFailure;
+ f.store.db.prepare('UPDATE runs SET body=? WHERE id=?').run(JSON.stringify(previous),previous.id);
+ f.run.states.a='BLOCKED';
+ finish(f.store,f.run,f.owner,{itemId:'a',generation:2},'FAILED');
+ f.run.states.a='READY';f.store.save(f.run,f.owner,'REPAIR_GENERATION_3_REVIEWED');
+ const third=reserveRepairGeneration(f.store,f.run,f.owner,'a',f.childContract,{
+  expectedFailureEvidenceRef:secondFailure,maxGenerations:3
+ });
+ assert.equal(third.repairGeneration,3);
+ assert.equal(third.repairOfChildId,second.id);
+ assert.equal(third.repairEvidenceRef,secondFailure);
+ assert.deepEqual(attempts(f.store,f.run.id).map(a=>[a.generation,a.status]),[
+  [1,'FAILED'],[2,'FAILED'],[3,'STARTED']]);
+ assert.throws(()=>reserveRepairGeneration(f.store,f.run,f.owner,'a',f.childContract,{
+  expectedFailureEvidenceRef:secondFailure,maxGenerations:3
+ }),/terminal failed|active/);
+ finish(f.store,f.run,f.owner,{itemId:'a',generation:3},'SUCCEEDED');
+ assert.deepEqual(attempts(f.store,f.run.id).map(a=>[a.generation,a.status]),[
+  [1,'FAILED'],[2,'FAILED'],[3,'SUCCEEDED']]);
+ assert.equal(f.store.get(f.first.id).lastEvidenceHash,f.failureRef);
+});

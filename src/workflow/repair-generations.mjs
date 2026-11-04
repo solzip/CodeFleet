@@ -46,10 +46,15 @@ export function reserveRepairGeneration(store, run, owner, itemId, contract, {
   store.db.exec('BEGIN IMMEDIATE');
   try {
     approval(store, run);
-    const rows = attempts(store, run.id).filter(a => a.itemId === itemId);
+    // attempts() aggregates the legacy first generation and all extension rows.
+    // The last durable generation, not the legacy PK row, is the repair parent.
+    const rows = attempts(store, run.id).filter(a => a.itemId === itemId)
+      .sort((left, right) => (left.generation ?? 1) - (right.generation ?? 1));
     const last = rows.at(-1);
     if (!last || last.status !== 'FAILED' || rows.some(a => a.status === 'STARTED') ||
-        rows.length >= maxGenerations) throw Error('Repair requires terminal failed Attempt and unused bounded generation');
+        rows.length >= maxGenerations ||
+        rows.some((a, i) => (a.generation ?? 1) !== i + 1))
+      throw Error('Repair requires terminal failed Attempt and contiguous unused generation');
     const allRunning = [
       ...store.db.prepare("SELECT * FROM workflow_attempts WHERE status='STARTED'").all(),
       ...repairRows(store).filter(a=>a.status==='STARTED')
@@ -70,6 +75,12 @@ export function reserveRepairGeneration(store, run, owner, itemId, contract, {
         !store.readArtifact(old.lastEvidenceHash) || old.state === 'COMPLETED')
       throw Error('Repair requires actual previous failure Evidence');
     const generation = (last.generation ?? 1) + 1;
+    // Generation IDs must be immutable and strictly increasing. Never modify
+    // a prior terminal row or reuse a historical child/effect.
+    if (generation > maxGenerations ||
+        store.db.prepare('SELECT 1 FROM workflow_attempt_generations WHERE runId=? AND itemId=? AND generation=?')
+          .get(run.id, itemId, generation))
+      throw Error('Repair generation exhausted or already reserved');
     const child = {
       id: randomUUID(), repo:run.repo,base:run.base,contract,contractHash:hash(contract),
       state:'READY',attempts:0,elapsedMs:0,reportedCostUsd:0,unknownCostAttempts:0,
