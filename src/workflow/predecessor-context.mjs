@@ -2,7 +2,7 @@
 // Reuses existing accepted child artifacts and makes dependency overlays explicit.
 // No separate DAG scheduler, mutable side channel or alternate Outcome authority.
 import path from 'node:path';
-import { lstat, readFile, writeFile } from 'node:fs/promises';
+import { lstat, realpath, readFile, writeFile } from 'node:fs/promises';
 import { filePath, hash } from '../alpha/contract.mjs';
 
 export function predecessorOrder(workflow, itemId) {
@@ -58,16 +58,42 @@ export async function applyPredecessorOverlay(directory, names, changes) {
   if (!path.isAbsolute(directory) || !Array.isArray(names) ||
       new Set(names).size !== names.length) throw Error('Invalid candidate snapshot');
   const allowed = new Set(names);
+  const root = path.resolve(directory);
+  const rootStat = await lstat(root);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink())
+    throw Error('Predecessor candidate root must be a real directory');
+  const canonicalRoot = await realpath(root);
+  const targets = [];
+  // Validate the entire overlay before changing any Candidate bytes. A
+  // malicious or unexpectedly replaced parent symlink must never redirect
+  // predecessor writes outside the pinned snapshot.
   for (const [file, body] of Object.entries(changes)) {
     filePath(file);
     if (!allowed.has(file) || typeof body !== 'string' || Buffer.byteLength(body) > 64000)
       throw Error('Predecessor cannot introduce or modify an undeclared snapshot file');
-    const target = path.join(directory, file);
+    const target = path.join(root, file);
+    let ancestor = path.dirname(target);
+    while (ancestor !== root) {
+      const status = await lstat(ancestor);
+      if (!status.isDirectory() || status.isSymbolicLink())
+        throw Error('Predecessor candidate parent must be a regular directory');
+      const next = path.dirname(ancestor);
+      if (next === ancestor) throw Error('Predecessor candidate path escaped snapshot');
+      ancestor = next;
+    }
+    const canonicalParent = await realpath(path.dirname(target));
+    const relativeParent = path.relative(canonicalRoot, canonicalParent);
+    if (relativeParent === '..' || relativeParent.startsWith('..' + path.sep) ||
+        path.isAbsolute(relativeParent))
+      throw Error('Predecessor candidate parent escaped snapshot');
     const stat = await lstat(target);
-    if (!stat.isFile() || stat.isSymbolicLink()) throw Error('Predecessor input is not a regular file');
+    if (!stat.isFile() || stat.isSymbolicLink())
+      throw Error('Predecessor input is not a regular file');
     const before = await readFile(target, 'utf8');
-    if (before.includes('\0') || body.includes('\0')) throw Error('Binary predecessor change not supported');
-    await writeFile(target, body, 'utf8');
+    if (before.includes('\0') || body.includes('\0'))
+      throw Error('Binary predecessor change not supported');
+    targets.push({ target, body });
   }
+  for (const { target, body } of targets) await writeFile(target, body, 'utf8');
   return { inputTreeHash: hash(Object.entries(changes).sort(([a], [b]) => a.localeCompare(b))) };
 }

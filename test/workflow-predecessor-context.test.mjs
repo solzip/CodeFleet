@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { predecessorOrder, predecessorInput, applyPredecessorOverlay } from '../src/workflow/predecessor-context.mjs';
@@ -49,4 +49,35 @@ test('out-of-snapshot writes and binary materialization fail closed',async t=>{
   await writeFile(join(root,'src/a.js'),'base');
   await assert.rejects(applyPredecessorOverlay(root,['src/a.js'],{'src/missing.js':'unknown'}),/undeclared/);
   await assert.rejects(applyPredecessorOverlay(root,['src/a.js'],{'src/a.js':'\0'}),/Binary/);
+});
+
+test('candidate overlay rejects a linked parent without touching external bytes', { skip: process.platform === 'win32' }, async t => {
+  const sandbox = await mkdtemp(join(tmpdir(), 'cf-predecessor-link-'));
+  t.after(() => rm(sandbox, { recursive: true, force: true }));
+  const candidate = join(sandbox, 'candidate');
+  const external = join(sandbox, 'outside');
+  await mkdir(candidate);
+  await mkdir(external);
+  await writeFile(join(external, 'a.js'), 'outside-original');
+  await symlink(external, join(candidate, 'src'), 'dir');
+  await assert.rejects(
+    applyPredecessorOverlay(candidate, ['src/a.js'], { 'src/a.js': 'unapproved-write' }),
+    /candidate parent|escaped snapshot/
+  );
+  assert.equal(await readFile(join(external, 'a.js'), 'utf8'), 'outside-original');
+});
+
+test('the whole predecessor overlay is preflighted before any file changes', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'cf-predecessor-preflight-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, 'src'));
+  await writeFile(join(root, 'src/a.js'), 'a-original');
+  await writeFile(join(root, 'src/b.js'), 'b-original');
+  await assert.rejects(
+    applyPredecessorOverlay(root, ['src/a.js', 'src/b.js'],
+      { 'src/a.js': 'a-changed', 'src/b.js': 'bad\0content' }),
+    /Binary predecessor/
+  );
+  assert.equal(await readFile(join(root, 'src/a.js'), 'utf8'), 'a-original');
+  assert.equal(await readFile(join(root, 'src/b.js'), 'utf8'), 'b-original');
 });
