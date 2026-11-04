@@ -5,6 +5,7 @@
 import { candidateHash } from '../alpha/workspace.mjs';
 import { hash } from '../alpha/contract.mjs';
 import { evaluateDeliveredObjective } from './objective-judge.mjs';
+import { pinnedObjectiveDeliveryIntent } from './controlled-delivery.mjs';
 
 const SHA = /^[a-f0-9]{64}$/;
 const trustedSha = value => typeof value === 'string' && SHA.test(value);
@@ -36,6 +37,11 @@ export async function readDeliveredObjectiveStatus(store, objectiveId, {
     throw Error('Objective status requires a persisted Workflow');
   const common = { candidateAvailable: Boolean(run.finalRunId && run.acceptedHash),
     deliveryRecorded: Boolean(run.deliveryReceiptRef) };
+  if (run.state === 'RECONCILING' ||
+      (run.destinationDeliveryIntentRef && !run.deliveryReceiptRef))
+    return incomplete(run,
+      'Durable delivery intent has an uncertain external effect; reconcile destination before any replay',
+      'RECONCILING',{ ...common, deliveryUncertain:true });
   if (!run.deliveryReceiptRef) {
     // Legacy artifact-only Controller may mark a Workflow COMPLETED. Do not
     // promote that to CodeFleet Objective complete or imply target delivery.
@@ -44,17 +50,19 @@ export async function readDeliveredObjectiveStatus(store, objectiveId, {
       : 'No delivered target with accepted candidate Evidence',
       common.candidateAvailable ? 'VERIFIED_CANDIDATE_AVAILABLE' : 'INCOMPLETE',common);
   }
-  let delivered, child, decision, required, approved;
+  let delivered, child, decision, required, approved, intent;
   try {
     delivered = store.readArtifact(run.deliveryReceiptRef);
     child = store.get(run.finalRunId);
     if (run.objectiveDecisionRef) decision = store.readArtifact(run.objectiveDecisionRef);
     if (run.objectiveCriteriaRef) required = store.readArtifact(run.objectiveCriteriaRef);
     if (run.objectiveApprovedCriteriaRef) approved = store.readArtifact(run.objectiveApprovedCriteriaRef);
+    if (run.destinationDeliveryIntentRef) intent = store.readArtifact(run.destinationDeliveryIntentRef);
   } catch {
     return incomplete(run,'Delivery or Objective Evidence is unreadable','BLOCKED', common);
   }
-  const binding = delivered && delivered.status === 'DELIVERED_NOT_VERIFIED' &&
+  const binding = pinnedObjectiveDeliveryIntent({run,delivery:delivered,intent,approved}) &&
+    delivered && delivered.status === 'DELIVERED_NOT_VERIFIED' &&
     delivered.runId === run.id && delivered.revision === run.revision &&
     trustedSha(delivered.targetTreeHash) && delivered.targetTreeHash === delivered.candidateHash &&
     child && child.id === run.finalRunId && child.workflowParent === run.id &&
@@ -62,7 +70,7 @@ export async function readDeliveredObjectiveStatus(store, objectiveId, {
     child.candidateHash === delivered.targetTreeHash &&
     Array.isArray(child.candidatePaths) && child.candidatePaths.length > 0 &&
     typeof run.repo === 'string' && run.repo === child.repo;
-  if (!binding) return incomplete(run,'Delivered target and final Candidate binding mismatch','BLOCKED', common);
+  if (!binding) return incomplete(run,'Delivered target, pre-effect owner approval and final Candidate binding mismatch','BLOCKED', common);
   let observed;
   try { observed = await observeTree(run.repo, child.candidatePaths); }
   catch { return incomplete(run,'Current delivered target could not be independently observed','BLOCKED', common); }

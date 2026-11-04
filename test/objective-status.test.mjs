@@ -7,14 +7,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readDeliveredObjectiveStatus } from '../src/product/objective-status.mjs';
 
-const SHA = 'a'.repeat(64), OTHER = 'b'.repeat(64);
+const SHA = 'a'.repeat(64), OTHER = 'b'.repeat(64), BASE = 'c'.repeat(40);
+const criterionSet = [{id:'criterion-a',requiredAuthority:'LOCAL_EXECUTED'}];
 const run = () => ({kind:'workflow',id:'objective-1',revision:1,state:'COMPLETED',
-  finalRunId:'final-1',acceptedHash:'accepted-1',repo:'/approved-target',
+  finalRunId:'final-1',acceptedHash:'accepted-1',repo:'/approved-target',base:BASE,
+  destinationDeliveryIntentRef:'intent-1',
   deliveryReceiptRef:'delivery-1',objectiveDecisionRef:'decision-1',
   objectiveCriteriaRef:'criteria-1',objectiveApprovedCriteriaRef:'approved-1',contractHash:SHA,
   reportedCostUsd:0,unknownCostAttempts:2});
 const delivery = () => ({status:'DELIVERED_NOT_VERIFIED',runId:'objective-1',revision:1,
-  candidateHash:SHA,targetTreeHash:SHA,semanticCriteriaVerified:false});
+  candidateHash:SHA,targetTreeHash:SHA,semanticCriteriaVerified:false,
+  intentRef:'intent-1',appliedFiles:['src/a.js'],observedHashes:{'src/a.js':OTHER}});
+const intent = () => ({kind:'EXACT_LOCAL_DELIVERY_INTENT_V1',
+  runId:'objective-1',revision:1,base:BASE,destination:'/approved-target',
+  workflowHash:SHA,approvedCriteriaRef:'approved-1',
+  objectiveCriteriaHash:hash(criterionSet),candidateHash:SHA,
+  fileHashes:{'src/a.js':OTHER}});
 const child = () => ({id:'final-1',workflowParent:'objective-1',
   workflowRevision:1,candidateHash:SHA,candidatePaths:['src/a.js'],
   repo:'/approved-target'});
@@ -28,9 +36,11 @@ const evidence = () => ({kind:'OBJECTIVE_CRITERION_OBSERVATION_V1',
   commandHash:SHA,observationHash:OTHER,tests:1,passed:1,failed:0,skipped:0,todo:0,
   exitCode:0,interrupted:false,truncated:false,integrity:'MATCHED'});
 function fixture({current=SHA,runOverride={},deliveryOverride={},childOverride={},
- decisionOverride={},criteriaOverride={},approvedOverride={},evidenceOverride={},evidenceMissing=false}={}){
+ decisionOverride={},criteriaOverride={},approvedOverride={},intentOverride={},
+ evidenceOverride={},evidenceMissing=false}={}){
  const r={...run(),...runOverride};
- const blobs={'delivery-1':{...delivery(),...deliveryOverride},
+ const blobs={'intent-1':{...intent(),...intentOverride},
+   'delivery-1':{...delivery(),...deliveryOverride},
    'decision-1':{...decision(),...decisionOverride},
    'criteria-1':{kind:'OBJECTIVE_MANDATORY_CRITERIA_V1',
      objectiveId:'objective-1',revision:1,workflowHash:SHA,
@@ -56,7 +66,8 @@ test('delivered, independently accepted Local Objective may report COMPLETE afte
  assert.deepEqual(result.criterionIds,['criterion-a']);
 });
 test('artifact-only COMPLETED Workflow is not an Objective COMPLETE',async()=>{
- const x=fixture({runOverride:{deliveryReceiptRef:null,objectiveDecisionRef:null}});
+ const x=fixture({runOverride:{destinationDeliveryIntentRef:null,
+   deliveryReceiptRef:null,objectiveDecisionRef:null}});
  const result=await readDeliveredObjectiveStatus(x.store,'objective-1',{observeTree:x.observeTree});
  assert.equal(result.status,'VERIFIED_CANDIDATE_AVAILABLE');
  assert.equal(result.objectiveComplete,false);
@@ -229,4 +240,39 @@ test('post-delivery Evidence cannot replace a missing or changed pre-effect crit
     const result=await readDeliveredObjectiveStatus(x.store,'objective-1',{observeTree:x.observeTree});
     assert.equal(result.objectiveComplete,false,JSON.stringify(change));
   }
+});
+
+test('uncertain pre-effect delivery is RECONCILING, never a verified Candidate or COMPLETE',async()=>{
+ for(const state of ['RECONCILING','COMPLETED']) {
+   const x=fixture({runOverride:{state,deliveryReceiptRef:null}});
+   const result=await readDeliveredObjectiveStatus(x.store,'objective-1',{
+     observeTree:async()=>{throw Error('Unsafe read on uncertain destination');}
+   });
+   assert.equal(result.status,'RECONCILING');
+   assert.equal(result.deliveryUncertain,true);
+   assert.equal(result.objectiveComplete,false);
+   assert.equal(result.candidateAvailable,true);
+ }
+});
+
+test('Objective COMPLETE joins receipt and delivered file hashes to pre-effect approval intent',async()=>{
+ for(const change of [
+   {runOverride:{destinationDeliveryIntentRef:null}},
+   {runOverride:{base:'d'.repeat(40)}},
+   {intentOverride:{approvedCriteriaRef:'different-approval'}},
+   {intentOverride:{objectiveCriteriaHash:SHA}},
+   {intentOverride:{workflowHash:OTHER}},
+   {intentOverride:{destination:'/another-repository'}},
+   {intentOverride:{fileHashes:{'src/a.js':SHA}}},
+   {deliveryOverride:{intentRef:'unrelated-intent'}},
+   {deliveryOverride:{appliedFiles:['src/other.js']}},
+   {deliveryOverride:{observedHashes:{'src/a.js':SHA}}}
+ ]) {
+   const x=fixture(change);
+   const result=await readDeliveredObjectiveStatus(x.store,'objective-1',{
+     observeTree:async()=>{throw Error('Reject before target reads');}
+   });
+   assert.equal(result.status,'BLOCKED',JSON.stringify(change));
+   assert.equal(result.objectiveComplete,false);
+ }
 });

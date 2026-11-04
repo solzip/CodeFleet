@@ -10,7 +10,7 @@ import { ProviderError, requireProposal } from '../providers/interface.mjs';
 import { createRegistry, selectProvider } from '../providers/registry.mjs';
 import { readyBatch, validateWorkflow } from '../workflow/definition.mjs';
 import { predecessorInput, applyPredecessorOverlay } from '../workflow/predecessor-context.mjs';
-import { applyLocalDelivery } from '../product/controlled-delivery.mjs';
+import { applyLocalDelivery, pinnedObjectiveDeliveryIntent } from '../product/controlled-delivery.mjs';
 import { evaluateDeliveredObjective, requireTrustedObjectiveCriteria } from '../product/objective-judge.mjs';
 import { approvedDevelopmentBaseline } from './development-baseline.mjs';
 import { delegate, sendMessage, receiveMessages } from '../workflow/collaboration.mjs';
@@ -395,7 +395,10 @@ async function executeWorkflow(store, id, dependencies, options) {
               // Called only AFTER trusted owner approval and clean baseline
               // preflight, BEFORE any filesystem staging or rename.
               run.destinationDeliveryIntentRef = store.artifact({
-                ...localIntent,acceptedHash:finalChild.acceptedHash,
+                ...localIntent,workflowHash:run.contractHash,
+                approvedCriteriaRef:run.objectiveApprovedCriteriaRef,
+                objectiveCriteriaHash:reviewedCriterionContract.criteriaHash,
+                acceptedHash:finalChild.acceptedHash,
                 evidenceHash:finalChild.evidenceHash,
                 integrationHash:run.integrationHash
               });
@@ -407,6 +410,15 @@ async function executeWorkflow(store, id, dependencies, options) {
           save('DELIVERED_NOT_VERIFIED', 'Actual destination bytes observed; independent criterion verification pending');
         }
         const receipt = store.readArtifact(run.deliveryReceiptRef);
+        // Also on recovery, an independent receipt must join the exact
+        // pre-effect owner approval and the hashes of actually applied files.
+        if (!pinnedObjectiveDeliveryIntent({
+          run,delivery:receipt,
+          intent:run.destinationDeliveryIntentRef
+            ? store.readArtifact(run.destinationDeliveryIntentRef) : null,
+          approved:run.objectiveApprovedCriteriaRef
+            ? store.readArtifact(run.objectiveApprovedCriteriaRef) : null
+        })) throw Error('Delivery receipt is not bound to pre-effect approved Objective scope');
         if (receipt.targetTreeHash !== finalChild.candidateHash)
           throw Error('Delivered destination tree differs from integrated Candidate');
         // The trusted post-apply service must persist its own Evidence first.

@@ -135,6 +135,13 @@ test('joined synthetic two-WorkItem Objective: A persisted before B, local deliv
   assert.equal(approved.kind,'OBJECTIVE_APPROVED_CRITERIA_V1');
   assert.equal(approved.criteriaHash,hash(pinned.criteria));
   assert.equal(pinned.approvedCriteriaRef,completedRun.objectiveApprovedCriteriaRef);
+  const delivery=f.store.readArtifact(completedRun.deliveryReceiptRef);
+  const intent=f.store.readArtifact(completedRun.destinationDeliveryIntentRef);
+  assert.equal(delivery.intentRef,completedRun.destinationDeliveryIntentRef);
+  assert.equal(intent.approvedCriteriaRef,completedRun.objectiveApprovedCriteriaRef);
+  assert.equal(intent.objectiveCriteriaHash,approved.criteriaHash);
+  assert.equal(intent.workflowHash,completedRun.contractHash);
+  assert.deepEqual(intent.fileHashes,delivery.observedHashes);
   const events=f.store.events(f.workflow.id);
   const acceptedA=events.find(e=>e.type==='ATTEMPT_RECONCILED'&&e.body.itemId==='a');
   const reservedB=events.find(e=>e.type==='ATTEMPT_RESERVED'&&e.body.itemId==='b');

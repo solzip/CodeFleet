@@ -202,3 +202,20 @@ criterion normalization and former COMPLETE revalidation against changed or
 absent original approval. This still relies on a trusted embedding's owner
 grant, not model-supplied authentication, Host Live or protected verification.
 New Windows/Linux CI is necessary before declaring these offline tests PASS.
+
+
+## Pre-effect Objective approval and Delivery receipt provenance (fresh CI required)
+
+The delivered Objective status projection and Controller recovery path now require
+an immutable joined chain: the persisted pre-effect delivery intent binds the
+approved mandatory criterion artifact reference and criterion hash; the delivery
+receipt must point to that intent and its applied file hashes must match the
+approved changed-file hashes. Missing or mismatched intent, revision, Workflow
+scope, repository, criterion approval, delivered files or receipt fails closed
+instead of presenting Objective COMPLETE. An intent without a receipt is
+reported as RECONCILING (uncertain external effect), not as a verified
+Candidate; this projection does not replay or repair filesystem effects.
+Historical delivery records without this link are not grandfathered into
+COMPLETE. Synthetic joined-fixture and negative status tests exercise this
+consistency invariant. It does not authenticate the embedding, prove Host Live
+or attest protected verification. New Windows/Linux CI must pass separately.

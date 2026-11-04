@@ -46,6 +46,36 @@ export function deliveryIntent({ runId, revision, base, destination, candidateHa
     destination: path.resolve(destination), candidateHash: verifiedHash, fileHashes };
 }
 
+// Bind a delivered-tree receipt to the pre-effect approved Objective scope.
+// This checks persisted provenance, not Operator authentication or OS isolation.
+export function pinnedObjectiveDeliveryIntent({ run, delivery, intent, approved } = {}) {
+  if (!run || !delivery || !intent || !approved ||
+      intent.kind !== 'EXACT_LOCAL_DELIVERY_INTENT_V1' ||
+      intent.runId !== run.id || intent.revision !== run.revision ||
+      intent.base !== run.base || intent.destination !== run.repo ||
+      intent.workflowHash !== run.contractHash ||
+      intent.candidateHash !== delivery.candidateHash ||
+      intent.candidateHash !== delivery.targetTreeHash ||
+      intent.approvedCriteriaRef !== run.objectiveApprovedCriteriaRef ||
+      intent.objectiveCriteriaHash !== approved.criteriaHash ||
+      delivery.intentRef !== run.destinationDeliveryIntentRef ||
+      delivery.runId !== run.id || delivery.revision !== run.revision)
+    return false;
+  const before = intent.fileHashes, after = delivery.observedHashes;
+  if (!before || typeof before !== 'object' || Array.isArray(before) ||
+      !after || typeof after !== 'object' || Array.isArray(after) ||
+      !Array.isArray(delivery.appliedFiles))
+    return false;
+  const names = Object.keys(before);
+  return names.length > 0 && names.length === Object.keys(after).length &&
+    names.length === delivery.appliedFiles.length &&
+    new Set(delivery.appliedFiles).size === names.length &&
+    names.every(name => Object.hasOwn(after, name) &&
+      delivery.appliedFiles.includes(name) &&
+      /^[a-f0-9]{64}$/.test(before[name] ?? '') &&
+      before[name] === after[name]);
+}
+
 // A successful Promise means bytes were observed, NOT that acceptance tests ran.
 // Any exception after intent persistence must leave the workflow RECONCILING,
 // not READY: a partial multi-file apply may have occurred.
