@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { command, requireSuccess } from './process.mjs';
-import { filePath, hash } from './contract.mjs';
+import { hash } from './contract.mjs';
 
 export async function git(repo, args, options = {}) {
   return command('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.autocrlf=false', '-c', 'commit.gpgSign=false', '-C', repo, ...args], options);
@@ -55,8 +55,16 @@ export async function candidateHash(directory, names) {
     // Byte equality alone is not a safe observation: readFile follows links.
     // Recheck every path component before reading, including unchanged files
     // that were present in the delivered tree but not written by delivery.
-    filePath(name);
-    const parts = name.split('/');
+    // Snapshot paths may legitimately include .gitattributes, .gitignore
+    // and .github; source-contract filePath() is too restrictive here.
+    // Match snapshot's portable tracked-file boundaries instead.
+    const parts = typeof name === 'string' ? name.split('/') : [];
+    if (typeof name !== 'string' || !name || name.startsWith('/') ||
+        /[\\:\u0000-\u001f\u007f]/.test(name) ||
+        parts.some(part => !part || part === '.' || part === '..' ||
+          /[. ]$/.test(part) || part.toLowerCase() === '.git' ||
+          /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\\.|$)/i.test(part)))
+      throw Error('Unsafe tracked Candidate path: ' + String(name));
     let current = directory;
     for (let index = 0; index < parts.length; index++) {
       current = path.join(current, parts[index]);
