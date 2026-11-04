@@ -7,10 +7,21 @@ import { isAbsolute } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import { environment } from '../alpha/process.mjs';
 
+// Stable rust-v0.166.0 Codex notification vocabulary. Delta payloads are
+// counted only; they never authorize, verify or set Objective state.
 const NOTIFICATIONS = new Set([
   'account/updated', 'account/rateLimits/updated', 'remoteControl/status/changed',
-  'thread/started', 'turn/started', 'item/started', 'item/completed',
-  'turn/completed', 'thread/tokenUsage/updated'
+  'thread/started', 'thread/status/changed', 'thread/tokenUsage/updated',
+  'turn/started', 'turn/completed','turn/diff/updated','turn/plan/updated',
+  'item/started', 'item/completed', 'item/agentMessage/delta',
+  'item/reasoning/summaryTextDelta','item/reasoning/summaryPartAdded',
+  'item/plan/delta'
+]);
+const WORKSPACE_TOOL_NOTIFICATIONS = new Set([
+  'item/commandExecution/outputDelta',
+  'item/commandExecution/terminalInteraction',
+  'item/fileChange/outputDelta',
+  'item/fileChange/patchUpdated'
 ]);
 const INERT_ITEMS = new Set(['userMessage', 'agentMessage', 'reasoning', 'plan', 'contextCompaction']);
 const MAX_LINE = 512 * 1024;
@@ -69,7 +80,9 @@ export function createCodexTurnProtocol({ cwd, model, prompt, outputSchema, work
       if (phase === 'COMPLETE') reject('Unexpected App Server message after completed Turn');
       if (Object.hasOwn(message, 'method')) {
         if (Object.hasOwn(message, 'id')) reject('Unexpected server request; never auto-approve');
-        if (!NOTIFICATIONS.has(message.method)) reject('Unsupported App Server notification: ' + String(message.method));
+        if (!NOTIFICATIONS.has(message.method) &&
+            !(workspaceWrite && WORKSPACE_TOOL_NOTIFICATIONS.has(message.method)))
+          reject('Unsupported App Server notification: ' + String(message.method));
         count(message.method);
         if (message.method === 'item/started' || message.method === 'item/completed') {
           if (!object(message.params) || !recordId(message.params.threadId) || !recordId(message.params.turnId)) reject('Unbound Host item notification');

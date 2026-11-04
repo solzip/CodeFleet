@@ -83,3 +83,23 @@ test('no invented identifiers or terminal result', () => {
   p.accept({ id: 1, result: {} });
   assert.throws(() => p.accept({ id: 2, result: { thread: { id: '' } } }), /Thread ID/);
 });
+
+test('stable agent-message delta is observed without treating it as an effect', () => {
+  const p=start(make());
+  assert.deepEqual(p.accept({method:'item/agentMessage/delta',
+    params:{threadId:'thread-fixture',turnId:'turn-fixture',delta:'non-authoritative'}}),[]);
+  complete(p);
+  assert.equal(p.receipt().notifications['item/agentMessage/delta'],1);
+});
+test('workspace tool output delta is only admitted under explicit workspace mode',()=>{
+  const opts={cwd:process.cwd(),model:'fixture',prompt:'bounded return',
+    outputSchema:{type:'object'}};
+  const readonly=createCodexTurnProtocol(opts);
+  readonly.accept({id:1,result:{}});
+  assert.throws(()=>readonly.accept({method:'item/commandExecution/outputDelta',
+    params:{delta:'do not log'}}),/Unsupported/);
+  const workspace=createCodexTurnProtocol({...opts,workspaceWrite:true});
+  workspace.accept({id:1,result:{}});
+  assert.deepEqual(workspace.accept({method:'item/commandExecution/outputDelta',
+    params:{delta:'untrusted tool output'}}),[]);
+});
