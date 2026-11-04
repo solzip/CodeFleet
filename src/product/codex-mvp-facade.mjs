@@ -23,7 +23,9 @@ const callable = input => typeof input === 'function';
 export function createCodexMvpFacade(store, {
   executable, model, enableHostTurns = false,
   authorizePlanning, authorizeBootstrap, authorizeWorkflow, authorizeReviewedWorkflow,
-  authorizeWorkspace, workspaceWrite = false,\n  authorizeBootstrapMaterialization, authorizeBootstrapVerification,\n  bootstrapVerifierBackend,
+  authorizeWorkspace, workspaceWrite = false,
+  authorizeBootstrapMaterialization, authorizeBootstrapVerification,
+  bootstrapVerifierBackend,
   verificationBackend, unknownCostBudget, repairPolicy,
   destinationDelivery, developmentPolicy, workItemPolicy,
   transport,

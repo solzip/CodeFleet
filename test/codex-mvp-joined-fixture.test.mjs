@@ -23,7 +23,8 @@ const source = () => ({
 });
 async function initial(t) {
   const root = await mkdtemp(join(tmpdir(),'codefleet-joined-'));
-  t.after(async()=>rm(root,{recursive:true,force:true}));
+  let activeStore;
+  t.after(async()=>{ activeStore?.close(); await rm(root,{recursive:true,force:true}); });
   const repo = join(root,'repository');
   const stateDir = join(root,'state');
   await mkdir(join(repo,'src'),{recursive:true});
@@ -39,7 +40,7 @@ async function initial(t) {
   }
   const revision=await git(repo,['rev-parse','HEAD']);
   const base=String(revision.stdout).trim();
-  const store=new Store(stateDir); t.after(()=>store.close());
+  const store=new Store(stateDir); activeStore=store;
   const contract=source();
   const graph=definition(contract,{workflowId:'joinedfixture',base,items:[
     {id:'a',dependencies:[],priority:0,files:['src/a.js'],tests:['test/a.test.js'],
