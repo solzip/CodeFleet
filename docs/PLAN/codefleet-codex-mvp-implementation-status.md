@@ -232,3 +232,16 @@ and never produces a Delivery receipt. Regression cases simulate both post-inten
 path swaps. This narrows observable time-of-check/time-of-use windows but cannot
 provide atomicity or OS-level confinement; Host Live remains UNVERIFIED.
 The new head requires its own Windows/Linux CI result before an offline PASS claim.
+
+## Candidate hard-link and case-alias boundary (new offline CI required)
+
+The shared Candidate/Host-context/delivered Objective observer now rejects a
+regular leaf with multiple hard links (`nlink !== 1`) and rejects case-folded
+collisions among requested paths. An outside hard link may have identical bytes
+and no symlink flag; it must not be accepted as an independent in-scope file.
+Offline regression cases cover the Host context manifest and read-only COMPLETE
+status after an identical-byte hard-link substitution. A platform unable to
+create the hard link skips only that adversarial case. This is a fail-closed
+regular-file identity check, not OS confinement, protection against concurrent
+link swaps, or Host Live acceptance. The new head needs its own Windows/Linux
+CI before reporting these tests as passing.

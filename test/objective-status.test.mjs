@@ -1,4 +1,4 @@
-import { mkdtemp,mkdir,writeFile,rm,symlink } from 'node:fs/promises';
+import { mkdtemp,mkdir,writeFile,rm,symlink,link } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { candidateHash } from '../src/alpha/workspace.mjs';
@@ -277,4 +277,35 @@ test('Objective COMPLETE joins receipt and delivered file hashes to pre-effect a
    assert.equal(result.status,'BLOCKED',JSON.stringify(change));
    assert.equal(result.objectiveComplete,false);
  }
+});
+
+// Same-byte hard links bypass a symlink-only lstat check. An objective that
+// was COMPLETE must be revalidated against the current physical target files.
+test('COMPLETE projection rejects same-byte hard-link substitution',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'codefleet-hardlink-objective-'));
+ t.after(()=>rm(root,{recursive:true,force:true}));
+ await mkdir(join(root,'src'));
+ const target=join(root,'src','a.js'), outside=join(root,'outside.js');
+ const content='export const approved = true;';
+ await writeFile(target,content);
+ const targetHash=await candidateHash(root,['src/a.js']);
+ const x=fixture({
+  runOverride:{repo:root},childOverride:{repo:root,candidateHash:targetHash},
+  deliveryOverride:{candidateHash:targetHash,targetTreeHash:targetHash},
+  intentOverride:{destination:root,candidateHash:targetHash},
+  decisionOverride:{targetTreeHash:targetHash},evidenceOverride:{targetTreeHash:targetHash}
+ });
+ assert.equal((await readDeliveredObjectiveStatus(x.store,'objective-1')).status,'COMPLETE');
+ await writeFile(outside,content);
+ await rm(target);
+ try { await link(outside,target); }
+ catch(error) {
+  if (['EPERM','EACCES','ENOTSUP','EOPNOTSUPP','EXDEV'].includes(error.code)) {
+   t.skip('Hard links not supported by this runner');return;
+  }
+  throw error;
+ }
+ const changed=await readDeliveredObjectiveStatus(x.store,'objective-1');
+ assert.equal(changed.objectiveComplete,false);
+ assert.equal(changed.status,'BLOCKED');
 });

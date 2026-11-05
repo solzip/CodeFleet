@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, symlink, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, symlink, link, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { context } from '../src/alpha/workspace.mjs';
@@ -87,4 +87,25 @@ test('context refuses an ordinary Candidate reached via a symlinked ancestor', a
   await assert.rejects(context(join(linkedParent, 'candidate'), {
     context: ['a.js'], tests: []
   }), /Candidate tree ancestor is a symlink/);
+});
+
+// A hard link does not set isSymbolicLink(), but reads the same inode as a
+// file outside the approved Host context. Refuse it before reading bytes.
+test('context rejects hard-linked outside files and case-folded aliases', async t => {
+  const { root, candidate } = await fixture(t);
+  await mkdir(join(candidate, 'src'));
+  await writeFile(join(root, 'external.js'), 'unapproved outside bytes');
+  await writeFile(join(candidate, 'src', 'ok.js'), 'approved bytes');
+  await assert.rejects(context(candidate, {
+    context: ['src/ok.js', 'SRC/OK.js'], tests: []
+  }), /bounded, unique paths/);
+  try { await link(join(root, 'external.js'), join(candidate, 'src', 'linked.js')); }
+  catch (error) {
+    if (['EPERM', 'EACCES', 'ENOTSUP', 'EOPNOTSUPP', 'EXDEV'].includes(error.code)) {
+      t.skip('Hard links not supported by this runner'); return;
+    }
+    throw error;
+  }
+  await assert.rejects(context(candidate, { context: ['src/linked.js'], tests: [] }),
+    /hard link or nonregular/);
 });

@@ -51,7 +51,10 @@ export async function context(directory, contract) {
 }
 export async function candidateHash(directory, names) {
   if (!path.isAbsolute(directory ?? '') || !Array.isArray(names) ||
-      !names.length || names.length > 1500 || new Set(names).size !== names.length)
+      !names.length || names.length > 1500 ||
+      new Set(names).size !== names.length ||
+      // On case-insensitive filesystems these names may alias the same file.
+      new Set(names.map(name => typeof name === 'string' ? name.toLowerCase() : name)).size !== names.length)
     throw Error('Candidate tree requires bounded, unique paths and an absolute root');
   const root = await lstat(directory);
   if (!root.isDirectory() || root.isSymbolicLink())
@@ -88,8 +91,12 @@ export async function candidateHash(directory, names) {
       current = path.join(current, parts[index]);
       const stat = await lstat(current);
       if (stat.isSymbolicLink() ||
-          (index === parts.length - 1 ? !stat.isFile() : !stat.isDirectory()))
-        throw Error('Candidate tree contains a symlink or nonregular path: ' + name);
+          (index === parts.length - 1
+            ? !stat.isFile() || stat.nlink !== 1
+            : !stat.isDirectory()))
+        // Hard links are regular files but alias the bytes of an unapproved
+        // outside path, so content equality alone is not a safe boundary.
+        throw Error('Candidate tree contains a symlink, hard link or nonregular path: ' + name);
     }
     rows.push([name, hash(await readFile(current))]);
   }
