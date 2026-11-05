@@ -2,6 +2,7 @@
 // validator. This is only an injected, approved, read-only capability.
 // A created planning session is a durable reservation before a billable Turn;
 // an unresolved dispatch is never replayed automatically.
+import { realpath } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import { hash } from '../alpha/contract.mjs';
 import { beginPlanning, cancelPlanning, submitPlanning, PLANNING_PROFILE } from './planning.mjs';
@@ -35,13 +36,26 @@ export async function planWithCodexManagedThread(store, repo, objective, {
       !isAbsolute(cwd ?? '') || !isAbsolute(executable ?? '') ||
       typeof model !== 'string' || !model || !Number.isFinite(PLANNING_PROFILE.timeoutMs))
     throw Error('Explicit trusted Codex Host planning configuration required');
+  // The Host's working directory must be the exact repository whose pinned
+  // source bytes are reviewed. Absolute paths alone do not establish this.
+  if (await realpath(repo) !== await realpath(cwd))
+    throw Error('Codex Host planning cwd must resolve to the observed repository');
   const request = await beginPlanning(store, repo, objective, { host:'codex', version });
   const binding = { sessionId: request.sessionId, requestHash:request.requestHash,
     contextHash:request.contextHash, profileHash:request.profileHash,
     skillHash:request.skillHash, expiresAt:request.expiresAt,
     model, hostVersion:version, cwd };
-  const granted = await authorize(Object.freeze({ ...binding }));
-  if (granted !== true) throw Error('Host planning Turn requires independently trusted bounded approval');
+  let granted;
+  try { granted = await authorize(Object.freeze({ ...binding })); }
+  catch (error) {
+    // A rejected review must not leave a submit-capable OPEN session behind.
+    cancelPlanning(store, request.sessionId);
+    throw error;
+  }
+  if (granted !== true) {
+    cancelPlanning(store, request.sessionId);
+    throw Error('Host planning Turn requires independently trusted bounded approval');
+  }
   // Human approval can be asynchronous. A valid pinned request is not a grant
   // to dispatch against code that changed while the grant was being reviewed.
   // Refuse before reserving a potentially billable Host Turn, and invalidate
@@ -66,7 +80,10 @@ export async function planWithCodexManagedThread(store, repo, objective, {
       'Every proposed file must be grounded in exact path/line/quote from the pinned source. ' +
       'Preserve objective verbatim, mark unknown requirements unresolved. Do not use tools, edit, approve, run tests or claim complete.'
   });
-  if (Buffer.byteLength(prompt) > 160000) throw Error('Planning context too large; narrow the objective');
+  if (Buffer.byteLength(prompt) > 160000) {
+    cancelPlanning(store, request.sessionId);
+    throw Error('Planning context too large; narrow the objective');
+  }
   const dispatchRef = store.artifact({ ...binding, kind:'CODEX_PLANNING_DISPATCH_INTENT' });
   store.db.exec('BEGIN IMMEDIATE');
   try {

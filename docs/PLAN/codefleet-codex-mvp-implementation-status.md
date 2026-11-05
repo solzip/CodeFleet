@@ -301,3 +301,16 @@ persisted planning request; none starts the injected Host transport. This is
 a pre-dispatch freshness fence, not an atomic filesystem isolation guarantee,
 Host Live proof, authenticated public admission or Objective acceptance.
 A new Windows/Linux GitHub Actions run is required before an offline PASS claim.
+
+## Codex planning repository cwd and denied-grant lifecycle (new offline CI required)
+
+The trusted managed planning adapter now compares the canonical real paths of
+its pinned source repository and Host cwd before opening a planning session.
+An absolute but different cwd cannot start a Host Turn against unreviewed code.
+A rejected or throwing asynchronous owner grant and an oversized serialized
+Host prompt cancel the otherwise submit-capable OPEN planning session. Offline
+regression fixtures exercise mismatched cwd, denied and throwing grants, and
+escaped source text that exceeds the Host prompt limit without running a model.
+This is a trusted-adapter integrity fix, not native Host Live proof, public
+Operator authentication, or Objective E2E acceptance. The new head requires
+its own Windows/Linux CI; previous green results cannot cover this change.

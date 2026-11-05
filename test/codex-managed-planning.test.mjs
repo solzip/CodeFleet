@@ -58,6 +58,7 @@ test('without independent exact grant, Host Turn is never called',async t=>{
   transport:async()=>{turns++;throw Error('unreachable');}
  }),/approval/);
  assert.equal(turns,0);
+ assert.deepEqual(f.store.db.prepare('SELECT status FROM host_planning').all().map(row=>row.status),['CANCELLED']);
 });
 test('uncertain dispatched Turn remains RECONCILING without replay',async t=>{
  const f=await setup(t);let turns=0;
@@ -114,6 +115,45 @@ test('changed persisted planning request is rejected before reserving a Host Tur
   },
   transport:async()=>{turns++;throw Error('Host must not be started');}
  }),/Planning session changed or expired/);
+ assert.equal(turns,0);
+ assert.deepEqual(f.store.db.prepare('SELECT status FROM host_planning').all().map(row=>row.status),['CANCELLED']);
+});
+
+
+test('Host planning refuses a different working directory before creating a session or asking for a grant',async t=>{
+ const f=await setup(t);let grants=0,turns=0;
+ await assert.rejects(planWithCodexManagedThread(f.store,f.repo,goal,{
+  ...f.settings,cwd:join(f.repo,'src'),
+  authorize:async()=>{grants++;return true;},
+  transport:async()=>{turns++;throw Error('Host must not be started');}
+ }),/cwd must resolve to the observed repository/);
+ assert.equal(grants,0);
+ assert.equal(turns,0);
+});
+
+test('throwing approval callback cancels the staged planning session without dispatch',async t=>{
+ const f=await setup(t);let turns=0;
+ await assert.rejects(planWithCodexManagedThread(f.store,f.repo,goal,{
+  ...f.settings,authorize:async()=>{throw Error('owner grant transport unavailable');},
+  transport:async()=>{turns++;throw Error('Host must not be started');}
+ }),/owner grant transport unavailable/);
+ assert.equal(turns,0);
+ assert.deepEqual(f.store.db.prepare('SELECT status FROM host_planning').all().map(row=>row.status),['CANCELLED']);
+});
+
+test('oversized planning prompt closes OPEN reservation before a Host Turn',async t=>{
+ const f=await setup(t);let turns=0;
+ // The source fits the pinned text limit, but JSON escaping expands the
+ // Host prompt past its independent byte cap.
+ await writeFile(join(f.repo,'src/a.js'),'// '+ '\\'.repeat(82000) + '\n');
+ for(const args of [['add','.'],['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','large-escaped-source']]) {
+  const result=await git(f.repo,args);
+  assert.equal(result.exitCode,0,result.stderr.toString());
+ }
+ await assert.rejects(planWithCodexManagedThread(f.store,f.repo,goal,{
+  ...f.settings,authorize:async()=>true,
+  transport:async()=>{turns++;throw Error('Host must not be started');}
+ }),/Planning context too large/);
  assert.equal(turns,0);
  assert.deepEqual(f.store.db.prepare('SELECT status FROM host_planning').all().map(row=>row.status),['CANCELLED']);
 });
