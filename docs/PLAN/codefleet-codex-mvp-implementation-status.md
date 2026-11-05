@@ -434,3 +434,15 @@ cover tampered in-memory persisted source/DAG and grant-time changes that must
 not reach Controller or Host. This does not authenticate a public Operator,
 run a real Codex Turn or establish protected Objective acceptance. The new head
 requires Windows/Linux CI before any offline PASS claim.
+
+## Host planning cwd alias drift during owner review and Turn (fresh CI required)
+
+The managed Codex Planning adapter now pins the canonical repository root before
+opening a durable session and rechecks both the source and Host cwd after the
+asynchronous owner grant. A replaced directory alias cancels the OPEN session
+before a billable Turn. After a dispatched Turn, a changed Host cwd causes
+RECONCILING instead of accepting a mismatched planning receipt. Offline tests
+exercise both transitions with a repointed local directory link (skipped when
+the runner cannot create directory links). This narrows grant-time drift but
+is not atomic filesystem confinement or Host Live proof. Windows/Linux CI is
+required before marking this change tested.

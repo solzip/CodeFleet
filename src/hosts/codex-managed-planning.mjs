@@ -38,7 +38,8 @@ export async function planWithCodexManagedThread(store, repo, objective, {
     throw Error('Explicit trusted Codex Host planning configuration required');
   // The Host's working directory must be the exact repository whose pinned
   // source bytes are reviewed. Absolute paths alone do not establish this.
-  if (await realpath(repo) !== await realpath(cwd))
+  const pinnedRepo = await realpath(repo);
+  if (pinnedRepo !== await realpath(cwd))
     throw Error('Codex Host planning cwd must resolve to the observed repository');
   const request = await beginPlanning(store, repo, objective, { host:'codex', version });
   const binding = { sessionId: request.sessionId, requestHash:request.requestHash,
@@ -63,6 +64,10 @@ export async function planWithCodexManagedThread(store, repo, objective, {
   try {
     if (Date.now() >= request.expiresAt)
       throw Error('Planning authority expired before dispatch');
+    // An alias can be repointed while the human grant is pending. The Host
+    // must never start in a different directory from the pinned source.
+    if (await realpath(repo) !== pinnedRepo || await realpath(cwd) !== pinnedRepo)
+      throw Error('Planning repository or Host cwd changed while awaiting approval');
     const current = await readCodeContext(repo, objective);
     if (hash(current) !== request.contextHash ||
         current.discovery.dirty || current.discovery.base !== request.baseline)
@@ -108,6 +113,10 @@ export async function planWithCodexManagedThread(store, repo, objective, {
     if (receipt?.terminalStatus !== 'completed' || typeof receipt.text !== 'string' ||
         !receipt.threadId || !receipt.turnId || receipt.authority !== 'PROVIDER_REPORTED_ONLY' ||
         receipt.protectedVerified !== false) throw Error('Planning Host Turn has no acceptable receipt');
+    // A Turn observed in an unexpectedly moved Host cwd cannot be accepted as
+    // a response for the original pinned Objective, even if source bytes match.
+    if (await realpath(repo) !== pinnedRepo || await realpath(cwd) !== pinnedRepo)
+      throw Error('Planning repository or Host cwd changed during Host Turn');
     const current = await readCodeContext(repo, objective);
     if (hash(current) !== request.contextHash) throw Error('Planning source context changed during Host Turn');
     const result = submitPlanning(store, receipt.text, {

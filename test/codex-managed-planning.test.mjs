@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Store } from '../src/alpha/store.mjs';
 import { git } from '../src/alpha/workspace.mjs';
@@ -156,4 +156,50 @@ test('oversized planning prompt closes OPEN reservation before a Host Turn',asyn
  }),/Planning context too large/);
  assert.equal(turns,0);
  assert.deepEqual(f.store.db.prepare('SELECT status FROM host_planning').all().map(row=>row.status),['CANCELLED']);
+});
+
+async function switchableHostCwd(t, repo) {
+  const alias=join(dirname(repo),'approved-host-cwd');
+  const foreign=join(dirname(repo),'unapproved-host-cwd');
+  await mkdir(foreign);
+  const type=process.platform==='win32'?'junction':'dir';
+  try { await symlink(repo,alias,type); }
+  catch (error) {
+    if (['EPERM','EACCES','ENOTSUP','ENOSYS'].includes(error.code)) {
+      t.skip('Directory links unavailable on this runner');
+      return null;
+    }
+    throw error;
+  }
+  return {alias, async redirect() {
+    await rm(alias,{recursive:true,force:true});
+    await symlink(foreign,alias,type);
+  }};
+}
+
+test('planning grant cannot dispatch Host into a cwd alias repointed during review',async t=>{
+ const f=await setup(t);
+ const link=await switchableHostCwd(t,f.repo);
+ if (!link) return;
+ let turns=0;
+ await assert.rejects(planWithCodexManagedThread(f.store,f.repo,goal,{
+   ...f.settings,cwd:link.alias,
+   authorize:async()=>{await link.redirect();return true;},
+   transport:async()=>{turns++;throw Error('unauthorized Host dispatch');}
+ }),/Planning repository or Host cwd changed while awaiting approval/);
+ assert.equal(turns,0);
+ assert.deepEqual(f.store.db.prepare('SELECT status FROM host_planning').all().map(r=>r.status),['CANCELLED']);
+});
+
+test('planning refuses to accept a Host result from a cwd changed during Turn',async t=>{
+ const f=await setup(t);
+ const link=await switchableHostCwd(t,f.repo);
+ if (!link) return;
+ let turns=0;
+ await assert.rejects(planWithCodexManagedThread(f.store,f.repo,goal,{
+   ...f.settings,cwd:link.alias,authorize:async()=>true,
+   transport:async call=>{turns++;await link.redirect();return proposedReceipt(call);}
+ }),/Planning repository or Host cwd changed during Host Turn/);
+ assert.equal(turns,1);
+ assert.deepEqual(f.store.db.prepare('SELECT status FROM host_planning').all().map(r=>r.status),['RECONCILING']);
 });
