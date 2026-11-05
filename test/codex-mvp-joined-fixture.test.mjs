@@ -14,6 +14,8 @@ import { definition } from '../src/workflow/definition.mjs';
 import { createWorkflow, approveWorkflow, attempts } from '../src/workflow/persistence.mjs';
 import { createCodexManagedHostExecution } from '../src/hosts/codex-managed-host-execution.mjs';
 import { readDeliveredObjectiveStatus } from '../src/product/objective-status.mjs';
+import { dispatchProduct } from '../src/product/cli.mjs';
+import { runReport } from '../src/product/report.mjs';
 
 const source = () => ({
   schemaVersion:1,goal:'Complete both arithmetic source repairs under two approved dependent WorkItems.',
@@ -49,6 +51,10 @@ async function initial(t) {
       acceptanceCriteria:['Criterion B passes with accepted A as predecessor']}
   ]});
   const workflow=await createWorkflow(store,repo,graph,contract);
+  // Even the initial public workflow report cannot imply Objective success.
+  const pending=await runReport(store,workflow.id);
+  assert.equal(pending.objectiveComplete,false);
+  assert.equal(pending.objective.status,'INCOMPLETE');
   approveWorkflow(store,workflow.id,{actor:'synthetic-local-reviewer',workflowHash:workflow.contractHash,
     expiresAt:Date.now()+60000});
   return {root,repo,store,workflow};
@@ -150,8 +156,19 @@ test('joined synthetic two-WorkItem Objective: A persisted before B, local deliv
   assert.equal(result.status,'COMPLETE',result.reason);
   assert.equal(result.protection,'UNPROTECTED');
   assert.equal(result.objectiveComplete,true);
+  // Existing user-facing report must expose the real delivered-tree Judge.
+  const publicReport=await dispatchProduct(['report',f.workflow.id],{store:f.store});
+  assert.equal(publicReport.exitCode,0);
+  assert.equal(publicReport.data.objective.status,'COMPLETE');
+  assert.equal(publicReport.data.objectiveComplete,true);
+  assert.deepEqual(publicReport.data.objective.criterionIds,['C1']);
   await writeFile(join(f.repo,'src/a.js'),'user changed source after delivery');
   const drift=await readDeliveredObjectiveStatus(f.store,f.workflow.id);
   assert.equal(drift.objectiveComplete,false);
   assert.equal(drift.targetDrift,true);
+  const publicDrift=await dispatchProduct(['report',f.workflow.id],{store:f.store});
+  assert.equal(publicDrift.exitCode,0);
+  assert.equal(publicDrift.data.objectiveComplete,false);
+  assert.equal(publicDrift.data.objective.targetDrift,true);
+  assert.notEqual(publicDrift.data.objective.status,'COMPLETE');
 });

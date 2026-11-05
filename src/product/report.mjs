@@ -7,6 +7,7 @@ import { messages } from '../workflow/collaboration.mjs';
 import { task, bootstrapView, bootstrapDrift, clarifiableFor } from './tasks.mjs';
 import { reservationStatus } from './reservations.mjs';
 import { localAcceptance } from './local-acceptance.mjs';
+import { readDeliveredObjectiveStatus } from './objective-status.mjs';
 
 function bootstrapNext(current, plan) {
   if (current.state === 'REJECTED') return 'Create a new plan';
@@ -117,7 +118,12 @@ export async function runReport(store, id) {
   const artifactPaths = Object.fromEntries(['acceptedHash', 'evidenceHash', 'integrationHash', 'graphRef', 'sourceRef'].filter(k => /^[a-f0-9]{64}$/.test(run[k] ?? '')).map(k => [k, path.join(store.directory, 'artifacts', run[k] + '.json')]));
   const usage = run.kind === 'workflow' ? attempts(store, id).map(a => store.get(a.childId)) : [run];
   const complete = run.state === 'COMPLETED' && verification.status === 'VERIFIED';
-  return { schemaVersion: 1, kind: 'RunReport', runId: id, state: run.state === 'COMPLETED' && !complete ? 'VERIFICATION_INVALID' : run.state, recordedState: run.state, complete, verification, authorization, provider: run.providerId ?? (run.kind === 'workflow' ? 'NOT_SELECTED' : 'claude-v1'), workItems, activeAttempts,
+  // The legacy 'complete' flag describes a verified Candidate/Workflow, not
+  // a delivered Objective. Public report/status must expose the same current
+  // delivered-tree criterion judgment as the read-only Objective projection.
+  const objective = run.kind === 'workflow'
+    ? await readDeliveredObjectiveStatus(store, id) : null;
+  return { schemaVersion: 1, kind: 'RunReport', runId: id, objective, objectiveComplete: objective?.objectiveComplete === true, state: run.state === 'COMPLETED' && !complete ? 'VERIFICATION_INVALID' : run.state, recordedState: run.state, complete, verification, authorization, provider: run.providerId ?? (run.kind === 'workflow' ? 'NOT_SELECTED' : 'claude-v1'), workItems, activeAttempts,
     attempts: run.attempts, cost: { reportedUsd: usage.reduce((n, r) => n + r.reportedCostUsd, 0), unknownAttempts: usage.reduce((n, r) => n + r.unknownCostAttempts, 0), authority: 'PROVIDER_REPORTED_ONLY' },
     reason: run.reason ?? null, artifactPaths, messages: run.kind === 'workflow' && run.contract.schemaVersion === 2 ? messages(store, run.id) : [], retry: activeAttempts.length ? 'RECONCILE_ONLY_NO_AUTOMATIC_REPLAY' : run.kind === 'workflow' && workItems.some(n => n.attempt) && !complete ? 'NEW_REVIEWED_TASK_REQUIRED' : 'WITHIN_PINNED_CONTRACT_ONLY',
     readiness: complete ? 'VERIFIED' : 'BLOCKED_OR_UNSUPPORTED', liveProviderVerification: 'NOT_ESTABLISHED_BY_THIS_REPORT', events: store.events(id) };
