@@ -5,7 +5,7 @@ import { hash } from '../src/alpha/contract.mjs';
 import { POLICY } from '../src/workflow/definition.mjs';
 import { built, request, prepared, propose, approve } from './fixtures/bootstrap-reservation.mjs';
 import { task } from '../src/product/tasks.mjs';
-import { rm, readFile } from 'node:fs/promises';
+import { rm, readFile, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const backend = { prepare: async()=>{}, verify: async()=>{}, cleanup: async()=>{} };
@@ -158,6 +158,36 @@ test('Bootstrap verification grant rejects a swapped immutable Plan even with id
   await assert.rejects(api.verifyApprovedBootstrap(f.id,'tests',request(f)),
     /verification scope changed during review/);
   assert.equal(grants,1);
+  assert.equal(backendCalls,0);
+  assert.equal(task(f.store,f.id).bootstrap.verifications?.tests,undefined);
+});
+
+test('Bootstrap Local reviewer sees an immutable exact command before authorizing verification',async t=>{
+  const f=await built({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const command=request(f);
+  let reviews=0,backendCalls=0;
+  const api=createCodexMvpFacade(f.store,{executable:process.execPath,model:'fixture',
+    authorizeBootstrapVerification:async scope=>{
+      reviews++;
+      assert.equal(scope.protection,'UNPROTECTED');
+      assert.equal(scope.command.commandHash,scope.commandHash);
+      assert.equal(scope.command.executable,await realpath(command.executable));
+      assert.equal(scope.command.directory,await realpath(command.directory));
+      assert.deepEqual(scope.command.args,command.args);
+      assert.equal(scope.command.timeoutMs,command.timeoutMs);
+      assert.match(scope.command.executableHash,/^[a-f0-9]{64}$/);
+      assert.match(scope.command.candidateTreeHash,/^[a-f0-9]{64}$/);
+      assert.equal(Object.isFrozen(scope.command),true);
+      assert.equal(Object.isFrozen(scope.command.args),true);
+      assert.throws(()=>scope.command.args.push('--unreviewed'),TypeError);
+      assert.throws(()=>{scope.command.timeoutMs=1;},TypeError);
+      return false;
+    },
+    bootstrapVerifierBackend:{authorize:async()=>{backendCalls++;throw Error('unexpected execution');}}
+  });
+  await assert.rejects(api.verifyApprovedBootstrap(f.id,'tests',command),/grant denied/);
+  assert.equal(reviews,1);
   assert.equal(backendCalls,0);
   assert.equal(task(f.store,f.id).bootstrap.verifications?.tests,undefined);
 });

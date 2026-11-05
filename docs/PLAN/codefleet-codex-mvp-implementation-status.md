@@ -407,3 +407,15 @@ the Operator. The command still cannot grant approval, start a Host Turn or
 change the Store. This is an offline UX/approval-transparency improvement; no
 Host Live, protected verification or Objective E2E acceptance is claimed. New
 Windows/Linux CI is required before reporting offline PASS.
+
+## Bootstrap Local reviewer receives immutable executable/argv scope (fresh CI required)
+
+The trusted NEW_PROJECT/EXISTING_LOCAL verification approval callback now sees a
+frozen exact command specification (canonical executable and bytes hash, argv,
+cwd, timeout, candidate tree hash and command hash), not just opaque hashes.
+After asynchronous owner review, the facade compares this full snapshot with a
+fresh independent command preview before permitting the existing Local verifier.
+An offline denial regression checks frozen argument arrays and no backend effect
+when a reviewer rejects the inspected command. This is still UNPROTECTED Local
+only, not public Operator authentication, Codex Host Live or Objective acceptance.
+The changed head requires its own Windows/Linux Actions result.

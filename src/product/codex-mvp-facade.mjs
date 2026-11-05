@@ -164,8 +164,17 @@ export function createCodexMvpFacade(store, {
       // and current target bytes; it does not create a command grant.
       const preview=await verifyTask(store,taskId,itemId,command);
       if (preview?.status !== 'TRUST_REQUIRED' ||
-          !preview.commandHash || !preview.fileDigests)
+          !preview.commandHash || !preview.fileDigests ||
+          !Array.isArray(preview.command?.args) ||
+          preview.command.commandHash !== preview.commandHash)
         invalid('Exact Local command preview unavailable');
+      // Owner review must see the executable, argv, cwd, timeout and observed
+      // tree, not just opaque hashes. Freeze the nested argv before passing
+      // it across the asynchronous independent approval boundary.
+      const reviewedCommand=Object.freeze({
+        ...structuredClone(preview.command),
+        args:Object.freeze([...preview.command.args])
+      });
       const scope=Object.freeze({
         kind:'CODEFLEET_BOOTSTRAP_LOCAL_CHECK_SCOPE_V1',
         taskId,itemId,revision:initial.current.revision,
@@ -173,6 +182,7 @@ export function createCodexMvpFacade(store, {
         planRef:initial.current.planRef,
         workflowRef:initial.current.bootstrap.workflowRef,
         repo:initial.plan.probe.root,commandHash:preview.commandHash,
+        command:reviewedCommand,
         fileDigests:Object.freeze(structuredClone(preview.fileDigests)),
         protection:'UNPROTECTED'
       });
@@ -191,6 +201,7 @@ export function createCodexMvpFacade(store, {
       const currentPreview=await verifyTask(store,taskId,itemId,command);
       if (currentPreview?.status !== 'TRUST_REQUIRED' ||
           currentPreview.commandHash !== scope.commandHash ||
+          hash(currentPreview.command) !== hash(scope.command) ||
           hash(currentPreview.fileDigests) !== hash(scope.fileDigests))
         invalid('Bootstrap verification command/tree changed during review');
       // verifyTask still performs its own preflight, exact command inspection
