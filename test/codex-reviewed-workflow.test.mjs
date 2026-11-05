@@ -63,6 +63,38 @@ test('a validated Codex plan yields a pending approval Workflow, not execution',
  assert.equal(repeated.workflowId,created.workflowId);
  assert.equal(x.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,1);
 });
+test('planning review exposes frozen WorkItem DAG, mandatory criteria and budget before creation',async t=>{
+ const f=await fixture(t);
+ let reviews=0;
+ await assert.rejects(prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+   authorizeReview:async scope=>{
+     reviews++;
+     const source=f.result.workflowPreview.source;
+     assert.equal(scope.deliveryMode,'local');
+     assert.equal(scope.requiredVerification,true);
+     assert.deepEqual(scope.executionLimits,{
+       maxAttempts:source.maxAttempts,
+       timeoutSeconds:source.timeoutSeconds,
+       attemptBudgetUsd:source.attemptBudgetUsd
+     });
+     assert.deepEqual(scope.contextFiles,source.context);
+     assert.deepEqual(scope.finalAcceptanceCriteria,
+       f.result.workflowPreview.workflow.acceptanceCriteria);
+     assert.deepEqual(scope.workItems,[{
+       id:'change',priority:0,dependencies:[],
+       files:['src/a.js'],tests:['test/a.test.js'],
+       acceptanceCriteria:['Arithmetic regression passes']
+     }]);
+     assert.throws(()=>scope.workItems[0].files.push('src/extra.js'),TypeError);
+     assert.throws(()=>{scope.workItems[0].acceptanceCriteria[0]='weakened';},TypeError);
+     assert.throws(()=>{scope.executionLimits.maxAttempts=10;},TypeError);
+     return false;
+   }
+ }),/review denied/);
+ assert.equal(reviews,1);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
+});
+
 test('no independent review means no Workflow creation',async t=>{
  const x=await fixture(t);
  await assert.rejects(prepareReviewedCodexWorkflow(x.store,x.repo,x.request.sessionId,{

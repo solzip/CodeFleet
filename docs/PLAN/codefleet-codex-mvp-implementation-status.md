@@ -384,3 +384,14 @@ reuse an earlier Host execution grant. Negative offline tests exercise actor
 replacement and expiry extension without launching a Host. This does not supply
 public Operator authentication or Host Live acceptance. This head needs its
 own Windows/Linux CI evidence.
+
+## Exact Codex Contract/DAG reviewer scope (fresh CI required)
+
+The trusted persisted Host Planning-to-Workflow bridge now presents the
+independent reviewer with immutable WorkItem dependencies, per-item acceptance
+criteria, final mandatory verification criterion, source context and bounded
+attempt/time/cost limits rather than only opaque hashes and flat file lists.
+Review denial still creates no Workflow or authorization. A regression test
+checks frozen nested scopes and zero creation effects. No public Operator
+admission, Host Live Turn or Objective acceptance is implied. This head needs
+independent Windows/Linux CI.

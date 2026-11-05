@@ -57,7 +57,27 @@ export async function prepareReviewedCodexWorkflow(store, repo, sessionId, {
     repositoryRoot:reviewedRoot, repositoryId,
     baseline:initial.body.baseline, workflowHash:initial.workflow.workflowHash,
     sourceContractHash:hash(initial.source),
-    files:[...initial.source.files],tests:[...initial.source.tests],
+    // Review the actual DAG, mandatory checks and bounded contract rather
+    // than only a hash and flat file lists. Copies remain immutable throughout
+    // the asynchronous owner review and cannot mutate the persisted plan.
+    files:Object.freeze([...initial.source.files]),
+    tests:Object.freeze([...initial.source.tests]),
+    contextFiles:Object.freeze([...initial.source.context]),
+    deliveryMode:initial.source.delivery.mode,
+    executionLimits:Object.freeze({
+      maxAttempts:initial.source.maxAttempts,
+      timeoutSeconds:initial.source.timeoutSeconds,
+      attemptBudgetUsd:initial.source.attemptBudgetUsd
+    }),
+    requiredVerification:initial.workflow.requiredVerification,
+    finalAcceptanceCriteria:Object.freeze([...initial.workflow.acceptanceCriteria]),
+    workItems:Object.freeze(initial.workflow.items.map(item=>Object.freeze({
+      id:item.id, priority:item.priority,
+      dependencies:Object.freeze([...item.dependencies]),
+      files:Object.freeze([...item.files]),
+      tests:Object.freeze([...item.tests]),
+      acceptanceCriteria:Object.freeze([...item.acceptanceCriteria])
+    }))),
     executionGranted:false
   });
   if(await authorizeReview(scope)!==true)
