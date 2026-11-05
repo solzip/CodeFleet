@@ -153,8 +153,10 @@ export function createCodexMvpFacade(store, {
         kind:'CODEFLEET_BOOTSTRAP_LOCAL_CHECK_SCOPE_V1',
         taskId,itemId,revision:initial.current.revision,
         workflowHash:initial.workflow.workflowHash,
+        planRef:initial.current.planRef,
+        workflowRef:initial.current.bootstrap.workflowRef,
         repo:initial.plan.probe.root,commandHash:preview.commandHash,
-        fileDigests:structuredClone(preview.fileDigests),
+        fileDigests:Object.freeze(structuredClone(preview.fileDigests)),
         protection:'UNPROTECTED'
       });
       if (await authorizeBootstrapVerification(scope)!==true)
@@ -164,6 +166,8 @@ export function createCodexMvpFacade(store, {
       // another review. Do not reserve an execution or consume its grant.
       const fresh=bootstrapContext(store,taskId);
       if (fresh.current.revision !== scope.revision ||
+          fresh.current.planRef !== scope.planRef ||
+          fresh.current.bootstrap.workflowRef !== scope.workflowRef ||
           fresh.workflow.workflowHash !== scope.workflowHash ||
           fresh.plan.probe.root !== scope.repo)
         invalid('Bootstrap verification scope changed during review');

@@ -360,3 +360,15 @@ grant. An offline positive Fileset materialization fixture and an adversarial
 Plan substitution test cover this trusted entry; no Host model, PROTECTED
 verification or final Objective acceptance is claimed. Windows/Linux CI for
 this new commit must be evaluated independently.
+
+## Immutable Bootstrap Local verification review scope (new CI pending)
+
+The trusted Bootstrap Local verification facade now includes the immutable Plan
+and Workflow artifact references in its exact grant scope, and rechecks both
+after asynchronous owner review. A swapped Plan pointer with unchanged revision,
+repository root, Workflow hash, command and tree digests cannot consume the
+old grant. The criterion file-digest snapshot is frozen before it is shared
+with the grant callback to prevent accidental scope mutation. Offline regression
+checks assert a substituted Plan is rejected before backend authorization.
+This does not authenticate callers, provide OS confinement, verify a live Codex
+Turn or accept the final Objective. Fresh Windows/Linux CI is required.

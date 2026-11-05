@@ -106,6 +106,36 @@ test('Bootstrap exact verification grant is invalidated by a task revision chang
   assert.equal(backendCalls,0);
   assert.equal(task(f.store,f.id).bootstrap.verifications?.tests,undefined);
 });
+test('Bootstrap verification grant rejects a swapped immutable Plan even with identical workflow and file bytes',async t=>{
+  const f=await built({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const original=task(f.store,f.id);
+  const plan=f.store.readArtifact(original.planRef);
+  const substituted=f.store.artifact({...plan,unreviewedMetadata:'different immutable Plan'});
+  let grants=0,backendCalls=0;
+  const api=createCodexMvpFacade(f.store,{executable:process.execPath,model:'fixture',
+    authorizeBootstrapVerification:async scope=>{
+      grants++;
+      assert.equal(scope.planRef,original.planRef);
+      assert.equal(scope.workflowRef,original.bootstrap.workflowRef);
+      assert.equal(scope.repo,f.dir);
+      assert.equal(Object.isFrozen(scope.fileDigests),true);
+      assert.throws(()=>{scope.fileDigests['outside-scope']='forged';},TypeError);
+      // Preserve revision, Workflow hash, repo and command/tree hashes. Only
+      // the Plan artifact pointer moves during owner review.
+      f.store.db.prepare('UPDATE product_tasks SET body=? WHERE id=?')
+        .run(JSON.stringify({...original,planRef:substituted}),f.id);
+      return true;
+    },
+    bootstrapVerifierBackend:{authorize:async()=>{backendCalls++;throw Error('unexpected execution');}}
+  });
+  await assert.rejects(api.verifyApprovedBootstrap(f.id,'tests',request(f)),
+    /verification scope changed during review/);
+  assert.equal(grants,1);
+  assert.equal(backendCalls,0);
+  assert.equal(task(f.store,f.id).bootstrap.verifications?.tests,undefined);
+});
+
 test('Bootstrap exact verification grant rejects a mutable command changed during review',async t=>{
   const f=await built({passing:true});
   t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
