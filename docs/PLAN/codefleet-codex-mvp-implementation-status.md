@@ -245,3 +245,17 @@ create the hard link skips only that adversarial case. This is a fail-closed
 regular-file identity check, not OS confinement, protection against concurrent
 link swaps, or Host Live acceptance. The new head needs its own Windows/Linux
 CI before reporting these tests as passing.
+
+## Public read-only delivered Objective status (CI pending)
+
+The existing `codefleet-alpha objective` entry now exposes:
+`delivered-status <workflow-id>`. The command opens the SQLite Store read-only,
+calls the trusted `readDeliveredObjectiveStatus` projection, and exits 0 only
+for a genuinely COMPLETE delivered Objective; unverified or artifact-only results
+exit 2. It rejects extra execution/approval/model flags and never starts a Host
+Turn or initializes Task/Workflow tables. A read-only regression fixture checks
+that a legacy artifact-only COMPLETED Workflow is reported only as
+`VERIFIED_CANDIDATE_AVAILABLE`, preserves the original event count, and rejects
+execution flags. This is an **observation/UX** increment, not the authenticated
+Host execution entrypoint or proof of Codex Live acceptance. The changed head
+requires its own Windows/Linux CI before declaring offline PASS.
