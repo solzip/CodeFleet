@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { createCodexMvpFacade } from '../src/product/codex-mvp-facade.mjs';
 import { hash } from '../src/alpha/contract.mjs';
 import { POLICY } from '../src/workflow/definition.mjs';
-import { built, request } from './fixtures/bootstrap-reservation.mjs';
+import { built, request, prepared, propose, approve } from './fixtures/bootstrap-reservation.mjs';
 import { task } from '../src/product/tasks.mjs';
-import { rm } from 'node:fs/promises';
+import { rm, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 const backend = { prepare: async()=>{}, verify: async()=>{}, cleanup: async()=>{} };
 function fixture() {
@@ -124,4 +125,58 @@ test('Bootstrap exact verification grant rejects a mutable command changed durin
   assert.equal(grants,1);
   assert.equal(backendCalls,0);
   assert.equal(task(f.store,f.id).bootstrap.verifications?.tests,undefined);
+});
+
+
+const pendingTodoFiles = [
+  { path:'package.json', content:'{"type":"module"}\n' },
+  { path:'src/todo.mjs', content:'export const add = (list, t) => [...list, t];\n' },
+  { path:'test/todo.test.mjs', content:"import test from 'node:test';\n" }
+];
+
+test('trusted NEW_PROJECT materialization uses exact approved Plan and Fileset', async t => {
+  const f=await prepared({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  approve(f,await propose(f,'todo',{files:pendingTodoFiles}));
+  const current=task(f.store,f.id),runId=current.bootstrap.filesets.todo;
+  const scopes=[];
+  const api=createCodexMvpFacade(f.store,{executable:process.execPath,model:'fixture',
+    authorizeBootstrapMaterialization:async scope=>{scopes.push(scope);return true;}
+  });
+  const result=await api.materializeApprovedBootstrap(f.id,'todo');
+  assert.equal(result.status,'MATERIALIZED');
+  assert.equal(result.complete,false);
+  assert.equal(scopes.length,1);
+  assert.equal(scopes[0].repo,f.dir);
+  assert.equal(scopes[0].planRef,current.planRef);
+  assert.equal(scopes[0].filesetHash,f.store.get(runId).contractHash);
+  assert.equal(await readFile(join(f.dir,'src/todo.mjs'),'utf8'),pendingTodoFiles[1].content);
+});
+
+test('Bootstrap Fileset owner grant cannot be reused after Plan destination substitution', async t => {
+  const f=await prepared({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  approve(f,await propose(f,'todo',{files:pendingTodoFiles}));
+  const original=task(f.store,f.id),runId=original.bootstrap.filesets.todo;
+  let grants=0;
+  const api=createCodexMvpFacade(f.store,{executable:process.execPath,model:'fixture',
+    authorizeBootstrapMaterialization:async scope=>{
+      grants++;
+      assert.equal(scope.planRef,original.planRef);
+      const plan=f.store.readArtifact(original.planRef);
+      const redirected=f.store.artifact({
+        ...plan,probe:{...plan.probe,root:f.dir+'-unreviewed'}
+      });
+      // Simulate a stale mutable task pointer during asynchronous human review,
+      // without changing its revision, Fileset or Workflow hash.
+      f.store.db.prepare('UPDATE product_tasks SET body=? WHERE id=?')
+        .run(JSON.stringify({...original,planRef:redirected}),f.id);
+      return true;
+    }
+  });
+  await assert.rejects(api.materializeApprovedBootstrap(f.id,'todo'),
+    /Bootstrap scope changed during review/);
+  assert.equal(grants,1);
+  assert.equal(f.store.get(runId).state,'READY');
+  await assert.rejects(readFile(join(f.dir,'src/todo.mjs')),{code:'ENOENT'});
 });

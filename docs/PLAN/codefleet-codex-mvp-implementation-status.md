@@ -348,3 +348,15 @@ authenticated grant or solve production Host execution admission. Negative
 tests cover stale/tampered receipts, disallowed CLI options, read-only database
 access and absence of effects. The updated head needs its own Windows/Linux
 GitHub Actions result before this regression test may be marked passing.
+
+## Immutable Bootstrap destination during supervised Fileset materialization (new CI pending)
+
+The trusted NEW_PROJECT/EXISTING_LOCAL materialization facade now includes the
+immutable source Plan artifact reference in its exact owner review scope and
+rechecks both that reference and the destination repository root after the
+asynchronous grant. A task Plan pointer or repository substitution with an
+unchanged task revision, Workflow hash and Fileset hash cannot consume the old
+grant. An offline positive Fileset materialization fixture and an adversarial
+Plan substitution test cover this trusted entry; no Host model, PROTECTED
+verification or final Objective acceptance is claimed. Windows/Linux CI for
+this new commit must be evaluated independently.

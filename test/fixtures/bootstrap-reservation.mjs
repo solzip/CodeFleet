@@ -55,4 +55,4 @@ async function create(f, itemId, options) {
 async function built(options) { const f = await prepared(options); await create(f, 'todo', options); await create(f, 'calendar', options); return f; }
 const request = f => ({ executable: process.execPath, args: ['--test', '--test-reporter=tap'], directory: f.dir, timeoutMs: 60000 });
 
-export { built, request };
+export { built, request, prepared, propose, approve };

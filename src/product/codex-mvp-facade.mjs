@@ -116,6 +116,9 @@ export function createCodexMvpFacade(store, {
         kind:'CODEFLEET_BOOTSTRAP_MATERIALIZATION_SCOPE_V1',
         taskId,itemId,runId,revision:initial.current.revision,
         workflowHash:initial.workflow.workflowHash,
+        // A source Plan artifact and its repository are part of the exact
+        // owner-reviewed destination, even when the Workflow hash is unchanged.
+        planRef:initial.current.planRef,
         filesetHash:fileSet.contractHash,
         repo:initial.plan.probe.root,protection:'UNPROTECTED',
         goalEffect:'APPROVED_EXACT_LOCAL_FILESET'
@@ -125,6 +128,8 @@ export function createCodexMvpFacade(store, {
       const fresh=bootstrapContext(store,taskId);
       if (fresh.current.revision !== scope.revision ||
           fresh.workflow.workflowHash !== scope.workflowHash ||
+          fresh.current.planRef !== scope.planRef ||
+          fresh.plan.probe.root !== scope.repo ||
           fresh.current.bootstrap?.filesets?.[itemId] !== runId ||
           store.get(runId).contractHash !== scope.filesetHash)
         invalid('Bootstrap scope changed during review');
