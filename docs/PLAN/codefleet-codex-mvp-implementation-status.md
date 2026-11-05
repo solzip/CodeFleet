@@ -372,3 +372,15 @@ with the grant callback to prevent accidental scope mutation. Offline regression
 checks assert a substituted Plan is rejected before backend authorization.
 This does not authenticate callers, provide OS confinement, verify a live Codex
 Turn or accept the final Objective. Fresh Windows/Linux CI is required.
+
+## Managed Host Workflow approval rotation fence (new offline CI required)
+
+The trusted `runExistingWorkflow` execution scope now pins a hash of the exact
+current Workflow approval record (actor, workflow digest and expiry) or the
+already-required protected Operator binding. After asynchronous embedding-owned
+authorization, it re-reads this fingerprint before dispatching Controller/Host
+work. A replacement approval for the same revision/Workflow cannot silently
+reuse an earlier Host execution grant. Negative offline tests exercise actor
+replacement and expiry extension without launching a Host. This does not supply
+public Operator authentication or Host Live acceptance. This head needs its
+own Windows/Linux CI evidence.

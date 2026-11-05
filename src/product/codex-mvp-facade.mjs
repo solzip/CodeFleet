@@ -58,10 +58,27 @@ export function createCodexMvpFacade(store, {
     if (current.control && current.control !== 'run') invalid('Workflow is paused/cancelled');
     return current;
   };
+  // A trusted execution grant is not transferable to a replacement approval.
+  // The Workflow hash may be identical while the approving actor or expiry
+  // changes. Re-observe the authority row on both sides of async review.
+  const approvalSnapshotHash = run => {
+    if (run.authorizationMode === 'OS_OPERATOR_V1')
+      return hash({ mode:'OS_OPERATOR_V1', taskId:run.taskId ?? null,
+        operatorAuthorization:run.operatorAuthorization ?? null });
+    const row = store.db.prepare(
+      'SELECT digest,actor,expires FROM workflow_approvals WHERE runId=? AND revision=?'
+    ).get(run.id,run.revision);
+    if (!row || row.digest !== run.contractHash ||
+        !Number.isFinite(row.expires) || row.expires <= Date.now())
+      invalid('Current Workflow approval record required');
+    return hash({ mode:'WORKFLOW_APPROVAL_V1', digest:row.digest,
+      actor:row.actor ?? null, expires:row.expires });
+  };
   const callScope = run => Object.freeze({
     kind: 'CODEFLEET_MANAGED_WORKFLOW_SCOPE_V1', runId: run.id,
     revision: run.revision, workflowHash: run.contractHash,
     repo: run.repo, base: run.base, model,
+    approvalSnapshotHash: approvalSnapshotHash(run),
     executionMode: workspaceWrite
       ? 'HOST_WORKSPACE_WRITE_UNPROTECTED' : 'HOST_READ_ONLY_PROPOSAL',
     protectedVerified: false

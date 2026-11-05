@@ -58,6 +58,32 @@ test('Workflow revision or repo change while reviewing grant stops before launch
    authorizeWorkflow:async()=>{workflow.repo='/other-repo';return true;}});
  await assert.rejects(api.runExistingWorkflow('run-fixture'),/scope changed/);
 });
+test('a replacement Workflow approval cannot reuse an earlier Host execution grant',async()=>{
+ for (const rotate of [
+   row=>({...row,actor:'operator-replacement'}),
+   row=>({...row,expires:row.expires+15000})
+ ]) {
+   const {store,workflow}=fixture();
+   let current={digest:workflow.contractHash,actor:'operator-original',
+     expires:Date.now()+60000};
+   // Both approval records are independently valid for the same Workflow.
+   // Rotation during asynchronous owner review must nevertheless revoke the
+   // grant binding before Controller/Host execution begins.
+   store.db.prepare=()=>({get:()=>({...current})});
+   const scopes=[];
+   const api=createCodexMvpFacade(store,{executable:process.execPath,model:'fixture',
+     enableHostTurns:true,verificationBackend:backend,
+     authorizeWorkflow:async scope=>{
+       scopes.push(scope);
+       current=rotate(current);
+       return true;
+     }});
+   await assert.rejects(api.runExistingWorkflow('run-fixture'),/scope changed/);
+   assert.equal(scopes.length,1);
+   assert.match(scopes[0].approvalSnapshotHash,/^[a-f0-9]{64}$/);
+ }
+});
+
 test('host execution options cannot be model-controlled through unexpected fields',async()=>{
  const {store}=fixture();
  const api=createCodexMvpFacade(store,{executable:process.execPath,model:'codex-fixture',
