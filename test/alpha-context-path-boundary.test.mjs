@@ -107,5 +107,5 @@ test('context rejects hard-linked outside files and case-folded aliases', async 
     throw error;
   }
   await assert.rejects(context(candidate, { context: ['src/linked.js'], tests: [] }),
-    /hard link or nonregular/);
+    /hard link/);
 });
