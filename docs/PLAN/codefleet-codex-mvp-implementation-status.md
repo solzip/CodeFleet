@@ -395,3 +395,15 @@ Review denial still creates no Workflow or authorization. A regression test
 checks frozen nested scopes and zero creation effects. No public Operator
 admission, Host Live Turn or Objective acceptance is implied. This head needs
 independent Windows/Linux CI.
+
+## Public planning review shows mandatory final verification (fresh CI required)
+
+The read-only `objective review-codex-plan` result now includes the trusted
+independent review scope's WorkItem priorities, DAG edges, per-item acceptance
+criteria, source context, required capabilities, delivery mode and explicit final
+mandatory acceptance gate. Previously, the public preview only showed a flat
+criterion list, hiding the final protected source-contract test requirement from
+the Operator. The command still cannot grant approval, start a Host Turn or
+change the Store. This is an offline UX/approval-transparency improvement; no
+Host Live, protected verification or Objective E2E acceptance is claimed. New
+Windows/Linux CI is required before reporting offline PASS.

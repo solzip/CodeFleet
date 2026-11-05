@@ -128,13 +128,22 @@ export function inspectReviewedCodexPlan(store, sessionId) {
       objectiveHash:hash(body.objective), repositoryId:body.context.discovery.repositoryId,
       sourceBaseline:body.baseline, workflowHash:workflow.workflowHash,
       sourceContractHash:hash(source), revision:1,
+      // The public read-only preview must expose the *same* mandatory final
+      // acceptance gate and per-item scope as the independent owner reviewer.
+      // A flat WorkItem criterion list alone conceals the final verification
+      // requirement and cannot support an informed approval decision.
       files:[...source.files], tests:[...source.tests],
+      contextFiles:[...source.context], deliveryMode:source.delivery.mode,
+      requiredCapabilities:[...workflow.requiredCapabilities],
+      requiredVerification:workflow.requiredVerification,
+      finalAcceptanceCriteria:[...workflow.acceptanceCriteria],
       criteria:workflow.items.flatMap(item => item.acceptanceCriteria.map(text => ({
         workItemId:item.id, description:text
       }))),
       workItems:workflow.items.map(item => ({
-        id:item.id, dependencies:[...item.dependencies],
-        files:[...item.files],tests:[...item.tests]
+        id:item.id, priority:item.priority, dependencies:[...item.dependencies],
+        files:[...item.files], tests:[...item.tests],
+        acceptanceCriteria:[...item.acceptanceCriteria]
       })),
       executionLimits: {
         maxAttempts:source.maxAttempts, timeoutSeconds:source.timeoutSeconds,

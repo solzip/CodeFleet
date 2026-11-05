@@ -177,6 +177,19 @@ test('persisted Codex plan has a real read-only Objective / Contract / DAG revie
  assert.equal(snapshot.sourceContractHash,hash(f.result.workflowPreview.source));
  assert.deepEqual(snapshot.files,['src/a.js']);
  assert.deepEqual(snapshot.tests,['test/a.test.js']);
+ // Review-only CLI includes the same mandatory final gate and bounded
+ // per-WorkItem criteria that the trusted independent review callback sees.
+ const preview=f.result.workflowPreview;
+ assert.deepEqual(snapshot.contextFiles,preview.source.context);
+ assert.equal(snapshot.deliveryMode,preview.source.delivery.mode);
+ assert.deepEqual(snapshot.requiredCapabilities,preview.workflow.requiredCapabilities);
+ assert.equal(snapshot.requiredVerification,true);
+ assert.deepEqual(snapshot.finalAcceptanceCriteria,preview.workflow.acceptanceCriteria);
+ assert.deepEqual(snapshot.workItems,[{
+   id:'change',priority:0,dependencies:[],
+   files:['src/a.js'],tests:['test/a.test.js'],
+   acceptanceCriteria:['Arithmetic regression passes']
+ }]);
  assert.deepEqual(snapshot.workItems.map(n=>n.id),['change']);
  assert.equal(snapshot.approved,false);
  assert.equal(snapshot.executionGranted,false);
