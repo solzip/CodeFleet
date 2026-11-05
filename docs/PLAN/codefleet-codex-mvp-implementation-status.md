@@ -419,3 +419,18 @@ An offline denial regression checks frozen argument arrays and no backend effect
 when a reviewer rejects the inspected command. This is still UNPROTECTED Local
 only, not public Operator authentication, Codex Host Live or Objective acceptance.
 The changed head requires its own Windows/Linux Actions result.
+
+
+## Trusted Host execution grant inspects pinned DAG and source (fresh CI required)
+
+Before the existing Controller starts a bounded Codex Host Workflow, the trusted
+facade now validates the persisted Workflow graph and original source-contract
+artifact against their content hashes and the existing Workflow validator.
+Independent owner review sees immutable actual WorkItem edges, files, tests,
+acceptance criteria, required capabilities and limits, rather than approving
+only an opaque Workflow digest. The graph/source are revalidated after the
+asynchronous reviewer callback, before dispatch. Negative offline regressions
+cover tampered in-memory persisted source/DAG and grant-time changes that must
+not reach Controller or Host. This does not authenticate a public Operator,
+run a real Codex Turn or establish protected Objective acceptance. The new head
+requires Windows/Linux CI before any offline PASS claim.

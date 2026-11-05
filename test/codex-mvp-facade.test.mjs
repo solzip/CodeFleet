@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCodexMvpFacade } from '../src/product/codex-mvp-facade.mjs';
 import { hash } from '../src/alpha/contract.mjs';
-import { POLICY } from '../src/workflow/definition.mjs';
+import { POLICY, definition } from '../src/workflow/definition.mjs';
 import { built, request, prepared, propose, approve } from './fixtures/bootstrap-reservation.mjs';
 import { task } from '../src/product/tasks.mjs';
 import { rm, readFile, realpath } from 'node:fs/promises';
@@ -10,17 +10,23 @@ import { join } from 'node:path';
 
 const backend = { prepare: async()=>{}, verify: async()=>{}, cleanup: async()=>{} };
 function fixture() {
-  const graph={policySnapshotRef:hash(POLICY)};
-  graph.workflowHash=hash({kind:'graph'});
+  const source = {schemaVersion:1,goal:'Repair scoped regression with verified changes',
+    files:['src/example.mjs'],context:['src/example.mjs'],
+    tests:['test/example.test.mjs'],maxAttempts:1,timeoutSeconds:300,
+    attemptBudgetUsd:1,delivery:{mode:'local'}};
+  const graph=definition(source,{workflowId:'fixture',
+    base:'a'.repeat(40),items:[{id:'fix',dependencies:[],priority:0,
+      files:['src/example.mjs'],tests:['test/example.test.mjs'],
+      acceptanceCriteria:['Regression passes']}]});
   const workflow={id:'run-fixture',kind:'workflow',revision:1,contract:graph,
-    contractHash:graph.workflowHash,repo:'/fixture-repo',base:'a'.repeat(40),
-    state:'READY',control:'run'};
+    contractHash:graph.workflowHash,sourceRef:hash(source),graphRef:hash(graph),
+    repo:'/fixture-repo',base:'a'.repeat(40),state:'READY',control:'run'};
   const store={
     get:()=>workflow,
-    readArtifact:()=>{throw Error('unavailable')},
+    readArtifact:ref=>{if(ref!==workflow.sourceRef)throw Error('unavailable');return source;},
     db:{prepare:()=>({get:()=>({digest:workflow.contractHash,expires:Date.now()+60000})})}
   };
-  return {store,workflow};
+  return {store,workflow,source};
 }
 test('does not authorize Host live by default',async()=>{
  const {store}=fixture();
@@ -82,6 +88,65 @@ test('a replacement Workflow approval cannot reuse an earlier Host execution gra
    assert.equal(scopes.length,1);
    assert.match(scopes[0].approvalSnapshotHash,/^[a-f0-9]{64}$/);
  }
+});
+
+test('trusted Workflow reviewer inspects frozen DAG, bounded budget and exact target scope',async()=>{
+  const {store,source,workflow}=fixture();
+  let reviews=0;
+  const api=createCodexMvpFacade(store,{executable:process.execPath,model:'fixture',
+    enableHostTurns:true,verificationBackend:backend,
+    authorizeWorkflow:async scope=>{
+      reviews++;
+      assert.equal(scope.objective,source.goal);
+      assert.equal(scope.sourceRef,workflow.sourceRef);
+      assert.equal(scope.graphRef,workflow.graphRef);
+      assert.deepEqual(scope.files,source.files);
+      assert.deepEqual(scope.tests,source.tests);
+      assert.deepEqual(scope.contextFiles,source.context);
+      assert.equal(scope.deliveryMode,'local');
+      assert.deepEqual(scope.executionLimits,{maxAttempts:1,timeoutSeconds:300,attemptBudgetUsd:1});
+      assert.deepEqual(scope.workItems.map(item=>item.id),['fix']);
+      assert.deepEqual(scope.workItems[0].dependencies,[]);
+      assert.deepEqual(scope.workItems[0].files,['src/example.mjs']);
+      assert.deepEqual(scope.workItems[0].acceptanceCriteria,['Regression passes']);
+      assert.deepEqual(scope.finalAcceptanceCriteria,workflow.contract.acceptanceCriteria);
+      assert.deepEqual(scope.requiredCapabilities,workflow.contract.requiredCapabilities);
+      assert.equal(Object.isFrozen(scope.workItems[0]),true);
+      assert.throws(()=>scope.workItems[0].files.push('src/unreviewed.mjs'),TypeError);
+      assert.throws(()=>{scope.executionLimits.attemptBudgetUsd=10;},TypeError);
+      return false;
+    }});
+  await assert.rejects(api.runExistingWorkflow('run-fixture'),/grant denied/);
+  assert.equal(reviews,1);
+});
+
+test('tampered persisted Workflow DAG or source never reaches execution grant',async()=>{
+  for(const mutate of [
+    ({workflow})=>{workflow.contract.items[0].files=['src/unreviewed.mjs'];},
+    ({source})=>{source.files.push('src/unreviewed.mjs');}
+  ]){
+    const f=fixture();let reviews=0;
+    mutate(f);
+    const api=createCodexMvpFacade(f.store,{executable:process.execPath,model:'fixture',
+      enableHostTurns:true,verificationBackend:backend,
+      authorizeWorkflow:async()=>{reviews++;return true;}});
+    await assert.rejects(api.runExistingWorkflow('run-fixture'),/Contract\/DAG or source artifact invalid/);
+    assert.equal(reviews,0);
+  }
+});
+
+test('source or DAG drift during asynchronous grant blocks Controller dispatch',async()=>{
+  for(const mutate of [
+    ({workflow})=>{workflow.contract.items[0].acceptanceCriteria=['Weakened'];},
+    ({source})=>{source.attemptBudgetUsd=10;}
+  ]){
+    const f=fixture();let reviews=0;
+    const api=createCodexMvpFacade(f.store,{executable:process.execPath,model:'fixture',
+      enableHostTurns:true,verificationBackend:backend,
+      authorizeWorkflow:async()=>{reviews++;mutate(f);return true;}});
+    await assert.rejects(api.runExistingWorkflow('run-fixture'),/Contract\/DAG or source artifact invalid/);
+    assert.equal(reviews,1);
+  }
 });
 
 test('host execution options cannot be model-controlled through unexpected fields',async()=>{

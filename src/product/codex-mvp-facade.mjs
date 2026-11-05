@@ -9,6 +9,7 @@ import { isAbsolute, resolve } from 'node:path';
 import { hash } from '../alpha/contract.mjs';
 import { execute } from '../alpha/controller.mjs';
 import { approval } from '../workflow/persistence.mjs';
+import { validateWorkflow } from '../workflow/definition.mjs';
 import { createCodexManagedHostExecution } from '../hosts/codex-managed-host-execution.mjs';
 import { planWithCodexManagedThread } from '../hosts/codex-managed-planning.mjs';
 import { proposeNewProjectFileset } from '../hosts/codex-bootstrap-files.mjs';
@@ -54,9 +55,22 @@ export function createCodexMvpFacade(store, {
         current.contractHash !== current.contract.workflowHash ||
         !exactText(current.repo) || !exactText(current.base))
       invalid('A persisted current Workflow is required');
+    // A mutable run row can retain an old workflowHash while its DAG, scope
+    // or source pointer changes. Validate the actual pinned artifacts before
+    // asking for an execution grant; approval of a digest alone is insufficient.
+    let source;
+    try {
+      source = store.readArtifact(current.sourceRef);
+      if (hash(source) !== current.sourceRef ||
+          hash(current.contract) !== current.graphRef)
+        invalid('Workflow artifact reference mismatch');
+      validateWorkflow(current.contract, source);
+    } catch {
+      invalid('Persisted Workflow Contract/DAG or source artifact invalid');
+    }
     approval(store, current);
     if (current.control && current.control !== 'run') invalid('Workflow is paused/cancelled');
-    return current;
+    return { run: current, source };
   };
   // A trusted execution grant is not transferable to a replacement approval.
   // The Workflow hash may be identical while the approving actor or expiry
@@ -74,11 +88,36 @@ export function createCodexMvpFacade(store, {
     return hash({ mode:'WORKFLOW_APPROVAL_V1', digest:row.digest,
       actor:row.actor ?? null, expires:row.expires });
   };
-  const callScope = run => Object.freeze({
+  const callScope = ({ run, source }) => Object.freeze({
     kind: 'CODEFLEET_MANAGED_WORKFLOW_SCOPE_V1', runId: run.id,
     revision: run.revision, workflowHash: run.contractHash,
+    graphRef: run.graphRef, sourceRef: run.sourceRef,
     repo: run.repo, base: run.base, model,
     approvalSnapshotHash: approvalSnapshotHash(run),
+    // Independent execution review must see the real bounded contract, not
+    // only an opaque graph hash. Everything nested is a frozen copy; reviewer
+    // code cannot rewrite the DAG or broaden the file/command budget.
+    objective: source.goal,
+    files: Object.freeze([...source.files]),
+    tests: Object.freeze([...source.tests]),
+    contextFiles: Object.freeze([...source.context]),
+    deliveryMode: source.delivery.mode,
+    executionLimits: Object.freeze({
+      maxAttempts: source.maxAttempts,
+      timeoutSeconds: source.timeoutSeconds,
+      attemptBudgetUsd: source.attemptBudgetUsd
+    }),
+    requiredCapabilities: Object.freeze([...run.contract.requiredCapabilities]),
+    finalAcceptanceCriteria: Object.freeze([...run.contract.acceptanceCriteria]),
+    workItems: Object.freeze(run.contract.items.map(item => Object.freeze({
+      id: item.id, priority: item.priority,
+      dependencies: Object.freeze([...item.dependencies]),
+      files: Object.freeze([...item.files]),
+      tests: Object.freeze([...item.tests]),
+      acceptanceCriteria: Object.freeze([...item.acceptanceCriteria]),
+      ...(item.roles ? {roles: Object.freeze({...item.roles})} : {}),
+      ...(item.resources ? {resources: Object.freeze([...item.resources])} : {})
+    }))),
     executionMode: workspaceWrite
       ? 'HOST_WORKSPACE_WRITE_UNPROTECTED' : 'HOST_READ_ONLY_PROPOSAL',
     protectedVerified: false
