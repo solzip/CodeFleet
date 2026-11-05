@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp,mkdir,writeFile,rm,realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { hash } from '../src/alpha/contract.mjs';
+import { hybridDefinition } from '../src/workflow/definition.mjs';
 import { tmpdir } from 'node:os';
 import { Store } from '../src/alpha/store.mjs';
 import { git } from '../src/alpha/workspace.mjs';
@@ -72,6 +73,10 @@ test('planning review exposes frozen WorkItem DAG, mandatory criteria and budget
      const source=f.result.workflowPreview.source;
      assert.equal(scope.deliveryMode,'local');
      assert.equal(scope.requiredVerification,true);
+     assert.deepEqual(scope.requiredCapabilities,
+       f.result.workflowPreview.workflow.requiredCapabilities);
+     assert.equal(Object.isFrozen(scope.requiredCapabilities),true);
+     assert.throws(()=>scope.requiredCapabilities.push('unreviewed-capability'),TypeError);
      assert.deepEqual(scope.executionLimits,{
        maxAttempts:source.maxAttempts,
        timeoutSeconds:source.timeoutSeconds,
@@ -183,6 +188,7 @@ test('persisted Codex plan has a real read-only Objective / Contract / DAG revie
  assert.deepEqual(snapshot.contextFiles,preview.source.context);
  assert.equal(snapshot.deliveryMode,preview.source.delivery.mode);
  assert.deepEqual(snapshot.requiredCapabilities,preview.workflow.requiredCapabilities);
+ assert.equal(snapshot.requiredCapabilities.includes('non_interactive_execution'),true);
  assert.equal(snapshot.requiredVerification,true);
  assert.deepEqual(snapshot.finalAcceptanceCriteria,preview.workflow.acceptanceCriteria);
  assert.deepEqual(snapshot.workItems,[{
@@ -242,4 +248,44 @@ test('a read-only Store without Host planning records reports UNAVAILABLE withou
   assert.equal(checked.db.prepare("SELECT 1 FROM sqlite_master WHERE name='host_planning'").get(),undefined);
   assert.equal(checked.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
  }finally{ checked.close(); }
+});
+
+// A hybrid DAG can carry role assignment and resource-lock constraints. Those
+// fields are part of the owner-reviewed execution scope, not hidden metadata.
+test('reviewed Codex plan displays immutable hybrid role and resource scope',async t=>{
+ const f=await fixture(t);
+ const original=f.result.workflowPreview.workflow;
+ const roles={Planner:'planner',Architect:'architect',Executor:'executor',Reviewer:'reviewer'};
+ const resources=['src/a.js'];
+ const workflow=hybridDefinition(f.result.workflowPreview.source,{
+   workflowId:original.workflowId,base:original.base,
+   workflowVersion:original.workflowVersion,maxParallel:1,
+   items:original.items.map(item=>({...item,roles,resources}))
+ });
+ const row=f.store.db.prepare('SELECT result FROM host_planning WHERE id=?')
+   .get(f.request.sessionId);
+ const result=JSON.parse(row.result);
+ result.workflowPreview.workflow=workflow;
+ const encoded=JSON.stringify(result);
+ f.store.db.prepare('UPDATE host_planning SET result=?,resultHash=? WHERE id=?')
+   .run(encoded,hash(encoded),f.request.sessionId);
+ const preview=inspectReviewedCodexPlan(f.store,f.request.sessionId);
+ assert.equal(preview.status,'REVIEW_REQUIRED');
+ assert.deepEqual(preview.workItems[0].roles,roles);
+ assert.deepEqual(preview.workItems[0].resources,resources);
+ let reviews=0;
+ await assert.rejects(prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+   authorizeReview:async scope=>{
+     reviews++;
+     assert.deepEqual(scope.workItems[0].roles,roles);
+     assert.deepEqual(scope.workItems[0].resources,resources);
+     assert.equal(Object.isFrozen(scope.workItems[0].roles),true);
+     assert.equal(Object.isFrozen(scope.workItems[0].resources),true);
+     assert.throws(()=>{scope.workItems[0].roles.Executor='replacement';},TypeError);
+     assert.throws(()=>scope.workItems[0].resources.push('outside'),TypeError);
+     return false;
+   }
+ }),/review denied/);
+ assert.equal(reviews,1);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
 });

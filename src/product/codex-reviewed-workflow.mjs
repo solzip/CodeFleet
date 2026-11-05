@@ -70,13 +70,17 @@ export async function prepareReviewedCodexWorkflow(store, repo, sessionId, {
       attemptBudgetUsd:initial.source.attemptBudgetUsd
     }),
     requiredVerification:initial.workflow.requiredVerification,
+    // Approval of a Contract must also disclose the Host capabilities it requires.
+    requiredCapabilities:Object.freeze([...initial.workflow.requiredCapabilities]),
     finalAcceptanceCriteria:Object.freeze([...initial.workflow.acceptanceCriteria]),
     workItems:Object.freeze(initial.workflow.items.map(item=>Object.freeze({
       id:item.id, priority:item.priority,
       dependencies:Object.freeze([...item.dependencies]),
       files:Object.freeze([...item.files]),
       tests:Object.freeze([...item.tests]),
-      acceptanceCriteria:Object.freeze([...item.acceptanceCriteria])
+      acceptanceCriteria:Object.freeze([...item.acceptanceCriteria]),
+      ...(item.roles ? {roles:Object.freeze({...item.roles})} : {}),
+      ...(item.resources ? {resources:Object.freeze([...item.resources])} : {})
     }))),
     executionGranted:false
   });
@@ -143,7 +147,9 @@ export function inspectReviewedCodexPlan(store, sessionId) {
       workItems:workflow.items.map(item => ({
         id:item.id, priority:item.priority, dependencies:[...item.dependencies],
         files:[...item.files], tests:[...item.tests],
-        acceptanceCriteria:[...item.acceptanceCriteria]
+        acceptanceCriteria:[...item.acceptanceCriteria],
+        ...(item.roles ? {roles:{...item.roles}} : {}),
+        ...(item.resources ? {resources:[...item.resources]} : {})
       })),
       executionLimits: {
         maxAttempts:source.maxAttempts, timeoutSeconds:source.timeoutSeconds,
