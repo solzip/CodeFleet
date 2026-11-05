@@ -459,3 +459,15 @@ post-Turn hard-link substitution, and a linked directory ancestor. This does
 not prevent Host-origin external effects, provide OS confinement, prove live
 Codex execution, or establish a verified Objective. Windows/Linux CI for this
 commit is required before reporting these offline tests as PASS.
+
+## Executable-mode bound Candidate / delivered-tree hashes (fresh CI required)
+
+The shared Candidate tree observer now pins the Git-style executable bit
+(100644 vs 100755) alongside each file's bytes. An otherwise identical
+delivered file with newly executable permissions cannot retain Objective
+COMPLETE. The Local delivery fixture uses the mode-aware hash, and an offline
+delivered Objective test checks byte-identical executable-mode drift.
+Previously persisted byte-only Candidate hashes are not silently promoted;
+they require the current bound verification path. Windows executable-bit
+mutation is not claimed to be supported or tested by the POSIX-specific case.
+Native Codex Host Live and final independent acceptance remain UNVERIFIED.

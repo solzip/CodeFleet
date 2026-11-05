@@ -87,6 +87,7 @@ export async function candidateHash(directory, names) {
           /^(con|prn|aux|nul|com[0-9]|lpt[0-9])([.]|$)/i.test(part)))
       throw Error('Unsafe tracked Candidate path: ' + String(name));
     let current = directory;
+    let executable = false;
     for (let index = 0; index < parts.length; index++) {
       current = path.join(current, parts[index]);
       const stat = await lstat(current);
@@ -97,8 +98,13 @@ export async function candidateHash(directory, names) {
         // Hard links are regular files but alias the bytes of an unapproved
         // outside path, so content equality alone is not a safe boundary.
         throw Error('Candidate tree contains a symlink or nonregular path (including hard link): ' + name);
+      if (index === parts.length - 1)
+        executable = (stat.mode & 0o111) !== 0;
     }
-    rows.push([name, hash(await readFile(current))]);
+    // Executable files change behavior without changing bytes. Git preserves
+    // executable versus regular file mode; pin that distinction in Candidate
+    // and delivered-tree hashes instead of accepting same-byte mode drift.
+    rows.push([name, hash(await readFile(current)), executable ? '100755' : '100644']);
   }
   return hash(rows);
 }

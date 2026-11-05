@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, readdir, rename, symlink, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, readdir, rename, symlink, lstat, rm } from 'node:fs/promises';
 import { join, dirname, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import { git } from '../src/alpha/workspace.mjs';
@@ -21,7 +21,9 @@ async function fixture(t) {
   const rev=await git(root,['rev-parse','HEAD']);
   const base=rev.stdout.toString().trim();
   const candidatePaths=['src/a.js'];
-  const verifiedCandidateHash = hash([['src/a.js',hash(Buffer.from(changed))]]);
+  const executable = ((await lstat(join(root,'src/a.js'))).mode & 0o111) !== 0;
+  const verifiedCandidateHash = hash([['src/a.js', hash(Buffer.from(changed)),
+    executable ? '100755' : '100644']]);
   let grants=0,intents=0;
   const opts={
     destination:root,base,files:{'src/a.js':changed},

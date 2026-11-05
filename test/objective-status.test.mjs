@@ -1,4 +1,4 @@
-import { mkdtemp,mkdir,writeFile,rm,symlink,link } from 'node:fs/promises';
+import { mkdtemp,mkdir,writeFile,rm,symlink,link,chmod,lstat,readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { candidateHash } from '../src/alpha/workspace.mjs';
@@ -328,4 +328,40 @@ test('delivered Objective preserves the pre-effect verified Candidate and Eviden
    assert.equal(result.status,'BLOCKED',JSON.stringify(change));
    assert.equal(result.objectiveComplete,false);
  }
+});
+
+test('delivered Objective rejects same-byte executable-bit drift after COMPLETE', async t => {
+  if (process.platform === 'win32') {
+    t.skip('Executable-bit mutation is not portable on Windows filesystems'); return;
+  }
+  const root = await mkdtemp(join(tmpdir(), 'codefleet-mode-objective-'));
+  t.after(() => rm(root, { recursive:true, force:true }));
+  await mkdir(join(root, 'src'));
+  const target = join(root, 'src', 'a.js');
+  const source = 'export const approved = 1;\n';
+  await writeFile(target, source);
+  await chmod(target, 0o644);
+  if (((await lstat(target)).mode & 0o111) !== 0) {
+    t.skip('Filesystem does not honor removing executable bits'); return;
+  }
+  const targetHash = await candidateHash(root, ['src/a.js']);
+  const x = fixture({
+    runOverride:{repo:root},
+    childOverride:{repo:root,candidateHash:targetHash},
+    deliveryOverride:{candidateHash:targetHash,targetTreeHash:targetHash},
+    intentOverride:{destination:root,candidateHash:targetHash},
+    decisionOverride:{targetTreeHash:targetHash},
+    evidenceOverride:{targetTreeHash:targetHash}
+  });
+  const accepted = await readDeliveredObjectiveStatus(x.store, 'objective-1');
+  assert.equal(accepted.status, 'COMPLETE');
+  await chmod(target, 0o755);
+  if (((await lstat(target)).mode & 0o111) === 0) {
+    t.skip('Filesystem does not honor setting executable bits'); return;
+  }
+  assert.equal(await readFile(target, 'utf8'), source);
+  const drifted = await readDeliveredObjectiveStatus(x.store, 'objective-1');
+  assert.equal(drifted.objectiveComplete, false);
+  assert.equal(drifted.status, 'INCOMPLETE');
+  assert.equal(drifted.targetDrift, true);
 });
