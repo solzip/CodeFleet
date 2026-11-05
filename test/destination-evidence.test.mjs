@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp,mkdir,writeFile,rm,symlink,chmod } from 'node:fs/promises';
+import { mkdtemp,mkdir,writeFile,rm,symlink,chmod,realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { hash } from '../src/alpha/contract.mjs';
@@ -25,16 +25,39 @@ async function fixture(t){
  return {root,targetHash,run,delivery,candidate,store,criteria,commandSpecs};
 }
 test('trusted grant and actual local test result create criterion Evidence for delivered hash',async t=>{
- const f=await fixture(t);let approvals=0,verifications=0;
+ const f=await fixture(t);let approvals=0,verifications=0,review;
  const verifier=createLocalDestinationVerifier(f.store,{
   criteria:f.criteria,commandSpecs:f.commandSpecs,
-  obtainGrant:async observed=>{approvals++;assert.equal(observed.targetTreeHash,f.targetHash);return true;},
+  obtainGrant:async observed=>{
+    approvals++;review=observed;
+    assert.equal(observed.kind,'CODEFLEET_DESTINATION_CRITERION_GRANT_V1');
+    assert.equal(observed.workflowHash,f.run.contractHash);
+    assert.equal(observed.targetTreeHash,f.targetHash);
+    assert.deepEqual(observed.criterion,f.criteria[0]);
+    assert.equal(observed.command.executable,await realpath(process.execPath));
+    assert.equal(observed.command.directory,await realpath(f.root));
+    assert.deepEqual(observed.command.args,['--version']);
+    assert.equal(observed.command.commandHash,observed.commandHash);
+    assert.ok(Object.isFrozen(observed.command));
+    assert.ok(Object.isFrozen(observed.command.args));
+    assert.ok(Object.isFrozen(observed.criterion));
+    assert.throws(()=>{observed.command.args[0]='--help';},TypeError);
+    assert.throws(()=>{observed.criterion.id='unreviewed';},TypeError);
+    return true;
+  },
   backend:{
-    async authorize(){return Object.freeze({token:true});},
+    async authorize(request,trust){
+      assert.deepEqual(request.args,['--version']);
+      assert.equal(trust.reviewedCommandHash,review.commandHash);
+      return Object.freeze({token:true});
+    },
     async verify(){verifications++;return {
       status:'LOCAL_PASSED',evidenceIntegrity:'MATCHED',integrity:true,
       executionAuthority:'LOCAL_EXECUTED',exitCode:0,tests:1,passed:1,
-      failed:0,skipped:0,todo:0,interrupted:false,truncated:false
+      failed:0,skipped:0,todo:0,interrupted:false,truncated:false,
+      commandHash:review.commandHash,
+      candidateTreeHash:review.command.candidateTreeHash,
+      contractHash:f.run.contractHash,verificationBackend:'local'
     };}
   }
  });
@@ -46,6 +69,48 @@ test('trusted grant and actual local test result create criterion Evidence for d
  assert.equal(observed.targetTreeHash,f.targetHash);
  assert.equal(observed.complete,true);
 });
+test('destination drift during asynchronous criterion grant blocks backend admission',async t=>{
+ const f=await fixture(t);let authorized=0,executed=0;
+ const verifier=createLocalDestinationVerifier(f.store,{
+  criteria:f.criteria,commandSpecs:f.commandSpecs,
+  obtainGrant:async scope=>{
+    assert.deepEqual(scope.command.args,['--version']);
+    await writeFile(join(f.root,'src/a.js'),'unreviewed source after grant');
+    return true;
+  },
+  backend:{
+    async authorize(){authorized++;return {};},
+    async verify(){executed++;throw Error('Backend must not run on stale approval');}
+  }
+ });
+ await assert.rejects(verifier.verify({run:f.run,delivery:f.delivery,
+  candidate:f.candidate,cancelled:()=>false}),/changed during approval/);
+ assert.equal(authorized,0);
+ assert.equal(executed,0);
+});
+
+test('a successful backend status with a different command receipt cannot satisfy a criterion',async t=>{
+ const f=await fixture(t);let reviewed;
+ const verifier=createLocalDestinationVerifier(f.store,{
+  criteria:f.criteria,commandSpecs:f.commandSpecs,
+  obtainGrant:async scope=>{reviewed=scope;return true;},
+  backend:{
+    async authorize(){return Object.freeze({token:true});},
+    async verify(){return {
+      status:'LOCAL_PASSED',evidenceIntegrity:'MATCHED',integrity:true,
+      executionAuthority:'LOCAL_EXECUTED',exitCode:0,tests:1,passed:1,
+      failed:0,skipped:0,todo:0,interrupted:false,truncated:false,
+      commandHash:'f'.repeat(64),candidateTreeHash:reviewed.command.candidateTreeHash,
+      contractHash:f.run.contractHash,verificationBackend:'local'
+    };}
+  }
+ });
+ const result=await verifier.verify({run:f.run,delivery:f.delivery,
+  candidate:f.candidate,cancelled:()=>false});
+ assert.equal(result.readVerifiedEvidence(result.evidenceRefs.C1).complete,false);
+ assert.equal(result.readVerifiedEvidence(result.evidenceRefs.C1).integrity,'UNVERIFIED');
+});
+
 test('denied command grant causes zero test execution',async t=>{
  const f=await fixture(t);let invoked=false;
  const verifier=createLocalDestinationVerifier(f.store,{criteria:f.criteria,

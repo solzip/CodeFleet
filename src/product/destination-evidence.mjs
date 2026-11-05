@@ -56,13 +56,30 @@ export function createLocalDestinationVerifier(store, {
           contractHash:run.contractHash, cancelled };
         const inspected = await inspectLocalCommand(request);
         guard();
+        // The owner must review the actual executable, argv and working tree,
+        // not merely a hash that hides the behavior of the Local command.
+        const reviewedCommand = Object.freeze({
+          ...inspected, args:Object.freeze([...inspected.args])
+        });
         const granted = await obtainGrant(Object.freeze({
-          objectiveId:run.id,revision:run.revision,criterionId:criterion.id,
+          kind:'CODEFLEET_DESTINATION_CRITERION_GRANT_V1',
+          objectiveId:run.id,revision:run.revision,
+          workflowHash:run.contractHash,
+          criterion:Object.freeze({...criterion}),criterionId:criterion.id,
           targetTreeHash:delivery.targetTreeHash,commandHash:inspected.commandHash,
           executableHash:inspected.executableHash,timeoutMs:command.timeoutMs,
-          protection:'UNPROTECTED'
+          command:reviewedCommand,protection:'UNPROTECTED'
         }));
         if (granted !== true) throw Error('Exact Local verification approval missing');
+        guard();
+        // A grant can be asynchronous. Do not ask even a trusted backend to
+        // authorize a stale command or delivery after the owner's review.
+        const currentCommand = await inspectLocalCommand(request);
+        guard();
+        if (currentCommand.commandHash !== inspected.commandHash)
+          throw Error('Local criterion command/tree changed during approval');
+        if (await candidateHash(run.repo,candidate.candidatePaths) !== delivery.targetTreeHash)
+          throw Error('Destination changed during Local criterion approval');
         guard();
         const token = await backend.authorize(request,{
           reviewedCommandHash:inspected.commandHash,
@@ -82,7 +99,12 @@ export function createLocalDestinationVerifier(store, {
         guard();
         const complete = observed.status === 'LOCAL_PASSED' &&
           observed.evidenceIntegrity === 'MATCHED' && observed.integrity === true &&
-          observed.executionAuthority === 'LOCAL_EXECUTED' && observed.exitCode === 0 &&
+          observed.executionAuthority === 'LOCAL_EXECUTED' &&
+          observed.commandHash === inspected.commandHash &&
+          observed.candidateTreeHash === inspected.candidateTreeHash &&
+          observed.contractHash === run.contractHash &&
+          observed.verificationBackend === 'local' &&
+          observed.exitCode === 0 &&
           Number.isInteger(observed.tests) && observed.tests > 0 &&
           observed.passed === observed.tests && observed.failed === 0 &&
           observed.skipped === 0 && observed.todo === 0 &&
