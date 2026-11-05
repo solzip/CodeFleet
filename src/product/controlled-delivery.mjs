@@ -193,6 +193,10 @@ export async function applyLocalDelivery({ destination, base, files, candidatePa
     }
     const targetTreeHash = await candidateHash(root, candidatePaths);
     if (targetTreeHash !== verifiedCandidateHash) throw Error('Delivered tracked tree differs from verified integrated Candidate');
+    // An approval/lease may be revoked during the final awaited filesystem
+    // observation. Recheck the live guard before issuing a success receipt.
+    // Bytes already applied still require reconciliation on late cancellation.
+    if (cancelled()) throw Error('Delivery cancelled after destination observation');
     return { status: 'DELIVERED_NOT_VERIFIED', authority: 'LOCAL_OBSERVED_UNPROTECTED',
       intentRef, runId, revision, candidateHash: verifiedCandidateHash,
       targetTreeHash, observedHashes, appliedFiles: targets.map(t => t.name),

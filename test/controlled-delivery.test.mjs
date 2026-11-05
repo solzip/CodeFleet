@@ -76,6 +76,25 @@ test('cancelled delivery leaves original file intact',async t=>{
   await assert.rejects(applyLocalDelivery({...f.opts,cancelled:()=>true}),/cancelled/);
   assert.equal(await readFile(join(f.root,'src/a.js'),'utf8'),original);
 });
+test('late approval revocation after destination observation leaves no success receipt', async t => {
+  const f = await fixture(t);
+  // Four earlier fences pass. The fifth check is intentionally after the
+  // final async tree observation, when the single target has been replaced.
+  let checks = 0;
+  await assert.rejects(
+    applyLocalDelivery({ ...f.opts, cancelled: () => ++checks >= 5 }),
+    error => {
+      assert.equal(error.code, 'DESTINATION_UNCERTAIN');
+      assert.equal(error.filesPossiblyApplied, 1);
+      assert.match(error.message, /cancelled after destination observation/);
+      return true;
+    }
+  );
+  assert.equal(checks, 5);
+  assert.deepEqual(f.counts(), { grants: 1, intents: 1 });
+  assert.equal(await readFile(join(f.root, 'src/a.js'), 'utf8'), changed);
+});
+
 test('delivery intent preserves candidate and source identity',()=>{
   const intent=deliveryIntent({runId:'run',revision:1,base:'a'.repeat(40),
     destination:process.cwd(),candidateHash:'b'.repeat(64),files:{'src/a.js':changed}});

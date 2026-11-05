@@ -272,3 +272,17 @@ untouched when a later input is a hard link and a linked Candidate ancestor
 refusing writes. This narrows pre-write drift windows; it is not atomic OS
 confinement and does not establish Host Live or final Objective acceptance.
 The new head requires its own Windows/Linux CI before reporting offline PASS.
+
+## Post-observation Local Delivery approval guard (new offline CI required)
+
+The supervised exact-scope Local delivery path now rechecks its trusted live
+cancellation/lease/approval callback after the final awaited delivered-tree
+observation and before it returns a success receipt. Previously a revocation
+arising during the last filesystem observation could leave a successful
+`DELIVERED_NOT_VERIFIED` result even though the approval was no longer valid.
+The regression fixture revokes only at that final fence, and asserts the
+already-applied bytes are treated as `DESTINATION_UNCERTAIN` with one
+possibly applied file, never as a successful receipt. This guards the final
+observed transition but does not make filesystem changes atomic, authenticate
+the grant callback, prove Host Live, or accept an Objective. New Windows/Linux
+CI is required for this head.
