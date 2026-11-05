@@ -14,6 +14,7 @@ import { developmentProposalRequest, developmentProposalBatch, reviewDevelopment
 import { recoverObjective } from './recovery.mjs';
 import { prepareContractRevision, acceptContractRevision, revokeContractRevision } from './contract-revisions.mjs';
 import { repairProposalRequest } from './repair.mjs';
+import { inspectReviewedCodexPlan } from './codex-reviewed-workflow.mjs';
 import { readDeliveredObjectiveStatus } from './objective-status.mjs';
 
 export const help = `codefleet-alpha objective plan|run "goal" [repository]
@@ -27,6 +28,7 @@ codefleet-alpha objective approve <task-id> --hash <workflowHash> --actor <name>
 codefleet-alpha objective run|resume <task-id> --allow-model
 codefleet-alpha objective status [task-id] | report <task-or-run-id>
 codefleet-alpha objective delivered-status <workflow-id> (read-only delivered-tree Objective acceptance; never starts Host or writes State)
+codefleet-alpha objective review-codex-plan <planning-session-id> (read-only pinned Contract/DAG review, never grants execution)
 codefleet-alpha objective proposal-request <task-id> <item-id> (eligible source context only; no model call or execution approval)
 codefleet-alpha objective repair-proposal-request <task-id> (settled Local failure context; no model call or approval)
 codefleet-alpha objective proposal-batch <task-id> [OPTIONS.json] (maxAgents 1..3, parallelBenefit; proposal-only, no model grant)
@@ -97,6 +99,12 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
   const [action, ...rest] = argv;
   if (!action || ['help', '--help'].includes(action)) return { exitCode: 0, data: { schemaVersion: 1, help } };
   const { positional: args, options: o } = parse(rest);
+  if (action === 'review-codex-plan') {
+    if (args.length !== 1 || Object.keys(o).length || !args[0] || args[0].startsWith('-'))
+      throw Error('review-codex-plan requires exactly one Host Planning session ID and no execution options');
+    const data = inspectReviewedCodexPlan(store, args[0]);
+    return { exitCode: data.status === 'REVIEW_REQUIRED' ? 0 : 2, data };
+  }
   if (action === 'delivered-status') {
     if (args.length !== 1 || Object.keys(o).length || !args[0] || args[0].startsWith('-'))
       throw Error('delivered-status requires exactly one Workflow ID and no execution options');
@@ -286,7 +294,7 @@ export async function productCli(argv, directory) {
   try {
     requireDurableEntry(argv); // Before opening Store or reading caller JSON.
     if (!argv[0] || ['help', '--help'].includes(argv[0])) return await dispatchProduct(argv);
-    store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request', 'delivered-status'].includes(argv[0]) });
+    store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request', 'delivered-status', 'review-codex-plan'].includes(argv[0]) });
     return await dispatchProduct(argv, { store });
   }
   catch (e) { return { exitCode: 1, data: { schemaVersion: 1, status: 'BLOCKED_OR_UNSUPPORTED', error: e.message } }; }

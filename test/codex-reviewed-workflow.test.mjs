@@ -7,7 +7,8 @@ import { tmpdir } from 'node:os';
 import { Store } from '../src/alpha/store.mjs';
 import { git } from '../src/alpha/workspace.mjs';
 import { beginPlanning,submitPlanning } from '../src/hosts/planning.mjs';
-import { prepareReviewedCodexWorkflow } from '../src/product/codex-reviewed-workflow.mjs';
+import { prepareReviewedCodexWorkflow, inspectReviewedCodexPlan } from '../src/product/codex-reviewed-workflow.mjs';
+import { dispatchProduct, productCli } from '../src/product/cli.mjs';
 
 const goal='Repair arithmetic behavior in src/a.js with test/a.test.js and independently verify results.';
 async function fixture(t) {
@@ -130,4 +131,70 @@ test('changed planning request during async review cannot reuse the initial scop
    }
  }),/planning outcome unavailable/);
  assert.equal(x.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
+});
+
+test('persisted Codex plan has a real read-only Objective / Contract / DAG review entrypoint',async t=>{
+ const f=await fixture(t);
+ const before=f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n;
+ const snapshot=inspectReviewedCodexPlan(f.store,f.request.sessionId);
+ assert.equal(snapshot.kind,'CODEFLEET_CODEX_PLANNING_REVIEW_V1');
+ assert.equal(snapshot.status,'REVIEW_REQUIRED');
+ assert.equal(snapshot.objective,goal);
+ assert.equal(snapshot.objectiveHash,hash(goal));
+ assert.equal(snapshot.workflowHash,f.result.workflowPreview.workflow.workflowHash);
+ assert.equal(snapshot.sourceContractHash,hash(f.result.workflowPreview.source));
+ assert.deepEqual(snapshot.files,['src/a.js']);
+ assert.deepEqual(snapshot.tests,['test/a.test.js']);
+ assert.deepEqual(snapshot.workItems.map(n=>n.id),['change']);
+ assert.equal(snapshot.approved,false);
+ assert.equal(snapshot.executionGranted,false);
+ assert.equal(snapshot.nativeHostVerified,false);
+ assert.equal(snapshot.sourceFreshness,'NOT_RECHECKED');
+ assert.equal(snapshot.authority,'PERSISTED_PLANNING_DATA_ONLY');
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,before);
+
+ const direct=await dispatchProduct(['review-codex-plan',f.request.sessionId],{store:f.store});
+ assert.equal(direct.exitCode,0);
+ assert.equal(direct.data.workflowHash,snapshot.workflowHash);
+ const readonly=await productCli(['review-codex-plan',f.request.sessionId],f.store.directory);
+ assert.equal(readonly.exitCode,0);
+ assert.deepEqual(readonly.data,direct.data);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,before);
+ // A review display cannot act as an Operator grant or dispatch a Host.
+ for(const args of [
+  ['review-codex-plan',f.request.sessionId,'--allow-model'],
+  ['review-codex-plan',f.request.sessionId,'--trust','fake'],
+  ['review-codex-plan',f.request.sessionId,'other-session'],
+  ['review-codex-plan']
+ ]) {
+  await assert.rejects(dispatchProduct(args,{store:f.store}),/requires exactly one/);
+ }
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,before);
+});
+test('untrusted or unsubmitted Codex planning state cannot be presented as review-ready',async t=>{
+ const f=await fixture(t);
+ f.store.db.prepare('UPDATE host_planning SET resultHash=? WHERE id=?')
+   .run('f'.repeat(64),f.request.sessionId);
+ const blocked=await productCli(['review-codex-plan',f.request.sessionId],f.store.directory);
+ assert.equal(blocked.exitCode,2);
+ assert.equal(blocked.data.status,'BLOCKED');
+ assert.equal(blocked.data.approved,false);
+ assert.equal(blocked.data.executionGranted,false);
+ assert.equal(blocked.data.workflowHash,undefined);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
+});
+test('a read-only Store without Host planning records reports UNAVAILABLE without migration',async t=>{
+ const directory=await mkdtemp(join(tmpdir(),'codefleet-codex-review-empty-'));
+ const store=new Store(directory);
+ store.close();
+ t.after(async()=>rm(directory,{recursive:true,force:true}));
+ const result=await productCli(['review-codex-plan','a'.repeat(36)],directory);
+ assert.equal(result.exitCode,2);
+ assert.equal(result.data.status,'UNAVAILABLE');
+ assert.equal(result.data.executionGranted,false);
+ const checked=new Store(directory,{readOnly:true});
+ try {
+  assert.equal(checked.db.prepare("SELECT 1 FROM sqlite_master WHERE name='host_planning'").get(),undefined);
+  assert.equal(checked.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
+ }finally{ checked.close(); }
 });

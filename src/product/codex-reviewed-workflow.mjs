@@ -85,3 +85,47 @@ export async function prepareReviewedCodexWorkflow(store, repo, sessionId, {
     state:run.state,executionGranted:false,approved:false,
     authority:'REVIEWED_CONTRACT_ONLY' };
 }
+
+
+// Data-only public review projection. This NEVER invokes a model, publishes an
+// operator grant, creates a Workflow, or declares accepted execution. The review
+// operation intentionally reuses the same strict persisted planning validator
+// as prepareReviewedCodexWorkflow, rather than duplicating trust logic.
+export function inspectReviewedCodexPlan(store, sessionId) {
+  if (!store?.db || typeof store.db.prepare !== 'function' ||
+      typeof sessionId !== 'string' || !/^[a-f0-9-]{36}$/i.test(sessionId))
+    fail('A Store and exact planning session ID are required');
+  const view = { schemaVersion:1, kind:'CODEFLEET_CODEX_PLANNING_REVIEW_V1',
+    sessionId, executionGranted:false, approved:false,
+    nativeHostVerified:false, sourceFreshness:'NOT_RECHECKED',
+    authority:'PERSISTED_PLANNING_DATA_ONLY' };
+  if (!store.db.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='host_planning'"
+  ).get()) return { ...view, status:'UNAVAILABLE', reason:'No persisted Host planning sessions' };
+  try {
+    const { body, source, workflow } = planRow(store, sessionId);
+    return { ...view, status:'REVIEW_REQUIRED', objective:body.objective,
+      objectiveHash:hash(body.objective), repositoryId:body.context.discovery.repositoryId,
+      sourceBaseline:body.baseline, workflowHash:workflow.workflowHash,
+      sourceContractHash:hash(source), revision:1,
+      files:[...source.files], tests:[...source.tests],
+      criteria:workflow.items.flatMap(item => item.acceptanceCriteria.map(text => ({
+        workItemId:item.id, description:text
+      }))),
+      workItems:workflow.items.map(item => ({
+        id:item.id, dependencies:[...item.dependencies],
+        files:[...item.files],tests:[...item.tests]
+      })),
+      executionLimits: {
+        maxAttempts:source.maxAttempts, timeoutSeconds:source.timeoutSeconds,
+        attemptBudgetUsd:source.attemptBudgetUsd
+      },
+      nextAction:'Independent exact-scope plan review, then separately approved execution. This command does not grant either.'
+    };
+  } catch {
+    // Stale, unsubmitted, tampered or incomplete Host output must not produce
+    // a reviewable contract or leak arbitrary model raw data in an error.
+    return { ...view, status:'BLOCKED',
+      reason:'Persisted Host Planning result is absent, unvalidated, stale or integrity-invalid' };
+  }
+}

@@ -329,3 +329,22 @@ This remains supervised, UNPROTECTED Local verification behind a trusted
 embedding, not a public Operator authorization, atomic filesystem confinement,
 Host Live proof, or Objective acceptance. This head needs fresh Windows/Linux
 GitHub Actions evidence before any PASS claim.
+
+## Host Planning Contract/DAG review via existing Objective CLI (CI pending)
+
+The existing `codefleet-alpha objective` command now exposes
+`review-codex-plan <planning-session-id>`. It opens the existing Store
+**read-only** and reuses the same strict persisted Codex Host Planning
+validation as the trusted Workflow preparer. The response contains only
+the pinned user Objective, source baseline, repo identity hash, Contract
+scope, WorkItem dependencies/criteria, budget/time limits, and immutable
+Workflow/source hashes. It reports `REVIEW_REQUIRED` (not approved or
+executable) for a valid submitted planning session, `BLOCKED` for
+tampered/unsubmitted output, or `UNAVAILABLE` when no planning table exists.
+It never starts a model, creates a Workflow, migrates State or accepts
+approval flags. The public command is a review-only entry point to the
+existing trusted `prepareReviewedCodexWorkflow` path; it does not create an
+authenticated grant or solve production Host execution admission. Negative
+tests cover stale/tampered receipts, disallowed CLI options, read-only database
+access and absence of effects. The updated head needs its own Windows/Linux
+GitHub Actions result before this regression test may be marked passing.
