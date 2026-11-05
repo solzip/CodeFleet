@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { createCodexMvpFacade } from '../src/product/codex-mvp-facade.mjs';
 import { hash } from '../src/alpha/contract.mjs';
 import { POLICY } from '../src/workflow/definition.mjs';
+import { built, request } from './fixtures/bootstrap-reservation.mjs';
+import { task } from '../src/product/tasks.mjs';
+import { rm } from 'node:fs/promises';
 
 const backend = { prepare: async()=>{}, verify: async()=>{}, cleanup: async()=>{} };
 function fixture() {
@@ -76,4 +79,49 @@ test('Bootstrap filesystem effects remain unavailable without independent grants
    enableHostTurns:true});
  await assert.rejects(api.materializeApprovedBootstrap('task','item'),/materialization grant required/);
  await assert.rejects(api.verifyApprovedBootstrap('task','item',{}),/verification grant required/);
+});
+
+test('Bootstrap exact verification grant is invalidated by a task revision change with identical bytes',async t=>{
+  const f=await built({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  let grants=0,backendCalls=0;
+  const api=createCodexMvpFacade(f.store,{executable:process.execPath,model:'fixture',
+    authorizeBootstrapVerification:async scope=>{
+      grants++;
+      assert.equal(scope.taskId,f.id);
+      assert.equal(scope.itemId,'tests');
+      assert.equal(scope.revision,task(f.store,f.id).revision);
+      assert.equal(scope.workflowHash,task(f.store,f.id).bootstrap.workflowHash);
+      const changed=task(f.store,f.id);changed.revision++;
+      f.store.db.prepare('UPDATE product_tasks SET body=?,revision=? WHERE id=?')
+        .run(JSON.stringify(changed),changed.revision,f.id);
+      return true;
+    },
+    bootstrapVerifierBackend:{authorize:async()=>{backendCalls++;throw Error('unexpected execution');}}
+  });
+  await assert.rejects(api.verifyApprovedBootstrap(f.id,'tests',request(f)),
+    /verification scope changed during review/);
+  assert.equal(grants,1);
+  assert.equal(backendCalls,0);
+  assert.equal(task(f.store,f.id).bootstrap.verifications?.tests,undefined);
+});
+test('Bootstrap exact verification grant rejects a mutable command changed during review',async t=>{
+  const f=await built({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const command=request(f);
+  let grants=0,backendCalls=0;
+  const api=createCodexMvpFacade(f.store,{executable:process.execPath,model:'fixture',
+    authorizeBootstrapVerification:async scope=>{
+      grants++;
+      assert.equal(scope.protection,'UNPROTECTED');
+      command.args.push('--test-name-pattern=not-reviewed');
+      return true;
+    },
+    bootstrapVerifierBackend:{authorize:async()=>{backendCalls++;throw Error('unexpected execution');}}
+  });
+  await assert.rejects(api.verifyApprovedBootstrap(f.id,'tests',command),
+    /verification command\/tree changed during review/);
+  assert.equal(grants,1);
+  assert.equal(backendCalls,0);
+  assert.equal(task(f.store,f.id).bootstrap.verifications?.tests,undefined);
 });

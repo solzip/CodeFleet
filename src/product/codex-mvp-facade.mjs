@@ -135,6 +135,9 @@ export function createCodexMvpFacade(store, {
     async verifyApprovedBootstrap(taskId,itemId,command) {
       if (!callable(authorizeBootstrapVerification))
         invalid('Independent exact Bootstrap verification grant required');
+      // Bind the independent approval to the current immutable task revision
+      // and Workflow, not merely to reusable command bytes.
+      const initial=bootstrapContext(store,taskId);
       // Preview is read-only and yields the hash of the executable, arguments
       // and current target bytes; it does not create a command grant.
       const preview=await verifyTask(store,taskId,itemId,command);
@@ -143,14 +146,29 @@ export function createCodexMvpFacade(store, {
         invalid('Exact Local command preview unavailable');
       const scope=Object.freeze({
         kind:'CODEFLEET_BOOTSTRAP_LOCAL_CHECK_SCOPE_V1',
-        taskId,itemId,commandHash:preview.commandHash,
+        taskId,itemId,revision:initial.current.revision,
+        workflowHash:initial.workflow.workflowHash,
+        repo:initial.plan.probe.root,commandHash:preview.commandHash,
         fileDigests:structuredClone(preview.fileDigests),
         protection:'UNPROTECTED'
       });
       if (await authorizeBootstrapVerification(scope)!==true)
         invalid('Exact Bootstrap verification grant denied');
-      // verifyTask reinspects the executable/tree and rejects changed command
-      // identity; its local backend records real command results.
+      // The owner grant may take time. A new task revision (even with the same
+      // command bytes), changed Workflow, or mutable command/tree input needs
+      // another review. Do not reserve an execution or consume its grant.
+      const fresh=bootstrapContext(store,taskId);
+      if (fresh.current.revision !== scope.revision ||
+          fresh.workflow.workflowHash !== scope.workflowHash ||
+          fresh.plan.probe.root !== scope.repo)
+        invalid('Bootstrap verification scope changed during review');
+      const currentPreview=await verifyTask(store,taskId,itemId,command);
+      if (currentPreview?.status !== 'TRUST_REQUIRED' ||
+          currentPreview.commandHash !== scope.commandHash ||
+          hash(currentPreview.fileDigests) !== hash(scope.fileDigests))
+        invalid('Bootstrap verification command/tree changed during review');
+      // verifyTask still performs its own preflight, exact command inspection
+      // and Local backend checks before recording real verification Evidence.
       return verifyTask(store,taskId,itemId,command,{
         trust:preview.commandHash,acknowledgeUnisolated:true,
         ...(bootstrapVerifierBackend?{backend:bootstrapVerifierBackend}:{})

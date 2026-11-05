@@ -314,3 +314,18 @@ escaped source text that exceeds the Host prompt limit without running a model.
 This is a trusted-adapter integrity fix, not native Host Live proof, public
 Operator authentication, or Objective E2E acceptance. The new head requires
 its own Windows/Linux CI; previous green results cannot cover this change.
+
+## Bootstrap Local verification grant freshness (offline CI required)
+
+The trusted NEW_PROJECT/EXISTING_LOCAL facade now binds its independent Local
+verification review to the current Bootstrap task revision, Workflow hash,
+repository root, exact executable/arguments and recorded file digests.
+After an asynchronous grant it reads the current task/Workflow again and
+repeats the existing read-only command/tree preview before invoking the Local
+backend. A task revision change with identical source bytes or a mutated
+command during review cannot consume the earlier grant. Negative offline tests
+exercise both stale-review cases without running any verification subprocess.
+This remains supervised, UNPROTECTED Local verification behind a trusted
+embedding, not a public Operator authorization, atomic filesystem confinement,
+Host Live proof, or Objective acceptance. This head needs fresh Windows/Linux
+GitHub Actions evidence before any PASS claim.
