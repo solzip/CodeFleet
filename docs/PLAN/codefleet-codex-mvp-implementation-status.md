@@ -259,3 +259,16 @@ that a legacy artifact-only COMPLETED Workflow is reported only as
 execution flags. This is an **observation/UX** increment, not the authenticated
 Host execution entrypoint or proof of Codex Live acceptance. The changed head
 requires its own Windows/Linux CI before declaring offline PASS.
+
+## Accepted predecessor overlay hard-link and ancestor boundary (fresh CI required)
+
+The A→B predecessor overlay now reuses the shared `candidateHash` regular-file
+observer before any materialization and repeats a scoped observation immediately
+before each write. Previously, a hard-linked Candidate leaf was regular by
+`lstat` and `writeFile` could mutate the same inode outside the Candidate;
+likewise a Candidate reached through a linked ancestor was not detected by its
+leaf-root check. Regression cases cover an in-scope earlier file remaining
+untouched when a later input is a hard link and a linked Candidate ancestor
+refusing writes. This narrows pre-write drift windows; it is not atomic OS
+confinement and does not establish Host Live or final Objective acceptance.
+The new head requires its own Windows/Linux CI before reporting offline PASS.

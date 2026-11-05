@@ -4,6 +4,7 @@
 import path from 'node:path';
 import { lstat, realpath, readFile, writeFile } from 'node:fs/promises';
 import { filePath, hash } from '../alpha/contract.mjs';
+import { candidateHash } from '../alpha/workspace.mjs';
 
 export function predecessorOrder(workflow, itemId) {
   const nodes = new Map((workflow?.items ?? []).map(item => [item.id, item]));
@@ -92,8 +93,18 @@ export async function applyPredecessorOverlay(directory, names, changes) {
     const before = await readFile(target, 'utf8');
     if (before.includes('\0') || body.includes('\0'))
       throw Error('Binary predecessor change not supported');
-    targets.push({ target, body });
+    targets.push({ name: file, target, body });
   }
-  for (const { target, body } of targets) await writeFile(target, body, 'utf8');
+  // The preflight above checks leaf and parent symlinks, but regular files
+  // with multiple hard links still alias bytes outside the Candidate. Reuse
+  // the shared tracked-tree observer to reject hard links, linked ancestors,
+  // case-colliding paths and other unsafe snapshot entries before any write.
+  // Repeat a scoped observation immediately before each file effect to narrow
+  // path-replacement races; this is not atomic OS confinement.
+  if (targets.length) await candidateHash(root, names);
+  for (const { name, target, body } of targets) {
+    await candidateHash(root, [name]);
+    await writeFile(target, body, 'utf8');
+  }
   return { inputTreeHash: hash(Object.entries(changes).sort(([a], [b]) => a.localeCompare(b))) };
 }

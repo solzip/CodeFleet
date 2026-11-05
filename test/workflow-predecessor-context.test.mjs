@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, link } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { predecessorOrder, predecessorInput, applyPredecessorOverlay } from '../src/workflow/predecessor-context.mjs';
@@ -80,4 +80,46 @@ test('the whole predecessor overlay is preflighted before any file changes', asy
   );
   assert.equal(await readFile(join(root, 'src/a.js'), 'utf8'), 'a-original');
   assert.equal(await readFile(join(root, 'src/b.js'), 'utf8'), 'b-original');
+});
+
+test('predecessor overlay rejects a hard-linked input before modifying earlier files', async t => {
+  const sandbox = await mkdtemp(join(tmpdir(), 'cf-predecessor-hardlink-'));
+  t.after(() => rm(sandbox, { recursive: true, force: true }));
+  const candidate = join(sandbox, 'candidate');
+  const external = join(sandbox, 'external.js');
+  await mkdir(join(candidate, 'src'), { recursive: true });
+  await writeFile(join(candidate, 'src/a.js'), 'original-a');
+  await writeFile(external, 'outside-original');
+  try {
+    await link(external, join(candidate, 'src/b.js'));
+  } catch (error) {
+    if (['EPERM', 'EACCES', 'ENOTSUP', 'EOPNOTSUPP'].includes(error.code)) {
+      t.skip('Host filesystem cannot create hard links'); return;
+    }
+    throw error;
+  }
+  await assert.rejects(
+    applyPredecessorOverlay(candidate, ['src/a.js', 'src/b.js'],
+      { 'src/a.js': 'changed-a', 'src/b.js': 'unauthorized-outside-write' }),
+    /hard link|nonregular/
+  );
+  assert.equal(await readFile(join(candidate, 'src/a.js'), 'utf8'), 'original-a');
+  assert.equal(await readFile(external, 'utf8'), 'outside-original');
+});
+
+test('predecessor overlay rejects a Candidate reached through a linked ancestor', {
+  skip: process.platform === 'win32'
+}, async t => {
+  const sandbox = await mkdtemp(join(tmpdir(), 'cf-predecessor-ancestor-'));
+  t.after(() => rm(sandbox, { recursive: true, force: true }));
+  const actual = join(sandbox, 'actual');
+  await mkdir(join(actual, 'candidate', 'src'), { recursive: true });
+  await writeFile(join(actual, 'candidate', 'src/a.js'), 'original');
+  await symlink(actual, join(sandbox, 'linked-root'), 'dir');
+  const candidate = join(sandbox, 'linked-root', 'candidate');
+  await assert.rejects(
+    applyPredecessorOverlay(candidate, ['src/a.js'], { 'src/a.js': 'unapproved' }),
+    /ancestor|symlink|nonregular/
+  );
+  assert.equal(await readFile(join(actual, 'candidate', 'src/a.js'), 'utf8'), 'original');
 });
