@@ -96,7 +96,7 @@ export async function candidateHash(directory, names) {
             : !stat.isDirectory()))
         // Hard links are regular files but alias the bytes of an unapproved
         // outside path, so content equality alone is not a safe boundary.
-        throw Error('Candidate tree contains a symlink, hard link or nonregular path: ' + name);
+        throw Error('Candidate tree contains a symlink or nonregular path (including hard link): ' + name);
     }
     rows.push([name, hash(await readFile(current))]);
   }
