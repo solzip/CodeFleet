@@ -11,9 +11,18 @@ const MAX_FILES=1500,MAX_BYTES=32*1024*1024;
 
 async function observeTree(root) {
   const resolved=await realpath(root);
-  const rootInfo=await lstat(root);
-  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink())
-    reject('Candidate root link/Junction unsupported');
+  // A Windows Junction (or POSIX symlink) in an ancestor can redirect the
+  // Candidate even when its final directory is regular. Inspect every
+  // lexical parent before and after the Host Turn; this is not OS isolation.
+  let ancestor=path.resolve(root);
+  while (true) {
+    const info=await lstat(ancestor);
+    if (!info.isDirectory() || info.isSymbolicLink())
+      reject('Candidate root ancestor link/Junction unsupported');
+    const parent=path.dirname(ancestor);
+    if (parent===ancestor) break;
+    ancestor=parent;
+  }
   // Windows temp paths can be 8.3 aliases of the same actual directory.
   // Verify the actual root entry rather than treating alias text as a link.
   // This is unprotected Local execution, never OS-enforced confinement.
@@ -30,6 +39,10 @@ async function observeTree(root) {
       if (st.isSymbolicLink()) reject('Candidate symlink/Junction forbidden');
       if (st.isDirectory()) await visit(relative);
       else if (st.isFile()) {
+        // A hard link is regular according to lstat, but its inode may be
+        // shared with a path outside the bounded Candidate. Never accept
+        // either the pre-grant snapshot or the post-Turn receipt for one.
+        if (st.nlink!==1) reject('Candidate hard-linked file forbidden');
         bytes+=st.size;
         if (bytes>MAX_BYTES || entries.size>=MAX_FILES) reject('Candidate snapshot bound exceeded');
         entries.set(relative,{mode:st.mode & 0o777,bytes:await readFile(target)});

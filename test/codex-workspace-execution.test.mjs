@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp,mkdir,writeFile,readFile,rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdtemp,mkdir,writeFile,readFile,rm,link,symlink } from 'node:fs/promises';
+import { join,dirname,basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import { captureCodexWorkspaceEdits } from '../src/hosts/codex-workspace-execution.mjs';
 import { createCodexTurnProtocol } from '../src/hosts/codex-app-server-session.mjs';
@@ -99,4 +99,66 @@ test('read-only session remains tool rejecting; workspace mode produces scoped p
  assert.equal(next[1].params.sandbox,'workspace-write');
  const turn=writable.accept({id:2,result:{thread:{id:'thread-1'}}});
  assert.deepEqual(turn[0].params.sandboxPolicy.writableRoots,[process.cwd()]);
+});
+
+const unsupportedLink = e => ['EPERM','EACCES','ENOSYS','ENOTSUP','EXDEV'].includes(e?.code);
+
+test('hard-linked Candidate input is rejected before any workspace approval or Host Turn',async t=>{
+ const f=await fixture(t), external=await mkdtemp(join(tmpdir(),'cf-host-external-'));
+ t.after(()=>rm(external,{recursive:true,force:true}));
+ const outside=join(external,'shared.js');
+ await writeFile(outside,'export const value = 1;');
+ await rm(join(f.root,'src/a.js'));
+ try {await link(outside,join(f.root,'src/a.js'));}
+ catch(e){if(unsupportedLink(e)){t.skip('Hard links unavailable on runner');return;}throw e;}
+ let reviewed=false,transported=false;
+ await assert.rejects(captureCodexWorkspaceEdits({candidateDirectory:f.root,contract:f.contract,
+  context:f.context,executable:process.execPath,model:'fixture',
+  approved:async()=>{reviewed=true;return true;},
+  transport:async()=>{transported=true;return hostReceipt();}}),/hard-linked file/);
+ assert.equal(reviewed,false);
+ assert.equal(transported,false);
+ assert.equal(await readFile(outside,'utf8'),'export const value = 1;');
+});
+
+test('Host hard-link substitution cannot be accepted as a bounded Candidate edit',async t=>{
+ const f=await fixture(t), external=await mkdtemp(join(tmpdir(),'cf-host-external-'));
+ t.after(()=>rm(external,{recursive:true,force:true}));
+ const outside=join(external,'shared.js');
+ await writeFile(outside,'export const value = 1;');
+ // Probe link support before the simulated Turn to avoid a false PASS.
+ const probe=join(f.root,'probe-link');
+ try {await link(outside,probe);}
+ catch(e){if(unsupportedLink(e)){t.skip('Hard links unavailable on runner');return;}throw e;}
+ await rm(probe);
+ let transported=false;
+ await assert.rejects(captureCodexWorkspaceEdits({candidateDirectory:f.root,contract:f.contract,
+  context:f.context,executable:process.execPath,model:'fixture',
+  approved:async()=>true,transport:async()=>{
+   transported=true;
+   await rm(join(f.root,'src/a.js'));
+   await link(outside,join(f.root,'src/a.js'));
+   await writeFile(join(f.root,'src/a.js'),'export const value = 2;');
+   return hostReceipt();
+  }}),/hard-linked file/);
+ assert.equal(transported,true);
+ // UNPROTECTED mode cannot undo outside effects, only reject the receipt.
+ assert.equal(await readFile(outside,'utf8'),'export const value = 2;');
+});
+
+test('linked Candidate directory ancestor is rejected before workspace authorization',async t=>{
+ const f=await fixture(t), alias=await mkdtemp(join(tmpdir(),'cf-host-alias-'));
+ t.after(()=>rm(alias,{recursive:true,force:true}));
+ const ancestor=join(alias,'linked-parent');
+ try {await symlink(dirname(f.root),ancestor,process.platform==='win32'?'junction':'dir');}
+ catch(e){if(unsupportedLink(e)){t.skip('Directory links unavailable on runner');return;}throw e;}
+ let authorized=false,transported=false;
+ await assert.rejects(captureCodexWorkspaceEdits({
+  candidateDirectory:join(ancestor,basename(f.root)),contract:f.contract,context:f.context,
+  executable:process.execPath,model:'fixture',
+  approved:async()=>{authorized=true;return true;},
+  transport:async()=>{transported=true;return hostReceipt();}
+ }),/ancestor link|ancestor|Junction/);
+ assert.equal(authorized,false);
+ assert.equal(transported,false);
 });

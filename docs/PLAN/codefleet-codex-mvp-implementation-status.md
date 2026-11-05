@@ -446,3 +446,16 @@ exercise both transitions with a repointed local directory link (skipped when
 the runner cannot create directory links). This narrows grant-time drift but
 is not atomic filesystem confinement or Host Live proof. Windows/Linux CI is
 required before marking this change tested.
+
+## Codex workspace Candidate hard-link and ancestor guard (new CI required)
+
+The supervised UNPROTECTED Host workspace-write adapter now rejects hard-linked
+Candidate leaves in both its pre-grant and post-Turn byte snapshots, and checks
+every directory ancestor for symlinks/Junctions. Previously, an externally
+shared hard-linked inode could be accepted as an ordinary scoped file despite
+potential effects outside the Candidate, and a linked Windows parent could
+redirect the observed root. Offline negative tests cover pre-grant refusal,
+post-Turn hard-link substitution, and a linked directory ancestor. This does
+not prevent Host-origin external effects, provide OS confinement, prove live
+Codex execution, or establish a verified Objective. Windows/Linux CI for this
+commit is required before reporting these offline tests as PASS.
