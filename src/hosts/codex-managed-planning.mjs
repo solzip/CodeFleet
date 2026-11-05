@@ -4,7 +4,7 @@
 // an unresolved dispatch is never replayed automatically.
 import { isAbsolute } from 'node:path';
 import { hash } from '../alpha/contract.mjs';
-import { beginPlanning, submitPlanning, PLANNING_PROFILE } from './planning.mjs';
+import { beginPlanning, cancelPlanning, submitPlanning, PLANNING_PROFILE } from './planning.mjs';
 import { readCodeContext } from '../intent/semantic.mjs';
 import { runCodexReadOnlyTurn } from './codex-app-server-session.mjs';
 
@@ -42,7 +42,23 @@ export async function planWithCodexManagedThread(store, repo, objective, {
     model, hostVersion:version, cwd };
   const granted = await authorize(Object.freeze({ ...binding }));
   if (granted !== true) throw Error('Host planning Turn requires independently trusted bounded approval');
-  if (Date.now() >= request.expiresAt) throw Error('Planning authority expired before dispatch');
+  // Human approval can be asynchronous. A valid pinned request is not a grant
+  // to dispatch against code that changed while the grant was being reviewed.
+  // Refuse before reserving a potentially billable Host Turn, and invalidate
+  // the OPEN session so a stale response cannot be submitted later.
+  try {
+    if (Date.now() >= request.expiresAt)
+      throw Error('Planning authority expired before dispatch');
+    const current = await readCodeContext(repo, objective);
+    if (hash(current) !== request.contextHash ||
+        current.discovery.dirty || current.discovery.base !== request.baseline)
+      throw Error('Planning source context changed while awaiting approval');
+    if (Date.now() >= request.expiresAt)
+      throw Error('Planning authority expired before dispatch');
+  } catch (error) {
+    cancelPlanning(store, request.sessionId);
+    throw error;
+  }
   const prompt = JSON.stringify({ kind:'CODEFLEET_HOST_PLANNING_V1',
     sessionId:request.sessionId,requestHash:request.requestHash,
     originalObjective:objective,context:request.context,
@@ -54,13 +70,19 @@ export async function planWithCodexManagedThread(store, repo, objective, {
   const dispatchRef = store.artifact({ ...binding, kind:'CODEX_PLANNING_DISPATCH_INTENT' });
   store.db.exec('BEGIN IMMEDIATE');
   try {
-    const row = store.db.prepare('SELECT status,digest FROM host_planning WHERE id=?').get(request.sessionId);
-    if (row?.status !== 'OPEN' || row.digest !== request.requestHash) throw Error('Planning session changed');
+    const row = store.db.prepare('SELECT status,digest,body FROM host_planning WHERE id=?').get(request.sessionId);
+    if (row?.status !== 'OPEN' || row.digest !== request.requestHash ||
+        hash(JSON.parse(row.body)) !== request.requestHash || Date.now() >= request.expiresAt)
+      throw Error('Planning session changed or expired');
     if (store.db.prepare("UPDATE host_planning SET status='DISPATCHED' WHERE id=? AND status='OPEN'").run(request.sessionId).changes !== 1)
       throw Error('Planning dispatch already reserved');
     store.event(request.sessionId,'HOST_PLANNING_TURN_RESERVED',{dispatchRef,requestHash:request.requestHash});
     store.db.exec('COMMIT');
-  } catch(error) { store.db.exec('ROLLBACK'); throw error; }
+  } catch(error) {
+    store.db.exec('ROLLBACK');
+    cancelPlanning(store, request.sessionId);
+    throw error;
+  }
   try {
     const receipt = await transport({
       executable,cwd,model,prompt,outputSchema:planningOutputSchema,

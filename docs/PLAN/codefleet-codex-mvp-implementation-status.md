@@ -286,3 +286,18 @@ possibly applied file, never as a successful receipt. This guards the final
 observed transition but does not make filesystem changes atomic, authenticate
 the grant callback, prove Host Live, or accept an Objective. New Windows/Linux
 CI is required for this head.
+
+## Pre-dispatch Codex planning approval/source freshness (new offline CI required)
+
+A managed planning request now reobserves the discovered Git source context
+**after** the asynchronous trusted owner grant and **before** reserving a
+billable App Server Turn. Dirty or newly committed code changes and expired
+approval stop the Turn and cancel the stale OPEN planning session instead of
+launching a Host Turn that can only fail validation after consuming usage.
+The transactional dispatch reservation also verifies the stored request body
+against its original digest to detect tampering during review. Negative offline
+fixtures cover dirty source drift, clean HEAD replacement, and a changed
+persisted planning request; none starts the injected Host transport. This is
+a pre-dispatch freshness fence, not an atomic filesystem isolation guarantee,
+Host Live proof, authenticated public admission or Objective acceptance.
+A new Windows/Linux GitHub Actions run is required before an offline PASS claim.

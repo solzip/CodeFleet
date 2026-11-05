@@ -70,3 +70,50 @@ test('uncertain dispatched Turn remains RECONCILING without replay',async t=>{
  assert.equal(rows.length,1);
  assert.equal(rows[0].status,'RECONCILING');
 });
+
+test('source drift during asynchronous approval cancels OPEN planning without a Host Turn',async t=>{
+ const f=await setup(t);let turns=0;
+ await assert.rejects(planWithCodexManagedThread(f.store,f.repo,goal,{
+  ...f.settings,
+  authorize:async()=>{
+   await writeFile(join(f.repo,'src/a.js'),'export function add(x,y){ return x-y; }\n');
+   return true;
+  },
+  transport:async()=>{turns++;throw Error('Host must not be started');}
+ }),/Planning source context changed while awaiting approval/);
+ assert.equal(turns,0);
+ const rows=f.store.db.prepare('SELECT status FROM host_planning').all();
+ assert.deepEqual(rows.map(row=>row.status),['CANCELLED']);
+});
+
+test('clean HEAD replacement during approval is not silently accepted for planning',async t=>{
+ const f=await setup(t);let turns=0;
+ await assert.rejects(planWithCodexManagedThread(f.store,f.repo,goal,{
+  ...f.settings,
+  authorize:async()=>{
+   await writeFile(join(f.repo,'src/a.js'),'export function add(x,y){ return x+y+1; }\n');
+   for (const argv of [['add','.'],['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','changed-during-approval']]) {
+     const result=await git(f.repo,argv);
+     assert.equal(result.exitCode,0,result.stderr.toString());
+   }
+   return true;
+  },
+  transport:async()=>{turns++;throw Error('Host must not be started');}
+ }),/Planning source context changed while awaiting approval/);
+ assert.equal(turns,0);
+ assert.deepEqual(f.store.db.prepare('SELECT status FROM host_planning').all().map(row=>row.status),['CANCELLED']);
+});
+
+test('changed persisted planning request is rejected before reserving a Host Turn',async t=>{
+ const f=await setup(t);let turns=0;
+ await assert.rejects(planWithCodexManagedThread(f.store,f.repo,goal,{
+  ...f.settings,
+  authorize:async()=>{
+   f.store.db.prepare("UPDATE host_planning SET body=? WHERE status='OPEN'").run('{"mutated":true}');
+   return true;
+  },
+  transport:async()=>{turns++;throw Error('Host must not be started');}
+ }),/Planning session changed or expired/);
+ assert.equal(turns,0);
+ assert.deepEqual(f.store.db.prepare('SELECT status FROM host_planning').all().map(row=>row.status),['CANCELLED']);
+});
