@@ -168,6 +168,22 @@ export function createCodexMvpFacade(store, {
       const runId=initial.current?.bootstrap?.filesets?.[itemId];
       if (!runId) invalid('No current approved Fileset for WorkItem');
       const fileSet=store.get(runId);
+      // A hash alone is not an inspectable authorization scope. Show the
+      // owner the *actual* bytes to be created or repaired before any local
+      // effect, and validate them against the already-approved Fileset.
+      let content;
+      try { content=store.readArtifact(fileSet.contentRef); }
+      catch { invalid('Approved Bootstrap Fileset content unavailable'); }
+      if (!content?.manifest || !Array.isArray(content.files) ||
+          hash(fileSet.contract) !== fileSet.contractHash ||
+          hash(content.manifest) !== fileSet.contractHash ||
+          content.files.length !== fileSet.contract.files.length ||
+          content.files.some((entry,index) =>
+            entry.path !== fileSet.contract.files[index].path ||
+            hash(entry.content) !== fileSet.contract.files[index].sha256))
+        invalid('Approved Bootstrap Fileset content integrity mismatch');
+      const reviewedFiles=Object.freeze(content.files.map(entry=>Object.freeze({...entry})));
+      const reviewedFilesHash=hash(reviewedFiles);
       const scope=Object.freeze({
         kind:'CODEFLEET_BOOTSTRAP_MATERIALIZATION_SCOPE_V1',
         taskId,itemId,runId,revision:initial.current.revision,
@@ -175,7 +191,8 @@ export function createCodexMvpFacade(store, {
         // A source Plan artifact and its repository are part of the exact
         // owner-reviewed destination, even when the Workflow hash is unchanged.
         planRef:initial.current.planRef,
-        filesetHash:fileSet.contractHash,
+        filesetHash:fileSet.contractHash,contentRef:fileSet.contentRef,
+        operation:fileSet.operation ?? 'create',files:reviewedFiles,
         repo:initial.plan.probe.root,protection:'UNPROTECTED',
         goalEffect:'APPROVED_EXACT_LOCAL_FILESET'
       });
@@ -186,9 +203,20 @@ export function createCodexMvpFacade(store, {
           fresh.workflow.workflowHash !== scope.workflowHash ||
           fresh.current.planRef !== scope.planRef ||
           fresh.plan.probe.root !== scope.repo ||
-          fresh.current.bootstrap?.filesets?.[itemId] !== runId ||
-          store.get(runId).contractHash !== scope.filesetHash)
+          fresh.current.bootstrap?.filesets?.[itemId] !== runId)
         invalid('Bootstrap scope changed during review');
+      const latestFileset=store.get(runId);
+      if (latestFileset.contractHash !== scope.filesetHash ||
+          latestFileset.contentRef !== scope.contentRef ||
+          (latestFileset.operation ?? 'create') !== scope.operation)
+        invalid('Bootstrap scope changed during review');
+      let latestContent;
+      try { latestContent=store.readArtifact(latestFileset.contentRef); }
+      catch { invalid('Bootstrap Fileset content changed during review'); }
+      if (!latestContent?.manifest ||
+          hash(latestContent.manifest) !== scope.filesetHash ||
+          hash(latestContent.files) !== reviewedFilesHash)
+        invalid('Bootstrap Fileset content changed during review');
       // materializeTask independently checks the exact workflow approval, lease,
       // pending dependencies, file hashes and destination drift before writes.
       return materializeTask(store,taskId,itemId,{freshOnly:true});

@@ -301,6 +301,12 @@ test('trusted NEW_PROJECT materialization uses exact approved Plan and Fileset',
   assert.equal(scopes[0].repo,f.dir);
   assert.equal(scopes[0].planRef,current.planRef);
   assert.equal(scopes[0].filesetHash,f.store.get(runId).contractHash);
+  assert.equal(scopes[0].contentRef,f.store.get(runId).contentRef);
+  assert.equal(scopes[0].operation,'create');
+  assert.deepEqual(scopes[0].files.map(file=>file.path),pendingTodoFiles.map(file=>file.path));
+  assert.equal(scopes[0].files.find(file=>file.path==='src/todo.mjs').content,pendingTodoFiles[1].content);
+  assert.equal(Object.isFrozen(scopes[0].files),true);
+  assert.equal(Object.isFrozen(scopes[0].files[0]),true);
   assert.equal(await readFile(join(f.dir,'src/todo.mjs'),'utf8'),pendingTodoFiles[1].content);
 });
 
@@ -327,6 +333,55 @@ test('Bootstrap Fileset owner grant cannot be reused after Plan destination subs
   });
   await assert.rejects(api.materializeApprovedBootstrap(f.id,'todo'),
     /Bootstrap scope changed during review/);
+  assert.equal(grants,1);
+  assert.equal(f.store.get(runId).state,'READY');
+  await assert.rejects(readFile(join(f.dir,'src/todo.mjs')),{code:'ENOENT'});
+});
+
+test('Bootstrap Fileset owner can inspect immutable source bytes and deny local writes', async t => {
+  const f=await prepared({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  approve(f,await propose(f,'todo',{files:pendingTodoFiles}));
+  let reviews=0;
+  const api=createCodexMvpFacade(f.store,{executable:process.execPath,model:'fixture',
+    authorizeBootstrapMaterialization:async scope=>{
+      reviews++;
+      const proposed=scope.files.find(file=>file.path==='src/todo.mjs');
+      assert.equal(proposed.content,pendingTodoFiles[1].content);
+      assert.equal(proposed.sha256,hash(proposed.content));
+      assert.equal(scope.operation,'create');
+      assert.throws(()=>{proposed.content='not reviewed';},TypeError);
+      assert.throws(()=>scope.files.push({path:'src/unapproved.mjs'}),TypeError);
+      return false;
+    }
+  });
+  await assert.rejects(api.materializeApprovedBootstrap(f.id,'todo'),/grant denied/);
+  assert.equal(reviews,1);
+  await assert.rejects(readFile(join(f.dir,'src/todo.mjs')),{code:'ENOENT'});
+});
+
+test('Bootstrap Fileset bytes changed during asynchronous owner review never reach materialization', async t => {
+  const f=await prepared({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  approve(f,await propose(f,'todo',{files:pendingTodoFiles}));
+  const runId=task(f.store,f.id).bootstrap.filesets.todo;
+  const contentRef=f.store.get(runId).contentRef;
+  const originalRead=f.store.readArtifact.bind(f.store);
+  let replaced=false,grants=0;
+  // Simulate storage or embedding interference at the exact async review
+  // boundary, without changing the previously reviewed file-set hash.
+  f.store.readArtifact=ref=>{
+    const artifact=originalRead(ref);
+    if (replaced && ref===contentRef)
+      return {...artifact,files:artifact.files.map((entry,index)=>
+        index===0?{...entry,content:'unreviewed changed bytes'}:entry)};
+    return artifact;
+  };
+  const api=createCodexMvpFacade(f.store,{executable:process.execPath,model:'fixture',
+    authorizeBootstrapMaterialization:async()=>{grants++;replaced=true;return true;}
+  });
+  await assert.rejects(api.materializeApprovedBootstrap(f.id,'todo'),
+    /Fileset content changed during review/);
   assert.equal(grants,1);
   assert.equal(f.store.get(runId).state,'READY');
   await assert.rejects(readFile(join(f.dir,'src/todo.mjs')),{code:'ENOENT'});
