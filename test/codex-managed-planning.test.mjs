@@ -203,3 +203,29 @@ test('planning refuses to accept a Host result from a cwd changed during Turn',a
  assert.equal(turns,1);
  assert.deepEqual(f.store.db.prepare('SELECT status FROM host_planning').all().map(r=>r.status),['RECONCILING']);
 });
+
+test('planning approval expiring after durable dispatch reservation never invokes Host',async t=>{
+ const f=await setup(t);let turns=0;
+ const originalNow=Date.now;
+ const originalEvent=f.store.event.bind(f.store);
+ let reserved=false;
+ f.store.event=(...args)=>{
+   const result=originalEvent(...args);
+   if(args[1]==='HOST_PLANNING_TURN_RESERVED') reserved=true;
+   return result;
+ };
+ Date.now=()=>originalNow()+(reserved?120000:0);
+ try {
+   await assert.rejects(planWithCodexManagedThread(f.store,f.repo,goal,{
+     ...f.settings,authorize:async()=>true,
+     transport:async()=>{turns++;throw Error('expired grant must not invoke Host');}
+   }),/Planning authority expired before Host Turn/);
+ } finally {
+   Date.now=originalNow;
+   f.store.event=originalEvent;
+ }
+ assert.equal(reserved,true);
+ assert.equal(turns,0);
+ assert.deepEqual(f.store.db.prepare('SELECT status FROM host_planning').all().map(r=>r.status),['CANCELLED']);
+ assert.ok(f.store.db.prepare("SELECT 1 FROM events WHERE type='HOST_PLANNING_TURN_CANCELLED'").get());
+});

@@ -105,10 +105,22 @@ export async function planWithCodexManagedThread(store, repo, objective, {
     cancelPlanning(store, request.sessionId);
     throw error;
   }
+  // An approval can expire after the reservation transaction but before the
+  // transport call. A nonpositive timeout is never permission to start a
+  // billable Host Turn. This is a known no-dispatch outcome, not RECONCILING.
+  const remainingMs = request.expiresAt - Date.now();
+  if (remainingMs <= 0) {
+    store.db.prepare("UPDATE host_planning SET status='CANCELLED' WHERE id=? AND status='DISPATCHED'")
+      .run(request.sessionId);
+    store.event(request.sessionId,'HOST_PLANNING_TURN_CANCELLED',{
+      dispatchRef,reason:'Approved planning window expired before transport invocation; no Host Turn started'
+    });
+    throw Error('Planning authority expired before Host Turn');
+  }
   try {
     const receipt = await transport({
       executable,cwd,model,prompt,outputSchema:planningOutputSchema,
-      timeoutMs:Math.min(PLANNING_PROFILE.timeoutMs,request.expiresAt-Date.now()),
+      timeoutMs:Math.min(PLANNING_PROFILE.timeoutMs,remainingMs),
     });
     if (receipt?.terminalStatus !== 'completed' || typeof receipt.text !== 'string' ||
         !receipt.threadId || !receipt.turnId || receipt.authority !== 'PROVIDER_REPORTED_ONLY' ||
