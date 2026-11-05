@@ -58,6 +58,12 @@ export function pinnedObjectiveDeliveryIntent({ run, delivery, intent, approved 
       intent.candidateHash !== delivery.targetTreeHash ||
       intent.approvedCriteriaRef !== run.objectiveApprovedCriteriaRef ||
       intent.objectiveCriteriaHash !== approved.criteriaHash ||
+      // Preserve the exact accepted final Candidate/Evidence reviewed before
+      // destination effects, not only a replaceable same-byte tree hash.
+      typeof intent.acceptedHash !== 'string' || !intent.acceptedHash ||
+      typeof intent.evidenceHash !== 'string' || !intent.evidenceHash ||
+      intent.acceptedHash !== run.acceptedHash ||
+      intent.evidenceHash !== run.evidenceHash ||
       delivery.intentRef !== run.destinationDeliveryIntentRef ||
       delivery.runId !== run.id || delivery.revision !== run.revision)
     return false;

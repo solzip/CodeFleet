@@ -10,7 +10,7 @@ import { readDeliveredObjectiveStatus } from '../src/product/objective-status.mj
 const SHA = 'a'.repeat(64), OTHER = 'b'.repeat(64), BASE = 'c'.repeat(40);
 const criterionSet = [{id:'criterion-a',requiredAuthority:'LOCAL_EXECUTED'}];
 const run = () => ({kind:'workflow',id:'objective-1',revision:1,state:'COMPLETED',
-  finalRunId:'final-1',acceptedHash:'accepted-1',repo:'/approved-target',base:BASE,
+  finalRunId:'final-1',acceptedHash:'accepted-1',evidenceHash:'candidate-evidence-1',repo:'/approved-target',base:BASE,
   destinationDeliveryIntentRef:'intent-1',
   deliveryReceiptRef:'delivery-1',objectiveDecisionRef:'decision-1',
   objectiveCriteriaRef:'criteria-1',objectiveApprovedCriteriaRef:'approved-1',contractHash:SHA,
@@ -21,10 +21,12 @@ const delivery = () => ({status:'DELIVERED_NOT_VERIFIED',runId:'objective-1',rev
 const intent = () => ({kind:'EXACT_LOCAL_DELIVERY_INTENT_V1',
   runId:'objective-1',revision:1,base:BASE,destination:'/approved-target',
   workflowHash:SHA,approvedCriteriaRef:'approved-1',
-  objectiveCriteriaHash:hash(criterionSet),candidateHash:SHA,
+  objectiveCriteriaHash:hash(criterionSet),acceptedHash:'accepted-1',
+  evidenceHash:'candidate-evidence-1',candidateHash:SHA,
   fileHashes:{'src/a.js':OTHER}});
 const child = () => ({id:'final-1',workflowParent:'objective-1',
-  workflowRevision:1,candidateHash:SHA,candidatePaths:['src/a.js'],
+  workflowRevision:1,candidateHash:SHA,acceptedHash:'accepted-1',
+  evidenceHash:'candidate-evidence-1',candidatePaths:['src/a.js'],
   repo:'/approved-target'});
 const decision = () => ({outcome:'COMPLETE',complete:true,objectiveId:'objective-1',
   revision:1,targetTreeHash:SHA,authority:'LOCAL_EXECUTED',
@@ -308,4 +310,22 @@ test('COMPLETE projection rejects same-byte hard-link substitution',async t=>{
  const changed=await readDeliveredObjectiveStatus(x.store,'objective-1');
  assert.equal(changed.objectiveComplete,false);
  assert.equal(changed.status,'BLOCKED');
+});
+
+test('delivered Objective preserves the pre-effect verified Candidate and Evidence refs',async()=>{
+ for(const change of [
+   {runOverride:{acceptedHash:'different-patch'}},
+   {runOverride:{evidenceHash:'different-evidence'}},
+   {intentOverride:{acceptedHash:'different-patch'}},
+   {intentOverride:{evidenceHash:'different-evidence'}},
+   {childOverride:{acceptedHash:'different-patch'}},
+   {childOverride:{evidenceHash:'different-evidence'}}
+ ]) {
+   const x=fixture(change);
+   const result=await readDeliveredObjectiveStatus(x.store,'objective-1',{
+     observeTree:async()=>{throw Error('Never read target for changed Candidate provenance');}
+   });
+   assert.equal(result.status,'BLOCKED',JSON.stringify(change));
+   assert.equal(result.objectiveComplete,false);
+ }
 });

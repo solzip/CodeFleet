@@ -66,7 +66,10 @@ export async function readDeliveredObjectiveStatus(store, objectiveId, {
     delivered.runId === run.id && delivered.revision === run.revision &&
     trustedSha(delivered.targetTreeHash) && delivered.targetTreeHash === delivered.candidateHash &&
     child && child.id === run.finalRunId && child.workflowParent === run.id &&
-    child.workflowRevision === run.revision && trustedSha(child.candidateHash) &&
+    child.workflowRevision === run.revision &&
+    child.acceptedHash === run.acceptedHash &&
+    child.evidenceHash === run.evidenceHash &&
+    trustedSha(child.candidateHash) &&
     child.candidateHash === delivered.targetTreeHash &&
     Array.isArray(child.candidatePaths) && child.candidatePaths.length > 0 &&
     typeof run.repo === 'string' && run.repo === child.repo;
