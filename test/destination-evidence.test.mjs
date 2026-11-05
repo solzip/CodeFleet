@@ -1,16 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp,mkdir,writeFile,rm,symlink } from 'node:fs/promises';
+import { mkdtemp,mkdir,writeFile,rm,symlink,chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { hash } from '../src/alpha/contract.mjs';
+import { candidateHash } from '../src/alpha/workspace.mjs';
 import { createLocalDestinationVerifier } from '../src/product/destination-evidence.mjs';
 
 async function fixture(t){
  const root=await mkdtemp(join(tmpdir(),'cf-destination-evidence-'));
  t.after(()=>rm(root,{recursive:true,force:true}));
  await mkdir(join(root,'src'));await writeFile(join(root,'src/a.js'),'export const answer = 42;');
- const targetHash=hash([['src/a.js',hash(Buffer.from('export const answer = 42;'))]]);
+ // Use the production observer: Candidate hashes now bind Git executable mode too.
+ const targetHash=await candidateHash(root,['src/a.js']);
  const run={id:'run-1',revision:1,repo:root,contractHash:'a'.repeat(64)};
  const delivery={status:'DELIVERED_NOT_VERIFIED',runId:run.id,revision:run.revision,
   semanticCriteriaVerified:false,candidateHash:targetHash,targetTreeHash:targetHash};
@@ -133,6 +135,19 @@ test('revocation during a running Local check prevents successful Evidence persi
   candidate:f.candidate,cancelled:()=>cancelled}),/cancelled or grant revoked/);
  assert.equal(invoked,true);
  assert.equal(artifacts,0);
+});
+
+test('mode-only drift on delivered files cannot receive a Local verification grant',async t=>{
+ if (process.platform === 'win32') { t.skip('POSIX executable mode not portable on Windows'); return; }
+ const f=await fixture(t);let granted=false;
+ await chmod(join(f.root,'src/a.js'),0o755);
+ const verifier=createLocalDestinationVerifier(f.store,{
+  criteria:f.criteria,commandSpecs:f.commandSpecs,
+  obtainGrant:async()=>{granted=true;return true;}
+ });
+ await assert.rejects(verifier.verify({run:f.run,delivery:f.delivery,
+  candidate:f.candidate,cancelled:()=>false}),/Destination changed before criterion verification/);
+ assert.equal(granted,false);
 });
 
 test('same-byte symlink substitution after delivery cannot create criterion Evidence',async t=>{
