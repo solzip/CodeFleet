@@ -61,15 +61,16 @@ export async function captureCodexWorkspaceEdits({candidateDirectory, contract, 
     reject('Exact trusted supervised Host execution configuration required');
   const before=await observeTree(candidateDirectory);
   const allowed=new Set(contract.files);
+  const contextHash=hash(context);
   const initialTree = [...before].map(([name,entry])=>[name,hash(entry.bytes),entry.mode]);
   for(const name of allowed){
     if (!before.has(name) || !context[name] || !Buffer.from(context[name]).equals(before.get(name).bytes))
       reject('Candidate source/context does not match approved WorkItem');
   }
-  const approvedScope={kind:'HOST_WORKSPACE_WRITE_UNPROTECTED_V1',
+  const approvedScope=Object.freeze({kind:'HOST_WORKSPACE_WRITE_UNPROTECTED_V1',
     root:candidateDirectory,baseTreeHash:hash(initialTree),
-    contractHash:hash(contract),allowedFiles:[...allowed].sort(),model,timeoutMs};
-  if(await approved(Object.freeze({...approvedScope}))!==true) reject('Supervised Host workspace write not granted');
+    contractHash:hash(contract),allowedFiles:Object.freeze([...allowed].sort()),model,timeoutMs});
+  if(await approved(approvedScope)!==true) reject('Supervised Host workspace write not granted');
   // Grant review can be asynchronous. Never hand the Host a write-enabled Turn
   // for a Candidate that changed while its exact base-tree grant was pending.
   // This is a drift check, not an OS sandbox or a Host permission substitute.
@@ -78,6 +79,10 @@ export async function captureCodexWorkspaceEdits({candidateDirectory, contract, 
     [name,hash(entry.bytes),entry.mode]));
   if(afterGrantHash!==approvedScope.baseTreeHash)
     reject('Candidate snapshot changed during Host workspace authorization');
+  // Async owner review must not let the caller rewrite the contract or the
+  // Host context while the reviewed Candidate bytes remain unchanged.
+  if(hash(contract)!==approvedScope.contractHash || hash(context)!==contextHash)
+    reject('Contract or Host context changed during workspace authorization');
   if(cancelled())reject('Candidate execution cancelled before Host Turn');
   const prompt=JSON.stringify({goal:contract.goal,approvedScope,files:contract.files,
     instructions:'Use Codex Host tools only to edit the explicitly allowed existing source files under this candidate root. '+
@@ -86,8 +91,10 @@ export async function captureCodexWorkspaceEdits({candidateDirectory, contract, 
   const receipt=await transport({executable,cwd:candidateDirectory,model,prompt,
     outputSchema:{type:'object',additionalProperties:false,required:['summary'],properties:{summary:{type:'string'}}},
     timeoutMs,cancelled,workspaceWrite:true});
-  if (receipt?.terminalStatus!=='completed' || receipt.protectedVerified!==false ||
-      !receipt.threadId || !receipt.turnId || receipt.executionMode!=='HOST_WORKSPACE_WRITE_UNPROTECTED')
+  if (cancelled()) reject('Host Turn cancelled before Candidate acceptance');
+  if (receipt?.terminalStatus!=='completed' || receipt.authority!=='PROVIDER_REPORTED_ONLY' ||
+      receipt.protectedVerified!==false || !receipt.threadId || !receipt.turnId ||
+      receipt.executionMode!=='HOST_WORKSPACE_WRITE_UNPROTECTED')
     reject('Missing live Host filesystem Turn receipt');
   const after=await observeTree(candidateDirectory);
   if (before.size!==after.size || [...before.keys()].some(file=>!after.has(file)))
@@ -108,6 +115,11 @@ export async function captureCodexWorkspaceEdits({candidateDirectory, contract, 
   }
   if(!edits.length)reject('Host Turn did not produce a source change');
   const proposal={summary:'Changes observed from isolated Codex Host filesystem',edits};
+  // The Turn may also outlive mutable coordinator input. Accept only the
+  // approved contract/context and a still-current cancellation fence.
+  if(hash(contract)!==approvedScope.contractHash || hash(context)!==contextHash)
+    reject('Approved Contract or Host context changed during Host Turn');
+  if(cancelled()) reject('Host Turn cancelled before Candidate acceptance');
   // Keep the legacy Proposal/Verifier pipeline: verify exact edit scope on
   // original baseline. Never classify tool events as independent Evidence.
   applyEdits(contract,context,proposal);

@@ -162,3 +162,69 @@ test('linked Candidate directory ancestor is rejected before workspace authoriza
  assert.equal(authorized,false);
  assert.equal(transported,false);
 });
+
+test('supervised workspace review receives an immutable exact file scope',async t=>{
+ const f=await fixture(t);
+ const result=await captureCodexWorkspaceEdits({candidateDirectory:f.root,contract:f.contract,
+  context:f.context,executable:process.execPath,model:'fixture',
+  approved:async scope=>{
+   assert.equal(Object.isFrozen(scope),true);
+   assert.equal(Object.isFrozen(scope.allowedFiles),true);
+   assert.throws(()=>scope.allowedFiles.push('src/b.js'),TypeError);
+   assert.deepEqual(scope.allowedFiles,['src/a.js']);
+   return true;
+  },transport:async()=>{
+   await writeFile(join(f.root,'src/a.js'),'export const value = 2;');
+   return hostReceipt();
+  }});
+ assert.deepEqual(result.proposal.edits.map(e=>e.path),['src/a.js']);
+});
+
+for (const modified of ['contract','context']) {
+ test('workspace grant rejects '+modified+' mutation before Host Turn',async t=>{
+  const f=await fixture(t);let transported=false;
+  await assert.rejects(captureCodexWorkspaceEdits({candidateDirectory:f.root,contract:f.contract,
+   context:f.context,executable:process.execPath,model:'fixture',
+   approved:async()=>{
+    if(modified==='contract') f.contract.goal+=' changed during approval';
+    else f.context['src/a.js']='different approved text';
+    return true;
+   },transport:async()=>{transported=true;return hostReceipt();}
+  }),/Contract or Host context changed during workspace authorization/);
+  assert.equal(transported,false);
+  assert.equal(await readFile(join(f.root,'src/a.js'),'utf8'),'export const value = 1;');
+ });
+}
+
+test('workspace Host Turn cannot accept changed coordinator context',async t=>{
+ const f=await fixture(t);
+ await assert.rejects(captureCodexWorkspaceEdits({candidateDirectory:f.root,
+  contract:f.contract,context:f.context,executable:process.execPath,model:'fixture',
+  approved:async()=>true,transport:async()=>{
+   await writeFile(join(f.root,'src/a.js'),'export const value = 2;');
+   f.context['src/a.js']='tampered while Host was running';
+   return hostReceipt();
+  }}),/Approved Contract or Host context changed during Host Turn/);
+});
+
+test('workspace Host Turn cancellation after file effect never accepts a Candidate',async t=>{
+ const f=await fixture(t);let revoked=false;
+ await assert.rejects(captureCodexWorkspaceEdits({candidateDirectory:f.root,
+  contract:f.contract,context:f.context,executable:process.execPath,model:'fixture',
+  approved:async()=>true,cancelled:()=>revoked,transport:async()=>{
+   await writeFile(join(f.root,'src/a.js'),'export const value = 2;');
+   revoked=true;
+   return hostReceipt();
+  }}),/Host Turn cancelled before Candidate acceptance/);
+ assert.equal(await readFile(join(f.root,'src/a.js'),'utf8'),'export const value = 2;');
+});
+
+test('workspace Host Turn cannot launder a claimed protected receipt as Local proposal',async t=>{
+ const f=await fixture(t);
+ await assert.rejects(captureCodexWorkspaceEdits({candidateDirectory:f.root,
+  contract:f.contract,context:f.context,executable:process.execPath,model:'fixture',
+  approved:async()=>true,transport:async()=>{
+   await writeFile(join(f.root,'src/a.js'),'export const value = 2;');
+   return {...hostReceipt(),authority:'PROTECTED_EXECUTED'};
+  }}),/Missing live Host filesystem Turn receipt/);
+});
