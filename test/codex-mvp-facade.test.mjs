@@ -149,6 +149,45 @@ test('source or DAG drift during asynchronous grant blocks Controller dispatch',
   }
 });
 
+test('managed Workflow refuses a missing delivered Objective criterion set before execution grant',async()=>{
+  const {store}=fixture();
+  let grants=0;
+  const api=createCodexMvpFacade(store,{executable:process.execPath,model:'fixture',
+    enableHostTurns:true,verificationBackend:backend,
+    destinationDelivery:{approvedCriteria:[],authorize:async()=>true,verify:async()=>({})},
+    authorizeWorkflow:async()=>{grants++;return true;}});
+  await assert.rejects(api.runExistingWorkflow('run-fixture'),
+    /Trusted mandatory Objective criterion set missing or invalid/);
+  assert.equal(grants,0);
+});
+
+test('managed Workflow owner grant pins immutable destination criteria through async review',async()=>{
+  const {store}=fixture();
+  const destinationDelivery={
+    approvedCriteria:[{id:'C1',requiredAuthority:'LOCAL_EXECUTED',description:'Check the delivered tree'}],
+    authorize:async()=>{throw Error('Destination effect not permitted in this test');},
+    verify:async()=>{throw Error('Verifier must not start');}
+  };
+  let grants=0;
+  const api=createCodexMvpFacade(store,{executable:process.execPath,model:'fixture',
+    enableHostTurns:true,verificationBackend:backend,destinationDelivery,
+    authorizeWorkflow:async scope=>{
+      grants++;
+      assert.deepEqual(scope.destinationCriteria,[{
+        id:'C1',requiredAuthority:'LOCAL_EXECUTED',description:'Check the delivered tree'
+      }]);
+      assert.equal(Object.isFrozen(scope.destinationCriteria),true);
+      assert.equal(Object.isFrozen(scope.destinationCriteria[0]),true);
+      assert.throws(()=>{scope.destinationCriteria[0].requiredAuthority='OWNER_REVIEW';},TypeError);
+      // A trusted embedding may be reconfigured during asynchronous approval.
+      // The old grant must not authorize the replacement completion criteria.
+      destinationDelivery.approvedCriteria[0].requiredAuthority='OWNER_REVIEW';
+      return true;
+    }});
+  await assert.rejects(api.runExistingWorkflow('run-fixture'),/Workflow scope changed/);
+  assert.equal(grants,1);
+});
+
 test('host execution options cannot be model-controlled through unexpected fields',async()=>{
  const {store}=fixture();
  const api=createCodexMvpFacade(store,{executable:process.execPath,model:'codex-fixture',

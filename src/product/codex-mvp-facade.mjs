@@ -14,6 +14,7 @@ import { createCodexManagedHostExecution } from '../hosts/codex-managed-host-exe
 import { planWithCodexManagedThread } from '../hosts/codex-managed-planning.mjs';
 import { proposeNewProjectFileset } from '../hosts/codex-bootstrap-files.mjs';
 import { readDeliveredObjectiveStatus } from './objective-status.mjs';
+import { requireTrustedObjectiveCriteria } from './objective-judge.mjs';
 import { prepareReviewedCodexWorkflow } from './codex-reviewed-workflow.mjs';
 import { bootstrapContext, materializeTask, verifyTask } from './tasks.mjs';
 
@@ -103,6 +104,12 @@ export function createCodexMvpFacade(store, {
     tests: Object.freeze([...source.tests]),
     contextFiles: Object.freeze([...source.context]),
     deliveryMode: source.delivery.mode,
+    // Independent Workflow admission must show the actual mandatory delivered
+    // Objective checks, not only a source-level delivery mode. The Controller
+    // will separately require an exact pre-effect owner delivery grant.
+    destinationCriteria: destinationDelivery
+      ? Object.freeze(requireTrustedObjectiveCriteria(destinationDelivery.approvedCriteria)
+          .map(criterion => Object.freeze(criterion))) : null,
     executionLimits: Object.freeze({
       maxAttempts: source.maxAttempts,
       timeoutSeconds: source.timeoutSeconds,
@@ -311,7 +318,12 @@ export function createCodexMvpFacade(store, {
       const dependencies = { hostExecution, verificationBackend,
         ...(unknownCostBudget ? { unknownCostBudget } : {}),
         ...(repairPolicy ? { repairPolicy } : {}),
-        ...(destinationDelivery ? { destinationDelivery } : {}),
+        // Use exactly the reviewed criterion snapshot for this execution.
+        // A later mutation of the embedding's array cannot retarget delivery.
+        ...(destinationDelivery ? { destinationDelivery: {
+          ...destinationDelivery,
+          approvedCriteria: scope.destinationCriteria.map(criterion => ({ ...criterion }))
+        } } : {}),
         ...(developmentPolicy ? { developmentPolicy } : {}),
         ...(workItemPolicy ? { workItemPolicy } : {})
       };
