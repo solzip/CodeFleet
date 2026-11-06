@@ -30,8 +30,9 @@ test('binary contents or unsafe filenames are rejected before materialization',(
  assert.throws(()=>validateBootstrapHostProposal(escape,workflow,'create',3),/Unsafe/);
 });
 
-import { rm, readFile } from 'node:fs/promises';
+import { rm, readFile, realpath, mkdtemp, symlink, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { prepared } from './fixtures/bootstrap-reservation.mjs';
 import { task } from '../src/product/tasks.mjs';
 import { createCodexMvpFacade } from '../src/product/codex-mvp-facade.mjs';
@@ -66,6 +67,10 @@ test('NEW_PROJECT trusted Fileset planning submits a proposal without materializ
       assert.equal(scope.planRef,before.planRef);
       assert.equal(scope.workflowRef,before.bootstrap.workflowRef);
       assert.equal(scope.repo,f.dir);
+      assert.equal(scope.executablePath,process.execPath);
+      assert.equal(scope.executableResolvedPath,await realpath(process.execPath));
+      assert.equal(scope.model,'SYNTHETIC_ONLY');
+      assert.equal(scope.timeoutMs,90000);
       assert.deepEqual(scope.files,proposedTodoFiles.map(file=>file.path));
       assert.equal(Object.isFrozen(scope.files),true);
       assert.throws(()=>scope.files.push('secret.txt'),TypeError);
@@ -75,6 +80,7 @@ test('NEW_PROJECT trusted Fileset planning submits a proposal without materializ
       hostTurns++;
       const prompt=JSON.parse(request.prompt);
       assert.equal(request.cwd,f.dir);
+      assert.equal(request.executable,await realpath(process.execPath));
       assert.deepEqual(prompt.files,proposedTodoFiles.map(file=>file.path));
       return fakeHostReceipt(prompt);
     }
@@ -127,6 +133,87 @@ test('NEW_PROJECT Host proposal cannot be submitted after the reviewed Plan chan
   assert.equal(task(f.store,f.id).bootstrap.filesets.todo,undefined);
   assert.deepEqual(
     f.store.events(f.id).filter(event=>event.type.startsWith('BOOTSTRAP_HOST_TURN_')).map(event=>event.type),
+    ['BOOTSTRAP_HOST_TURN_RESERVED','BOOTSTRAP_HOST_TURN_RECONCILING']
+  );
+});
+
+test('NEW_PROJECT rejects a non-file Host executable before grant or Turn', async t => {
+  const f=await prepared({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  let grants=0,turns=0;
+  const api=createCodexMvpFacade(f.store,{
+    executable:f.dir,model:'SYNTHETIC_ONLY',enableHostTurns:true,
+    authorizeBootstrap:async()=>{grants++;return true;},
+    transport:async()=>{turns++;throw Error('Host must not run');}
+  });
+  await assert.rejects(api.proposeBootstrapFiles(f.id,'todo'),/regular file/);
+  assert.equal(grants,0);
+  assert.equal(turns,0);
+  assert.equal(f.store.events(f.id).filter(e=>e.type==='BOOTSTRAP_HOST_TURN_RESERVED').length,0);
+});
+
+async function linkedBootstrapHost(t) {
+  const root=await mkdtemp(join(tmpdir(),'codefleet-bootstrap-host-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const alias=join(root,'codex-host'),replacement=join(root,'other-host');
+  await writeFile(replacement,'synthetic replacement binary');
+  try { await symlink(process.execPath,alias,'file'); }
+  catch(error) {
+    if (['EPERM','EACCES','ENOTSUP'].includes(error.code)) {
+      t.skip('Host executable symlink unavailable on this runner');
+      return null;
+    }
+    throw error;
+  }
+  return {alias,replacement};
+}
+
+test('NEW_PROJECT Host grant cannot dispatch after executable alias substitution',async t=>{
+  const linked=await linkedBootstrapHost(t);
+  if (!linked) return;
+  const f=await prepared({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  let turns=0,grants=0;
+  const api=createCodexMvpFacade(f.store,{
+    executable:linked.alias,model:'SYNTHETIC_ONLY',enableHostTurns:true,
+    authorizeBootstrap:async scope=>{
+      grants++;
+      assert.equal(scope.executablePath,linked.alias);
+      assert.equal(scope.executableResolvedPath,await realpath(process.execPath));
+      await unlink(linked.alias);
+      await symlink(linked.replacement,linked.alias,'file');
+      return true;
+    },
+    transport:async()=>{turns++;throw Error('Host must not run');}
+  });
+  await assert.rejects(api.proposeBootstrapFiles(f.id,'todo'),/executable changed/);
+  assert.equal(grants,1);
+  assert.equal(turns,0);
+  assert.equal(f.store.events(f.id).filter(e=>e.type==='BOOTSTRAP_HOST_TURN_RESERVED').length,0);
+});
+
+test('NEW_PROJECT refuses a proposal after Host executable changes during Turn',async t=>{
+  const linked=await linkedBootstrapHost(t);
+  if (!linked) return;
+  const f=await prepared({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  let turns=0;
+  const api=createCodexMvpFacade(f.store,{
+    executable:linked.alias,model:'SYNTHETIC_ONLY',enableHostTurns:true,
+    authorizeBootstrap:async()=>true,
+    transport:async request=>{
+      turns++;
+      assert.equal(request.executable,await realpath(process.execPath));
+      await unlink(linked.alias);
+      await symlink(linked.replacement,linked.alias,'file');
+      return fakeHostReceipt(JSON.parse(request.prompt));
+    }
+  });
+  await assert.rejects(api.proposeBootstrapFiles(f.id,'todo'),/executable changed/);
+  assert.equal(turns,1);
+  assert.equal(task(f.store,f.id).bootstrap.filesets.todo,undefined);
+  assert.deepEqual(
+    f.store.events(f.id).filter(e=>e.type.startsWith('BOOTSTRAP_HOST_TURN_')).map(e=>e.type),
     ['BOOTSTRAP_HOST_TURN_RESERVED','BOOTSTRAP_HOST_TURN_RECONCILING']
   );
 });

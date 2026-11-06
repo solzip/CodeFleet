@@ -2,6 +2,7 @@
 // Builds on the existing pre-HEAD Bootstrap workflow and exact Fileset review;
 // Codex does not receive approval or direct filesystem write authority here.
 import { isAbsolute } from 'node:path';
+import { realpath, stat } from 'node:fs/promises';
 import { hash } from '../alpha/contract.mjs';
 import { bootstrapContext, submitBootstrapFiles } from '../product/tasks.mjs';
 import { validateFileset } from '../workflow/bootstrap-files.mjs';
@@ -35,12 +36,24 @@ export async function proposeNewProjectFileset(store, taskId, itemId, {
   const item = workflow.items.find(n=>n.id===itemId);
   if (!item || item.kind !== 'local-edit' || !['PENDING_FILESET','FILESET_PROPOSED'].includes(current.bootstrap.states[itemId]))
     throw Error('Bootstrap WorkItem is not awaiting an approved Fileset proposal');
+  // A Host executable is a billable execution boundary. The owner must review
+  // its real target, not only an absolute path that can be repointed later.
+  const pinnedExecutable = await realpath(executable);
+  if (!(await stat(pinnedExecutable)).isFile())
+    throw Error('Bootstrap Host executable must resolve to a regular file');
+  const ensureExecutable = async () => {
+    if (await realpath(executable) !== pinnedExecutable ||
+        !(await stat(pinnedExecutable)).isFile())
+      throw Error('Bootstrap Host executable changed during approval or Turn');
+  };
   // Review the immutable target Plan and actual WorkItem scope, not only its
   // revision/hash. A Plan pointer can be substituted without bumping either.
   const scope = Object.freeze({
     taskId,itemId,revision:current.revision,
     planRef:current.planRef,workflowRef:current.bootstrap.workflowRef,
     repo:plan.probe.root,workflowHash:workflow.workflowHash,
+    executablePath:executable,executableResolvedPath:pinnedExecutable,
+    model,timeoutMs,
     probeHash:plan.probe.probeHash,goal:plan.intent.original,
     files:Object.freeze([...item.files]),expiresAt:Date.now()+timeoutMs
   });
@@ -62,6 +75,7 @@ export async function proposeNewProjectFileset(store, taskId, itemId, {
   const allowed = await authorize(scope);
   if (allowed !== true) throw Error('Host Fileset proposal requires trusted exact bounded approval');
   if(Date.now()>=scope.expiresAt) throw Error('Bootstrap Host Fileset approval expired');
+  await ensureExecutable();
   ensureFresh();
   const prompt = JSON.stringify({kind:'CODEFLEET_NEW_PROJECT_FILESET_V1',...scope,
     instruction:'Return only JSON {revision,itemId,files:[{path,content}]}. ' +
@@ -79,11 +93,12 @@ export async function proposeNewProjectFileset(store, taskId, itemId, {
     store.db.exec('COMMIT');
   } catch(error) {store.db.exec('ROLLBACK');throw error;}
   try {
-    const receipt=await transport({executable,cwd:plan.probe.root,model,prompt,
+    const receipt=await transport({executable:pinnedExecutable,cwd:plan.probe.root,model,prompt,
       outputSchema:bootstrapFilesOutputSchema,timeoutMs});
     if(!receipt||receipt.terminalStatus!=='completed'||!receipt.threadId||!receipt.turnId||
       receipt.authority!=='PROVIDER_REPORTED_ONLY'||receipt.protectedVerified!==false||
       typeof receipt.text!=='string') throw Error('Bootstrap Host Turn receipt incomplete');
+    await ensureExecutable();
     const proposed=JSON.parse(receipt.text);
     validateBootstrapHostProposal(proposed,workflow,itemId,current.revision);
     // The Host proposal is not authority to submit against an unreviewed
