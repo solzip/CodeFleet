@@ -544,7 +544,7 @@ test('NEW_PROJECT pending Host Repair keeps exact approval and failure Evidence 
   });
   assert.equal(failed.status,'LOCAL_FAILED');
   const original=await readFile(join(f.dir,'src/todo.mjs'),'utf8');
-  const replacement='export const add = (list, t) => [...list, t];\\n';
+  const replacement='export const add = (list, t) => [...list, t];\n';
   let turns=0,materializationGrants=0,verificationGrants=0;
   const beforeRestart=createCodexMvpFacade(f.store,{
     executable:process.execPath,model:'SYNTHETIC_ONLY',enableHostTurns:true,
