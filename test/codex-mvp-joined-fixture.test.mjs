@@ -9,10 +9,9 @@ import { tmpdir } from 'node:os';
 import { Store } from '../src/alpha/store.mjs';
 import { git } from '../src/alpha/workspace.mjs';
 import { hash } from '../src/alpha/contract.mjs';
-import { execute } from '../src/alpha/controller.mjs';
 import { definition } from '../src/workflow/definition.mjs';
 import { createWorkflow, approveWorkflow, attempts } from '../src/workflow/persistence.mjs';
-import { createCodexManagedHostExecution } from '../src/hosts/codex-managed-host-execution.mjs';
+import { createCodexMvpFacade } from '../src/product/codex-mvp-facade.mjs';
 import { readDeliveredObjectiveStatus } from '../src/product/objective-status.mjs';
 import { dispatchProduct } from '../src/product/cli.mjs';
 import { runReport } from '../src/product/report.mjs';
@@ -63,9 +62,7 @@ async function initial(t) {
 test('joined synthetic two-WorkItem Objective: A persisted before B, local delivery and current-tree Judge',async t=>{
   const f=await initial(t);
   const hostTurns=[]; const grants=[]; const recorded=[];
-  const adapter=createCodexManagedHostExecution(f.store,{
-    enabled:true,executable:process.execPath,model:'FAKE_HOST_ONLY',
-    transport:async request=>{
+  const transport=async request=>{
       const p=JSON.parse(request.prompt);
       assert.ok(['a','b'].includes(p.workItemId));
       if(p.workItemId==='b') {
@@ -79,8 +76,7 @@ test('joined synthetic two-WorkItem Objective: A persisted before B, local deliv
         protectedVerified:false,executionMode:'HOST_READ_ONLY_PROPOSAL',
         text:JSON.stringify({summary:'Synthetic fixture change',
           edits:[{path:name,oldText:'a+b',newText:'a-b'}]})};
-    }
-  });
+    };
   const verifier=async ({directory,tests})=>{
     const result=[];
     for(const identity of tests){
@@ -92,9 +88,25 @@ test('joined synthetic two-WorkItem Objective: A persisted before B, local deliv
       skipped:0,todo:0,exitCode:failed?1:0,interrupted:false,truncated:false,
       testNames:tests};
   };
-  const completed=await execute(f.store,f.workflow.id,{
-    hostExecution:adapter,ready:async()=>{},cleanupContainer:async()=>{},
-    verify:verifier,
+  // Exercise the trusted MVP entry, not only the underlying Controller. No
+  // real Codex Host is launched: transport and independent verifier are fakes.
+  const reviewedScopes=[];
+  const facade=createCodexMvpFacade(f.store,{
+    executable:process.execPath,model:'FAKE_HOST_ONLY',
+    enableHostTurns:true,transport,
+    authorizeWorkflow:async scope=>{
+      reviewedScopes.push(scope);
+      assert.equal(scope.kind,'CODEFLEET_MANAGED_WORKFLOW_SCOPE_V1');
+      assert.equal(scope.runId,f.workflow.id);
+      assert.equal(scope.workflowHash,f.workflow.contractHash);
+      assert.equal(scope.executionMode,'HOST_READ_ONLY_PROPOSAL');
+      assert.equal(scope.executableResolvedPath,await realpath(process.execPath));
+      assert.deepEqual(scope.workItems.map(item=>item.id),['a','b']);
+      assert.deepEqual(scope.workItems[1].dependencies,['a']);
+      assert.deepEqual(scope.destinationCriteria,[{id:'C1',requiredAuthority:'LOCAL_EXECUTED'}]);
+      return true;
+    },
+    verificationBackend:{prepare:async()=>{},verify:verifier,cleanup:async()=>{}},
     unknownCostBudget:{authorize:async req=>{
       grants.push(req);return req.unknownCostTurns<=2;
     }},
@@ -105,7 +117,10 @@ test('joined synthetic two-WorkItem Objective: A persisted before B, local deliv
         assert.deepEqual(scope.objectiveCriteria,[{id:'C1',requiredAuthority:'LOCAL_EXECUTED'}]);
         assert.equal(scope.objectiveCriteriaHash,hash(scope.objectiveCriteria));
         assert.equal(scope.runId,f.workflow.id);
-        // Git for Windows may return a long canonical path while %TEMP% uses\n        // its 8.3 alias; compare resolved filesystem identities instead.\n        assert.equal((await realpath(scope.destination)).toLowerCase(),\n          (await realpath(f.repo)).toLowerCase());
+        // Git for Windows may return a long canonical path while %TEMP% uses
+        // its 8.3 alias; compare resolved filesystem identities instead.
+        assert.equal((await realpath(scope.destination)).toLowerCase(),
+          (await realpath(f.repo)).toLowerCase());
         return true;
       },
       verify:async ({run,delivery,candidate})=>{
@@ -128,7 +143,13 @@ test('joined synthetic two-WorkItem Objective: A persisted before B, local deliv
       }
     }
   });
-  assert.equal(completed.state,'COMPLETED',completed.reason);
+  const completed=await facade.runExistingWorkflow(f.workflow.id);
+  assert.equal(completed.workflowState,'COMPLETED',completed.objective.reason);
+  assert.equal(completed.objective.status,'COMPLETE');
+  assert.equal(completed.authority,'TRUSTED_EMBEDDING_LOCAL_ONLY');
+  assert.equal(completed.hostLiveAcceptance,'UNVERIFIED');
+  assert.equal(completed.protectedVerified,false);
+  assert.equal(reviewedScopes.length,1);
   const rows=attempts(f.store,f.workflow.id);
   assert.deepEqual(rows.map(row=>[row.itemId,row.status]),[
     ['a','SUCCEEDED'],['b','SUCCEEDED'],['final','SUCCEEDED']]);
