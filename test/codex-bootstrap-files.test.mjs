@@ -534,3 +534,113 @@ test('NEW_PROJECT Host Repair refuses missing failure Evidence before grant or T
   assert.equal(turns,0);
   assert.equal(f.store.events(f.id).filter(e=>e.type==='BOOTSTRAP_HOST_TURN_RESERVED').length,0);
 });
+
+test('NEW_PROJECT pending Host Repair keeps exact approval and failure Evidence across Store restart',async t=>{
+  const f=await built({protectedItem:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const preview=await verifyTask(f.store,f.id,'tests',request(f));
+  const failed=await verifyTask(f.store,f.id,'tests',request(f),{
+    trust:preview.commandHash,acknowledgeUnisolated:true
+  });
+  assert.equal(failed.status,'LOCAL_FAILED');
+  const original=await readFile(join(f.dir,'src/todo.mjs'),'utf8');
+  const replacement='export const add = (list, t) => [...list, t];\\n';
+  let turns=0,materializationGrants=0,verificationGrants=0;
+  const beforeRestart=createCodexMvpFacade(f.store,{
+    executable:process.execPath,model:'SYNTHETIC_ONLY',enableHostTurns:true,
+    authorizeBootstrap:async scope=>{
+      assert.equal(scope.operation,'repair');
+      assert.equal(scope.repair.evidenceRef,failed.evidenceRef);
+      return true;
+    },
+    transport:async input=>{
+      turns++;
+      const scope=JSON.parse(input.prompt);
+      return {...fakeHostReceipt(scope),text:JSON.stringify({
+        revision:scope.revision,itemId:'todo',
+        repair:{verificationItem:'tests',evidenceRef:failed.evidenceRef},
+        files:[{path:'src/todo.mjs',content:replacement,baseSha256:hash(original)}]
+      })};
+    }
+  });
+  const proposed=await beforeRestart.proposeBootstrapRepairFiles(f.id,'todo','tests');
+  assert.equal(f.store.get(proposed.approvalRequest.runId).state,'WAITING_APPROVAL');
+  assert.equal(await readFile(join(f.dir,'src/todo.mjs'),'utf8'),original);
+  f.store.close();
+  f.store=new Store(f.state);
+  const afterRestart=createCodexMvpFacade(f.store,{
+    executable:process.execPath,model:'SYNTHETIC_ONLY',
+    authorizeBootstrapMaterialization:async scope=>{
+      materializationGrants++;
+      assert.equal(scope.runId,proposed.approvalRequest.runId);
+      assert.equal(scope.operation,'modify');
+      assert.equal(scope.files[0].baseSha256,hash(original));
+      assert.equal(scope.files[0].content,replacement);
+      return true;
+    },
+    authorizeBootstrapVerification:async scope=>{
+      verificationGrants++;
+      assert.equal(scope.itemId,'tests');
+      return true;
+    },
+    transport:async()=>{turns++;throw Error('Restart must not replay the Host Turn');}
+  });
+  assert.equal(task(f.store,f.id).bootstrap.verifications.tests,failed.evidenceRef);
+  assert.equal(f.store.get(proposed.approvalRequest.runId).state,'WAITING_APPROVAL');
+  await assert.rejects(afterRestart.materializeApprovedBootstrap(f.id,'todo'),/approval required/);
+  assert.equal(await readFile(join(f.dir,'src/todo.mjs'),'utf8'),original);
+  approve(f,proposed.approvalRequest);
+  const applied=await afterRestart.materializeApprovedBootstrap(f.id,'todo');
+  assert.equal(applied.status,'MATERIALIZED');
+  assert.equal(await readFile(join(f.dir,'src/todo.mjs'),'utf8'),replacement);
+  assert.equal(task(f.store,f.id).bootstrap.states.tests,'VERIFICATION_STALE');
+  const passed=await afterRestart.verifyApprovedBootstrap(f.id,'tests',request(f));
+  assert.equal(passed.status,'LOCAL_PASSED');
+  assert.equal(passed.complete,false);
+  assert.equal(passed.protectedVerification,'UNSATISFIED');
+  assert.equal(turns,1);
+  assert.equal(materializationGrants,2);
+  assert.equal(verificationGrants,1);
+  assert.deepEqual(f.store.events(f.id).filter(e=>e.type.startsWith('BOOTSTRAP_HOST_TURN_'))
+    .map(e=>e.type),['BOOTSTRAP_HOST_TURN_RESERVED','BOOTSTRAP_HOST_TURN_SUBMITTED']);
+});
+
+test('NEW_PROJECT uncertain Host Repair cannot replay after Store restart',async t=>{
+  const f=await built({protectedItem:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const preview=await verifyTask(f.store,f.id,'tests',request(f));
+  const failed=await verifyTask(f.store,f.id,'tests',request(f),{
+    trust:preview.commandHash,acknowledgeUnisolated:true
+  });
+  assert.equal(failed.status,'LOCAL_FAILED');
+  const original=await readFile(join(f.dir,'src/todo.mjs'),'utf8');
+  let turns=0;
+  const config={
+    executable:process.execPath,model:'SYNTHETIC_ONLY',
+    authorize:async scope=>{
+      assert.equal(scope.operation,'repair');
+      assert.equal(scope.repair.evidenceRef,failed.evidenceRef);
+      return true;
+    },
+    repair:{verificationItem:'tests'},
+    transport:async input=>{
+      turns++;
+      return {...fakeHostReceipt(JSON.parse(input.prompt)),terminalStatus:'failed'};
+    }
+  };
+  await assert.rejects(proposeNewProjectFileset(f.store,f.id,'todo',config),
+    /receipt incomplete/);
+  assert.equal(turns,1);
+  assert.deepEqual(f.store.events(f.id).filter(e=>e.type.startsWith('BOOTSTRAP_HOST_TURN_'))
+    .map(e=>e.type),['BOOTSTRAP_HOST_TURN_RESERVED','BOOTSTRAP_HOST_TURN_RECONCILING']);
+  f.store.close();
+  f.store=new Store(f.state);
+  await assert.rejects(proposeNewProjectFileset(f.store,f.id,'todo',{
+    ...config,transport:async()=>{turns++;throw Error('Replayed unresolved Repair Turn');}
+  }),/requires reconciliation; no replay/);
+  assert.equal(turns,1);
+  assert.equal(task(f.store,f.id).bootstrap.verifications.tests,failed.evidenceRef);
+  assert.equal(task(f.store,f.id).bootstrap.states.tests,'LOCAL_FAILED');
+  assert.equal(await readFile(join(f.dir,'src/todo.mjs'),'utf8'),original);
+  assert.equal(f.store.events(f.id).filter(e=>e.type==='BOOTSTRAP_HOST_TURN_RESERVED').length,1);
+});
