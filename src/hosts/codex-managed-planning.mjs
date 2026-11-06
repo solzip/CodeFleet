@@ -46,8 +46,29 @@ export async function planWithCodexManagedThread(store, repo, objective, {
     contextHash:request.contextHash, profileHash:request.profileHash,
     skillHash:request.skillHash, expiresAt:request.expiresAt,
     model, hostVersion:version, cwd };
+  // A billable Host Turn must be approved against an inspectable exact
+  // Objective, repository and source inventory, not opaque hashes alone.
+  // Show only pinned file identities (not source bytes) and the requested
+  // read-only Host policy; unknown model usage is not a zero-cost grant.
+  const sourceFiles = Object.freeze(Object.entries(request.context.files)
+    .sort(([left],[right]) => left.localeCompare(right))
+    .map(([name,file]) => Object.freeze({
+      path:name, kind:file.kind, sha256:file.sha256,
+      bytes:Buffer.byteLength(file.text,'utf8')
+    })));
+  const reviewScope = Object.freeze({
+    ...binding, objective:request.objective, repositoryRoot:pinnedRepo,
+    sourceBaseline:request.baseline, sourceFiles,
+    requestedHostPolicy:Object.freeze({
+      tools:Object.freeze([...request.profile.tools]),
+      writes:request.profile.writes, network:request.profile.network,
+      timeoutMs:request.profile.timeoutMs,
+      outputBytes:request.profile.outputBytes
+    }),
+    costVisibility:'UNKNOWN', executionGranted:false
+  });
   let granted;
-  try { granted = await authorize(Object.freeze({ ...binding })); }
+  try { granted = await authorize(reviewScope); }
   catch (error) {
     // A rejected review must not leave a submit-capable OPEN session behind.
     cancelPlanning(store, request.sessionId);

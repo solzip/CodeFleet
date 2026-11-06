@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, symlink, realpath } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Store } from '../src/alpha/store.mjs';
@@ -50,6 +50,40 @@ test('approved Codex planning Turn reuses existing cited-draft validator and per
  assert.equal(result.costStatus,'UNKNOWN');
  assert.equal(result.executable,false);
  assert.ok(result.workflowPreview);
+});
+test('Codex planning grant inspects immutable Goal, pinned source and requested Host policy',async t=>{
+ const f=await setup(t);let turns=0,grants=0;
+ await assert.rejects(planWithCodexManagedThread(f.store,f.repo,goal,{
+  ...f.settings,authorize:async scope=>{
+   grants++;
+   assert.equal(scope.objective,goal);
+   assert.equal(scope.repositoryRoot,await realpath(f.repo));
+   assert.match(scope.sourceBaseline,/^[a-f0-9]{40,64}$/);
+   assert.equal(scope.executionGranted,false);
+   assert.equal(scope.costVisibility,'UNKNOWN');
+   assert.deepEqual(scope.sourceFiles.map(file=>file.path),['src/a.js','test/a.test.js']);
+   assert.equal(Object.isFrozen(scope.sourceFiles),true);
+   for(const file of scope.sourceFiles) {
+    assert.equal(Object.isFrozen(file),true);
+    assert.match(file.sha256,/^[a-f0-9]{64}$/);
+    assert.ok(file.bytes>0);
+   }
+   assert.deepEqual(scope.requestedHostPolicy,{
+    tools:['read','search'],writes:false,network:'deny',
+    timeoutMs:30000,outputBytes:65536
+   });
+   assert.equal(Object.isFrozen(scope.requestedHostPolicy),true);
+   assert.equal(Object.isFrozen(scope.requestedHostPolicy.tools),true);
+   assert.throws(()=>{scope.sourceFiles[0].sha256='changed';},TypeError);
+   assert.throws(()=>scope.sourceFiles.push({path:'unreviewed'}),TypeError);
+   assert.throws(()=>scope.requestedHostPolicy.tools.push('write'),TypeError);
+   return false;
+  },
+  transport:async()=>{turns++;throw Error('denied review must not dispatch');}
+ }),/approval/);
+ assert.equal(grants,1);
+ assert.equal(turns,0);
+ assert.deepEqual(f.store.db.prepare('SELECT status FROM host_planning').all().map(row=>row.status),['CANCELLED']);
 });
 test('without independent exact grant, Host Turn is never called',async t=>{
  const f=await setup(t);let turns=0;
