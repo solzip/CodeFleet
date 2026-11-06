@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { objectiveStatusArgs, reportObjective } from '../src/product/objective-status-cli.mjs';
 import { dispatchProduct, productCli } from '../src/product/cli.mjs';
 import { Store } from '../src/alpha/store.mjs';
+import { enableRepairStorage } from '../src/workflow/repair-generations.mjs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -87,4 +88,62 @@ test('delivered-status dispatch exits without loading Task or workflow execution
   await assert.rejects(dispatchProduct(['delivered-status','accepted-workflow','--allow-model'],{store}),
     /delivered-status requires/);
   assert.equal(calls,1);
+});
+
+test('read-only workflow-progress shows the current Repair generation and unresolved DAG dependencies', async t => {
+  const stateDirectory = await mkdtemp(join(tmpdir(), 'codefleet-progress-readonly-'));
+  t.after(() => rm(stateDirectory, { recursive: true, force: true }));
+  const state = new Store(stateDirectory);
+  enableRepairStorage(state);
+  state.create({
+    id: 'workflow-progress-fixture', kind: 'workflow', revision: 1,
+    state: 'RUNNING', contractHash: 'fixture-workflow-hash',
+    contract: { schemaVersion: 1, items: [
+      { id: 'a', dependencies: [] },
+      { id: 'b', dependencies: ['a'] }
+    ] },
+    states: { a: 'READY', b: 'PENDING' },
+    attempts: 2, reportedCostUsd: 0, unknownCostAttempts: 0
+  });
+  state.create({ id: 'attempt-a-1', state: 'WAITING_HUMAN', reason: 'first generation failed',
+    attempts: 1, reportedCostUsd: 0.1, unknownCostAttempts: 0 });
+  state.create({ id: 'attempt-a-2', state: 'GENERATING', reason: 'repair generation in flight',
+    attempts: 1, reportedCostUsd: 0, unknownCostAttempts: 1 });
+  state.db.prepare('INSERT INTO workflow_attempts VALUES (?,?,?,?,?)')
+    .run('workflow-progress-fixture', 'a', 'attempt-a-1', 1, 'FAILED');
+  state.db.prepare('INSERT INTO workflow_attempt_generations VALUES (?,?,?,?,?,?,?,?)')
+    .run('workflow-progress-fixture', 'a', 2, 'attempt-a-2', 1, 'STARTED',
+      'attempt-a-1', 'failed-evidence-ref');
+  const eventsBefore = state.events('workflow-progress-fixture').length;
+  state.close();
+
+  const result = await productCli(['workflow-progress','workflow-progress-fixture'], stateDirectory);
+  assert.equal(result.exitCode, 2);
+  assert.equal(result.data.kind, 'CODEFLEET_WORKFLOW_PROGRESS_V1');
+  assert.equal(result.data.workflowState, 'RUNNING');
+  assert.equal(result.data.workItems[0].state, 'GENERATING');
+  assert.deepEqual(result.data.workItems[0].attempt, {
+    childId: 'attempt-a-2', generation: 2, status: 'STARTED'
+  });
+  assert.deepEqual(result.data.workItems[1].waitingOn, ['a']);
+  assert.deepEqual(result.data.activeAttemptIds, ['attempt-a-2']);
+  assert.equal(result.data.objective.status, 'INCOMPLETE');
+  assert.equal(result.data.objectiveComplete, false);
+  assert.equal(result.data.executionGranted, false);
+  assert.equal(result.data.hostLiveAcceptance, 'UNVERIFIED');
+
+  for (const command of [
+    ['workflow-progress','workflow-progress-fixture','--allow-model'],
+    ['workflow-progress','workflow-progress-fixture','--trust','unreviewed'],
+    ['workflow-progress','workflow-progress-fixture','extra'],
+    ['workflow-progress']
+  ]) {
+    const denied = await productCli(command, stateDirectory);
+    assert.equal(denied.exitCode, 1);
+  }
+  const checked = new Store(stateDirectory, { readOnly: true });
+  try {
+    assert.equal(checked.events('workflow-progress-fixture').length, eventsBefore);
+    assert.equal(checked.get('workflow-progress-fixture').state, 'RUNNING');
+  } finally { checked.close(); }
 });

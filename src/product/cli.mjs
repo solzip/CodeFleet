@@ -7,7 +7,7 @@ import { createCodexAdapter } from '../providers/codex.mjs';
 import { probeProvider } from '../providers/capabilities.mjs';
 import { enableTasks, createTask, reviewTask, prepareTask, approveTask, rejectTask, materializeTask, verifyTask, clarifyTask, objectiveUnknownsReport, task, tasks } from './tasks.mjs';
 import { readResponse } from '../hosts/cli.mjs';
-import { runReport, taskReport } from './report.mjs';
+import { runReport, taskReport, workflowProgress } from './report.mjs';
 import { revokeDecision, reservationStatus, requireDurableOperator } from './reservations.mjs';
 import { nativeLocalStep, nativeEnvironmentStep, prepareNativeLocalReview, acceptNativeLocalReview, prepareNativeFilesReview, acceptNativeFilesReview } from './native-local.mjs';
 import { developmentProposalRequest, developmentProposalBatch, reviewDevelopmentResults, recordProposalDispatch } from './continuation.mjs';
@@ -28,6 +28,7 @@ codefleet-alpha objective approve <task-id> --hash <workflowHash> --actor <name>
 codefleet-alpha objective run|resume <task-id> --allow-model
 codefleet-alpha objective status [task-id] | report <task-or-run-id>
 codefleet-alpha objective delivered-status <workflow-id> (read-only delivered-tree Objective acceptance; never starts Host or writes State)
+codefleet-alpha objective workflow-progress <workflow-id> (read-only DAG/Repair progress and current delivered Objective; never grants execution)
 codefleet-alpha objective review-codex-plan <planning-session-id> [--repository ABSOLUTE_PATH] (read-only pinned Contract/DAG review; optional clean Git checkout check, never grants execution)
 codefleet-alpha objective proposal-request <task-id> <item-id> (eligible source context only; no model call or execution approval)
 codefleet-alpha objective repair-proposal-request <task-id> (settled Local failure context; no model call or approval)
@@ -108,6 +109,12 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       ? await inspectReviewedCodexPlanAtSource(store, args[0], o.repository)
       : inspectReviewedCodexPlan(store, args[0]);
     return { exitCode: data.status === 'REVIEW_REQUIRED' ? 0 : 2, data };
+  }
+  if (action === 'workflow-progress') {
+    if (args.length !== 1 || Object.keys(o).length || !args[0] || args[0].startsWith('-'))
+      throw Error('workflow-progress requires exactly one Workflow ID and no execution options');
+    const data = await workflowProgress(store, args[0]);
+    return { exitCode: data.objectiveComplete === true ? 0 : 2, data };
   }
   if (action === 'delivered-status') {
     if (args.length !== 1 || Object.keys(o).length || !args[0] || args[0].startsWith('-'))
@@ -298,7 +305,7 @@ export async function productCli(argv, directory) {
   try {
     requireDurableEntry(argv); // Before opening Store or reading caller JSON.
     if (!argv[0] || ['help', '--help'].includes(argv[0])) return await dispatchProduct(argv);
-    store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request', 'delivered-status', 'review-codex-plan'].includes(argv[0]) });
+    store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request', 'delivered-status', 'workflow-progress', 'review-codex-plan'].includes(argv[0]) });
     return await dispatchProduct(argv, { store });
   }
   catch (e) { return { exitCode: 1, data: { schemaVersion: 1, status: 'BLOCKED_OR_UNSUPPORTED', error: e.message } }; }

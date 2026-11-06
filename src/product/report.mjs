@@ -111,7 +111,11 @@ export async function runReport(store, id) {
     const records = attempts(store, id);
     activeAttempts = records.filter(a => a.status === 'STARTED').map(a => ({ ...a, state: store.get(a.childId).state }));
     workItems = run.contract.items.map(n => {
-      const a = records.find(a => a.itemId === n.id), child = a ? store.get(a.childId) : null;
+      // Repair generations are immutable; the latest generation, not the first
+      // legacy attempt, determines the current WorkItem progress and reason.
+      const a = records.filter(a => a.itemId === n.id)
+        .sort((left,right) => (left.generation ?? 1) - (right.generation ?? 1)).at(-1);
+      const child = a ? store.get(a.childId) : null;
       return { id: n.id, dependencies: n.dependencies, roles: n.roles ?? null, state: child && a.status === 'STARTED' ? child.state : run.states[n.id], attempt: a ?? null, reason: child?.reason ?? run.workItemBlocks?.[n.id]?.join('; ') ?? null };
     });
   }
@@ -167,4 +171,41 @@ export async function taskReport(store, id) {
   return { schemaVersion: 1, kind: 'TaskReport', taskId: id, revision: current.revision, state: current.state === 'REJECTED' ? 'REJECTED' : run?.state ?? current.state, reviewState: current.state, plannerAttempt: current.plannerAttempt ?? null, plan, settings: current.settings, run,
     nextAction: current.state === 'REJECTED' ? 'Create a new plan' : !current.runId ? 'Review scope, then run to prepare a workflow' : 'Approve the exact workflow hash, then run with explicit model consent',
     workflowHash: current.runId ? store.get(current.runId).contractHash : null };
+}
+
+// Read-only current DAG + Repair progress for the Codex MVP entry point.
+// Advisory only: dependency readiness is not execution/lease/approval authority.
+export async function workflowProgress(store, id) {
+  const run = store.get(id);
+  if (run?.kind !== 'workflow' || !Number.isInteger(run.revision) ||
+      !Array.isArray(run.contract?.items) || !run.states)
+    throw Error('Workflow progress requires a persisted current Workflow');
+  const report = await runReport(store, id);
+  const effective = new Map(report.workItems.map(item => [item.id, item.state]));
+  const workItems = report.workItems.map(item => ({
+    id: item.id, state: item.state,
+    dependencies: [...item.dependencies],
+    waitingOn: item.dependencies.filter(dep => effective.get(dep) !== 'SUCCEEDED'),
+    attempt: item.attempt ? {
+      childId: item.attempt.childId,
+      generation: item.attempt.generation ?? 1,
+      status: item.attempt.status
+    } : null,
+    reason: item.reason
+  }));
+  return {
+    kind: 'CODEFLEET_WORKFLOW_PROGRESS_V1',
+    workflowId: id, revision: run.revision, workflowHash: run.contractHash,
+    workflowState: report.recordedState,
+    workItems,
+    dependencyReadyIds: workItems.filter(item =>
+      item.waitingOn.length === 0 && ['PENDING','READY'].includes(item.state))
+      .map(item => item.id),
+    activeAttemptIds: report.activeAttempts.map(item => item.childId),
+    objective: report.objective,
+    objectiveComplete: report.objectiveComplete,
+    cost: report.cost,
+    authority: 'READ_ONLY_ADVISORY', executionGranted: false,
+    hostLiveAcceptance: 'UNVERIFIED'
+  };
 }
