@@ -14,7 +14,7 @@ import { developmentProposalRequest, developmentProposalBatch, reviewDevelopment
 import { recoverObjective } from './recovery.mjs';
 import { prepareContractRevision, acceptContractRevision, revokeContractRevision } from './contract-revisions.mjs';
 import { repairProposalRequest } from './repair.mjs';
-import { inspectReviewedCodexPlan } from './codex-reviewed-workflow.mjs';
+import { inspectReviewedCodexPlan, inspectReviewedCodexPlanAtSource } from './codex-reviewed-workflow.mjs';
 import { readDeliveredObjectiveStatus } from './objective-status.mjs';
 
 export const help = `codefleet-alpha objective plan|run "goal" [repository]
@@ -28,7 +28,7 @@ codefleet-alpha objective approve <task-id> --hash <workflowHash> --actor <name>
 codefleet-alpha objective run|resume <task-id> --allow-model
 codefleet-alpha objective status [task-id] | report <task-or-run-id>
 codefleet-alpha objective delivered-status <workflow-id> (read-only delivered-tree Objective acceptance; never starts Host or writes State)
-codefleet-alpha objective review-codex-plan <planning-session-id> (read-only pinned Contract/DAG review, never grants execution)
+codefleet-alpha objective review-codex-plan <planning-session-id> [--repository ABSOLUTE_PATH] (read-only pinned Contract/DAG review; optional clean Git checkout check, never grants execution)
 codefleet-alpha objective proposal-request <task-id> <item-id> (eligible source context only; no model call or execution approval)
 codefleet-alpha objective repair-proposal-request <task-id> (settled Local failure context; no model call or approval)
 codefleet-alpha objective proposal-batch <task-id> [OPTIONS.json] (maxAgents 1..3, parallelBenefit; proposal-only, no model grant)
@@ -71,7 +71,7 @@ No command enables an unverified Provider or performs remote delivery.`;
 function parse(values) {
   const positional = [], options = {};
   const flags = new Set(['allow-model', 'json', 'acknowledge-unisolated', 'local-existing']);
-  const allowed = new Set(['acceptance', 'files', 'tests', 'criterion', 'item', 'parallel', 'attempts', 'timeout', 'budget', 'hash', 'actor', 'planner', 'codex-executable', 'claude-executable', 'unknown', 'scope', 'revision', 'trust', 'decision', 'request-id', 'expires']);
+  const allowed = new Set(['acceptance', 'files', 'tests', 'criterion', 'item', 'parallel', 'attempts', 'timeout', 'budget', 'hash', 'actor', 'planner', 'codex-executable', 'claude-executable', 'unknown', 'scope', 'revision', 'trust', 'decision', 'request-id', 'expires', 'repository']);
   for (let i = 0; i < values.length; i++) {
     const value = values[i];
     if (!value.startsWith('--')) { positional.push(value); continue; }
@@ -99,10 +99,14 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
   const [action, ...rest] = argv;
   if (!action || ['help', '--help'].includes(action)) return { exitCode: 0, data: { schemaVersion: 1, help } };
   const { positional: args, options: o } = parse(rest);
+  if (o.repository !== undefined && action !== 'review-codex-plan')
+    throw Error('--repository is only valid for read-only Codex planning review');
   if (action === 'review-codex-plan') {
-    if (args.length !== 1 || Object.keys(o).length || !args[0] || args[0].startsWith('-'))
-      throw Error('review-codex-plan requires exactly one Host Planning session ID and no execution options');
-    const data = inspectReviewedCodexPlan(store, args[0]);
+    if (args.length !== 1 || Object.keys(o).some(k => k !== 'repository') || !args[0] || args[0].startsWith('-'))
+      throw Error('review-codex-plan requires one Host Planning session ID and optional --repository only');
+    const data = o.repository
+      ? await inspectReviewedCodexPlanAtSource(store, args[0], o.repository)
+      : inspectReviewedCodexPlan(store, args[0]);
     return { exitCode: data.status === 'REVIEW_REQUIRED' ? 0 : 2, data };
   }
   if (action === 'delivered-status') {

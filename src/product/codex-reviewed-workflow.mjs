@@ -181,3 +181,30 @@ export function inspectReviewedCodexPlan(store, sessionId) {
       reason:'Persisted Host Planning result is absent, unvalidated, stale or integrity-invalid' };
   }
 }
+
+
+// Optional live-source review for the public data-only CLI. A persisted valid
+// proposal is not necessarily applicable to the checkout currently on disk.
+// Never show a stale/cross-repository proposal as REVIEW_REQUIRED when the
+// user supplies an exact local source root for observation.
+export async function inspectReviewedCodexPlanAtSource(store, sessionId, repo) {
+  const view = inspectReviewedCodexPlan(store, sessionId);
+  if (view.status !== 'REVIEW_REQUIRED') return view;
+  try {
+    if (!isAbsolute(repo ?? '')) throw Error('Absolute source root required');
+    const root = await realpath(repo);
+    if (hash(root) !== view.repositoryId)
+      throw Error('Different repository');
+    await requirePinnedPlanningSource(repo, root, view.sourceBaseline);
+    return { ...view, sourceFreshness:'PINNED_CLEAN_AT_REVIEW' };
+  } catch {
+    // No raw model output, source content, or stale review scope on denial.
+    return {
+      schemaVersion:1, kind:'CODEFLEET_CODEX_PLANNING_REVIEW_V1',
+      sessionId, executionGranted:false, approved:false,
+      nativeHostVerified:false, sourceFreshness:'STALE_OR_MISMATCHED',
+      authority:'PERSISTED_PLANNING_DATA_ONLY', status:'BLOCKED',
+      reason:'Current repository identity, clean tree or Git HEAD does not match the persisted Codex plan'
+    };
+  }
+}

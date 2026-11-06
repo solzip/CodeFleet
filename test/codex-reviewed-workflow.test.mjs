@@ -317,3 +317,44 @@ test('reviewed Codex plan displays immutable hybrid role and resource scope',asy
  assert.equal(reviews,1);
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
 });
+
+test('public Codex plan review optionally checks a clean pinned repository before showing review-ready',async t=>{
+ const f=await fixture(t);
+ const before=f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n;
+ const argv=['review-codex-plan',f.request.sessionId,'--repository',f.repo];
+ const ready=await productCli(argv,f.store.directory);
+ assert.equal(ready.exitCode,0);
+ assert.equal(ready.data.status,'REVIEW_REQUIRED');
+ assert.equal(ready.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+ assert.equal(ready.data.executionGranted,false);
+ const cloneRoot=join(f.repo,'..','clone-for-readonly-review');
+ const cloned=await git(f.repo,['clone',f.repo,cloneRoot]);
+ assert.equal(cloned.exitCode,0,cloned.stderr.toString());
+ const wrongRepo=await productCli(['review-codex-plan',f.request.sessionId,'--repository',cloneRoot],f.store.directory);
+ assert.equal(wrongRepo.exitCode,2);
+ assert.equal(wrongRepo.data.status,'BLOCKED');
+ assert.equal(wrongRepo.data.workflowHash,undefined);
+ assert.equal(wrongRepo.data.sourceFreshness,'STALE_OR_MISMATCHED');
+
+ await writeFile(join(f.repo,'src/a.js'),'export function add(x,y){ return x-y; }\n');
+ const dirty=await productCli(argv,f.store.directory);
+ assert.equal(dirty.exitCode,2);
+ assert.equal(dirty.data.status,'BLOCKED');
+ assert.equal(dirty.data.workflowHash,undefined);
+
+ for(const gitArgs of [['add','src/a.js'],
+  ['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','different baseline']]) {
+  const result=await git(f.repo,gitArgs);
+  assert.equal(result.exitCode,0,result.stderr.toString());
+ }
+ const changedHead=await productCli(argv,f.store.directory);
+ assert.equal(changedHead.exitCode,2);
+ assert.equal(changedHead.data.status,'BLOCKED');
+ assert.equal(changedHead.data.sourceFreshness,'STALE_OR_MISMATCHED');
+ const relative=await productCli(['review-codex-plan',f.request.sessionId,'--repository','relative/path'],f.store.directory);
+ assert.equal(relative.exitCode,2);
+ assert.equal(relative.data.status,'BLOCKED');
+ const invalid=await productCli(['delivered-status','workflow-id','--repository',f.repo],f.store.directory);
+ assert.equal(invalid.exitCode,1);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,before);
+});
