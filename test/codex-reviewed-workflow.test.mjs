@@ -246,7 +246,7 @@ test('persisted Codex plan has a real read-only Objective / Contract / DAG revie
   ['review-codex-plan',f.request.sessionId,'other-session'],
   ['review-codex-plan']
  ]) {
-  await assert.rejects(dispatchProduct(args,{store:f.store}),/requires exactly one/);
+  await assert.rejects(dispatchProduct(args,{store:f.store}),/review-codex-plan requires one Host Planning session ID and optional --repository only/);
  }
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,before);
 });
