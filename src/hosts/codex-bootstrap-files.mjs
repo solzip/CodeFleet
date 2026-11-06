@@ -99,6 +99,10 @@ export async function proposeNewProjectFileset(store, taskId, itemId, {
       receipt.authority!=='PROVIDER_REPORTED_ONLY'||receipt.protectedVerified!==false||
       typeof receipt.text!=='string') throw Error('Bootstrap Host Turn receipt incomplete');
     await ensureExecutable();
+    // A completed but late Host Turn cannot consume an expired owner grant.
+    // Keep the durable reservation uncertain; do not submit or replay files.
+    if (Date.now() >= scope.expiresAt)
+      throw Error('Bootstrap Host Fileset approval expired during Turn');
     const proposed=JSON.parse(receipt.text);
     validateBootstrapHostProposal(proposed,workflow,itemId,current.revision);
     // The Host proposal is not authority to submit against an unreviewed

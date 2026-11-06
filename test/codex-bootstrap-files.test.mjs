@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateBootstrapHostProposal,bootstrapFilesOutputSchema } from '../src/hosts/codex-bootstrap-files.mjs';
+import { proposeNewProjectFileset,validateBootstrapHostProposal,bootstrapFilesOutputSchema } from '../src/hosts/codex-bootstrap-files.mjs';
 
 const workflow={items:[{id:'create',kind:'local-edit',files:['src/index.js','test/index.test.js']}]};
 const proposal=()=>({revision:3,itemId:'create',files:[
@@ -35,6 +35,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { prepared, approve } from './fixtures/bootstrap-reservation.mjs';
 import { task } from '../src/product/tasks.mjs';
+import { Store } from '../src/alpha/store.mjs';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { taskReport } from '../src/product/report.mjs';
 import { createCodexMvpFacade } from '../src/product/codex-mvp-facade.mjs';
 
@@ -305,4 +307,47 @@ test('NEW_PROJECT synthetic Host Filesets join reviewed materialization and real
   assert.equal(report.complete,false);
   assert.equal(report.protectedVerification,'UNSATISFIED');
   assert.equal(task(f.store,f.id).bootstrap.states.tests,'LOCAL_PASSED');
+});
+
+test('NEW_PROJECT expired Host Turn cannot submit or replay after Store restart',async t=>{
+  const f=await prepared({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  let hostTurns=0;
+  const config={
+    executable:process.execPath,model:'SYNTHETIC_ONLY',timeoutMs:1000,
+    authorize:async scope=>{
+      assert.equal(scope.itemId,'todo');
+      assert.equal(scope.repo,f.dir);
+      return true;
+    },
+    transport:async request=>{
+      hostTurns++;
+      // A synthetically delayed completed receipt arrives after the grant
+      // expires. No actual Codex Host or destination subprocess is invoked.
+      await sleep(1100);
+      return fakeHostReceipt(JSON.parse(request.prompt));
+    }
+  };
+  await assert.rejects(
+    proposeNewProjectFileset(f.store,f.id,'todo',config),/approval expired during Turn/);
+  assert.equal(hostTurns,1);
+  assert.deepEqual(
+    f.store.events(f.id).filter(event=>event.type.startsWith('BOOTSTRAP_HOST_TURN_'))
+      .map(event=>event.type),
+    ['BOOTSTRAP_HOST_TURN_RESERVED','BOOTSTRAP_HOST_TURN_RECONCILING']);
+  assert.equal(task(f.store,f.id).bootstrap.filesets.todo,undefined);
+  assert.equal(task(f.store,f.id).bootstrap.states.todo,'PENDING_FILESET');
+  await assert.rejects(readFile(join(f.dir,'src/todo.mjs'),'utf8'),{code:'ENOENT'});
+  // A new process reopening the durable Store must not replay the billable
+  // Turn or accept its stale proposal under another embedding grant.
+  f.store.close();
+  f.store=new Store(f.state);
+  await assert.rejects(
+    proposeNewProjectFileset(f.store,f.id,'todo',{
+      ...config,transport:async()=>{hostTurns++;throw Error('replayed Host Turn');}
+    }),/requires reconciliation; no replay/);
+  assert.equal(hostTurns,1);
+  assert.equal(task(f.store,f.id).bootstrap.filesets.todo,undefined);
+  assert.equal(
+    f.store.events(f.id).filter(e=>e.type==='BOOTSTRAP_HOST_TURN_RESERVED').length,1);
 });
