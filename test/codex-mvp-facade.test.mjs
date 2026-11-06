@@ -502,3 +502,45 @@ test('Bootstrap Fileset bytes changed during asynchronous owner review never rea
   assert.equal(f.store.get(runId).state,'READY');
   await assert.rejects(readFile(join(f.dir,'src/todo.mjs')),{code:'ENOENT'});
 });
+
+
+test('Bootstrap verification dispatch pins the reviewed command through asynchronous Local authorization',async t=>{
+  const f=await built({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const command=request(f), expectedArgs=[...command.args];
+  let reviewedHash, reviews=0, authorizations=0, verifications=0;
+  const api=createCodexMvpFacade(f.store,{executable:process.execPath,model:'fixture',
+    authorizeBootstrapVerification:async scope=>{
+      reviews++;
+      reviewedHash=scope.commandHash;
+      assert.deepEqual(scope.command.args,expectedArgs);
+      return true;
+    },
+    bootstrapVerifierBackend:{
+      authorize:async (received,{reviewedCommandHash})=>{
+        authorizations++;
+        assert.equal(reviewedCommandHash,reviewedHash);
+        assert.notStrictEqual(received,command);
+        assert.equal(Object.isFrozen(received),true);
+        assert.equal(Object.isFrozen(received.args),true);
+        assert.deepEqual(received.args,expectedArgs);
+        // An embedding may still hold the original input after owner review.
+        // This mutation must not alter the already-authorized execution.
+        command.args.push('--not-reviewed');
+        return {kind:'fixture-local-grant'};
+      },
+      verify:async received=>{
+        verifications++;
+        assert.deepEqual(received.args,expectedArgs);
+        assert.equal(received.args.includes('--not-reviewed'),false);
+        throw Error('fixture stopped before external process');
+      }
+    }
+  });
+  await assert.rejects(api.verifyApprovedBootstrap(f.id,'tests',command),
+    /fixture stopped before external process/);
+  assert.equal(reviews,1);
+  assert.equal(authorizations,1);
+  assert.equal(verifications,1);
+  assert.equal(task(f.store,f.id).bootstrap.verifications?.tests,undefined);
+});

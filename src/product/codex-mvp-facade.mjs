@@ -286,9 +286,19 @@ export function createCodexMvpFacade(store, {
           hash(currentPreview.command) !== hash(scope.command) ||
           hash(currentPreview.fileDigests) !== hash(scope.fileDigests))
         invalid('Bootstrap verification command/tree changed during review');
-      // verifyTask still performs its own preflight, exact command inspection
-      // and Local backend checks before recording real verification Evidence.
-      return verifyTask(store,taskId,itemId,command,{
+      // The second preview checks the caller's latest command. Dispatch must
+      // nevertheless use a detached, immutable copy of the owner's reviewed
+      // canonical command: the original input may change while the Local
+      // backend is asynchronously authorizing execution.
+      const reviewedRequest=Object.freeze({
+        executable:scope.command.executable,
+        args:Object.freeze([...scope.command.args]),
+        directory:scope.command.directory,
+        timeoutMs:scope.command.timeoutMs
+      });
+      // verifyTask still independently rechecks the executable, snapshot,
+      // exact trust hash and Local backend before recording any Evidence.
+      return verifyTask(store,taskId,itemId,reviewedRequest,{
         trust:preview.commandHash,acknowledgeUnisolated:true,
         ...(bootstrapVerifierBackend?{backend:bootstrapVerifierBackend}:{})
       });
