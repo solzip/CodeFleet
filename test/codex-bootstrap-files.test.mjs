@@ -33,8 +33,9 @@ test('binary contents or unsafe filenames are rejected before materialization',(
 import { rm, readFile, realpath, mkdtemp, symlink, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { prepared } from './fixtures/bootstrap-reservation.mjs';
+import { prepared, approve } from './fixtures/bootstrap-reservation.mjs';
 import { task } from '../src/product/tasks.mjs';
+import { taskReport } from '../src/product/report.mjs';
 import { createCodexMvpFacade } from '../src/product/codex-mvp-facade.mjs';
 
 const proposedTodoFiles = [
@@ -216,4 +217,92 @@ test('NEW_PROJECT refuses a proposal after Host executable changes during Turn',
     f.store.events(f.id).filter(e=>e.type.startsWith('BOOTSTRAP_HOST_TURN_')).map(e=>e.type),
     ['BOOTSTRAP_HOST_TURN_RESERVED','BOOTSTRAP_HOST_TURN_RECONCILING']
   );
+});
+
+
+test('NEW_PROJECT synthetic Host Filesets join reviewed materialization and real Local verification without Objective acceptance', async t => {
+  // Only a fake Host transport is used. The local node:test subprocess runs
+  // against this disposable Bootstrap fixture, never an actual Codex Turn.
+  const f=await prepared({passing:true,protectedItem:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const filesByItem={
+    todo:[
+      {path:'package.json',content:'{"type":"module"}\n'},
+      {path:'src/todo.mjs',content:'export const add = (list, t) => [...list, t];\n'},
+      {path:'test/todo.test.mjs',content:'import test from "node:test";\nimport assert from "node:assert/strict";\nimport {add} from "../src/todo.mjs";\ntest("todo append",()=>assert.deepEqual(add([], "item"),["item"]));\n'}
+    ],
+    calendar:[
+      {path:'src/calendar.mjs',content:'export const byDate = () => ({});\n'},
+      {path:'test/calendar.test.mjs',content:'import test from "node:test";\nimport assert from "node:assert/strict";\nimport {byDate} from "../src/calendar.mjs";\ntest("calendar grouping",()=>assert.deepEqual(byDate(),{}));\n'}
+    ]
+  };
+  const turns=[],hostGrants=[],materializationGrants=[],verificationGrants=[];
+  const api=createCodexMvpFacade(f.store,{
+    executable:process.execPath,model:'SYNTHETIC_ONLY',enableHostTurns:true,
+    authorizeBootstrap:async scope=>{
+      hostGrants.push(scope.itemId);
+      assert.deepEqual(scope.files,filesByItem[scope.itemId].map(file=>file.path));
+      assert.equal(scope.repo,f.dir);
+      return true;
+    },
+    transport:async request=>{
+      const scope=JSON.parse(request.prompt);
+      turns.push(scope.itemId);
+      assert.equal(request.cwd,f.dir);
+      assert.equal(request.executable,await realpath(process.execPath));
+      return {...fakeHostReceipt(scope),
+        text:JSON.stringify({revision:scope.revision,itemId:scope.itemId,
+          files:filesByItem[scope.itemId]})};
+    },
+    authorizeBootstrapMaterialization:async scope=>{
+      materializationGrants.push(scope.itemId);
+      assert.equal(scope.protection,'UNPROTECTED');
+      assert.equal(scope.repo,f.dir);
+      assert.deepEqual(scope.files.map(file=>file.path),
+        filesByItem[scope.itemId].map(file=>file.path));
+      assert.deepEqual(scope.files.map(file=>file.content),
+        filesByItem[scope.itemId].map(file=>file.content));
+      return true;
+    },
+    authorizeBootstrapVerification:async scope=>{
+      verificationGrants.push(scope.itemId);
+      assert.equal(scope.protection,'UNPROTECTED');
+      assert.equal(scope.repo,f.dir);
+      assert.equal(scope.command.directory,await realpath(f.dir));
+      assert.deepEqual(scope.command.args,['--test','--test-reporter=tap']);
+      return true;
+    }
+  });
+  for(const itemId of ['todo','calendar']) {
+    const proposal=await api.proposeBootstrapFiles(f.id,itemId);
+    assert.equal(proposal.materialized,false);
+    assert.equal(proposal.executionGranted,false);
+    assert.equal(f.store.get(proposal.approvalRequest.runId).state,'WAITING_APPROVAL');
+    const firstPath=filesByItem[itemId][0].path;
+    await assert.rejects(readFile(join(f.dir,firstPath)),{code:'ENOENT'});
+    approve(f,proposal.approvalRequest);
+    const applied=await api.materializeApprovedBootstrap(f.id,itemId);
+    assert.equal(applied.status,'MATERIALIZED');
+    assert.equal(applied.complete,false);
+    for(const file of filesByItem[itemId])
+      assert.equal(await readFile(join(f.dir,file.path),'utf8'),file.content);
+  }
+  assert.deepEqual(turns,['todo','calendar']);
+  assert.deepEqual(hostGrants,turns);
+  assert.deepEqual(materializationGrants,turns);
+  const verified=await api.verifyApprovedBootstrap(f.id,'tests',{
+    executable:process.execPath,args:['--test','--test-reporter=tap'],
+    directory:f.dir,timeoutMs:60000
+  });
+  assert.equal(verified.status,'LOCAL_PASSED');
+  assert.equal(verified.tests,2);
+  assert.equal(verified.failed,0);
+  assert.equal(verified.authority,'LOCAL_EXECUTED');
+  assert.equal(verified.protectedVerification,'UNSATISFIED');
+  assert.equal(verified.complete,false);
+  assert.deepEqual(verificationGrants,['tests']);
+  const report=await taskReport(f.store,f.id);
+  assert.equal(report.complete,false);
+  assert.equal(report.protectedVerification,'UNSATISFIED');
+  assert.equal(task(f.store,f.id).bootstrap.states.tests,'LOCAL_PASSED');
 });
