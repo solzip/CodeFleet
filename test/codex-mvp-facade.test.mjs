@@ -156,6 +156,46 @@ test('host execution options cannot be model-controlled through unexpected field
  await assert.rejects(api.runExistingWorkflow('run-fixture',{provider:'other'}),/Unrecognized/);
 });
 
+test('Host Workflow approval pins recovery intent and rejects option mutation during review',async()=>{
+  for(const initialResume of [false,true]){
+    const {store}=fixture();
+    const options={resume:initialResume};
+    let reviews=0;
+    const api=createCodexMvpFacade(store,{executable:process.execPath,model:'fixture',
+      enableHostTurns:true,verificationBackend:backend,
+      authorizeWorkflow:async scope=>{
+        reviews++;
+        assert.equal(scope.resume,initialResume);
+        assert.equal(Object.isFrozen(scope),true);
+        assert.throws(()=>{scope.resume=!initialResume;},TypeError);
+        // A caller can hold and mutate the original options object while the
+        // owner is approving; this must not silently switch execute() mode.
+        options.resume=!initialResume;
+        return true;
+      }});
+    await assert.rejects(api.runExistingWorkflow('run-fixture',options),
+      /Workflow execution options changed while awaiting trusted grant/);
+    assert.equal(reviews,1);
+  }
+});
+
+test('Host Workflow approval rejects newly injected execution options',async()=>{
+  const {store}=fixture();
+  const options={resume:false};
+  let reviews=0;
+  const api=createCodexMvpFacade(store,{executable:process.execPath,model:'fixture',
+    enableHostTurns:true,verificationBackend:backend,
+    authorizeWorkflow:async scope=>{
+      reviews++;
+      assert.equal(scope.resume,false);
+      options.provider='unreviewed-provider';
+      return true;
+    }});
+  await assert.rejects(api.runExistingWorkflow('run-fixture',options),
+    /Workflow execution options changed while awaiting trusted grant/);
+  assert.equal(reviews,1);
+});
+
 test('planning Host cwd must match the approved repo path',async()=>{
  const {store}=fixture();let calls=0;
  const api=createCodexMvpFacade(store,{executable:process.execPath,model:'fixture',

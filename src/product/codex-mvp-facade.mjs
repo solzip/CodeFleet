@@ -88,11 +88,12 @@ export function createCodexMvpFacade(store, {
     return hash({ mode:'WORKFLOW_APPROVAL_V1', digest:row.digest,
       actor:row.actor ?? null, expires:row.expires });
   };
-  const callScope = ({ run, source }) => Object.freeze({
+  const callScope = ({ run, source }, resume) => Object.freeze({
     kind: 'CODEFLEET_MANAGED_WORKFLOW_SCOPE_V1', runId: run.id,
     revision: run.revision, workflowHash: run.contractHash,
     graphRef: run.graphRef, sourceRef: run.sourceRef,
     repo: run.repo, base: run.base, model,
+    resume,
     approvalSnapshotHash: approvalSnapshotHash(run),
     // Independent execution review must see the real bounded contract, not
     // only an opaque graph hash. Everything nested is a frozen copy; reviewer
@@ -286,14 +287,22 @@ export function createCodexMvpFacade(store, {
           Object.keys(options).some(k => k !== 'resume') ||
           (options.resume !== undefined && typeof options.resume !== 'boolean'))
         invalid('Unrecognized Workflow execution option');
+      // Recovery intent changes dispatch semantics and must be approved exactly.
+      const resume = options.resume === true;
       const current = activeWorkflow(runId);
-      const scope = callScope(current);
+      const scope = callScope(current, resume);
       if (await authorizeWorkflow(scope) !== true)
         invalid('Exact managed Workflow execution grant denied');
       // Re-read after potentially asynchronous human review. A caller cannot
       // promote an earlier approval across a revision or repo/base change.
       const refreshed = activeWorkflow(runId);
-      if (hash(callScope(refreshed)) !== hash(scope))
+      // A shared options object may change while the owner reviews the grant.
+      // Never dispatch with a different recovery mode or newly injected options.
+      if (Object.keys(options).some(k => k !== 'resume') ||
+          (options.resume !== undefined && typeof options.resume !== 'boolean') ||
+          (options.resume === true) !== resume)
+        invalid('Workflow execution options changed while awaiting trusted grant');
+      if (hash(callScope(refreshed, resume)) !== hash(scope))
         invalid('Workflow scope changed while awaiting trusted grant');
       const hostExecution = createCodexManagedHostExecution(store, {
         executable, model, enabled: true, workspaceWrite, authorizeWorkspace,
@@ -307,7 +316,7 @@ export function createCodexMvpFacade(store, {
         ...(workItemPolicy ? { workItemPolicy } : {})
       };
       const workflow = await execute(store, runId, dependencies,
-        { resume: options.resume === true });
+        { resume });
       const objective = await readDeliveredObjectiveStatus(store, runId);
       return { workflowId: runId, workflowState: workflow.state, objective,
         authority: 'TRUSTED_EMBEDDING_LOCAL_ONLY',
