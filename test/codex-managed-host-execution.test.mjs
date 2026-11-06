@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { hash, validateContract } from '../src/alpha/contract.mjs';
 import { policyFor } from '../src/workflow/definition.mjs';
 import { createCodexManagedHostExecution } from '../src/hosts/codex-managed-host-execution.mjs';
+import { mkdtemp, realpath, rm, symlink, unlink, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 function fixture({ reserved = true, approved = true, control = 'run' } = {}) {
   const contract = validateContract({
@@ -66,7 +69,8 @@ test('approved reservation may create a proposal-only result with observed Host 
   const h = createCodexManagedHostExecution(x.store, {
     enabled: true, model: 'model-fixture', executable: process.execPath,
     transport: async call => {
-      called++; assert.equal(call.outputSchema.required[0], 'summary');
+      called++; assert.equal(call.executable,await realpath(process.execPath));
+      assert.equal(call.outputSchema.required[0], 'summary');
       assert.match(call.prompt, /workItemId/);
       assert.equal(call.timeoutMs, 1000);
       assert.equal(call.cwd, x.child.candidateDirectory);
@@ -83,6 +87,41 @@ test('approved reservation may create a proposal-only result with observed Host 
   assert.equal(result.hostSessionCostStatus, 'UNKNOWN');
   assert.equal(result.cost, null);
   assert.deepEqual(result.proposal, proposal);
+});
+
+test('read-only Host rejects a non-file executable before invoking transport',async()=>{
+  const x=fixture();let called=false;
+  const h=createCodexManagedHostExecution(x.store,{
+    enabled:true,model:'fixture',executable:process.cwd(),
+    transport:async()=>{called=true;return receipt();}
+  });
+  await assert.rejects(h.execute(x.child,x.request),/regular file/);
+  assert.equal(called,false);
+});
+
+test('read-only Host rejects a repointed executable after the Turn',async t=>{
+  const dir=await mkdtemp(join(tmpdir(),'codefleet-host-readonly-'));
+  t.after(()=>rm(dir,{recursive:true,force:true}));
+  const alias=join(dir,'codex-host'),other=join(dir,'replacement');
+  await writeFile(other,'not the original Host binary');
+  try { await symlink(process.execPath,alias,'file'); }
+  catch(error){
+    if(['EPERM','EACCES','ENOTSUP'].includes(error.code)) return t.skip('file symlink unavailable');
+    throw error;
+  }
+  const x=fixture();let called=0;
+  const h=createCodexManagedHostExecution(x.store,{
+    enabled:true,model:'fixture',executable:alias,
+    transport:async call=>{
+      called++;
+      assert.equal(call.executable,await realpath(process.execPath));
+      await unlink(alias);
+      await symlink(other,alias,'file');
+      return receipt();
+    }
+  });
+  await assert.rejects(h.execute(x.child,x.request),/Host executable changed during read-only Turn/);
+  assert.equal(called,1);
 });
 
 for (const name of ['reserved', 'approved', 'control']) {

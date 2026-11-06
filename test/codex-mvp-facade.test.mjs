@@ -5,8 +5,9 @@ import { hash } from '../src/alpha/contract.mjs';
 import { POLICY, definition } from '../src/workflow/definition.mjs';
 import { built, request, prepared, propose, approve } from './fixtures/bootstrap-reservation.mjs';
 import { task } from '../src/product/tasks.mjs';
-import { rm, readFile, realpath } from 'node:fs/promises';
+import { rm, readFile, realpath, mkdtemp, symlink, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const backend = { prepare: async()=>{}, verify: async()=>{}, cleanup: async()=>{} };
 function fixture() {
@@ -55,8 +56,44 @@ test('approved Workflow cannot start without exact independently trusted grant',
  assert.equal(scopes.length,1);
  assert.equal(scopes[0].kind,'CODEFLEET_MANAGED_WORKFLOW_SCOPE_V1');
  assert.equal(scopes[0].executionMode,'HOST_READ_ONLY_PROPOSAL');
+ assert.equal(scopes[0].executablePath,process.execPath);
+ assert.equal(scopes[0].executableResolvedPath,await realpath(process.execPath));
  assert.equal(scopes[0].protectedVerified,false);
 });
+test('non-file managed Host executable is rejected before Workflow approval', async () => {
+ const {store}=fixture();let grants=0;
+ const api=createCodexMvpFacade(store,{executable:process.cwd(),model:'fixture',
+   enableHostTurns:true,verificationBackend:backend,
+   authorizeWorkflow:async()=>{grants++;return true;}});
+ await assert.rejects(api.runExistingWorkflow('run-fixture'),/regular file/);
+ assert.equal(grants,0);
+});
+
+test('repointed Host executable during asynchronous Workflow approval cannot dispatch', async t => {
+ const dir=await mkdtemp(join(tmpdir(),'codefleet-host-approval-'));
+ t.after(()=>rm(dir,{recursive:true,force:true}));
+ const alias=join(dir,'codex-host'),other=join(dir,'replacement');
+ await writeFile(other,'not an approved executable');
+ try { await symlink(process.execPath,alias,'file'); }
+ catch(error) {
+   if (['EPERM','EACCES','ENOTSUP'].includes(error.code)) return t.skip('file symlink unavailable');
+   throw error;
+ }
+ const {store}=fixture();let grants=0;
+ const api=createCodexMvpFacade(store,{executable:alias,model:'fixture',
+   enableHostTurns:true,verificationBackend:backend,
+   authorizeWorkflow:async scope=>{
+     grants++;
+     assert.equal(scope.executablePath,alias);
+     assert.equal(scope.executableResolvedPath,await realpath(process.execPath));
+     await unlink(alias);
+     await symlink(other,alias,'file');
+     return true;
+   }});
+ await assert.rejects(api.runExistingWorkflow('run-fixture'),/Host executable changed while awaiting trusted grant/);
+ assert.equal(grants,1);
+});
+
 test('Workflow revision or repo change while reviewing grant stops before launch',async()=>{
  const {store,workflow}=fixture();
  const api=createCodexMvpFacade(store,{executable:process.execPath,model:'codex-fixture',
