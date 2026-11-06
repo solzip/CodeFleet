@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm, symlink, realpath } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { join, dirname, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Store } from '../src/alpha/store.mjs';
 import { git } from '../src/alpha/workspace.mjs';
@@ -41,7 +41,7 @@ test('approved Codex planning Turn reuses existing cited-draft validator and per
  const f=await setup(t);let turns=0;
  const result=await planWithCodexManagedThread(f.store,f.repo,goal,{
   ...f.settings,authorize:async binding=>Boolean(binding.sessionId&&binding.requestHash),
-  transport:async call=>{turns++;assert.equal(call.outputSchema,planningOutputSchema);return proposedReceipt(call);}
+  transport:async call=>{turns++;assert.equal(call.executable,await realpath(process.execPath));assert.equal(call.outputSchema,planningOutputSchema);return proposedReceipt(call);}
  });
  assert.equal(turns,1);
  assert.equal(result.status,'VALIDATED');
@@ -58,6 +58,8 @@ test('Codex planning grant inspects immutable Goal, pinned source and requested 
    grants++;
    assert.equal(scope.objective,goal);
    assert.equal(scope.repositoryRoot,await realpath(f.repo));
+   assert.equal(scope.executablePath,process.execPath);
+   assert.equal(scope.executableResolvedPath,await realpath(process.execPath));
    assert.match(scope.sourceBaseline,/^[a-f0-9]{40,64}$/);
    assert.equal(scope.executionGranted,false);
    assert.equal(scope.costVisibility,'UNKNOWN');
@@ -262,4 +264,71 @@ test('planning approval expiring after durable dispatch reservation never invoke
  assert.equal(turns,0);
  assert.deepEqual(f.store.db.prepare('SELECT status FROM host_planning').all().map(r=>r.status),['CANCELLED']);
  assert.ok(f.store.db.prepare("SELECT 1 FROM events WHERE type='HOST_PLANNING_TURN_CANCELLED'").get());
+});
+
+test('planning refuses a directory as Host executable before staging approval',async t=>{
+ const f=await setup(t);let grants=0,turns=0;
+ await assert.rejects(planWithCodexManagedThread(f.store,f.repo,goal,{
+   ...f.settings,executable:join(f.repo,'src'),
+   authorize:async()=>{grants++;return true;},
+   transport:async()=>{turns++;throw Error('unauthorized dispatch');}
+ }),/executable must resolve to a regular file/);
+ assert.equal(grants,0);
+ assert.equal(turns,0);
+ assert.deepEqual(f.store.db.prepare('SELECT status FROM host_planning').all(),[]);
+});
+
+// Directory aliases (junctions on Windows) exercise the real executable
+// pathname without requiring a privileged file-symlink or a Codex binary.
+async function switchableExecutableDirectory(t, repo) {
+ const alias=join(dirname(repo),'reviewed-host-bin');
+ const foreign=join(dirname(repo),'foreign-host-bin');
+ await mkdir(foreign);
+ const name=basename(process.execPath);
+ await writeFile(join(foreign,name),'not the reviewed executable');
+ const type=process.platform==='win32'?'junction':'dir';
+ try { await symlink(dirname(process.execPath),alias,type); }
+ catch (error) {
+   if (['EPERM','EACCES','ENOTSUP','ENOSYS'].includes(error.code)) {
+     t.skip('Directory links unavailable on this runner');return null;
+   }
+   throw error;
+ }
+ return {path:join(alias,name), async redirect() {
+   await rm(alias,{recursive:true,force:true});
+   await symlink(foreign,alias,type);
+ }};
+}
+
+test('repointed executable alias during approval cancels planning before Host Turn',async t=>{
+ const f=await setup(t);
+ const link=await switchableExecutableDirectory(t,f.repo);
+ if (!link) return;
+ let turns=0;
+ await assert.rejects(planWithCodexManagedThread(f.store,f.repo,goal,{
+   ...f.settings,executable:link.path,
+   authorize:async scope=>{
+     assert.equal(scope.executablePath,link.path);
+     assert.equal(scope.executableResolvedPath,await realpath(process.execPath));
+     await link.redirect();
+     return true;
+   },
+   transport:async()=>{turns++;throw Error('unapproved Host executable invoked');}
+ }),/Planning Host executable changed while awaiting approval/);
+ assert.equal(turns,0);
+ assert.deepEqual(f.store.db.prepare('SELECT status FROM host_planning').all().map(r=>r.status),['CANCELLED']);
+});
+
+test('repointed executable alias during Host Turn makes planning result uncertain',async t=>{
+ const f=await setup(t);
+ const link=await switchableExecutableDirectory(t,f.repo);
+ if (!link) return;
+ let turns=0;
+ await assert.rejects(planWithCodexManagedThread(f.store,f.repo,goal,{
+   ...f.settings,executable:link.path,
+   authorize:async()=>true,
+   transport:async call=>{turns++;await link.redirect();return proposedReceipt(call);}
+ }),/Planning Host executable changed during Host Turn/);
+ assert.equal(turns,1);
+ assert.deepEqual(f.store.db.prepare('SELECT status FROM host_planning').all().map(r=>r.status),['RECONCILING']);
 });
