@@ -2,6 +2,8 @@
 // Builds on the existing pre-HEAD Bootstrap workflow and exact Fileset review;
 // Codex does not receive approval or direct filesystem write authority here.
 import { isAbsolute } from 'node:path';
+import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
 import { realpath, stat } from 'node:fs/promises';
 import { hash } from '../alpha/contract.mjs';
 import { bootstrapContext, submitBootstrapFiles } from '../product/tasks.mjs';
@@ -18,6 +20,12 @@ export const bootstrapFilesOutputSchema = {
     }}
   }
 };
+async function executableSha256(path) {
+  const digest = createHash('sha256');
+  for await (const chunk of createReadStream(path)) digest.update(chunk);
+  return digest.digest('hex');
+}
+
 export function validateBootstrapHostProposal(response, workflow, itemId, revision) {
   if (!response || response.itemId !== itemId || response.revision !== revision)
     throw Error('Host Fileset proposal stale or unbound');
@@ -41,9 +49,14 @@ export async function proposeNewProjectFileset(store, taskId, itemId, {
   const pinnedExecutable = await realpath(executable);
   if (!(await stat(pinnedExecutable)).isFile())
     throw Error('Bootstrap Host executable must resolve to a regular file');
+  // A stable canonical path is insufficient: an executable can be rewritten
+  // in place while the owner reviews it or while a billable Turn runs.
+  // Bind the reviewed binary bytes as well as its real path.
+  const pinnedExecutableSha256 = await executableSha256(pinnedExecutable);
   const ensureExecutable = async () => {
     if (await realpath(executable) !== pinnedExecutable ||
-        !(await stat(pinnedExecutable)).isFile())
+        !(await stat(pinnedExecutable)).isFile() ||
+        await executableSha256(pinnedExecutable) !== pinnedExecutableSha256)
       throw Error('Bootstrap Host executable changed during approval or Turn');
   };
   // A Plan pointer can remain unchanged while the Host's cwd is replaced.
@@ -71,7 +84,7 @@ export async function proposeNewProjectFileset(store, taskId, itemId, {
     planRef:current.planRef,workflowRef:current.bootstrap.workflowRef,
     repo:plan.probe.root,repositoryIdentity,workflowHash:workflow.workflowHash,
     executablePath:executable,executableResolvedPath:pinnedExecutable,
-    model,timeoutMs,
+    executableSha256:pinnedExecutableSha256,model,timeoutMs,
     probeHash:plan.probe.probeHash,goal:plan.intent.original,
     files:Object.freeze([...item.files]),expiresAt:Date.now()+timeoutMs
   });

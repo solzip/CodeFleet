@@ -77,6 +77,7 @@ test('NEW_PROJECT trusted Fileset planning submits a proposal without materializ
       assert.equal(Object.isFrozen(scope.repositoryIdentity),true);
       assert.equal(scope.executablePath,process.execPath);
       assert.equal(scope.executableResolvedPath,await realpath(process.execPath));
+      assert.match(scope.executableSha256,/^[a-f0-9]{64}$/);
       assert.equal(scope.model,'SYNTHETIC_ONLY');
       assert.equal(scope.timeoutMs,90000);
       assert.deepEqual(scope.files,proposedTodoFiles.map(file=>file.path));
@@ -176,6 +177,52 @@ async function linkedBootstrapHost(t) {
   return {alias,replacement};
 }
 
+
+test('NEW_PROJECT rejects in-place Host executable modification during owner review',async t=>{
+  const f=await prepared({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const executable=join(f.root,'synthetic-codex-executable');
+  await writeFile(executable,'original synthetic binary');
+  let turns=0;
+  const api=createCodexMvpFacade(f.store,{
+    executable,model:'SYNTHETIC_ONLY',enableHostTurns:true,
+    authorizeBootstrap:async scope=>{
+      assert.equal(scope.executableResolvedPath,await realpath(executable));
+      assert.match(scope.executableSha256,/^[a-f0-9]{64}$/);
+      // Same canonical executable path; only the reviewed bytes change.
+      await writeFile(executable,'replacement synthetic binary');
+      return true;
+    },
+    transport:async()=>{turns++;throw Error('Host must not launch');}
+  });
+  await assert.rejects(api.proposeBootstrapFiles(f.id,'todo'),/executable changed/);
+  assert.equal(turns,0);
+  assert.equal(f.store.events(f.id).filter(e=>e.type==='BOOTSTRAP_HOST_TURN_RESERVED').length,0);
+});
+
+test('NEW_PROJECT reconciles after in-place Host executable modification during Turn',async t=>{
+  const f=await prepared({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const executable=join(f.root,'synthetic-codex-executable');
+  await writeFile(executable,'original synthetic binary');
+  let turns=0;
+  const api=createCodexMvpFacade(f.store,{
+    executable,model:'SYNTHETIC_ONLY',enableHostTurns:true,
+    authorizeBootstrap:async()=>true,
+    transport:async request=>{
+      turns++;
+      await writeFile(executable,'replacement synthetic binary');
+      return fakeHostReceipt(JSON.parse(request.prompt));
+    }
+  });
+  await assert.rejects(api.proposeBootstrapFiles(f.id,'todo'),/executable changed/);
+  assert.equal(turns,1);
+  assert.equal(task(f.store,f.id).bootstrap.filesets.todo,undefined);
+  assert.deepEqual(
+    f.store.events(f.id).filter(e=>e.type.startsWith('BOOTSTRAP_HOST_TURN_')).map(e=>e.type),
+    ['BOOTSTRAP_HOST_TURN_RESERVED','BOOTSTRAP_HOST_TURN_RECONCILING']
+  );
+});
 
 test('NEW_PROJECT rejects a replacement repository directory during owner grant before Host reservation',async t=>{
   const f=await prepared({passing:true});
