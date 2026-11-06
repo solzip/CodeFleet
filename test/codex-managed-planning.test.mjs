@@ -275,7 +275,9 @@ test('planning refuses a directory as Host executable before staging approval',a
  }),/executable must resolve to a regular file/);
  assert.equal(grants,0);
  assert.equal(turns,0);
- assert.deepEqual(f.store.db.prepare('SELECT status FROM host_planning').all(),[]);
+ // Executable preflight is before opt-in planning schema creation.
+ assert.equal(f.store.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='host_planning'").get(),undefined);
+ assert.deepEqual(f.store.db.prepare('SELECT type FROM events').all(),[]);
 });
 
 // Directory aliases (junctions on Windows) exercise the real executable
