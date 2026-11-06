@@ -118,6 +118,34 @@ test('changed planning receipt during review stops Workflow creation',async t=>{
  }),/unavailable/);
  assert.equal(x.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
 });
+test('a validated planning session cannot create a Workflow against a later clean HEAD',async t=>{
+ const x=await fixture(t);
+ await writeFile(join(x.repo,'src/a.js'),'export function add(x,y){ return x-y; }\n');
+ for(const args of [['add','src/a.js'],
+  ['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','new baseline']]) {
+  const result=await git(x.repo,args);
+  assert.equal(result.exitCode,0,result.stderr.toString());
+ }
+ let reviews=0;
+ await assert.rejects(prepareReviewedCodexWorkflow(x.store,x.repo,x.request.sessionId,{
+   authorizeReview:async()=>{reviews++;return true;}
+ }),/pinned baseline/);
+ assert.equal(reviews,0);
+ assert.equal(x.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
+});
+test('dirty source introduced during asynchronous planning review cannot create a Workflow',async t=>{
+ const x=await fixture(t);
+ let reviews=0;
+ await assert.rejects(prepareReviewedCodexWorkflow(x.store,x.repo,x.request.sessionId,{
+   authorizeReview:async()=>{
+     reviews++;
+     await writeFile(join(x.repo,'src/a.js'),'export function add(x,y){ return x-y; }\n');
+     return true;
+   }
+ }),/pinned baseline/);
+ assert.equal(reviews,1);
+ assert.equal(x.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
+});
 test('unresolved Host result cannot become an approved execution contract',async t=>{
  const x=await fixture(t);
  x.store.db.prepare("UPDATE host_planning SET status='RECONCILING' WHERE id=?")

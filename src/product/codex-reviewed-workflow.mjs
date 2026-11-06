@@ -4,6 +4,7 @@
 import { realpath } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import { hash } from '../alpha/contract.mjs';
+import { repository } from '../alpha/workspace.mjs';
 import { validateWorkflow } from '../workflow/definition.mjs';
 import { createWorkflow } from '../workflow/persistence.mjs';
 
@@ -36,6 +37,20 @@ function planRow(store, sessionId) {
   return { row,body,result,source,workflow };
 }
 
+// A persisted plan binds an immutable source baseline, not merely the path
+// that happens to resolve to the same repository. A human review cannot grant
+// creation of a Workflow against dirty or subsequently committed source.
+async function requirePinnedPlanningSource(repo, root, baseline) {
+  try {
+    if (await realpath(repo) !== root) throw Error('Repository alias changed');
+    const observed = await repository(root);
+    if (await realpath(observed.repo) !== root || observed.base !== baseline)
+      throw Error('Repository HEAD changed');
+  } catch {
+    fail('Planning repository must remain clean at its pinned baseline');
+  }
+}
+
 export async function prepareReviewedCodexWorkflow(store, repo, sessionId, {
   authorizeReview,
 }={}) {
@@ -51,6 +66,7 @@ export async function prepareReviewedCodexWorkflow(store, repo, sessionId, {
   if (initial.body.context?.discovery?.repositoryId !== repositoryId ||
       initial.result.plan?.discovery?.repositoryId !== repositoryId)
     fail('Planning repository identity differs from reviewed target');
+  await requirePinnedPlanningSource(repo, reviewedRoot, initial.body.baseline);
   const scope=Object.freeze({
     kind:'CODEFLEET_REVIEWED_PLANNING_CONTRACT_V1',
     sessionId, objectiveHash:hash(initial.body.objective),
@@ -100,6 +116,7 @@ export async function prepareReviewedCodexWorkflow(store, repo, sessionId, {
       current.workflow.workflowHash !== scope.workflowHash ||
       hash(current.source) !== scope.sourceContractHash)
     fail('Planning result changed during review');
+  await requirePinnedPlanningSource(repo, reviewedRoot, initial.body.baseline);
   // Deterministic command ID allows safe idempotent creation after an
   // interruption but does not provide an execution approval.
   const commandId='planning-'+sessionId;
