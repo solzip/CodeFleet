@@ -35,11 +35,34 @@ export async function proposeNewProjectFileset(store, taskId, itemId, {
   const item = workflow.items.find(n=>n.id===itemId);
   if (!item || item.kind !== 'local-edit' || !['PENDING_FILESET','FILESET_PROPOSED'].includes(current.bootstrap.states[itemId]))
     throw Error('Bootstrap WorkItem is not awaiting an approved Fileset proposal');
-  const scope = { taskId,itemId,revision:current.revision,
-    workflowHash:workflow.workflowHash,probeHash:plan.probe.probeHash,
-    goal:plan.intent.original,files:[...item.files],expiresAt:Date.now()+timeoutMs };
-  const allowed = await authorize(Object.freeze({ ...scope }));
+  // Review the immutable target Plan and actual WorkItem scope, not only its
+  // revision/hash. A Plan pointer can be substituted without bumping either.
+  const scope = Object.freeze({
+    taskId,itemId,revision:current.revision,
+    planRef:current.planRef,workflowRef:current.bootstrap.workflowRef,
+    repo:plan.probe.root,workflowHash:workflow.workflowHash,
+    probeHash:plan.probe.probeHash,goal:plan.intent.original,
+    files:Object.freeze([...item.files]),expiresAt:Date.now()+timeoutMs
+  });
+  const ensureFresh = () => {
+    const latest = bootstrapContext(store,taskId);
+    const latestItem = latest.workflow.items.find(node=>node.id===itemId);
+    if(latest.current.revision!==scope.revision ||
+        latest.current.planRef!==scope.planRef ||
+        latest.current.bootstrap.workflowRef!==scope.workflowRef ||
+        latest.workflow.workflowHash!==scope.workflowHash ||
+        latest.plan.probe.root!==scope.repo ||
+        latest.plan.probe.probeHash!==scope.probeHash ||
+        latest.plan.intent.original!==scope.goal ||
+        !latestItem || latestItem.kind!=='local-edit' ||
+        hash(latestItem.files)!==hash(scope.files) ||
+        !['PENDING_FILESET','FILESET_PROPOSED'].includes(latest.current.bootstrap.states[itemId]))
+      throw Error('Bootstrap Host Fileset scope changed during review or Turn');
+  };
+  const allowed = await authorize(scope);
   if (allowed !== true) throw Error('Host Fileset proposal requires trusted exact bounded approval');
+  if(Date.now()>=scope.expiresAt) throw Error('Bootstrap Host Fileset approval expired');
+  ensureFresh();
   const prompt = JSON.stringify({kind:'CODEFLEET_NEW_PROJECT_FILESET_V1',...scope,
     instruction:'Return only JSON {revision,itemId,files:[{path,content}]}. ' +
       'Include exactly the listed planned files. Write actual bounded source/test content. ' +
@@ -48,9 +71,7 @@ export async function proposeNewProjectFileset(store, taskId, itemId, {
   const intentRef=store.artifact({kind:'BOOTSTRAP_HOST_TURN_INTENT',...scope,model});
   store.db.exec('BEGIN IMMEDIATE');
   try {
-    const latest=bootstrapContext(store,taskId);
-    if(latest.current.revision!==current.revision||latest.workflow.workflowHash!==workflow.workflowHash)
-      throw Error('Bootstrap state changed before Host dispatch');
+    ensureFresh();
     if(store.events(taskId).some(event=>event.type==='BOOTSTRAP_HOST_TURN_RESERVED' &&
       event.body.itemId===itemId && event.body.revision===current.revision))
       throw Error('Previous Bootstrap Host Turn requires reconciliation; no replay');
@@ -65,6 +86,9 @@ export async function proposeNewProjectFileset(store, taskId, itemId, {
       typeof receipt.text!=='string') throw Error('Bootstrap Host Turn receipt incomplete');
     const proposed=JSON.parse(receipt.text);
     validateBootstrapHostProposal(proposed,workflow,itemId,current.revision);
+    // The Host proposal is not authority to submit against an unreviewed
+    // replacement Plan, repository, or Workflow after an awaited model Turn.
+    ensureFresh();
     const submitted=await submitBootstrapFiles(store,taskId,proposed);
     store.event(taskId,'BOOTSTRAP_HOST_TURN_SUBMITTED',{
       itemId,revision:current.revision,intentRef,threadId:receipt.threadId,turnId:receipt.turnId,
