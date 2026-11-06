@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp,mkdir,writeFile,readFile,rm,link,symlink } from 'node:fs/promises';
+import { mkdtemp,mkdir,writeFile,readFile,rm,link,symlink,realpath } from 'node:fs/promises';
 import { join,dirname,basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import { captureCodexWorkspaceEdits } from '../src/hosts/codex-workspace-execution.mjs';
@@ -25,10 +25,16 @@ test('real candidate byte change becomes a bounded proposal, not an evidence PAS
  const f=await fixture(t);let calls=0;
  const r=await captureCodexWorkspaceEdits({candidateDirectory:f.root,contract:f.contract,
   context:f.context,executable:process.execPath,model:'fixture-model',
-  approved:async policy=>{assert.deepEqual(policy.allowedFiles,['src/a.js']);return true;},
+  approved:async policy=>{
+   assert.deepEqual(policy.allowedFiles,['src/a.js']);
+   assert.equal(policy.executablePath,process.execPath);
+   assert.equal(policy.executableResolvedPath,await realpath(process.execPath));
+   return true;
+  },
   transport:async request=>{
    calls++;assert.equal(request.workspaceWrite,true);
    assert.equal(request.cwd,f.root);
+   assert.equal(request.executable,await realpath(process.execPath));
    await writeFile(join(f.root,'src/a.js'),'export const value = 2;');
    return hostReceipt();
   }});
@@ -161,6 +167,73 @@ test('linked Candidate directory ancestor is rejected before workspace authoriza
  }),/ancestor link|ancestor|Junction/);
  assert.equal(authorized,false);
  assert.equal(transported,false);
+});
+
+test('workspace Host rejects a directory executable before authorization or dispatch',async t=>{
+ const f=await fixture(t);let reviewed=false,transported=false;
+ await assert.rejects(captureCodexWorkspaceEdits({candidateDirectory:f.root,
+  contract:f.contract,context:f.context,executable:join(f.root,'src'),model:'fixture',
+  approved:async()=>{reviewed=true;return true;},
+  transport:async()=>{transported=true;return hostReceipt();}
+ }),/Host executable must resolve to a regular file/);
+ assert.equal(reviewed,false);
+ assert.equal(transported,false);
+});
+
+async function switchableHostExecutable(t) {
+ const scratch=await mkdtemp(join(tmpdir(),'cf-host-exec-alias-'));
+ t.after(()=>rm(scratch,{recursive:true,force:true}));
+ const foreign=join(scratch,'foreign-host-bin');
+ const alias=join(scratch,'reviewed-host-bin');
+ await mkdir(foreign);
+ const name=basename(process.execPath);
+ await writeFile(join(foreign,name),'not the approved Host executable');
+ const type=process.platform==='win32'?'junction':'dir';
+ try {await symlink(dirname(process.execPath),alias,type);}
+ catch(error) {
+  if(unsupportedLink(error)){t.skip('Directory aliases unavailable on runner');return null;}
+  throw error;
+ }
+ return {path:join(alias,name),async redirect(){
+  await rm(alias,{recursive:true,force:true});
+  await symlink(foreign,alias,type);
+ }};
+}
+
+test('repointed Host executable during asynchronous workspace grant prevents dispatch',async t=>{
+ const f=await fixture(t), alias=await switchableHostExecutable(t);
+ if(!alias)return;
+ let transported=false;
+ await assert.rejects(captureCodexWorkspaceEdits({candidateDirectory:f.root,
+  contract:f.contract,context:f.context,executable:alias.path,model:'fixture',
+  approved:async policy=>{
+   assert.equal(policy.executablePath,alias.path);
+   assert.equal(policy.executableResolvedPath,await realpath(process.execPath));
+   await alias.redirect();
+   return true;
+  },
+  transport:async()=>{transported=true;return hostReceipt();}
+ }),/Host executable changed during workspace authorization/);
+ assert.equal(transported,false);
+ assert.equal(await readFile(join(f.root,'src/a.js'),'utf8'),'export const value = 1;');
+});
+
+test('repointed Host executable during workspace Turn makes Candidate untrusted',async t=>{
+ const f=await fixture(t), alias=await switchableHostExecutable(t);
+ if(!alias)return;
+ let transported=false;
+ await assert.rejects(captureCodexWorkspaceEdits({candidateDirectory:f.root,
+  contract:f.contract,context:f.context,executable:alias.path,model:'fixture',
+  approved:async()=>true,
+  transport:async request=>{
+   transported=true;
+   assert.equal(request.executable,await realpath(process.execPath));
+   await alias.redirect();
+   await writeFile(join(f.root,'src/a.js'),'export const value = 2;');
+   return hostReceipt();
+  }
+ }),/Host executable changed during workspace Host Turn/);
+ assert.equal(transported,true);
 });
 
 test('supervised workspace review receives an immutable exact file scope',async t=>{

@@ -2,7 +2,7 @@
 // Writes happen only in an ephemeral Controller-owned Candidate. This adapter
 // inspects actual bytes instead of trusting model-reported patch content.
 import path from 'node:path';
-import { readdir, lstat, readFile, realpath } from 'node:fs/promises';
+import { readdir, lstat, readFile, realpath, stat } from 'node:fs/promises';
 import { hash, applyEdits } from '../alpha/contract.mjs';
 import { runCodexReadOnlyTurn } from './codex-app-server-session.mjs';
 
@@ -59,6 +59,11 @@ export async function captureCodexWorkspaceEdits({candidateDirectory, contract, 
       !context || !path.isAbsolute(executable??'') ||
       typeof model !== 'string' || !model || typeof transport !== 'function')
     reject('Exact trusted supervised Host execution configuration required');
+  // Bind the reviewed grant to the real Host executable, not only the model
+  // and workspace. A mutable directory alias cannot redirect a write-enabled Turn.
+  const pinnedExecutable=await realpath(executable);
+  if (!(await stat(pinnedExecutable)).isFile())
+    reject('Host executable must resolve to a regular file');
   const before=await observeTree(candidateDirectory);
   const allowed=new Set(contract.files);
   const contextHash=hash(context);
@@ -69,11 +74,14 @@ export async function captureCodexWorkspaceEdits({candidateDirectory, contract, 
   }
   const approvedScope=Object.freeze({kind:'HOST_WORKSPACE_WRITE_UNPROTECTED_V1',
     root:candidateDirectory,baseTreeHash:hash(initialTree),
+    executablePath:executable,executableResolvedPath:pinnedExecutable,
     contractHash:hash(contract),allowedFiles:Object.freeze([...allowed].sort()),model,timeoutMs});
   if(await approved(approvedScope)!==true) reject('Supervised Host workspace write not granted');
   // Grant review can be asynchronous. Never hand the Host a write-enabled Turn
   // for a Candidate that changed while its exact base-tree grant was pending.
   // This is a drift check, not an OS sandbox or a Host permission substitute.
+  if (await realpath(executable)!==pinnedExecutable)
+    reject('Host executable changed during workspace authorization');
   const afterGrant=await observeTree(candidateDirectory);
   const afterGrantHash=hash([...afterGrant].map(([name,entry])=>
     [name,hash(entry.bytes),entry.mode]));
@@ -88,10 +96,12 @@ export async function captureCodexWorkspaceEdits({candidateDirectory, contract, 
     instructions:'Use Codex Host tools only to edit the explicitly allowed existing source files under this candidate root. '+
       'Do not change tests, install dependencies, access network/credentials, commit, deploy or write outside root. '+
       'Return JSON with summary only; test and objective acceptance are performed independently by CodeFleet.'});
-  const receipt=await transport({executable,cwd:candidateDirectory,model,prompt,
+  const receipt=await transport({executable:pinnedExecutable,cwd:candidateDirectory,model,prompt,
     outputSchema:{type:'object',additionalProperties:false,required:['summary'],properties:{summary:{type:'string'}}},
     timeoutMs,cancelled,workspaceWrite:true});
   if (cancelled()) reject('Host Turn cancelled before Candidate acceptance');
+  if (await realpath(executable)!==pinnedExecutable)
+    reject('Host executable changed during workspace Host Turn');
   if (receipt?.terminalStatus!=='completed' || receipt.authority!=='PROVIDER_REPORTED_ONLY' ||
       receipt.protectedVerified!==false || !receipt.threadId || !receipt.turnId ||
       receipt.executionMode!=='HOST_WORKSPACE_WRITE_UNPROTECTED')
