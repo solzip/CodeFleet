@@ -3,8 +3,7 @@
 // Host output is untrusted proposal data and always goes through the existing
 // Controller's applyEdits -> independent Verifier -> Judge workflow.
 import { runCodexReadOnlyTurn } from './codex-app-server-session.mjs';
-import { realpath, stat } from 'node:fs/promises';
-import { isAbsolute } from 'node:path';
+import { snapshotHostExecutable, requireSameHostExecutable } from './host-executable-identity.mjs';
 import { captureCodexWorkspaceEdits } from './codex-workspace-execution.mjs';
 import { approval, attempts } from '../workflow/persistence.mjs';
 import { policyFor } from '../workflow/definition.mjs';
@@ -55,7 +54,7 @@ function makePrompt(request, child) {
 
 export function createCodexManagedHostExecution(store, {
   executable, model, enabled = false, transport = runCodexReadOnlyTurn,
-  workspaceWrite = false, authorizeWorkspace,
+  workspaceWrite = false, authorizeWorkspace, approvedExecutable,
 } = {}) {
   if (!store || typeof transport !== 'function') fail('Store and bounded Host transport required');
   return {
@@ -88,16 +87,18 @@ export function createCodexManagedHostExecution(store, {
       // per-Turn executable/approval guard in captureCodexWorkspaceEdits.
       let pinnedExecutable = null;
       if (!workspaceWrite) {
-        if (!isAbsolute(executable ?? '')) fail('Absolute Host executable required');
-        pinnedExecutable = await realpath(executable);
-        if (!(await stat(pinnedExecutable)).isFile())
-          fail('Host executable must resolve to a regular file');
+        pinnedExecutable = await snapshotHostExecutable(executable);
+        if (approvedExecutable &&
+            (pinnedExecutable.resolvedPath !== approvedExecutable.resolvedPath ||
+             pinnedExecutable.sha256 !== approvedExecutable.sha256))
+          fail('Host executable changed since Workflow approval');
       }
       // Both modes are reserved/billable effects, never silently retried.
       const captured = workspaceWrite
         ? await captureCodexWorkspaceEdits({
             candidateDirectory,contract:request.contract,context:request.files,
             executable,model,transport,approved:authorizeWorkspace,
+            approvedExecutable,
             timeoutMs:Math.min(request.timeoutMs,180000),cancelled:request.cancelled
           })
         : null;
@@ -106,12 +107,13 @@ export function createCodexManagedHostExecution(store, {
             executionMode:'HOST_WORKSPACE_WRITE_UNPROTECTED',
             protectedVerified:false,authority:'PROVIDER_REPORTED_ONLY' }
         : await transport({
-            executable:pinnedExecutable,cwd:candidateDirectory,model,
+            executable:pinnedExecutable.resolvedPath,cwd:candidateDirectory,model,
             prompt:makePrompt(request,child),outputSchema:responseSchema,
             timeoutMs:Math.min(request.timeoutMs,180000),cancelled:request.cancelled
           });
-      if (!workspaceWrite && await realpath(executable) !== pinnedExecutable)
-        fail('Host executable changed during read-only Turn');
+      if (!workspaceWrite)
+        await requireSameHostExecutable(executable,pinnedExecutable,
+          'Host executable changed during read-only Turn');
       currentReservation(store, child);
       if (request.cancelled?.()) fail('Attempt no longer admitted after Host Turn');
       if (!isObject(receipt) || receipt.terminalStatus !== 'completed' ||

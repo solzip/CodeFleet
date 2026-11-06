@@ -301,3 +301,35 @@ test('workspace Host Turn cannot launder a claimed protected receipt as Local pr
    return {...hostReceipt(),authority:'PROTECTED_EXECUTED'};
   }}),/Missing live Host filesystem Turn receipt/);
 });
+
+test('workspace Host executable rewrite during owner grant stops dispatch',async t=>{
+  const f=await fixture(t),executable=join(f.root,'synthetic-host-bin');
+  await writeFile(executable,'approved bytes');
+  let turns=0;
+  await assert.rejects(captureCodexWorkspaceEdits({
+    candidateDirectory:f.root,contract:f.contract,context:f.context,
+    executable,model:'fake',approved:async scope=>{
+      assert.match(scope.executableSha256,/^[a-f0-9]{64}$/);
+      await writeFile(executable,'modified bytes');return true;
+    },
+    transport:async()=>{turns++;return hostReceipt();}
+  }),/Host executable changed during workspace authorization/);
+  assert.equal(turns,0);
+});
+
+test('workspace Host executable rewrite during Turn rejects Candidate intake',async t=>{
+  const f=await fixture(t),executable=join(f.root,'synthetic-host-bin');
+  await writeFile(executable,'approved bytes');
+  let turns=0;
+  await assert.rejects(captureCodexWorkspaceEdits({
+    candidateDirectory:f.root,contract:f.contract,context:f.context,
+    executable,model:'fake',approved:async()=>true,
+    transport:async()=>{
+      turns++;
+      await writeFile(executable,'modified bytes during Turn');
+      await writeFile(join(f.root,'src/a.js'),'export const value = 2;');
+      return hostReceipt();
+    }
+  }),/Host executable changed during workspace Host Turn/);
+  assert.equal(turns,1);
+});

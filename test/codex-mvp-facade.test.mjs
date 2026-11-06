@@ -58,6 +58,7 @@ test('approved Workflow cannot start without exact independently trusted grant',
  assert.equal(scopes[0].executionMode,'HOST_READ_ONLY_PROPOSAL');
  assert.equal(scopes[0].executablePath,process.execPath);
  assert.equal(scopes[0].executableResolvedPath,await realpath(process.execPath));
+ assert.match(scopes[0].executableSha256,/^[a-f0-9]{64}$/);
  assert.equal(scopes[0].protectedVerified,false);
 });
 test('non-file managed Host executable is rejected before Workflow approval', async () => {
@@ -543,4 +544,24 @@ test('Bootstrap verification dispatch pins the reviewed command through asynchro
   assert.equal(authorizations,1);
   assert.equal(verifications,1);
   assert.equal(task(f.store,f.id).bootstrap.verifications?.tests,undefined);
+});
+
+test('managed Host cannot dispatch when executable bytes change during Workflow review',async t=>{
+  const dir=await mkdtemp(join(tmpdir(),'cf-executable-review-'));
+  t.after(()=>rm(dir,{recursive:true,force:true}));
+  const executable=join(dir,'codex-host');
+  await writeFile(executable,'approved binary bytes');
+  const {store}=fixture();let reviews=0,turns=0;
+  const api=createCodexMvpFacade(store,{
+    executable,model:'fake-model',enableHostTurns:true,verificationBackend:backend,
+    authorizeWorkflow:async scope=>{
+      reviews++;assert.match(scope.executableSha256,/^[a-f0-9]{64}$/);
+      await writeFile(executable,'modified binary bytes');return true;
+    },
+    transport:async()=>{turns++;throw Error('Turn must not run');}
+  });
+  await assert.rejects(api.runExistingWorkflow('run-fixture'),
+    /Host executable changed while awaiting trusted grant/);
+  assert.equal(reviews,1);
+  assert.equal(turns,0);
 });

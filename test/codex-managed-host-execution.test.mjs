@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { hash, validateContract } from '../src/alpha/contract.mjs';
 import { policyFor } from '../src/workflow/definition.mjs';
 import { createCodexManagedHostExecution } from '../src/hosts/codex-managed-host-execution.mjs';
+import { snapshotHostExecutable } from '../src/hosts/host-executable-identity.mjs';
 import { mkdtemp, realpath, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -158,4 +159,36 @@ test('wrong content and unverified Host receipts are not accepted', async () => 
       model: 'fixture', executable: process.execPath, transport: async () => wrong });
     await assert.rejects(h.execute(x.child, x.request));
   }
+});
+
+test('read-only Host cannot dispatch after reviewed executable bytes change',async t=>{
+  const dir=await mkdtemp(join(tmpdir(),'cf-host-readonly-bin-'));
+  t.after(()=>rm(dir,{recursive:true,force:true}));
+  const executable=join(dir,'host-binary');
+  await writeFile(executable,'original bytes');
+  const approvedExecutable=await snapshotHostExecutable(executable);
+  await writeFile(executable,'changed bytes');
+  const x=fixture();let turns=0;
+  const host=createCodexManagedHostExecution(x.store,{
+    executable,approvedExecutable,enabled:true,model:'fake',
+    transport:async()=>{turns++;return receipt();}
+  });
+  await assert.rejects(host.execute(x.child,x.request),/changed since Workflow approval/);
+  assert.equal(turns,0);
+});
+
+test('read-only Host rejects a completed Turn if binary bytes change in place',async t=>{
+  const dir=await mkdtemp(join(tmpdir(),'cf-host-readonly-bin-'));
+  t.after(()=>rm(dir,{recursive:true,force:true}));
+  const executable=join(dir,'host-binary');
+  await writeFile(executable,'original bytes');
+  const x=fixture();let turns=0;
+  const host=createCodexManagedHostExecution(x.store,{
+    executable,enabled:true,model:'fake',
+    transport:async()=>{
+      turns++;await writeFile(executable,'changed during Turn');return receipt();
+    }
+  });
+  await assert.rejects(host.execute(x.child,x.request),/changed during read-only Turn/);
+  assert.equal(turns,1);
 });

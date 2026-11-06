@@ -6,7 +6,7 @@
 // All model effects remain disabled unless explicitly enabled by a trusted
 // embedding that supplies independent, exact approval callbacks.
 import { isAbsolute, resolve } from 'node:path';
-import { realpath, stat } from 'node:fs/promises';
+import { snapshotHostExecutable, requireSameHostExecutable } from '../hosts/host-executable-identity.mjs';
 import { hash } from '../alpha/contract.mjs';
 import { execute } from '../alpha/controller.mjs';
 import { approval } from '../workflow/persistence.mjs';
@@ -90,17 +90,14 @@ export function createCodexMvpFacade(store, {
     return hash({ mode:'WORKFLOW_APPROVAL_V1', digest:row.digest,
       actor:row.actor ?? null, expires:row.expires });
   };
-  const pinnedHostExecutable = async () => {
-    const actual = await realpath(executable);
-    if (!(await stat(actual)).isFile()) invalid('Host executable must resolve to a regular file');
-    return actual;
-  };
-  const callScope = ({ run, source }, resume, executableResolvedPath) => Object.freeze({
+  const pinnedHostExecutable = () => snapshotHostExecutable(executable);
+  const callScope = ({ run, source }, resume, executableIdentity) => Object.freeze({
     kind: 'CODEFLEET_MANAGED_WORKFLOW_SCOPE_V1', runId: run.id,
     revision: run.revision, workflowHash: run.contractHash,
     graphRef: run.graphRef, sourceRef: run.sourceRef,
     repo: run.repo, base: run.base, model,
-    executablePath: executable, executableResolvedPath,
+    executablePath: executable, executableResolvedPath: executableIdentity.resolvedPath,
+    executableSha256: executableIdentity.sha256,
     resume,
     approvalSnapshotHash: approvalSnapshotHash(run),
     // Independent execution review must see the real bounded contract, not
@@ -329,12 +326,13 @@ export function createCodexMvpFacade(store, {
         invalid('Workflow execution options changed while awaiting trusted grant');
       // The Host binary is reviewed by the same owner as the Contract/DAG.
       // Reject a repointed executable alias before any billable dispatch.
-      if (await pinnedHostExecutable() !== pinnedExecutable)
-        invalid('Host executable changed while awaiting trusted grant');
+      await requireSameHostExecutable(executable, pinnedExecutable,
+        'Host executable changed while awaiting trusted grant');
       if (hash(callScope(refreshed, resume, pinnedExecutable)) !== hash(scope))
         invalid('Workflow scope changed while awaiting trusted grant');
       const hostExecution = createCodexManagedHostExecution(store, {
         executable, model, enabled: true, workspaceWrite, authorizeWorkspace,
+        approvedExecutable: pinnedExecutable,
         ...invokeTransport
       });
       const dependencies = { hostExecution, verificationBackend,
