@@ -46,12 +46,30 @@ export async function proposeNewProjectFileset(store, taskId, itemId, {
         !(await stat(pinnedExecutable)).isFile())
       throw Error('Bootstrap Host executable changed during approval or Turn');
   };
+  // A Plan pointer can remain unchanged while the Host's cwd is replaced.
+  // Pin the actual directory identity before approval and recheck it before
+  // dispatch and after the Turn. This is not atomic filesystem confinement.
+  const pinnedRoot = await realpath(plan.probe.root);
+  const pinnedRootStat = await stat(pinnedRoot);
+  if (pinnedRoot !== plan.probe.root || !pinnedRootStat.isDirectory())
+    throw Error('Bootstrap Host repository must be its original canonical directory');
+  const repositoryIdentity = Object.freeze({
+    dev:pinnedRootStat.dev,ino:pinnedRootStat.ino,birthtimeMs:pinnedRootStat.birthtimeMs
+  });
+  const ensureRepository = async () => {
+    const root = await realpath(plan.probe.root);
+    const observed = await stat(root);
+    if (root !== pinnedRoot || !observed.isDirectory() ||
+        observed.dev !== repositoryIdentity.dev || observed.ino !== repositoryIdentity.ino ||
+        observed.birthtimeMs !== repositoryIdentity.birthtimeMs)
+      throw Error('Bootstrap Host repository identity changed during approval or Turn');
+  };
   // Review the immutable target Plan and actual WorkItem scope, not only its
   // revision/hash. A Plan pointer can be substituted without bumping either.
   const scope = Object.freeze({
     taskId,itemId,revision:current.revision,
     planRef:current.planRef,workflowRef:current.bootstrap.workflowRef,
-    repo:plan.probe.root,workflowHash:workflow.workflowHash,
+    repo:plan.probe.root,repositoryIdentity,workflowHash:workflow.workflowHash,
     executablePath:executable,executableResolvedPath:pinnedExecutable,
     model,timeoutMs,
     probeHash:plan.probe.probeHash,goal:plan.intent.original,
@@ -76,6 +94,7 @@ export async function proposeNewProjectFileset(store, taskId, itemId, {
   if (allowed !== true) throw Error('Host Fileset proposal requires trusted exact bounded approval');
   if(Date.now()>=scope.expiresAt) throw Error('Bootstrap Host Fileset approval expired');
   await ensureExecutable();
+  await ensureRepository();
   ensureFresh();
   const prompt = JSON.stringify({kind:'CODEFLEET_NEW_PROJECT_FILESET_V1',...scope,
     instruction:'Return only JSON {revision,itemId,files:[{path,content}]}. ' +
@@ -99,6 +118,7 @@ export async function proposeNewProjectFileset(store, taskId, itemId, {
       receipt.authority!=='PROVIDER_REPORTED_ONLY'||receipt.protectedVerified!==false||
       typeof receipt.text!=='string') throw Error('Bootstrap Host Turn receipt incomplete');
     await ensureExecutable();
+    await ensureRepository();
     // A completed but late Host Turn cannot consume an expired owner grant.
     // Keep the durable reservation uncertain; do not submit or replay files.
     if (Date.now() >= scope.expiresAt)

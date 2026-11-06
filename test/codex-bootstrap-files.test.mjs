@@ -30,7 +30,7 @@ test('binary contents or unsafe filenames are rejected before materialization',(
  assert.throws(()=>validateBootstrapHostProposal(escape,workflow,'create',3),/Unsafe/);
 });
 
-import { rm, readFile, realpath, mkdtemp, symlink, unlink, writeFile } from 'node:fs/promises';
+import { rm, readFile, realpath, mkdtemp, symlink, unlink, writeFile, rename, mkdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { prepared, approve } from './fixtures/bootstrap-reservation.mjs';
@@ -70,6 +70,11 @@ test('NEW_PROJECT trusted Fileset planning submits a proposal without materializ
       assert.equal(scope.planRef,before.planRef);
       assert.equal(scope.workflowRef,before.bootstrap.workflowRef);
       assert.equal(scope.repo,f.dir);
+      const repoStat=await stat(f.dir);
+      assert.deepEqual(scope.repositoryIdentity,{
+        dev:repoStat.dev,ino:repoStat.ino,birthtimeMs:repoStat.birthtimeMs
+      });
+      assert.equal(Object.isFrozen(scope.repositoryIdentity),true);
       assert.equal(scope.executablePath,process.execPath);
       assert.equal(scope.executableResolvedPath,await realpath(process.execPath));
       assert.equal(scope.model,'SYNTHETIC_ONLY');
@@ -170,6 +175,48 @@ async function linkedBootstrapHost(t) {
   }
   return {alias,replacement};
 }
+
+
+test('NEW_PROJECT rejects a replacement repository directory during owner grant before Host reservation',async t=>{
+  const f=await prepared({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  let hostTurns=0;
+  const api=createCodexMvpFacade(f.store,{
+    executable:process.execPath,model:'SYNTHETIC_ONLY',enableHostTurns:true,
+    authorizeBootstrap:async()=>{
+      await rename(f.dir,join(f.root,'original-repository'));
+      await mkdir(f.dir);
+      return true;
+    },
+    transport:async()=>{hostTurns++;throw Error('Host must not launch');}
+  });
+  await assert.rejects(api.proposeBootstrapFiles(f.id,'todo'),/repository identity changed/);
+  assert.equal(hostTurns,0);
+  assert.equal(f.store.events(f.id).filter(e=>e.type==='BOOTSTRAP_HOST_TURN_RESERVED').length,0);
+});
+
+test('NEW_PROJECT reconciles rather than submitting when repository directory changes during Host Turn',async t=>{
+  const f=await prepared({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  let hostTurns=0;
+  const api=createCodexMvpFacade(f.store,{
+    executable:process.execPath,model:'SYNTHETIC_ONLY',enableHostTurns:true,
+    authorizeBootstrap:async()=>true,
+    transport:async request=>{
+      hostTurns++;
+      await rename(f.dir,join(f.root,'original-repository'));
+      await mkdir(f.dir);
+      return fakeHostReceipt(JSON.parse(request.prompt));
+    }
+  });
+  await assert.rejects(api.proposeBootstrapFiles(f.id,'todo'),/repository identity changed/);
+  assert.equal(hostTurns,1);
+  assert.equal(task(f.store,f.id).bootstrap.filesets.todo,undefined);
+  assert.deepEqual(
+    f.store.events(f.id).filter(e=>e.type.startsWith('BOOTSTRAP_HOST_TURN_')).map(e=>e.type),
+    ['BOOTSTRAP_HOST_TURN_RESERVED','BOOTSTRAP_HOST_TURN_RECONCILING']
+  );
+});
 
 test('NEW_PROJECT Host grant cannot dispatch after executable alias substitution',async t=>{
   const linked=await linkedBootstrapHost(t);
