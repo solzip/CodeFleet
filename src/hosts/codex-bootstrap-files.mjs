@@ -6,8 +6,10 @@ import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { realpath, stat } from 'node:fs/promises';
 import { hash } from '../alpha/contract.mjs';
-import { bootstrapContext, submitBootstrapFiles } from '../product/tasks.mjs';
-import { validateFileset } from '../workflow/bootstrap-files.mjs';
+import { context } from '../alpha/workspace.mjs';
+import { dependentsOf } from '../workflow/bootstrap.mjs';
+import { bootstrapContext, submitBootstrapFiles, recordedDigests, effectiveStates } from '../product/tasks.mjs';
+import { validateFileset, validateRepairFileset } from '../workflow/bootstrap-files.mjs';
 import { runCodexReadOnlyTurn } from './codex-app-server-session.mjs';
 
 export const bootstrapFilesOutputSchema = {
@@ -20,6 +22,28 @@ export const bootstrapFilesOutputSchema = {
     }}
   }
 };
+
+export const bootstrapRepairOutputSchema = {
+  type:'object',additionalProperties:false,required:['revision','itemId','repair','files'],
+  properties:{
+    revision:{type:'integer'},itemId:{type:'string'},
+    repair:{type:'object',additionalProperties:false,required:['verificationItem','evidenceRef'],
+      properties:{verificationItem:{type:'string'},evidenceRef:{type:'string'}}},
+    files:{type:'array',minItems:1,items:{type:'object',additionalProperties:false,
+      required:['path','content','baseSha256'],
+      properties:{path:{type:'string'},content:{type:'string'},baseSha256:{type:'string'}}}}
+  }
+};
+// The Host is only allowed to propose an explicitly bounded replacement of
+// materialized files against the pinned failing Local Evidence and byte digests.
+export function validateBootstrapHostRepairProposal(response, workflow, itemId, revision, repair, digests) {
+  if (!response || response.itemId !== itemId || response.revision !== revision ||
+      response.repair?.verificationItem !== repair.verificationItem ||
+      response.repair?.evidenceRef !== repair.evidenceRef)
+    throw Error('Host Repair Fileset proposal stale or failure Evidence unbound');
+  validateRepairFileset(response, workflow, itemId, digests);
+  return response;
+}
 async function executableSha256(path) {
   const digest = createHash('sha256');
   for await (const chunk of createReadStream(path)) digest.update(chunk);
@@ -33,7 +57,7 @@ export function validateBootstrapHostProposal(response, workflow, itemId, revisi
   return { revision,itemId,files };
 }
 export async function proposeNewProjectFileset(store, taskId, itemId, {
-  executable, model, authorize, transport = runCodexReadOnlyTurn, timeoutMs = 90000
+  executable, model, authorize, transport = runCodexReadOnlyTurn, timeoutMs = 90000, repair = null
 } = {}) {
   if (!store || typeof authorize !== 'function' || typeof transport !== 'function' ||
       !isAbsolute(executable ?? '') || typeof model !== 'string' || !model ||
@@ -42,8 +66,65 @@ export async function proposeNewProjectFileset(store, taskId, itemId, {
   const {current,plan,workflow} = bootstrapContext(store,taskId);
   if (plan.contractKind !== 'NEW_PROJECT') throw Error('Use existing-source planning for non-NEW_PROJECT tasks');
   const item = workflow.items.find(n=>n.id===itemId);
-  if (!item || item.kind !== 'local-edit' || !['PENDING_FILESET','FILESET_PROPOSED'].includes(current.bootstrap.states[itemId]))
-    throw Error('Bootstrap WorkItem is not awaiting an approved Fileset proposal');
+  const repairMode = repair !== null;
+  const states = effectiveStates(store,current,workflow);
+  if (!item || item.kind !== 'local-edit' ||
+      !(repairMode ? ['MATERIALIZED','REPAIR_PROPOSED'] : ['PENDING_FILESET','FILESET_PROPOSED']).includes(states[itemId]))
+    throw Error('Bootstrap WorkItem is not in a valid Fileset proposal or Repair state');
+  let repairScope = null;
+  if (repairMode) {
+    if (!repair || typeof repair !== 'object' || Array.isArray(repair) ||
+        Object.keys(repair).length !== 1 || typeof repair.verificationItem !== 'string')
+      throw Error('Explicit existing failed-verification WorkItem required for Host Repair');
+    const verifier=workflow.items.find(node=>node.id===repair.verificationItem);
+    const evidenceRef=current.bootstrap.verifications?.[repair.verificationItem];
+    if (!verifier || verifier.kind!=='local-verification' ||
+        !dependentsOf(workflow,itemId).includes(repair.verificationItem) ||
+        states[repair.verificationItem]!=='LOCAL_FAILED' || !evidenceRef)
+      throw Error('Host Repair requires current dependent LOCAL_FAILED Evidence');
+    const evidence=store.readArtifact(evidenceRef);
+    const digests=recordedDigests(store,current);
+    if (evidence.kind!=='BootstrapLocalVerification' ||
+        evidence.status!=='LOCAL_FAILED' || evidence.authority!=='LOCAL_EXECUTED' ||
+        evidence.taskId!==taskId || evidence.itemId!==repair.verificationItem ||
+        evidence.workflowHash!==workflow.workflowHash || hash(evidence.fileDigests)!==hash(digests))
+      throw Error('Host Repair failure Evidence is inconsistent with current Bootstrap tree');
+    const sourceFiles=await context(plan.probe.root,{context:item.files,tests:[]});
+    if (item.files.some(name=>hash(sourceFiles[name])!==digests[name]))
+      throw Error('Host Repair source differs from recorded materialized files');
+    const prior=store.get(current.bootstrap.filesets[itemId]);
+    if (!prior || (prior.state!=='COMPLETED' &&
+        !(prior.operation==='modify' && ['WAITING_APPROVAL','READY'].includes(prior.state))))
+      throw Error('Host Repair requires completed files or a replaceable pending Repair');
+    repairScope=Object.freeze({
+      verificationItem:repair.verificationItem,evidenceRef,
+      fileDigests:Object.freeze(item.files.map(path=>Object.freeze({path,sha256:digests[path]}))),
+      sourceFiles:Object.freeze(sourceFiles),
+      failure:Object.freeze({
+        reason:evidence.reason ?? null,
+        observed:Object.freeze({
+          exitCode:evidence.observed?.exitCode ?? null,
+          tests:evidence.observed?.tests ?? null,
+          passed:evidence.observed?.passed ?? null,
+          failed:evidence.observed?.failed ?? null
+        }),
+        log:typeof evidence.log==='string' ? evidence.log.slice(0,16000) : ''
+      })
+    });
+  }
+  const ensureRepairFresh=async()=>{
+    if (!repairScope) return;
+    const latest=bootstrapContext(store,taskId), liveStates=effectiveStates(store,latest.current,latest.workflow);
+    const liveDigests=recordedDigests(store,latest.current);
+    if (latest.current.bootstrap.verifications?.[repairScope.verificationItem]!==repairScope.evidenceRef ||
+        liveStates[repairScope.verificationItem]!=='LOCAL_FAILED' ||
+        !['MATERIALIZED','REPAIR_PROPOSED'].includes(liveStates[itemId]) ||
+        hash(repairScope.fileDigests)!==hash(item.files.map(path=>({path,sha256:liveDigests[path]}))))
+      throw Error('Host Repair failure Evidence or recorded digests changed');
+    const observed=await context(plan.probe.root,{context:item.files,tests:[]});
+    if (hash(observed)!==hash(repairScope.sourceFiles))
+      throw Error('Host Repair source changed during review or Turn');
+  };
   // A Host executable is a billable execution boundary. The owner must review
   // its real target, not only an absolute path that can be repointed later.
   const pinnedExecutable = await realpath(executable);
@@ -86,7 +167,9 @@ export async function proposeNewProjectFileset(store, taskId, itemId, {
     executablePath:executable,executableResolvedPath:pinnedExecutable,
     executableSha256:pinnedExecutableSha256,model,timeoutMs,
     probeHash:plan.probe.probeHash,goal:plan.intent.original,
-    files:Object.freeze([...item.files]),expiresAt:Date.now()+timeoutMs
+    files:Object.freeze([...item.files]),
+    operation:repairMode?'repair':'create',...(repairScope?{repair:repairScope}:{}),
+    expiresAt:Date.now()+timeoutMs
   });
   const ensureFresh = () => {
     const latest = bootstrapContext(store,taskId);
@@ -100,7 +183,7 @@ export async function proposeNewProjectFileset(store, taskId, itemId, {
         latest.plan.intent.original!==scope.goal ||
         !latestItem || latestItem.kind!=='local-edit' ||
         hash(latestItem.files)!==hash(scope.files) ||
-        !['PENDING_FILESET','FILESET_PROPOSED'].includes(latest.current.bootstrap.states[itemId]))
+        !(repairMode?['MATERIALIZED','REPAIR_PROPOSED']:['PENDING_FILESET','FILESET_PROPOSED']).includes(latest.current.bootstrap.states[itemId]))
       throw Error('Bootstrap Host Fileset scope changed during review or Turn');
   };
   const allowed = await authorize(scope);
@@ -109,9 +192,14 @@ export async function proposeNewProjectFileset(store, taskId, itemId, {
   await ensureExecutable();
   await ensureRepository();
   ensureFresh();
-  const prompt = JSON.stringify({kind:'CODEFLEET_NEW_PROJECT_FILESET_V1',...scope,
-    instruction:'Return only JSON {revision,itemId,files:[{path,content}]}. ' +
-      'Include exactly the listed planned files. Write actual bounded source/test content. ' +
+  await ensureRepairFresh();
+  const prompt = JSON.stringify({kind:repairMode?'CODEFLEET_NEW_PROJECT_REPAIR_FILESET_V1':'CODEFLEET_NEW_PROJECT_FILESET_V1',...scope,
+    instruction:(repairMode
+      ? 'Return only JSON {revision,itemId,repair:{verificationItem,evidenceRef},files:[{path,content,baseSha256}]}. ' +
+        'Use the exact failure Evidence binding and pinned baseSha256 for each changed file. ' +
+        'Repair only necessary owned files; do not add paths or claim verification passed. '
+      : 'Return only JSON {revision,itemId,files:[{path,content}]}. ' +
+        'Include exactly the listed planned files. Write actual bounded source/test content. ') +
       'Do not run commands, edit disk, access credentials/network, approve, or claim tests passed.'});
   if (Buffer.byteLength(prompt)>160000) throw Error('Bootstrap prompt too large');
   const intentRef=store.artifact({kind:'BOOTSTRAP_HOST_TURN_INTENT',...scope,model});
@@ -126,7 +214,7 @@ export async function proposeNewProjectFileset(store, taskId, itemId, {
   } catch(error) {store.db.exec('ROLLBACK');throw error;}
   try {
     const receipt=await transport({executable:pinnedExecutable,cwd:plan.probe.root,model,prompt,
-      outputSchema:bootstrapFilesOutputSchema,timeoutMs});
+      outputSchema:repairMode?bootstrapRepairOutputSchema:bootstrapFilesOutputSchema,timeoutMs});
     if(!receipt||receipt.terminalStatus!=='completed'||!receipt.threadId||!receipt.turnId||
       receipt.authority!=='PROVIDER_REPORTED_ONLY'||receipt.protectedVerified!==false||
       typeof receipt.text!=='string') throw Error('Bootstrap Host Turn receipt incomplete');
@@ -137,10 +225,14 @@ export async function proposeNewProjectFileset(store, taskId, itemId, {
     if (Date.now() >= scope.expiresAt)
       throw Error('Bootstrap Host Fileset approval expired during Turn');
     const proposed=JSON.parse(receipt.text);
-    validateBootstrapHostProposal(proposed,workflow,itemId,current.revision);
+    if (repairMode)
+      validateBootstrapHostRepairProposal(proposed,workflow,itemId,current.revision,repairScope,
+        recordedDigests(store,bootstrapContext(store,taskId).current));
+    else validateBootstrapHostProposal(proposed,workflow,itemId,current.revision);
     // The Host proposal is not authority to submit against an unreviewed
-    // replacement Plan, repository, or Workflow after an awaited model Turn.
+    // replacement Plan, repository, Workflow, or failed Evidence after a Turn.
     ensureFresh();
+    await ensureRepairFresh();
     const submitted=await submitBootstrapFiles(store,taskId,proposed);
     store.event(taskId,'BOOTSTRAP_HOST_TURN_SUBMITTED',{
       itemId,revision:current.revision,intentRef,threadId:receipt.threadId,turnId:receipt.turnId,

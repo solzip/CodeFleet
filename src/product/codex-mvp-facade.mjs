@@ -168,6 +168,16 @@ export function createCodexMvpFacade(store, {
         executable, model, authorize: authorizeBootstrap, ...invokeTransport
       });
     },
+    // A failed Local check can drive another Host proposal, not automatic writes
+    // or inherited approval to repair the Candidate or rerun verification.
+    async proposeBootstrapRepairFiles(taskId, itemId, verificationItem) {
+      available();
+      if (!callable(authorizeBootstrap)) invalid('Exact Bootstrap Repair planning grant required');
+      return proposeNewProjectFileset(store, taskId, itemId, {
+        executable, model, authorize: authorizeBootstrap,
+        repair:{verificationItem}, ...invokeTransport
+      });
+    },
     // Materialize only an existing exact-approved Fileset through the current
     // Bootstrap Controller. This is LOCAL UNPROTECTED and never a Host approval.
     async materializeApprovedBootstrap(taskId, itemId) {

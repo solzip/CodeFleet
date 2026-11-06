@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { proposeNewProjectFileset,validateBootstrapHostProposal,bootstrapFilesOutputSchema } from '../src/hosts/codex-bootstrap-files.mjs';
+import { proposeNewProjectFileset,validateBootstrapHostProposal,validateBootstrapHostRepairProposal,bootstrapFilesOutputSchema,bootstrapRepairOutputSchema } from '../src/hosts/codex-bootstrap-files.mjs';
 
 const workflow={items:[{id:'create',kind:'local-edit',files:['src/index.js','test/index.test.js']}]};
 const proposal=()=>({revision:3,itemId:'create',files:[
@@ -33,8 +33,9 @@ test('binary contents or unsafe filenames are rejected before materialization',(
 import { rm, readFile, realpath, mkdtemp, symlink, unlink, writeFile, rename, mkdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { prepared, approve } from './fixtures/bootstrap-reservation.mjs';
-import { task } from '../src/product/tasks.mjs';
+import { prepared, built, request, approve } from './fixtures/bootstrap-reservation.mjs';
+import { task, verifyTask } from '../src/product/tasks.mjs';
+import { hash } from '../src/alpha/contract.mjs';
 import { Store } from '../src/alpha/store.mjs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { taskReport } from '../src/product/report.mjs';
@@ -444,4 +445,92 @@ test('NEW_PROJECT expired Host Turn cannot submit or replay after Store restart'
   assert.equal(task(f.store,f.id).bootstrap.filesets.todo,undefined);
   assert.equal(
     f.store.events(f.id).filter(e=>e.type==='BOOTSTRAP_HOST_TURN_RESERVED').length,1);
+});
+
+test('NEW_PROJECT Host repairs only pinned failure Evidence through separately approved Fileset and Local re-verification',async t=>{
+  const f=await built({protectedItem:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const preview=await verifyTask(f.store,f.id,'tests',request(f));
+  const failed=await verifyTask(f.store,f.id,'tests',request(f),{
+    trust:preview.commandHash,acknowledgeUnisolated:true
+  });
+  assert.equal(failed.status,'LOCAL_FAILED');
+  const original='export const add = (list, t) => list;\n';
+  const replacement='export const add = (list, t) => [...list, t];\n';
+  const originalRun=task(f.store,f.id).bootstrap.filesets.todo;
+  let turns=0,planningGrants=0,materializationGrants=0,verificationGrants=0;
+  const api=createCodexMvpFacade(f.store,{
+    executable:process.execPath,model:'SYNTHETIC_ONLY',enableHostTurns:true,
+    authorizeBootstrap:async scope=>{
+      planningGrants++;
+      assert.equal(scope.operation,'repair');
+      assert.equal(scope.repair.verificationItem,'tests');
+      assert.equal(scope.repair.evidenceRef,failed.evidenceRef);
+      assert.equal(scope.repair.sourceFiles['src/todo.mjs'],original);
+      assert.deepEqual(scope.repair.fileDigests.find(x=>x.path==='src/todo.mjs'),
+        {path:'src/todo.mjs',sha256:hash(original)});
+      assert.equal(Object.isFrozen(scope.repair),true);
+      return true;
+    },
+    transport:async input=>{
+      turns++;
+      const scope=JSON.parse(input.prompt);
+      assert.equal(scope.kind,'CODEFLEET_NEW_PROJECT_REPAIR_FILESET_V1');
+      assert.equal(input.outputSchema,bootstrapRepairOutputSchema);
+      return {...fakeHostReceipt(scope),text:JSON.stringify({
+        revision:scope.revision,itemId:'todo',
+        repair:{verificationItem:'tests',evidenceRef:scope.repair.evidenceRef},
+        files:[{path:'src/todo.mjs',content:replacement,baseSha256:hash(original)}]
+      })};
+    },
+    authorizeBootstrapMaterialization:async scope=>{
+      materializationGrants++;
+      assert.equal(scope.operation,'modify');
+      assert.equal(scope.files.length,1);
+      assert.equal(scope.files[0].content,replacement);
+      assert.equal(scope.files[0].baseSha256,hash(original));
+      return true;
+    },
+    authorizeBootstrapVerification:async scope=>{
+      verificationGrants++;
+      assert.equal(scope.itemId,'tests');
+      return true;
+    }
+  });
+  const proposed=await api.proposeBootstrapRepairFiles(f.id,'todo','tests');
+  assert.equal(proposed.approvalRequest.operation,'modify');
+  assert.equal(proposed.executionGranted,false);
+  assert.equal(proposed.materialized,false);
+  assert.equal(await readFile(join(f.dir,'src/todo.mjs'),'utf8'),original);
+  assert.deepEqual([planningGrants,turns],[1,1]);
+  approve(f,proposed.approvalRequest);
+  const applied=await api.materializeApprovedBootstrap(f.id,'todo');
+  assert.equal(applied.status,'MATERIALIZED');
+  assert.equal(applied.operation,'modify');
+  assert.equal(await readFile(join(f.dir,'src/todo.mjs'),'utf8'),replacement);
+  assert.equal(materializationGrants,1);
+  assert.equal(task(f.store,f.id).bootstrap.states.tests,'VERIFICATION_STALE');
+  const passed=await api.verifyApprovedBootstrap(f.id,'tests',request(f));
+  assert.equal(passed.status,'LOCAL_PASSED');
+  assert.notEqual(passed.commandHash,failed.commandHash);
+  assert.equal(passed.complete,false);
+  assert.equal(passed.protectedVerification,'UNSATISFIED');
+  assert.equal(verificationGrants,1);
+  assert.equal(f.store.get(originalRun).state,'COMPLETED');
+  assert.equal((await taskReport(f.store,f.id)).complete,false);
+});
+
+test('NEW_PROJECT Host Repair refuses missing failure Evidence before grant or Turn',async t=>{
+  const f=await built({protectedItem:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  let grants=0,turns=0;
+  const api=createCodexMvpFacade(f.store,{
+    executable:process.execPath,model:'SYNTHETIC_ONLY',enableHostTurns:true,
+    authorizeBootstrap:async()=>{grants++;return true;},
+    transport:async()=>{turns++;throw Error('Host must not start');}
+  });
+  await assert.rejects(api.proposeBootstrapRepairFiles(f.id,'todo','tests'),/LOCAL_FAILED/);
+  assert.equal(grants,0);
+  assert.equal(turns,0);
+  assert.equal(f.store.events(f.id).filter(e=>e.type==='BOOTSTRAP_HOST_TURN_RESERVED').length,0);
 });
