@@ -819,3 +819,72 @@ test('Codex execution entry refuses an approval scope changed during asynchronou
  assert.equal(operatorReviews,1);
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
 });
+
+
+test('public Codex Workflow review shows persisted DAG and approval without granting Host execution',async t=>{
+ const f=await fixture(t);
+ const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+   authorizeReview:async()=>true
+ });
+ const argv=['review-codex-workflow',created.workflowId];
+ const eventCount=f.store.events(created.workflowId).length;
+ const before=await productCli(argv,f.store.directory);
+ assert.equal(before.exitCode,0);
+ const view=before.data;
+ assert.equal(view.kind,'CODEFLEET_CODEX_WORKFLOW_REVIEW_V1');
+ assert.equal(view.status,'REVIEW_REQUIRED');
+ assert.equal(view.approvalState,'MISSING_OR_EXPIRED');
+ assert.equal(view.executionGranted,false);
+ assert.equal(view.authenticatedOperatorAvailable,false);
+ assert.equal(view.hostLiveAcceptance,'UNVERIFIED');
+ assert.equal(view.workflowHash,created.workflowHash);
+ assert.equal(view.sourceContractHash,created.sourceContractHash);
+ assert.equal(view.objective,goal);
+ assert.deepEqual(view.workItems.map(item=>item.id),['change']);
+ assert.deepEqual(view.workItems[0].acceptanceCriteria,['Arithmetic regression passes']);
+ assert.deepEqual(view.finalAcceptanceCriteria,f.result.workflowPreview.workflow.acceptanceCriteria);
+ assert.equal(f.store.events(created.workflowId).length,eventCount);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+ approveWorkflow(f.store,created.workflowId,{
+   actor:'local-fixture',workflowHash:created.workflowHash,expiresAt:Date.now()+60000
+ });
+ const approved=await productCli(argv,f.store.directory);
+ assert.equal(approved.exitCode,0);
+ assert.equal(approved.data.approvalState,'CURRENT_WORKFLOW_APPROVAL_VALID');
+ assert.equal(approved.data.executionGranted,false);
+ assert.equal(approved.data.protectedVerified,false);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+ for(const extra of [['--allow-model'],['--actor','fake'],['--hash',created.workflowHash]]) {
+   await assert.rejects(dispatchProduct([...argv,...extra],{store:f.store}),
+     /review-codex-workflow requires exactly one Workflow ID/);
+ }
+});
+
+test('public Codex Workflow review fails closed on stale planning or mutated DAG provenance',async t=>{
+ const f=await fixture(t);
+ const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+   authorizeReview:async()=>true
+ });
+ const argv=['review-codex-workflow',created.workflowId];
+ const initial=f.store.get(created.workflowId);
+ const mutate=body=>f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
+   .run(JSON.stringify(body),created.workflowId);
+ for(const replacement of [
+   {...initial,sourceRef:'0'.repeat(64)},
+   {...initial,contract:{...initial.contract,requiredVerification:false}},
+   {...initial,repo:join(f.repo,'different-clone')}
+ ]) {
+   mutate(replacement);
+   const response=await productCli(argv,f.store.directory);
+   assert.equal(response.exitCode,2);
+   assert.equal(response.data.status,'BLOCKED');
+   assert.equal(response.data.executionGranted,false);
+ }
+ mutate(initial);
+ f.store.db.prepare('UPDATE graph_revisions SET digest=? WHERE runId=? AND revision=1')
+   .run('0'.repeat(64),created.workflowId);
+ const forged=await productCli(argv,f.store.directory);
+ assert.equal(forged.exitCode,2);
+ assert.equal(forged.data.status,'BLOCKED');
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+});

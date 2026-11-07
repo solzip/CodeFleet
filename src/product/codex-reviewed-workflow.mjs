@@ -6,7 +6,7 @@ import { isAbsolute } from 'node:path';
 import { hash } from '../alpha/contract.mjs';
 import { repository } from '../alpha/workspace.mjs';
 import { validateWorkflow } from '../workflow/definition.mjs';
-import { createWorkflow } from '../workflow/persistence.mjs';
+import { createWorkflow, approval as requireWorkflowApproval } from '../workflow/persistence.mjs';
 
 function fail(reason) { throw Error('Reviewed Codex plan: ' + reason); }
 function planRow(store, sessionId) {
@@ -214,4 +214,63 @@ export async function inspectReviewedCodexPlanAtSource(store, sessionId, repo) {
       reason:'Current repository identity, clean tree or Git HEAD does not match the persisted Codex plan'
     };
   }
+}
+
+
+// Public, read-only inspection of the exact persisted Codex Planning → Workflow
+// handoff. It grants neither Workflow approval nor authenticated Host admission.
+// Revision 1 must still belong to the validated originating Planning session;
+// later revisions can be reviewed but cannot rewrite the original provenance.
+export function inspectReviewedCodexWorkflow(store, workflowId) {
+  const view = { schemaVersion:1, kind:'CODEFLEET_CODEX_WORKFLOW_REVIEW_V1',
+    workflowId, status:'BLOCKED', executionGranted:false,
+    hostLiveAcceptance:'UNVERIFIED', protectedVerified:false,
+    authority:'PERSISTED_WORKFLOW_DATA_ONLY' };
+  const blocked = { ...view,
+    reason:'Codex Workflow or originating Planning/Contract/DAG binding is missing or invalid' };
+  if (!store?.db || typeof workflowId !== 'string' ||
+      !/^planning-[a-f0-9-]{36}$/i.test(workflowId)) return blocked;
+  try {
+    const plan=inspectReviewedCodexPlan(store,workflowId.slice('planning-'.length));
+    if (plan.status !== 'REVIEW_REQUIRED') return blocked;
+    const run=store.get(workflowId);
+    const original=store.db.prepare(
+      'SELECT digest,body FROM graph_revisions WHERE runId=? AND revision=1'
+    ).get(workflowId);
+    if (!run || run.kind !== 'workflow' || !Number.isSafeInteger(run.revision) ||
+        run.revision < 1 || !original || original.digest !== plan.workflowHash ||
+        JSON.parse(original.body).workflowHash !== original.digest ||
+        run.base !== plan.sourceBaseline || hash(run.repo) !== plan.repositoryId ||
+        run.contract?.workflowHash !== run.contractHash ||
+        hash(run.contract) !== run.graphRef) return blocked;
+    const source=store.readArtifact(run.sourceRef);
+    if (hash(source) !== run.sourceRef ||
+        hash(source) !== plan.sourceContractHash ||
+        source.goal !== plan.objective) return blocked;
+    validateWorkflow(run.contract,source);
+    let approvalState='MISSING_OR_EXPIRED';
+    try { requireWorkflowApproval(store,run); approvalState='CURRENT_WORKFLOW_APPROVAL_VALID'; }
+    catch { /* Missing/expired approval is reviewable, not an execution grant. */ }
+    return { ...view, status:'REVIEW_REQUIRED', revision:run.revision,
+      workflowState:run.state, workflowHash:run.contractHash,
+      sourceContractHash:run.sourceRef, repositoryId:plan.repositoryId,
+      sourceBaseline:run.base, objective:source.goal,
+      files:[...source.files], tests:[...source.tests],
+      finalAcceptanceCriteria:[...run.contract.acceptanceCriteria],
+      requiredCapabilities:[...run.contract.requiredCapabilities],
+      requiredVerification:run.contract.requiredVerification,
+      workItems:run.contract.items.map(item=>({
+        id:item.id, dependencies:[...item.dependencies],
+        files:[...item.files], tests:[...item.tests],
+        acceptanceCriteria:[...item.acceptanceCriteria]
+      })),
+      executionLimits:{ maxAttempts:source.maxAttempts,
+        timeoutSeconds:source.timeoutSeconds,
+        attemptBudgetUsd:source.attemptBudgetUsd },
+      approvalState, authenticatedOperatorAvailable:false,
+      nextAction:approvalState === 'CURRENT_WORKFLOW_APPROVAL_VALID'
+        ? 'Authenticated trusted Host Operator admission and separate exact managed-Host grant still required'
+        : 'Separate current Workflow approval, authenticated Host Operator admission and managed-Host grant required'
+    };
+  } catch { return blocked; }
 }

@@ -15,7 +15,7 @@ import { developmentProposalRequest, developmentProposalBatch, reviewDevelopment
 import { recoverObjective } from './recovery.mjs';
 import { prepareContractRevision, acceptContractRevision, revokeContractRevision } from './contract-revisions.mjs';
 import { repairProposalRequest } from './repair.mjs';
-import { inspectReviewedCodexPlan, inspectReviewedCodexPlanAtSource, prepareReviewedCodexWorkflow } from './codex-reviewed-workflow.mjs';
+import { inspectReviewedCodexPlan, inspectReviewedCodexPlanAtSource, inspectReviewedCodexWorkflow, prepareReviewedCodexWorkflow } from './codex-reviewed-workflow.mjs';
 import { readDeliveredObjectiveStatus } from './objective-status.mjs';
 import { isCodexMvpFacadeForStore } from './codex-mvp-facade.mjs';
 import { approval as requireWorkflowApproval } from '../workflow/persistence.mjs';
@@ -34,6 +34,7 @@ codefleet-alpha objective status [task-id] | report <task-or-run-id>
 codefleet-alpha objective delivered-status <workflow-id> (read-only delivered-tree Objective acceptance; never starts Host or writes State)
 codefleet-alpha objective workflow-progress <workflow-id> (read-only DAG/Repair progress and current delivered Objective; never grants execution)
 codefleet-alpha objective review-codex-plan <planning-session-id> [--repository ABSOLUTE_PATH] (read-only pinned Contract/DAG review; optional clean Git checkout check, never grants execution)
+codefleet-alpha objective review-codex-workflow <workflow-id> (read-only persisted Contract/DAG and Workflow approval status; no execution)
 codefleet-alpha objective prepare-codex-workflow <planning-session-id> --repository ABSOLUTE_PATH --hash <workflowHash> --source-hash <sourceContractHash>
   (explicitly confirm both hashes from review-codex-plan; create only a pending unapproved Workflow, never an execution or Operator grant)
 codefleet-alpha objective run-codex-workflow|resume-codex-workflow <workflow-id> --hash <workflowHash>
@@ -117,6 +118,13 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       ? await inspectReviewedCodexPlanAtSource(store, args[0], o.repository)
       : inspectReviewedCodexPlan(store, args[0]);
     return { exitCode: data.status === 'REVIEW_REQUIRED' ? 0 : 2, data };
+  }
+  if (action === 'review-codex-workflow') {
+    if (args.length !== 1 || !args[0] || args[0].startsWith('-') ||
+        Object.keys(o).length)
+      throw Error('review-codex-workflow requires exactly one Workflow ID and no approval/execution options');
+    const data = inspectReviewedCodexWorkflow(store,args[0]);
+    return { exitCode:data.status === 'REVIEW_REQUIRED' ? 0 : 2, data };
   }
   if (action === 'prepare-codex-workflow') {
     // Explicit Local contract confirmation is NOT an authenticated Operator
@@ -430,7 +438,7 @@ export async function productCli(argv, directory) {
     if (['run-codex-workflow','resume-codex-workflow'].includes(argv[0]))
       throw Error('AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE: plain CLI has no authenticated Host Operator binding');
     if (!argv[0] || ['help', '--help'].includes(argv[0])) return await dispatchProduct(argv);
-    store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request', 'delivered-status', 'workflow-progress', 'review-codex-plan'].includes(argv[0]) });
+    store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request', 'delivered-status', 'workflow-progress', 'review-codex-plan', 'review-codex-workflow'].includes(argv[0]) });
     return await dispatchProduct(argv, { store });
   }
   catch (e) { return { exitCode: 1, data: { schemaVersion: 1, status: 'BLOCKED_OR_UNSUPPORTED', error: e.message } }; }

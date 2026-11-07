@@ -657,3 +657,19 @@ DAGs and same-hash mutation during review with no Host grant or Attempt.
 This enables inspectable admission by a future trusted provider but **does
 not deploy Operator authentication**, authorize model calls or establish native
 Host Live or final Objective acceptance. New Windows/Linux CI is required.
+
+## Read-only post-planning Codex Workflow review (fresh CI required)
+
+The existing Objective CLI now exposes `review-codex-workflow <workflow-id>`.
+After explicit plan-to-Workflow promotion, it opens the Store read-only and
+shows the current validated Contract/DAG, immutable source/initial Planning
+lineage, bounded limits, WorkItems, mandatory criteria and current Workflow
+approval validity. Missing/expired approval is reported separately from a
+tampered or unrelated Workflow. Even a currently approved Local Workflow
+remains `executionGranted:false`: the ordinary public CLI still cannot
+supply authenticated Operator admission or a managed Codex Host grant.
+Negative offline fixtures reject changed source/DAG, repository identity,
+initial graph provenance and execution/approval flags without reserving an
+Attempt or starting a Host. This is user-visible review continuity, not
+an authenticated Operator provider, Host Live proof or Objective acceptance.
+The new head requires its own Windows/Linux CI results.
