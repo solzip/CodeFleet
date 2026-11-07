@@ -673,3 +673,19 @@ initial graph provenance and execution/approval flags without reserving an
 Attempt or starting a Host. This is user-visible review continuity, not
 an authenticated Operator provider, Host Live proof or Objective acceptance.
 The new head requires its own Windows/Linux CI results.
+
+
+## Read-only Codex Workflow source freshness review (fresh CI required)
+
+The public `objective review-codex-workflow <id> --repository ABSOLUTE_PATH`
+now optionally reobserves the canonical repository identity, clean working tree
+and exact pinned Git baseline, reusing the existing Planning source freshness
+check. It reports `PINNED_CLEAN_AT_REVIEW` only for the original checkout
+without drift; a dirty tree, a second clean clone with the same HEAD, or a new
+commit returns `BLOCKED` / `STALE_OR_MISMATCHED` without presenting stale
+Contract/DAG approval readiness. Without `--repository`, the read-only display
+explicitly says `NOT_RECHECKED`. Offline regressions were authored for all
+three negative cases and a clean positive case. This is a point-in-time
+read-only UX boundary, **not** a Host execution grant, OS-authenticated Operator,
+Host Live verification, or final Objective acceptance. This head requires its
+own Windows/Linux CI result.

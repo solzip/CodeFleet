@@ -888,3 +888,49 @@ test('public Codex Workflow review fails closed on stale planning or mutated DAG
  assert.equal(forged.data.status,'BLOCKED');
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
 });
+
+test('reviewed Codex Workflow checkout freshness blocks dirty, cloned and changed-HEAD sources',async t=>{
+  const f=await fixture(t);
+  const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+    authorizeReview:async()=>true
+  });
+  const argv=['review-codex-workflow',created.workflowId,'--repository',f.repo];
+  const eventCount=f.store.events(created.workflowId).length;
+  const clean=await productCli(argv,f.store.directory);
+  assert.equal(clean.exitCode,0);
+  assert.equal(clean.data.status,'REVIEW_REQUIRED');
+  assert.equal(clean.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+  assert.equal(clean.data.executionGranted,false);
+
+  // A second clone may have identical HEAD and content but cannot reuse the
+  // original Planning session's repository-bound review.
+  const other=join(f.repo,'..','cloned-repository');
+  const cloned=await git(f.repo,['clone',f.repo,other]);
+  assert.equal(cloned.exitCode,0,cloned.stderr.toString());
+  const cloneView=await productCli(['review-codex-workflow',created.workflowId,
+    '--repository',other],f.store.directory);
+  assert.equal(cloneView.exitCode,2);
+  assert.equal(cloneView.data.sourceFreshness,'STALE_OR_MISMATCHED');
+  assert.equal(cloneView.data.status,'BLOCKED');
+  assert.equal(cloneView.data.workItems,undefined);
+
+  await writeFile(join(f.repo,'src/a.js'),'export function add(x,y){ return x-y; }\n');
+  const dirty=await productCli(argv,f.store.directory);
+  assert.equal(dirty.exitCode,2);
+  assert.equal(dirty.data.status,'BLOCKED');
+  assert.equal(dirty.data.executionGranted,false);
+  assert.equal(dirty.data.approvalState,undefined);
+
+  for (const args of [['add','src/a.js'],
+    ['-c','user.name=Fixture','-c','user.email=fixture@example.invalid',
+     'commit','-m','new baseline']]) {
+    const result=await git(f.repo,args);
+    assert.equal(result.exitCode,0,result.stderr.toString());
+  }
+  const changedHead=await productCli(argv,f.store.directory);
+  assert.equal(changedHead.exitCode,2);
+  assert.equal(changedHead.data.sourceFreshness,'STALE_OR_MISMATCHED');
+  assert.equal(changedHead.data.status,'BLOCKED');
+  assert.equal(f.store.events(created.workflowId).length,eventCount);
+  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+});

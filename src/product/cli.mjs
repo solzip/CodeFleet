@@ -15,7 +15,7 @@ import { developmentProposalRequest, developmentProposalBatch, reviewDevelopment
 import { recoverObjective } from './recovery.mjs';
 import { prepareContractRevision, acceptContractRevision, revokeContractRevision } from './contract-revisions.mjs';
 import { repairProposalRequest } from './repair.mjs';
-import { inspectReviewedCodexPlan, inspectReviewedCodexPlanAtSource, inspectReviewedCodexWorkflow, prepareReviewedCodexWorkflow } from './codex-reviewed-workflow.mjs';
+import { inspectReviewedCodexPlan, inspectReviewedCodexPlanAtSource, inspectReviewedCodexWorkflow, inspectReviewedCodexWorkflowAtSource, prepareReviewedCodexWorkflow } from './codex-reviewed-workflow.mjs';
 import { readDeliveredObjectiveStatus } from './objective-status.mjs';
 import { isCodexMvpFacadeForStore } from './codex-mvp-facade.mjs';
 import { approval as requireWorkflowApproval } from '../workflow/persistence.mjs';
@@ -34,7 +34,7 @@ codefleet-alpha objective status [task-id] | report <task-or-run-id>
 codefleet-alpha objective delivered-status <workflow-id> (read-only delivered-tree Objective acceptance; never starts Host or writes State)
 codefleet-alpha objective workflow-progress <workflow-id> (read-only DAG/Repair progress and current delivered Objective; never grants execution)
 codefleet-alpha objective review-codex-plan <planning-session-id> [--repository ABSOLUTE_PATH] (read-only pinned Contract/DAG review; optional clean Git checkout check, never grants execution)
-codefleet-alpha objective review-codex-workflow <workflow-id> (read-only persisted Contract/DAG and Workflow approval status; no execution)
+codefleet-alpha objective review-codex-workflow <workflow-id> [--repository ABSOLUTE_PATH] (read-only Contract/DAG, approval and optional clean Git baseline check; no execution)
 codefleet-alpha objective prepare-codex-workflow <planning-session-id> --repository ABSOLUTE_PATH --hash <workflowHash> --source-hash <sourceContractHash>
   (explicitly confirm both hashes from review-codex-plan; create only a pending unapproved Workflow, never an execution or Operator grant)
 codefleet-alpha objective run-codex-workflow|resume-codex-workflow <workflow-id> --hash <workflowHash>
@@ -109,8 +109,8 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
   const [action, ...rest] = argv;
   if (!action || ['help', '--help'].includes(action)) return { exitCode: 0, data: { schemaVersion: 1, help } };
   const { positional: args, options: o } = parse(rest);
-  if (o.repository !== undefined && !['review-codex-plan', 'prepare-codex-workflow'].includes(action))
-    throw Error('--repository is only valid for Codex planning review or pending Workflow creation');
+  if (o.repository !== undefined && !['review-codex-plan', 'review-codex-workflow', 'prepare-codex-workflow'].includes(action))
+    throw Error('--repository is only valid for Codex planning/Workflow review or pending Workflow creation');
   if (action === 'review-codex-plan') {
     if (args.length !== 1 || Object.keys(o).some(k => k !== 'repository') || !args[0] || args[0].startsWith('-'))
       throw Error('review-codex-plan requires one Host Planning session ID and optional --repository only');
@@ -121,9 +121,11 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
   }
   if (action === 'review-codex-workflow') {
     if (args.length !== 1 || !args[0] || args[0].startsWith('-') ||
-        Object.keys(o).length)
-      throw Error('review-codex-workflow requires exactly one Workflow ID and no approval/execution options');
-    const data = inspectReviewedCodexWorkflow(store,args[0]);
+        Object.keys(o).some(k => k !== 'repository'))
+      throw Error('review-codex-workflow requires exactly one Workflow ID and optional --repository only; no approval/execution options');
+    const data = o.repository
+      ? await inspectReviewedCodexWorkflowAtSource(store,args[0],o.repository)
+      : inspectReviewedCodexWorkflow(store,args[0]);
     return { exitCode:data.status === 'REVIEW_REQUIRED' ? 0 : 2, data };
   }
   if (action === 'prepare-codex-workflow') {

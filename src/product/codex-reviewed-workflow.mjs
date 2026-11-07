@@ -225,7 +225,7 @@ export function inspectReviewedCodexWorkflow(store, workflowId) {
   const view = { schemaVersion:1, kind:'CODEFLEET_CODEX_WORKFLOW_REVIEW_V1',
     workflowId, status:'BLOCKED', executionGranted:false,
     hostLiveAcceptance:'UNVERIFIED', protectedVerified:false,
-    authority:'PERSISTED_WORKFLOW_DATA_ONLY' };
+    sourceFreshness:'NOT_RECHECKED', authority:'PERSISTED_WORKFLOW_DATA_ONLY' };
   const blocked = { ...view,
     reason:'Codex Workflow or originating Planning/Contract/DAG binding is missing or invalid' };
   if (!store?.db || typeof workflowId !== 'string' ||
@@ -273,4 +273,31 @@ export function inspectReviewedCodexWorkflow(store, workflowId) {
         : 'Separate current Workflow approval, authenticated Host Operator admission and managed-Host grant required'
     };
   } catch { return blocked; }
+}
+
+
+// Optional read-only source freshness for the *promoted* Codex Workflow.
+// Persisted approval is not proof that the current checkout remains executable.
+// This never upgrades approval or grants Host/Controller permission.
+export async function inspectReviewedCodexWorkflowAtSource(store, workflowId, repo) {
+  const view=inspectReviewedCodexWorkflow(store,workflowId);
+  if (view.status !== 'REVIEW_REQUIRED') return view;
+  try {
+    if (!isAbsolute(repo ?? '')) throw Error('Absolute source root required');
+    const root=await realpath(repo);
+    if (hash(root) !== view.repositoryId) throw Error('Different repository');
+    await requirePinnedPlanningSource(repo,root,view.sourceBaseline);
+    return { ...view, sourceFreshness:'PINNED_CLEAN_AT_REVIEW' };
+  } catch {
+    // Do not display a reviewable Contract/DAG or apparent approval readiness
+    // for a stale source, dirty checkout, or second clone with the same HEAD.
+    return {
+      schemaVersion:1, kind:'CODEFLEET_CODEX_WORKFLOW_REVIEW_V1',
+      workflowId, status:'BLOCKED', executionGranted:false,
+      hostLiveAcceptance:'UNVERIFIED', protectedVerified:false,
+      authority:'PERSISTED_WORKFLOW_DATA_ONLY',
+      sourceFreshness:'STALE_OR_MISMATCHED',
+      reason:'Current repository identity, clean tree or Git HEAD does not match the reviewed Codex Workflow'
+    };
+  }
 }
