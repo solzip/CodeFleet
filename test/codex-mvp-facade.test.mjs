@@ -22,10 +22,13 @@ function fixture() {
   const workflow={id:'run-fixture',kind:'workflow',revision:1,contract:graph,
     contractHash:graph.workflowHash,sourceRef:hash(source),graphRef:hash(graph),
     repo:'/fixture-repo',base:'a'.repeat(40),state:'READY',control:'run'};
+  // Persisted approval expiry is a fixed timestamp. Recomputing it on each
+  // read fabricates an approval rotation during an otherwise stable grant.
+  const approved={digest:workflow.contractHash,expires:Date.now()+60000};
   const store={
     get:()=>workflow,
     readArtifact:ref=>{if(ref!==workflow.sourceRef)throw Error('unavailable');return source;},
-    db:{prepare:()=>({get:()=>({digest:workflow.contractHash,expires:Date.now()+60000})})}
+    db:{prepare:()=>({get:()=>({...approved})})}
   };
   return {store,workflow,source};
 }
