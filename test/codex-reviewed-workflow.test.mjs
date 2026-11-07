@@ -749,7 +749,13 @@ test('Codex execution entry refuses an approval scope changed during asynchronou
    verificationBackend:{prepare:async()=>{},verify:async()=>{},cleanup:async()=>{}},
    authorizeWorkflow:async()=>{throw Error('Must not reach Host execution review');}
  });
+ approveWorkflow(f.store,created.workflowId,{
+   actor:'local-test',workflowHash:created.workflowHash,
+   expiresAt:Date.now()+60_000
+ });
+ let operatorReviews=0;
  const execution={codexAdmission:{facade,authorizeOperator:async()=>{
+   operatorReviews++;
    const changed={...f.store.get(created.workflowId),revision:2};
    f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
      .run(JSON.stringify(changed),created.workflowId);
@@ -758,5 +764,6 @@ test('Codex execution entry refuses an approval scope changed during asynchronou
  await assert.rejects(dispatchProduct([
    'resume-codex-workflow',created.workflowId,'--hash',created.workflowHash
  ],{store:f.store,execution}),/scope changed during authenticated admission/);
+ assert.equal(operatorReviews,1);
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
 });

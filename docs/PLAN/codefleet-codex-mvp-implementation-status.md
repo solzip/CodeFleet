@@ -627,3 +627,18 @@ reuse the earlier Operator grant. An offline negative regression covers both
 mutations with zero Host grant and zero Attempt. This is **not** a deployed
 Operator authentication provider, nor Host Live, protected verification or
 Objective acceptance. Windows/Linux CI for this new head is still required.
+
+## CI regression repair: scope-change fixture requires initial Workflow approval (fresh CI required)
+
+On `aab3191566667781f3fd8b5d393918cb6e4a354d`, both Windows and Linux
+GitHub Actions failed one of 235 offline Codex MVP tests. The existing
+`resume-codex-workflow` entry correctly rejected the scope-mutation fixture
+*before* authenticated Operator review because it had no Workflow approval;
+the fixture incorrectly expected a later authenticated-scope-change rejection.
+The regression fixture now creates a bounded explicit Local Workflow approval
+before Operator review, verifies that the Operator callback was actually
+entered once, and still changes the persisted Workflow revision during that
+review to assert rejection before Host grant or any Attempt. The product
+admission and approval rules remain unchanged. These are authored offline
+test corrections only; the new head requires its own Windows/Linux CI and
+native Host Live/final independent Objective acceptance remain UNVERIFIED.
