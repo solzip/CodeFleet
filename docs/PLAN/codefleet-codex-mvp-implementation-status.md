@@ -642,3 +642,18 @@ review to assert rejection before Host grant or any Attempt. The product
 admission and approval rules remain unchanged. These are authored offline
 test corrections only; the new head requires its own Windows/Linux CI and
 native Host Live/final independent Objective acceptance remain UNVERIFIED.
+
+## Authenticated Operator reviews the exact validated Contract/DAG (fresh CI required)
+
+The trusted `run-codex-workflow` and `resume-codex-workflow` entry now
+validates the stored source artifact and Workflow DAG against their pinned
+hashes and the existing Workflow validator **before** authenticated Operator
+review. The Operator receives deeply frozen copies of the actual source
+contract and Workflow graph, including WorkItems, dependencies, criteria and
+limits, rather than only opaque hashes. After asynchronous admission, both
+artifacts are validated again; a changed DAG cannot inherit the earlier review.
+Offline tests cover immutable reviewer scope, stale source pointers, altered
+DAGs and same-hash mutation during review with no Host grant or Attempt.
+This enables inspectable admission by a future trusted provider but **does
+not deploy Operator authentication**, authorize model calls or establish native
+Host Live or final Objective acceptance. New Windows/Linux CI is required.

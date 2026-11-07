@@ -19,6 +19,7 @@ import { inspectReviewedCodexPlan, inspectReviewedCodexPlanAtSource, prepareRevi
 import { readDeliveredObjectiveStatus } from './objective-status.mjs';
 import { isCodexMvpFacadeForStore } from './codex-mvp-facade.mjs';
 import { approval as requireWorkflowApproval } from '../workflow/persistence.mjs';
+import { validateWorkflow } from '../workflow/definition.mjs';
 
 export const help = `codefleet-alpha objective plan|run "goal" [repository]
   [--local-existing] (explicit existing Git working-tree Local contract; no Git writes)
@@ -173,6 +174,32 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       return hash({ mode: 'WORKFLOW_APPROVAL_V1', digest: row.digest,
         actor: row.actor ?? null, expires: row.expires });
     };
+    // The authenticated Operator must review the actual, validated source
+    // contract and DAG, not only opaque references. Reject tampered Store
+    // records before consuming an external authentication/approval decision.
+    const inspectContract = value => {
+      try {
+        const source = store.readArtifact(value.sourceRef);
+        if (!value.contract || value.contract.workflowHash !== value.contractHash ||
+            hash(value.contract) !== value.graphRef ||
+            hash(source) !== value.sourceRef)
+          throw Error('Workflow artifact binding mismatch');
+        validateWorkflow(value.contract, source);
+        return { source, graph: value.contract };
+      } catch {
+        throw Error('Codex Workflow Contract/DAG or source artifact invalid');
+      }
+    };
+    const inspected = inspectContract(run);
+    const inspectedHash = hash(inspected);
+    const freezeCopy = value => {
+      if (Array.isArray(value)) return Object.freeze(value.map(freezeCopy));
+      if (value && typeof value === 'object')
+        return Object.freeze(Object.fromEntries(
+          Object.entries(value).map(([key, entry]) => [key, freezeCopy(entry)])
+        ));
+      return value;
+    };
     const pinned = fingerprint(run);
     const pinnedApproval = approvalFingerprint(run);
     const authorizeOperator = admission.authorizeOperator;
@@ -182,7 +209,12 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       workflowId:runId, revision:run.revision, workflowHash:run.contractHash,
       sourceRef:run.sourceRef, graphRef:run.graphRef, repo:run.repo,
       base:run.base, resume:action === 'resume-codex-workflow',
-      workflowApprovalHash:pinnedApproval, protectedVerified:false
+      workflowApprovalHash:pinnedApproval, protectedVerified:false,
+      // Detached and deeply immutable: the reviewer can inspect every
+      // WorkItem dependency, acceptance criterion and source/budget limit.
+      // This is review context, not a substitute for Operator identity.
+      sourceContract:freezeCopy(inspected.source),
+      workflowContract:freezeCopy(inspected.graph)
     });
     if (await Reflect.apply(authorizeOperator, admission, [scope]) !== true)
       throw Error('Authenticated Codex Operator admission denied');
@@ -194,6 +226,8 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       throw Error('Codex Workflow scope changed during authenticated admission');
     if (approvalFingerprint(refreshed) !== pinnedApproval)
       throw Error('Codex Workflow approval changed during authenticated admission');
+    if (hash(inspectContract(refreshed)) !== inspectedHash)
+      throw Error('Codex Workflow Contract/DAG changed during authenticated admission');
     // The existing facade independently verifies current Workflow approval,
     // exact DAG, Host executable, budget, Lease and Host grant before dispatch.
     const data = await managedFacade.runExistingWorkflow(runId, { resume:scope.resume });

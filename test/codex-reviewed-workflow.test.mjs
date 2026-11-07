@@ -684,6 +684,12 @@ test('authenticated Codex entry preserves separate Workflow and managed Host gra
    assert.equal(Object.isFrozen(scope),true);
    assert.equal(scope.workflowHash,created.workflowHash);
    assert.equal(scope.resume,false);
+   assert.equal(scope.sourceContract.goal,goal);
+   assert.equal(scope.workflowContract.workflowHash,created.workflowHash);
+   assert.deepEqual(scope.workflowContract.items.map(item=>item.id),['change']);
+   assert.equal(Object.isFrozen(scope.sourceContract),true);
+   assert.equal(Object.isFrozen(scope.workflowContract.items[0].files),true);
+   assert.throws(()=>scope.workflowContract.items[0].files.push('src/extra.js'),TypeError);
    return true;
  }};
  const execution={codexAdmission:admission};
@@ -701,6 +707,52 @@ test('authenticated Codex entry preserves separate Workflow and managed Host gra
  admission.authorizeOperator=async()=>false;
  await assert.rejects(dispatchProduct(argv,{store:f.store,execution}),/Operator admission denied/);
  assert.equal(hostReviews,1);
+});
+
+test('authenticated Codex Operator review fails closed on changed source and DAG artifacts',async t=>{
+ const f=await fixture(t);
+ const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+   authorizeReview:async()=>true
+ });
+ approveWorkflow(f.store,created.workflowId,{
+   actor:'local-test',workflowHash:created.workflowHash,expiresAt:Date.now()+60000
+ });
+ const original=f.store.get(created.workflowId);
+ let operatorReviews=0,hostReviews=0;
+ const facade=createCodexMvpFacade(f.store,{
+   executable:process.execPath,model:'offline-fixture',enableHostTurns:true,
+   authorizeWorkflow:async()=>{hostReviews++;return true;},
+   verificationBackend:{prepare:async()=>{},verify:async()=>{},cleanup:async()=>{}}
+ });
+ const argv=['run-codex-workflow',created.workflowId,'--hash',created.workflowHash];
+ const execution={codexAdmission:{facade,authorizeOperator:async scope=>{
+   operatorReviews++;
+   assert.equal(scope.workflowContract.workflowHash,created.workflowHash);
+   // A late, same-hash persisted DAG mutation must not inherit this grant.
+   const current=f.store.get(created.workflowId);
+   f.store.db.prepare('UPDATE runs SET body=? WHERE id=?').run(JSON.stringify({
+     ...current,contract:{...current.contract,requiredVerification:false}
+   }),created.workflowId);
+   return true;
+ }}};
+ // Both stale source pointers and an altered DAG are rejected before review.
+ for(const changed of [
+   {...original,sourceRef:'0'.repeat(64)},
+   {...original,contract:{...original.contract,requiredVerification:false}}
+ ]) {
+   f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
+     .run(JSON.stringify(changed),created.workflowId);
+   await assert.rejects(dispatchProduct(argv,{store:f.store,execution}),
+     /Codex Workflow Contract\/DAG or source artifact invalid/);
+ }
+ assert.equal(operatorReviews,0);
+ f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
+   .run(JSON.stringify(original),created.workflowId);
+ await assert.rejects(dispatchProduct(argv,{store:f.store,execution}),
+   /Codex Workflow Contract\/DAG or source artifact invalid/);
+ assert.equal(operatorReviews,1);
+ assert.equal(hostReviews,0);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
 });
 
 test('Codex Operator admission pins current Workflow approval actor and expiry',async t=>{
