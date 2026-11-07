@@ -22,9 +22,13 @@ import { bootstrapContext, materializeTask, verifyTask } from './tasks.mjs';
 // Object identity prevents an untrusted adapter shaped like the facade from
 // being passed as an authenticated execution transport. This is not Operator
 // authentication; the trusted embedding must independently perform it.
-const facades = new WeakSet();
+// Keep the Store capability private. A genuine facade for another Store
+// must not execute a different Workflow after Operator review on this Store.
+const facades = new WeakMap();
 export const isCodexMvpFacade = value => value !== null &&
   typeof value === 'object' && facades.has(value);
+export const isCodexMvpFacadeForStore = (value, store) =>
+  isCodexMvpFacade(value) && facades.get(value) === store;
 const invalid = detail => { throw Error('Codex MVP trusted embedding: ' + detail); };
 const exactText = input => typeof input === 'string' && input.length > 0;
 const callable = input => typeof input === 'function';
@@ -419,6 +423,6 @@ export function createCodexMvpFacade(store, {
       return readDeliveredObjectiveStatus(store, workflowId);
     },
   });
-  facades.add(facade);
+  facades.set(facade, store);
   return facade;
 }

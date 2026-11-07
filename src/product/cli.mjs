@@ -17,7 +17,7 @@ import { prepareContractRevision, acceptContractRevision, revokeContractRevision
 import { repairProposalRequest } from './repair.mjs';
 import { inspectReviewedCodexPlan, inspectReviewedCodexPlanAtSource, prepareReviewedCodexWorkflow } from './codex-reviewed-workflow.mjs';
 import { readDeliveredObjectiveStatus } from './objective-status.mjs';
-import { isCodexMvpFacade } from './codex-mvp-facade.mjs';
+import { isCodexMvpFacadeForStore } from './codex-mvp-facade.mjs';
 
 export const help = `codefleet-alpha objective plan|run "goal" [repository]
   [--local-existing] (explicit existing Git working-tree Local contract; no Git writes)
@@ -144,7 +144,7 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       throw Error('Codex Workflow execution requires one Workflow ID and exact --hash only');
     const admission = execution?.codexAdmission;
     if (!admission || typeof admission.authorizeOperator !== 'function' ||
-        !isCodexMvpFacade(admission.facade))
+        !isCodexMvpFacadeForStore(admission.facade, store))
       throw Error('AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE: trusted Host Operator binding required');
     const runId = args[0], run = store.get(runId);
     if (!run || run.kind !== 'workflow' || run.contractHash !== o.hash ||

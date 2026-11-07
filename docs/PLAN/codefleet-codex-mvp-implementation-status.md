@@ -588,3 +588,17 @@ scope rotation without starting a Host Turn. This is an integration seam, **not*
 a deployed Operator authentication provider or a generally usable public Host
 command. Native Codex Host Live, protected execution and final Objective
 acceptance remain UNVERIFIED. The new head needs its own Windows/Linux CI.
+
+
+## Authenticated Codex entry Store binding (fresh CI required)
+
+A genuine trusted Codex MVP facade is now bound to its original Store object.
+The authenticated `run-codex-workflow` / `resume-codex-workflow` dispatcher
+rejects facades from another Store before consulting Operator authorization,
+even if another handle points to the same SQLite database. This prevents
+reviewing one Workflow connection and dispatching a different one through a
+legitimate but mismatched facade. Offline denial tests cover cross-database and
+same-database/different-handle mismatches with no Host admission or Attempt.
+This is **not** an Operator authentication provider, Host Live verification,
+protected execution or Objective acceptance. Windows/Linux CI for this new
+head must be evaluated independently.
