@@ -6,7 +6,7 @@ import { hash } from '../src/alpha/contract.mjs';
 import { hybridDefinition } from '../src/workflow/definition.mjs';
 import { tmpdir } from 'node:os';
 import { Store } from '../src/alpha/store.mjs';
-import { approveWorkflow } from '../src/workflow/persistence.mjs';
+import { approveWorkflow, reviseWorkflow } from '../src/workflow/persistence.mjs';
 import { createCodexMvpFacade } from '../src/product/codex-mvp-facade.mjs';
 import { git } from '../src/alpha/workspace.mjs';
 import { beginPlanning,submitPlanning } from '../src/hosts/planning.mjs';
@@ -1034,4 +1034,72 @@ test('reviewed Codex Workflow checkout freshness blocks dirty, cloned and change
   assert.equal(changedHead.data.status,'BLOCKED');
   assert.equal(f.store.events(created.workflowId).length,eventCount);
   assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+});
+
+test('reviewed Codex Workflow binds active revised DAG to its persisted revision record',async t=>{
+ const f=await fixture(t);
+ const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+   authorizeReview:async()=>true
+ });
+ const current=f.store.get(created.workflowId);
+ const {workflowHash:ignored,...graphBody}=current.contract;
+ const nextBody={...graphBody,workflowVersion:graphBody.workflowVersion+1};
+ const nextGraph={...nextBody,workflowHash:hash(nextBody)};
+ const revised=reviseWorkflow(f.store,created.workflowId,1,nextGraph);
+ assert.equal(revised.revision,2);
+ const reviewArgs=['review-codex-workflow',created.workflowId];
+ const valid=await productCli(reviewArgs,f.store.directory);
+ assert.equal(valid.exitCode,0);
+ assert.equal(valid.data.status,'REVIEW_REQUIRED');
+ assert.equal(valid.data.revision,2);
+ assert.equal(valid.data.approvalState,'MISSING_OR_EXPIRED');
+ approveWorkflow(f.store,created.workflowId,{
+   actor:'local-fixture',workflowHash:revised.contractHash,expiresAt:Date.now()+60_000
+ });
+ const original=f.store.db.prepare(
+   'SELECT digest,body FROM graph_revisions WHERE runId=? AND revision=2'
+ ).get(created.workflowId);
+ const deleteRevision=f.store.db.prepare(
+   'DELETE FROM graph_revisions WHERE runId=? AND revision=2'
+ );
+ const putRevision=f.store.db.prepare(
+   'INSERT OR REPLACE INTO graph_revisions (runId,revision,digest,body) VALUES (?,2,?,?)'
+ );
+ let operatorReviews=0,hostGrants=0;
+ const facade=createCodexMvpFacade(f.store,{
+   executable:process.execPath,model:'offline-fixture',enableHostTurns:true,
+   authorizeWorkflow:async()=>{hostGrants++;return false;}
+ });
+ const executeArgs=['run-codex-workflow',created.workflowId,'--hash',revised.contractHash];
+ const execution={codexAdmission:{facade,authorizeOperator:async()=>{
+   operatorReviews++;return true;
+ }}};
+ const blocked=async()=>{
+   const view=await productCli(reviewArgs,f.store.directory);
+   assert.equal(view.exitCode,2);
+   assert.equal(view.data.status,'BLOCKED');
+   assert.equal(view.data.executionGranted,false);
+   assert.equal(view.data.approvalState,undefined);
+   await assert.rejects(dispatchProduct(executeArgs,{store:f.store,execution}),
+     /originating Planning\\/Contract\\/DAG provenance invalid/);
+   assert.equal(operatorReviews,0);
+   assert.equal(hostGrants,0);
+   assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+ };
+ try {
+   // An unrecorded current revision must never inherit the earlier approval.
+   deleteRevision.run(created.workflowId);
+   await blocked();
+   // The new revision row must carry the exact recorded digest and graph body.
+   putRevision.run(created.workflowId,'0'.repeat(64),original.body);
+   await blocked();
+   putRevision.run(created.workflowId,original.digest,JSON.stringify(current.contract));
+   await blocked();
+ }finally{
+   putRevision.run(created.workflowId,original.digest,original.body);
+ }
+ const restored=await productCli(reviewArgs,f.store.directory);
+ assert.equal(restored.exitCode,0);
+ assert.equal(restored.data.status,'REVIEW_REQUIRED');
+ assert.equal(restored.data.approvalState,'CURRENT_WORKFLOW_APPROVAL_VALID');
 });

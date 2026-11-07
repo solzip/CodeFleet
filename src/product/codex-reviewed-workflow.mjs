@@ -251,6 +251,18 @@ export function inspectReviewedCodexWorkflow(store, workflowId) {
         run.base !== plan.sourceBaseline || hash(run.repo) !== plan.repositoryId ||
         run.contract?.workflowHash !== run.contractHash ||
         hash(run.contract) !== run.graphRef) return blocked;
+    // The active DAG must be exactly the one durably recorded for the current
+    // revision. A valid current graphRef and a matching first Planning DAG do
+    // not attest a later, unrecorded or rewritten revision row.
+    const active=store.db.prepare(
+      'SELECT digest,body FROM graph_revisions WHERE runId=? AND revision=?'
+    ).get(workflowId,run.revision);
+    const activeGraph=active && JSON.parse(active.body);
+    if (!active || !activeGraph ||
+        active.digest !== run.contractHash ||
+        activeGraph.workflowHash !== active.digest ||
+        activeGraph.workflowVersion !== run.revision ||
+        hash(activeGraph) !== hash(run.contract)) return blocked;
     const source=store.readArtifact(run.sourceRef);
     if (hash(source) !== run.sourceRef ||
         hash(source) !== plan.sourceContractHash ||

@@ -737,3 +737,19 @@ admission-time mutation and verifies zero Host grants/Attempts. This prevents
 a history/provenance integrity bypass; it does **not** authenticate an
 Operator, grant a Host, prove native Codex Live or accept an Objective.
 Windows/Linux CI for this change must be checked on its own commit.
+
+
+## Active Codex Workflow revision row is required for review and Operator admission (fresh CI required)
+
+A valid first Planning DAG is not sufficient to authorize a subsequently revised
+Workflow. The public read-only `review-codex-workflow` projection now checks
+that the **current** Workflow DAG has a matching persisted `graph_revisions`
+row for its exact revision, including digest, complete body and
+`workflowVersion`. A missing row, stale digest or rewritten current body
+returns BLOCKED, and the authenticated Codex CLI reuses this check before any
+Operator or managed-Host grant. An offline regression starts with a legitimate
+revision-2 Workflow, checks its normal pending/approved review state, and then
+rejects missing/mismatched revision rows without Host grants or Attempts.
+This does not authenticate an Operator, grant execution, prove native Codex
+Host Live or independently accept an Objective. Fresh Windows/Linux CI must
+be checked for this commit.
