@@ -19,6 +19,12 @@ import { requireTrustedObjectiveCriteria } from './objective-judge.mjs';
 import { prepareReviewedCodexWorkflow } from './codex-reviewed-workflow.mjs';
 import { bootstrapContext, materializeTask, verifyTask } from './tasks.mjs';
 
+// Object identity prevents an untrusted adapter shaped like the facade from
+// being passed as an authenticated execution transport. This is not Operator
+// authentication; the trusted embedding must independently perform it.
+const facades = new WeakSet();
+export const isCodexMvpFacade = value => value !== null &&
+  typeof value === 'object' && facades.has(value);
 const invalid = detail => { throw Error('Codex MVP trusted embedding: ' + detail); };
 const exactText = input => typeof input === 'string' && input.length > 0;
 const callable = input => typeof input === 'function';
@@ -138,7 +144,7 @@ export function createCodexMvpFacade(store, {
       ? 'HOST_WORKSPACE_WRITE_UNPROTECTED' : 'HOST_READ_ONLY_PROPOSAL',
     protectedVerified: false
   });
-  return Object.freeze({
+  const facade = Object.freeze({
     // A plan is just an untrusted structured draft. No plan is an approval or
     // completed Objective. The existing planning validator owns citations.
     async planExisting(repo, objective, { cwd, version = '0.166.0' } = {}) {
@@ -413,4 +419,6 @@ export function createCodexMvpFacade(store, {
       return readDeliveredObjectiveStatus(store, workflowId);
     },
   });
+  facades.add(facade);
+  return facade;
 }

@@ -569,3 +569,22 @@ execution authority remain separate. Offline positive, idempotence, altered
 hash, prohibited execution-flag and dirty-checkout tests were authored. The new
 commit requires its own Windows/Linux CI; native Codex Host Live and final
 independent Objective acceptance remain UNVERIFIED.
+
+## Authenticated embedding gate for reviewed Codex Workflow execution (fresh CI required)
+
+The Objective command dispatcher now routes `run-codex-workflow` and
+`resume-codex-workflow` only through an embedding-injected authenticated
+Operator admission function and a genuine `createCodexMvpFacade` instance.
+The request is bound to the exact Workflow hash, revision, source/graph refs,
+repository and baseline; asynchronous authorization must preserve this scope.
+The facade then independently requires the existing persisted Workflow approval,
+Host executable identity, bounded budget/Lease and exact managed Host execution
+grant before entering the Controller. The plain public CLI explicitly fails
+closed **before Store open** because no authenticated Host binding is installed.
+Only the trusted in-process dispatcher can supply this dependency; CLI flags,
+actor names and JSON cannot do so. Negative offline tests cover missing or fake
+admission, no Workflow approval, denied Host grant, authentication denial and
+scope rotation without starting a Host Turn. This is an integration seam, **not**
+a deployed Operator authentication provider or a generally usable public Host
+command. Native Codex Host Live, protected execution and final Objective
+acceptance remain UNVERIFIED. The new head needs its own Windows/Linux CI.

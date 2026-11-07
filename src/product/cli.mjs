@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { hash } from '../alpha/contract.mjs';
 import { Store } from '../alpha/store.mjs';
 import { execute } from '../alpha/controller.mjs';
 import { createRegistry } from '../providers/registry.mjs';
@@ -16,6 +17,7 @@ import { prepareContractRevision, acceptContractRevision, revokeContractRevision
 import { repairProposalRequest } from './repair.mjs';
 import { inspectReviewedCodexPlan, inspectReviewedCodexPlanAtSource, prepareReviewedCodexWorkflow } from './codex-reviewed-workflow.mjs';
 import { readDeliveredObjectiveStatus } from './objective-status.mjs';
+import { isCodexMvpFacade } from './codex-mvp-facade.mjs';
 
 export const help = `codefleet-alpha objective plan|run "goal" [repository]
   [--local-existing] (explicit existing Git working-tree Local contract; no Git writes)
@@ -32,6 +34,8 @@ codefleet-alpha objective workflow-progress <workflow-id> (read-only DAG/Repair 
 codefleet-alpha objective review-codex-plan <planning-session-id> [--repository ABSOLUTE_PATH] (read-only pinned Contract/DAG review; optional clean Git checkout check, never grants execution)
 codefleet-alpha objective prepare-codex-workflow <planning-session-id> --repository ABSOLUTE_PATH --hash <workflowHash> --source-hash <sourceContractHash>
   (explicitly confirm both hashes from review-codex-plan; create only a pending unapproved Workflow, never an execution or Operator grant)
+codefleet-alpha objective run-codex-workflow|resume-codex-workflow <workflow-id> --hash <workflowHash>
+  (authenticated embedding only; separate Workflow approval and exact Host grant; ordinary CLI remains BLOCKED)
 codefleet-alpha objective proposal-request <task-id> <item-id> (eligible source context only; no model call or execution approval)
 codefleet-alpha objective repair-proposal-request <task-id> (settled Local failure context; no model call or approval)
 codefleet-alpha objective proposal-batch <task-id> [OPTIONS.json] (maxAgents 1..3, parallelBenefit; proposal-only, no model grant)
@@ -131,6 +135,48 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       hostLiveAcceptance: 'UNVERIFIED',
       nextAction: 'Separate Workflow approval and trusted managed-Host execution grant required'
     } };
+  }
+  if (action === 'run-codex-workflow' || action === 'resume-codex-workflow') {
+    // Only an authenticated Host embedding can provide this dependency.
+    // Never accept an Operator identity, callback or approval from CLI JSON.
+    if (args.length !== 1 || !args[0] || args[0].startsWith('-') ||
+        Object.keys(o).length !== 1 || !/^[a-f0-9]{64}$/.test(o.hash ?? ''))
+      throw Error('Codex Workflow execution requires one Workflow ID and exact --hash only');
+    const admission = execution?.codexAdmission;
+    if (!admission || typeof admission.authorizeOperator !== 'function' ||
+        !isCodexMvpFacade(admission.facade))
+      throw Error('AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE: trusted Host Operator binding required');
+    const runId = args[0], run = store.get(runId);
+    if (!run || run.kind !== 'workflow' || run.contractHash !== o.hash ||
+        !Number.isInteger(run.revision))
+      throw Error('Codex Workflow execution requires an exact current Workflow hash');
+    const fingerprint = value => hash({
+      id:value.id, revision:value.revision, workflowHash:value.contractHash,
+      sourceRef:value.sourceRef, graphRef:value.graphRef, repo:value.repo,
+      base:value.base, state:value.state, control:value.control ?? null
+    });
+    const pinned = fingerprint(run);
+    const authorizeOperator = admission.authorizeOperator;
+    const managedFacade = admission.facade;
+    const scope = Object.freeze({
+      kind:'CODEFLEET_AUTHENTICATED_CODEX_ENTRY_V1',
+      workflowId:runId, revision:run.revision, workflowHash:run.contractHash,
+      sourceRef:run.sourceRef, graphRef:run.graphRef, repo:run.repo,
+      base:run.base, resume:action === 'resume-codex-workflow',
+      protectedVerified:false
+    });
+    if (await Reflect.apply(authorizeOperator, admission, [scope]) !== true)
+      throw Error('Authenticated Codex Operator admission denied');
+    const refreshed = store.get(runId);
+    if (execution.codexAdmission !== admission ||
+        admission.authorizeOperator !== authorizeOperator ||
+        admission.facade !== managedFacade || !refreshed ||
+        fingerprint(refreshed) !== pinned)
+      throw Error('Codex Workflow scope changed during authenticated admission');
+    // The existing facade independently verifies current Workflow approval,
+    // exact DAG, Host executable, budget, Lease and Host grant before dispatch.
+    const data = await managedFacade.runExistingWorkflow(runId, { resume:scope.resume });
+    return { exitCode:data.objective?.objectiveComplete === true ? 0 : 2, data };
   }
   if (action === 'workflow-progress') {
     if (args.length !== 1 || Object.keys(o).length || !args[0] || args[0].startsWith('-'))
@@ -326,6 +372,8 @@ export async function productCli(argv, directory) {
   let store;
   try {
     requireDurableEntry(argv); // Before opening Store or reading caller JSON.
+    if (['run-codex-workflow','resume-codex-workflow'].includes(argv[0]))
+      throw Error('AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE: plain CLI has no authenticated Host Operator binding');
     if (!argv[0] || ['help', '--help'].includes(argv[0])) return await dispatchProduct(argv);
     store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request', 'delivered-status', 'workflow-progress', 'review-codex-plan'].includes(argv[0]) });
     return await dispatchProduct(argv, { store });

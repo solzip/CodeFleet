@@ -609,3 +609,82 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
   assert.equal(drifted.objectiveComplete,false);
   assert.equal(drifted.targetDrift,true);
 });
+
+test('public Codex Workflow execution is unavailable without authenticated Host admission',async t=>{
+ const f=await fixture(t);
+ const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+   authorizeReview:async()=>true
+ });
+ const argv=['run-codex-workflow',created.workflowId,'--hash',created.workflowHash];
+ for (const action of ['run-codex-workflow','resume-codex-workflow']) {
+   const response=await productCli([action,...argv.slice(1)],f.store.directory);
+   assert.equal(response.exitCode,1);
+   assert.match(response.data.error,/AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE/);
+ }
+ await assert.rejects(dispatchProduct(argv,{store:f.store}),/AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE/);
+ await assert.rejects(dispatchProduct(argv,{store:f.store,execution:{
+   codexAdmission:{authorizeOperator:async()=>true,facade:{runExistingWorkflow:async()=>{}}}
+ }}),/AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE/);
+ for(const extra of [['--allow-model'],['--actor','fake'],['--trust','fake']]) {
+   await assert.rejects(dispatchProduct([...argv,...extra],{store:f.store}),
+     /Codex Workflow execution requires one Workflow ID and exact --hash only/);
+ }
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+});
+
+test('authenticated Codex entry preserves separate Workflow and managed Host grants',async t=>{
+ const f=await fixture(t);
+ const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+   authorizeReview:async()=>true
+ });
+ const argv=['run-codex-workflow',created.workflowId,'--hash',created.workflowHash];
+ let hostReviews=0; const operatorScopes=[];
+ const facade=createCodexMvpFacade(f.store,{
+   executable:process.execPath,model:'test-codex',enableHostTurns:true,
+   verificationBackend:{prepare:async()=>{},verify:async()=>{},cleanup:async()=>{}},
+   authorizeWorkflow:async()=>{hostReviews++;return false;}
+ });
+ const admission={facade,authorizeOperator:async scope=>{
+   operatorScopes.push(scope);
+   assert.equal(Object.isFrozen(scope),true);
+   assert.equal(scope.workflowHash,created.workflowHash);
+   assert.equal(scope.resume,false);
+   return true;
+ }};
+ const execution={codexAdmission:admission};
+ await assert.rejects(dispatchProduct(argv,{store:f.store,execution}),/Workflow approval absent/);
+ assert.equal(hostReviews,0);
+ approveWorkflow(f.store,created.workflowId,{
+   actor:'local-test',workflowHash:created.workflowHash,expiresAt:Date.now()+60000
+ });
+ await assert.rejects(dispatchProduct(argv,{store:f.store,execution}),/grant denied/);
+ assert.equal(hostReviews,1);
+ assert.equal(operatorScopes.length,2);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+ // A denied authenticated session never reaches the managed Host reviewer.
+ admission.authorizeOperator=async()=>false;
+ await assert.rejects(dispatchProduct(argv,{store:f.store,execution}),/Operator admission denied/);
+ assert.equal(hostReviews,1);
+});
+
+test('Codex execution entry refuses an approval scope changed during asynchronous authentication',async t=>{
+ const f=await fixture(t);
+ const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+   authorizeReview:async()=>true
+ });
+ const facade=createCodexMvpFacade(f.store,{
+   executable:process.execPath,model:'test-codex',enableHostTurns:true,
+   verificationBackend:{prepare:async()=>{},verify:async()=>{},cleanup:async()=>{}},
+   authorizeWorkflow:async()=>{throw Error('Must not reach Host execution review');}
+ });
+ const execution={codexAdmission:{facade,authorizeOperator:async()=>{
+   const changed={...f.store.get(created.workflowId),revision:2};
+   f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
+     .run(JSON.stringify(changed),created.workflowId);
+   return true;
+ }}};
+ await assert.rejects(dispatchProduct([
+   'resume-codex-workflow',created.workflowId,'--hash',created.workflowHash
+ ],{store:f.store,execution}),/scope changed during authenticated admission/);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+});
