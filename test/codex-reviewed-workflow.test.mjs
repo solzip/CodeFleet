@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp,mkdir,writeFile,rm,realpath } from 'node:fs/promises';
+import { mkdtemp,mkdir,writeFile,readFile,rm,realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { hash } from '../src/alpha/contract.mjs';
 import { hybridDefinition } from '../src/workflow/definition.mjs';
@@ -450,4 +450,108 @@ test('reviewed Codex Goal to Workflow still requires independent Workflow and Ho
   const status=await api.status(created.workflowId);
   assert.equal(status.objectiveComplete,false);
   assert.equal(status.deliveryRecorded,false);
+});
+test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivered Objective Judge',async t=>{
+  // This joins the persisted Host Planning result to the *same* Controller and
+  // delivery path used by the synthetic A→B fixture. No model, credential,
+  // real Host executable, protected backend or real user repository is used.
+  const f=await fixture(t);
+  const hostTurns=[], verifierCalls=[], grants=[];
+  const approvedCriteria=[{id:'C1',requiredAuthority:'LOCAL_EXECUTED'}];
+  const api=createCodexMvpFacade(f.store,{
+    executable:process.execPath,model:'OFFLINE_FAKE_HOST',enableHostTurns:true,
+    authorizeReviewedWorkflow:async scope=>{
+      assert.equal(scope.executionGranted,false);
+      assert.equal(scope.workflowHash,f.result.workflowPreview.workflow.workflowHash);
+      return true;
+    },
+    authorizeWorkflow:async scope=>{
+      grants.push(scope);
+      assert.equal(scope.objective,goal);
+      assert.deepEqual(scope.workItems.map(item=>item.id),['change']);
+      assert.deepEqual(scope.destinationCriteria,approvedCriteria);
+      assert.equal(scope.executionMode,'HOST_READ_ONLY_PROPOSAL');
+      assert.equal(scope.protectedVerified,false);
+      return true;
+    },
+    transport:async request=>{
+      const prompt=JSON.parse(request.prompt);
+      assert.equal(prompt.workItemId,'change');
+      hostTurns.push(prompt.workItemId);
+      return {
+        threadId:'fake-planning-chain-thread',turnId:'fake-planning-chain-turn',
+        terminalStatus:'completed',authority:'PROVIDER_REPORTED_ONLY',
+        protectedVerified:false,executionMode:'HOST_READ_ONLY_PROPOSAL',
+        text:JSON.stringify({summary:'Offline fixture edit only',
+          edits:[{path:'src/a.js',oldText:'return x+y;',newText:'return x-y;'}]})
+      };
+    },
+    verificationBackend:{
+      prepare:async()=>{},
+      verify:async ({directory,tests})=>{
+        verifierCalls.push([...tests]);
+        const contents=await readFile(join(directory,'src/a.js'),'utf8');
+        const passed=contents.includes('return x-y;');
+        return {authority:'HARNESS_EXECUTED',tests:tests.length,
+          passed:passed?tests.length:0,failed:passed?0:tests.length,
+          skipped:0,todo:0,exitCode:passed?0:1,interrupted:false,
+          truncated:false,testNames:tests};
+      },
+      cleanup:async()=>{}
+    },
+    unknownCostBudget:{authorize:async request=>request.unknownCostTurns<=2},
+    destinationDelivery:{
+      approvedCriteria,
+      authorize:async scope=>{
+        assert.deepEqual(scope.objectiveCriteria,approvedCriteria);
+        assert.equal(scope.objectiveCriteriaHash,hash(approvedCriteria));
+        assert.equal((await realpath(scope.destination)).toLowerCase(),
+          (await realpath(f.repo)).toLowerCase());
+        return true;
+      },
+      verify:async ({run,delivery,candidate})=>{
+        assert.equal(delivery.targetTreeHash,candidate.candidateHash);
+        assert.match(await readFile(join(f.repo,'src/a.js'),'utf8'),/return x-y;/);
+        const evidence={
+          kind:'OBJECTIVE_CRITERION_OBSERVATION_V1',
+          objectiveId:run.id,revision:run.revision,criterionId:'C1',
+          targetTreeHash:delivery.targetTreeHash,authority:'LOCAL_EXECUTED',
+          independentObserver:true,commandHash:'a'.repeat(64),
+          observationHash:'b'.repeat(64),complete:true,tests:1,passed:1,failed:0,
+          skipped:0,todo:0,exitCode:0,interrupted:false,truncated:false,
+          integrity:'MATCHED',verificationBackend:'SYNTHETIC_TEST_ONLY',
+          protection:'UNPROTECTED'
+        };
+        const ref=f.store.artifact(evidence);
+        return {criteria:approvedCriteria,evidenceRefs:{C1:ref},
+          readVerifiedEvidence:ref=>f.store.readArtifact(ref)};
+      }
+    }
+  });
+  const created=await api.prepareReviewedExistingWorkflow(f.repo,f.request.sessionId);
+  assert.equal(created.state,'WAITING_APPROVAL');
+  assert.equal(created.executionGranted,false);
+  const before=await api.status(created.workflowId);
+  assert.equal(before.objectiveComplete,false);
+  assert.equal(hostTurns.length,0);
+  approveWorkflow(f.store,created.workflowId,{
+    actor:'offline-fixture-reviewer',workflowHash:created.workflowHash,
+    expiresAt:Date.now()+60_000
+  });
+  const completed=await api.runExistingWorkflow(created.workflowId);
+  assert.equal(completed.workflowState,'COMPLETED',completed.objective?.reason);
+  assert.equal(completed.objective.status,'COMPLETE',completed.objective?.reason);
+  assert.equal(completed.objective.protection,'UNPROTECTED');
+  assert.equal(completed.hostLiveAcceptance,'UNVERIFIED');
+  assert.equal(completed.protectedVerified,false);
+  assert.deepEqual(hostTurns,['change']);
+  assert.deepEqual(verifierCalls,[['test/a.test.js']]);
+  assert.equal(grants.length,1);
+  const observed=await dispatchProduct(['delivered-status',created.workflowId],{store:f.store});
+  assert.equal(observed.exitCode,0);
+  assert.equal(observed.data.objectiveComplete,true);
+  await writeFile(join(f.repo,'src/a.js'),'user drift after delivery');
+  const drifted=await api.status(created.workflowId);
+  assert.equal(drifted.objectiveComplete,false);
+  assert.equal(drifted.targetDrift,true);
 });

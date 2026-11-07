@@ -512,3 +512,17 @@ method-identity fence, not authentication of the embedding, attestation of a
 protected backend, or protection from internal backend state mutation and
 OS-level races. Native Codex Host Live and independent Objective acceptance
 remain UNVERIFIED. This head needs its own Windows/Linux CI result.
+
+## Validated Codex Goal through approved synthetic Host delivery (new CI required)
+
+An offline integration fixture now starts with persisted VALIDATED Codex Host
+Planning, applies independent Contract/DAG review, creates a pending Workflow,
+records a separate explicit Local Workflow approval and requires a managed-Host
+execution grant. It then reuses the real Controller, Candidate, local delivery,
+criterion Evidence and read-only delivered Objective Judge with an injected
+**fake** Codex Host transport and **fake** verifier. It checks that no Host
+Turn occurs before approval, the final Objective stays `UNPROTECTED`, and
+post-delivery source drift revokes the previously complete read-only status.
+This is a synthetic cross-module regression, **not** native Codex Host Live,
+OS-authenticated Operator admission, protected verification or final real
+project acceptance. This new commit requires its own Windows/Linux CI run.
