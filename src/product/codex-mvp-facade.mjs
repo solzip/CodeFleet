@@ -130,6 +130,10 @@ export function createCodexMvpFacade(store, {
       ...(item.roles ? {roles: Object.freeze({...item.roles})} : {}),
       ...(item.resources ? {resources: Object.freeze([...item.resources])} : {})
     }))),
+    // Subscription usage has no reliable USD amount. The execution reviewer
+    // must see whether a separate exact owner cost grant is available.
+    unknownUsageAuthorization: callable(unknownCostBudget?.authorize)
+      ? 'EXACT_OWNER_GRANT_REQUIRED' : 'BLOCKED_WITHOUT_OWNER_GRANT',
     executionMode: workspaceWrite
       ? 'HOST_WORKSPACE_WRITE_UNPROTECTED' : 'HOST_READ_ONLY_PROPOSAL',
     protectedVerified: false
@@ -335,6 +339,10 @@ export function createCodexMvpFacade(store, {
         authorize: destinationDelivery.authorize,
         verify: destinationDelivery.verify
       }) : null;
+      // The independent unknown-subscription-usage gate is a separate owner
+      // authorization. A mutable embedding must not replace that callback
+      // while the main managed-Host execution grant is under review.
+      const unknownCostAuthorize = unknownCostBudget?.authorize;
       const scope = callScope(current, resume, pinnedExecutable);
       if (await authorizeWorkflow(scope) !== true)
         invalid('Exact managed Workflow execution grant denied');
@@ -359,6 +367,8 @@ export function createCodexMvpFacade(store, {
       if (destinationMethods && Object.entries(destinationMethods).some(([name, method]) =>
         destinationDelivery[name] !== method))
         invalid('Destination delivery authority changed while awaiting trusted grant');
+      if (unknownCostBudget?.authorize !== unknownCostAuthorize)
+        invalid('Unknown-cost budget authority changed while awaiting trusted grant');
       // Bind Controller to the reviewed methods while preserving the backend's
       // original receiver. This is not independent backend attestation.
       const pinnedVerifier = Object.freeze(Object.fromEntries(
@@ -372,7 +382,12 @@ export function createCodexMvpFacade(store, {
         ...invokeTransport
       });
       const dependencies = { hostExecution, verificationBackend: pinnedVerifier,
-        ...(unknownCostBudget ? { unknownCostBudget } : {}),
+        // Pass only the originally reviewed callable. In particular, a later
+        // method-slot replacement cannot turn a denied unknown-cost grant into
+        // authorization for another billable WorkItem.
+        ...(callable(unknownCostAuthorize) ? { unknownCostBudget: Object.freeze({
+          authorize: (...args) => Reflect.apply(unknownCostAuthorize, unknownCostBudget, args)
+        }) } : {}),
         ...(repairPolicy ? { repairPolicy } : {}),
         // Use exactly the reviewed criterion snapshot for this execution.
         // A later mutation of the embedding's array cannot retarget delivery.

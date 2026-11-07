@@ -539,3 +539,16 @@ regressions cover both callback replacements with zero delivery effects. This
 does not authenticate the embedding, attest the verifier's internals or provide
 OS isolation; native Codex Host Live and final Objective acceptance remain
 UNVERIFIED. Windows/Linux CI for this new head must be evaluated separately.
+
+## Managed Host unknown-cost authority frozen across execution review (fresh CI required)
+
+The trusted managed-Host Workflow review now explicitly displays whether
+continuation after unpriced Codex subscription usage needs an independent
+exact owner grant or is blocked by default. The separate unknown-cost grant
+callback is pinned before asynchronous Workflow review, checked again before
+Controller entry and passed to the existing Controller as a bound function.
+Replacing its method during review cannot silently authorize another billable
+WorkItem. Two offline negative/readability regressions cover both the swapped
+callback and default-denied review scope. This does **not** authorize a budget,
+measure subscription cost, authenticate a public Operator or verify Host Live.
+The new head needs its own Windows/Linux CI before claiming offline PASS.

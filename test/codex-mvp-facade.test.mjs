@@ -625,3 +625,39 @@ test('managed Host rejects delivery approval or independent observer replaced du
     assert.equal(deliveryCalls, 0);
   }
 });
+
+test('managed Host rejects unknown-cost owner authority changed during Workflow review', async () => {
+  const { store } = fixture();
+  let reviews = 0, budgetCalls = 0;
+  const costBudget = {
+    authorize: async () => { budgetCalls++; return false; }
+  };
+  const api = createCodexMvpFacade(store, {
+    executable: process.execPath, model: 'fixture',
+    enableHostTurns: true, verificationBackend: backend,
+    unknownCostBudget: costBudget,
+    authorizeWorkflow: async scope => {
+      reviews++;
+      assert.equal(scope.unknownUsageAuthorization, 'EXACT_OWNER_GRANT_REQUIRED');
+      costBudget.authorize = async () => { budgetCalls++; return true; };
+      return true;
+    }
+  });
+  await assert.rejects(api.runExistingWorkflow('run-fixture'),
+    /Unknown-cost budget authority changed while awaiting trusted grant/);
+  assert.equal(reviews, 1);
+  assert.equal(budgetCalls, 0);
+});
+
+test('managed Host review discloses unknown-cost authorization disabled by default', async () => {
+  const { store } = fixture();
+  const api = createCodexMvpFacade(store, {
+    executable: process.execPath, model: 'fixture',
+    enableHostTurns: true, verificationBackend: backend,
+    authorizeWorkflow: async scope => {
+      assert.equal(scope.unknownUsageAuthorization, 'BLOCKED_WITHOUT_OWNER_GRANT');
+      return false;
+    }
+  });
+  await assert.rejects(api.runExistingWorkflow('run-fixture'), /grant denied/);
+});
