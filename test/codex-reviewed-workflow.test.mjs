@@ -289,7 +289,9 @@ test('submitted Host discovery drift is blocked before public review or independ
     assert.equal(reviewed,0);
   }
   assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
-  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+  // A denied review must not initialize Workflow storage just to count attempts.
+  // Absence of the table proves there were no durable attempts or migration effects.
+  assert.equal(f.store.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_attempts'").get(),undefined);
 });
 test('a read-only Store without Host planning records reports UNAVAILABLE without migration',async t=>{
  const directory=await mkdtemp(join(tmpdir(),'codefleet-codex-review-empty-'));
