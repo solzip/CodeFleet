@@ -545,7 +545,9 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
   assert.equal(completed.hostLiveAcceptance,'UNVERIFIED');
   assert.equal(completed.protectedVerified,false);
   assert.deepEqual(hostTurns,['change']);
-  assert.deepEqual(verifierCalls,[['test/a.test.js']]);
+  // The Controller independently checks baseline and candidate for both the
+  // WorkItem and final integration, using the same pinned regression suite.
+  assert.deepEqual(verifierCalls,Array.from({length:4},()=>['test/a.test.js']));
   assert.equal(grants.length,1);
   const observed=await dispatchProduct(['delivered-status',created.workflowId],{store:f.store});
   assert.equal(observed.exitCode,0);
