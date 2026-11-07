@@ -602,3 +602,14 @@ same-database/different-handle mismatches with no Host admission or Attempt.
 This is **not** an Operator authentication provider, Host Live verification,
 protected execution or Objective acceptance. Windows/Linux CI for this new
 head must be evaluated independently.
+
+
+## Windows CI: close secondary SQLite connections before fixture teardown (fresh CI required)
+
+The authenticated Codex Store-identity regression now closes both deliberately opened
+secondary Store handles in a `finally` block **before** the shared fixture deletes
+its temporary SQLite database. On the previous head `c27b2699`, Linux CI passed,
+but Windows CI failed with `EBUSY` unlinking `state.sqlite`: the secondary close
+hooks ran after the fixture cleanup hook. This is test resource-lifetime repair,
+not an Operator authentication implementation or Host Live verification. The new
+head requires independent Windows/Linux CI results before claiming this fix passed.

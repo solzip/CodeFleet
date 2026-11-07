@@ -644,23 +644,27 @@ test('authenticated Codex entry refuses genuine facades bound to another Store c
    new Store(join(f.store.directory,'unrelated-state')),
    new Store(f.store.directory)
  ];
- for(const other of others) t.after(()=>other.close());
- let operatorCalls=0,hostCalls=0;
- for(const other of others) {
-   const foreignFacade=createCodexMvpFacade(other,{
-     executable:process.execPath,model:'offline-test',enableHostTurns:true,
-     authorizeWorkflow:async()=>{hostCalls++;return true;},
-     verificationBackend:{prepare:async()=>{},verify:async()=>{},cleanup:async()=>{}}
-   });
-   await assert.rejects(dispatchProduct(argv,{store:f.store,execution:{
-     codexAdmission:{facade:foreignFacade,authorizeOperator:async()=>{
-       operatorCalls++;return true;
-     }}
-   }}),/AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE/);
+ // Close the extra SQLite connections before the fixture removes its Windows temp directory.
+ try {
+   let operatorCalls=0,hostCalls=0;
+   for(const other of others) {
+     const foreignFacade=createCodexMvpFacade(other,{
+       executable:process.execPath,model:'offline-test',enableHostTurns:true,
+       authorizeWorkflow:async()=>{hostCalls++;return true;},
+       verificationBackend:{prepare:async()=>{},verify:async()=>{},cleanup:async()=>{}}
+     });
+     await assert.rejects(dispatchProduct(argv,{store:f.store,execution:{
+       codexAdmission:{facade:foreignFacade,authorizeOperator:async()=>{
+         operatorCalls++;return true;
+       }}
+     }}),/AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE/);
+   }
+   assert.equal(operatorCalls,0);
+   assert.equal(hostCalls,0);
+   assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+ } finally {
+  for(const other of others) other.close();
  }
- assert.equal(operatorCalls,0);
- assert.equal(hostCalls,0);
- assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
 });
 
 test('authenticated Codex entry preserves separate Workflow and managed Host grants',async t=>{
