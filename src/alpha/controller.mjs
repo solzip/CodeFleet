@@ -9,8 +9,13 @@ import { propose } from './provider.mjs';
 import { ProviderError, requireProposal } from '../providers/interface.mjs';
 import { createRegistry, selectProvider } from '../providers/registry.mjs';
 import { readyBatch, validateWorkflow } from '../workflow/definition.mjs';
+import { predecessorInput, applyPredecessorOverlay } from '../workflow/predecessor-context.mjs';
+import { applyLocalDelivery, pinnedObjectiveDeliveryIntent } from '../product/controlled-delivery.mjs';
+import { evaluateDeliveredObjective, requireTrustedObjectiveCriteria } from '../product/objective-judge.mjs';
+import { approvedDevelopmentBaseline } from './development-baseline.mjs';
 import { delegate, sendMessage, receiveMessages } from '../workflow/collaboration.mjs';
 import * as workflowStore from '../workflow/persistence.mjs';
+import { enableRepairStorage, reserveRepairGeneration } from '../workflow/repair-generations.mjs';
 import { matchTestIdentity } from './verifier.mjs';
 import { deliver } from './delivery.mjs';
 import { workflowGuard } from '../hosts/workflow-authorization.mjs';
@@ -131,9 +136,35 @@ export async function execute(store, id, dependencies = {}, options = {}) {
     }
     const baseline = store.readArtifact(run.baselineHash);
     if (!isFailingBaseline(baseline)) {
-      save('WAITING_HUMAN', 'Alpha requires an executed failing regression test before code generation. Add a test for the requested behavior and create a new run.'); return run;
+      // Development work may have a green baseline. A trusted integration
+      // must authorize this exact run/contract/baseline; ordinary Alpha
+      // regressions and unsupported/empty evidence remain fail-closed.
+      const authorized = typeof dependencies.developmentBaseline?.authorize === 'function'
+        ? await dependencies.developmentBaseline.authorize({
+            runId:run.id,base:run.base,contractHash:run.contractHash,
+            baselineHash:run.baselineHash,baseline
+          }) : false;
+      guard();
+      if (authorized !== true) {
+        save('WAITING_HUMAN', 'Green baseline development requires explicit trusted authorization'); return run;
+      }
+      run.developmentBaselineRef = store.artifact({
+        kind:'APPROVED_GREEN_BASELINE_V1',runId:run.id,base:run.base,
+        contractHash:run.contractHash,baselineHash:run.baselineHash,
+        authorizedBy:'TRUSTED_INTEGRATION'
+      });
+      if (!approvedDevelopmentBaseline(store,run)) {
+        save('WAITING_HUMAN', 'Green baseline lacks independent protected test evidence'); return run;
+      }
+      save('READY', 'Independent green baseline explicitly admitted for development');
     }
-    let current = { ...originals }; let feedback = null;
+    let current = { ...originals };
+    let feedback = run.repairEvidenceRef ? {
+      ...store.readArtifact(run.repairEvidenceRef),
+      previousProposal: run.repairProposalRef
+        ? store.readArtifact(run.repairProposalRef).proposal : null,
+      repairGeneration: run.repairGeneration
+    } : null;
     if (run.proposalHash) {
       const previous = store.readArtifact(run.proposalHash);
       current = applyEdits(run.contract, originals, previous.proposal);
@@ -254,11 +285,14 @@ async function executeWorkflow(store, id, dependencies, options) {
       if (hash(expected) !== child.contractHash) throw Error('ChangeSet contract differs from approved WorkItem');
     }
     const patch = store.readArtifact(child.acceptedHash), evidence = store.readArtifact(child.evidenceHash);
-    if (patch.contractHash !== child.contractHash || evidence.contractHash !== child.contractHash || patch.candidateHash !== child.candidateHash || evidence.candidateHash !== child.candidateHash || judge(evidence).outcome !== 'ACCEPT' || !isFailingBaseline(store.readArtifact(child.baselineHash))) throw Error('Child verification evidence invalid');
+    if (patch.contractHash !== child.contractHash || evidence.contractHash !== child.contractHash || patch.candidateHash !== child.candidateHash || evidence.candidateHash !== child.candidateHash || judge(evidence).outcome !== 'ACCEPT' || !approvedDevelopmentBaseline(store,child)) throw Error('Child verification evidence invalid');
     if (Object.keys(patch.changedFiles).some(f => !child.contract.files.includes(f))) throw Error('Accepted patch outside contract');
     return patch;
   };
   try {
+    // Explicitly trusted integration opt-in. Ordinary Stores and historical
+    // Workflow users never migrate their state as a side effect of inspection.
+    if (dependencies.repairPolicy?.enableStorage === true) enableRepairStorage(store);
     if (run.state === 'COMPLETED' && run.contract.schemaVersion === 2) {
       const child = store.get(run.finalRunId); accepted(child);
       if (!child.candidatePaths || await candidateHash(child.candidateDirectory, child.candidatePaths) !== child.candidateHash) throw Error('Final candidate tree changed after verification');
@@ -281,8 +315,12 @@ async function executeWorkflow(store, id, dependencies, options) {
       else run.states[attempt.itemId] = 'SUCCEEDED';
       workflowStore.finish(store, run, owner, attempt, 'SUCCEEDED');
     }
-    const selectedRepo = await repository(run.repo); guard();
-    if (selectedRepo.base !== run.base) throw Error('Workflow baseline changed');
+    // A delivered local tree is intentionally Git-dirty. Never attempt a
+    // second delivery merely because verification/re-entry was interrupted.
+    if (!run.deliveryReceiptRef) {
+      const selectedRepo = await repository(run.repo); guard();
+      if (selectedRepo.base !== run.base) throw Error('Workflow baseline changed');
+    } else guard();
     const registry = dependencies.hostExecution ? null : dependencies.workflowRegistry ?? createRegistry();
     const choose = async () => {
       if (dependencies.hostExecution) { guard(); return dependencies.hostExecution.select(run); }
@@ -296,16 +334,134 @@ async function executeWorkflow(store, id, dependencies, options) {
       run.attempts = records.filter(a => a.itemId !== 'final').length;
       run.reportedCostUsd = records.reduce((s, a) => s + store.get(a.childId).reportedCostUsd, 0);
       run.unknownCostAttempts = records.reduce((s, a) => s + store.get(a.childId).unknownCostAttempts, 0);
-      if (run.unknownCostAttempts || run.reportedCostUsd > source.maxAttempts * source.attemptBudgetUsd) return save('WAITING_HUMAN', 'Workflow cost unknown or exhausted');
+      if (run.reportedCostUsd > source.maxAttempts * source.attemptBudgetUsd)
+        return save('WAITING_HUMAN', 'Workflow reported-cost budget exhausted');
+      if (run.unknownCostAttempts) {
+        // Codex subscription usage is often not convertible to USD. Never
+        // report zero cost, but permit continued *bounded* WorkItems if an
+        // independently trusted owner grant covers that exact unknown-usage
+        // count. No policy means the historical fail-closed behavior.
+        const granted = typeof dependencies.unknownCostBudget?.authorize === 'function'
+          ? await dependencies.unknownCostBudget.authorize({
+              workflowId:run.id,revision:run.revision,workflowHash:run.contractHash,
+              unknownCostTurns:run.unknownCostAttempts,
+              maxWorkItemAttempts:source.maxAttempts,
+              reportedCostUsd:run.reportedCostUsd
+            }) : false;
+        guard();
+        if (granted !== true)
+          return save('WAITING_HUMAN', 'Workflow cost unknown; bounded owner authorization required');
+      }
       if (run.finalRunId) {
-        const finalChild = store.get(run.finalRunId); accepted(finalChild);
+        const finalChild = store.get(run.finalRunId), finalPatch = accepted(finalChild);
         if (run.contract.schemaVersion === 2 && (!finalChild.candidatePaths || await candidateHash(finalChild.candidateDirectory, finalChild.candidatePaths) !== finalChild.candidateHash)) throw Error('Final candidate tree changed after verification');
         guard();
-        return save('COMPLETED', 'All required WorkItems and integrated candidate independently verified; local artifacts only');
+        // Default and historical behavior stays artifact-only. A separately
+        // enabled delivery path requires an independently trusted grant and
+        // verified criterion-indexed observations on the DELIVERED tree.
+        const deliveryService = dependencies.destinationDelivery;
+        if (!deliveryService) return save('COMPLETED', 'All required WorkItems and integrated candidate independently verified; local artifacts only');
+        if (typeof deliveryService.authorize !== 'function' || typeof deliveryService.verify !== 'function')
+          throw Error('Exact destination grant and independent post-apply verifier required');
+        // Mandatory criteria must be approved before any effect; a verifier
+        // response after delivery cannot choose, omit or downgrade them.
+        const approvedCriteria = requireTrustedObjectiveCriteria(deliveryService.approvedCriteria);
+        const reviewedCriterionContract = {
+          kind:'OBJECTIVE_APPROVED_CRITERIA_V1',objectiveId:run.id,
+          revision:run.revision,workflowHash:run.contractHash,
+          criteriaHash:hash(approvedCriteria),criteria:approvedCriteria
+        };
+        if (run.objectiveApprovedCriteriaRef) {
+          const persisted = store.readArtifact(run.objectiveApprovedCriteriaRef);
+          if (hash(persisted) !== hash(reviewedCriterionContract))
+            throw Error('Approved Objective criteria changed after delivery authorization');
+        } else if (run.deliveryReceiptRef)
+          throw Error('Delivered Objective lacks a pre-effect approved criterion contract');
+        if (run.destinationDeliveryIntentRef && !run.deliveryReceiptRef)
+          return save('RECONCILING', 'Uncertain destination delivery; never replay an external effect');
+        if (!run.deliveryReceiptRef) {
+          const delivered = await applyLocalDelivery({
+            destination:run.repo,base:run.base,files:finalPatch.changedFiles,
+            candidatePaths:finalChild.candidatePaths,verifiedCandidateHash:finalChild.candidateHash,
+            runId:run.id,revision:run.revision,
+            authorize:localIntent=>deliveryService.authorize(Object.freeze({
+              ...localIntent,workflowHash:run.contractHash,
+              objectiveCriteriaHash:reviewedCriterionContract.criteriaHash,
+              objectiveCriteria:structuredClone(approvedCriteria)
+            })),
+            cancelled:()=>leaseLost || store.get(run.id).control !== 'run',
+            persistIntent:async localIntent=>{
+              run.objectiveApprovedCriteriaRef = store.artifact(reviewedCriterionContract);
+              // Called only AFTER trusted owner approval and clean baseline
+              // preflight, BEFORE any filesystem staging or rename.
+              run.destinationDeliveryIntentRef = store.artifact({
+                ...localIntent,workflowHash:run.contractHash,
+                approvedCriteriaRef:run.objectiveApprovedCriteriaRef,
+                objectiveCriteriaHash:reviewedCriterionContract.criteriaHash,
+                acceptedHash:finalChild.acceptedHash,
+                evidenceHash:finalChild.evidenceHash,
+                integrationHash:run.integrationHash
+              });
+              save('DELIVERING', 'Approved destination intent committed before filesystem effects');
+              return run.destinationDeliveryIntentRef;
+            }
+          });
+          run.deliveryReceiptRef = store.artifact(delivered);
+          save('DELIVERED_NOT_VERIFIED', 'Actual destination bytes observed; independent criterion verification pending');
+        }
+        const receipt = store.readArtifact(run.deliveryReceiptRef);
+        // Also on recovery, an independent receipt must join the exact
+        // pre-effect owner approval and the hashes of actually applied files.
+        if (!pinnedObjectiveDeliveryIntent({
+          run,delivery:receipt,
+          intent:run.destinationDeliveryIntentRef
+            ? store.readArtifact(run.destinationDeliveryIntentRef) : null,
+          approved:run.objectiveApprovedCriteriaRef
+            ? store.readArtifact(run.objectiveApprovedCriteriaRef) : null
+        })) throw Error('Delivery receipt is not bound to pre-effect approved Objective scope');
+        if (receipt.targetTreeHash !== finalChild.candidateHash)
+          throw Error('Delivered destination tree differs from integrated Candidate');
+        // The trusted post-apply service must persist its own Evidence first.
+        const observations = await deliveryService.verify({
+          run,delivery:receipt,contract:source,candidate:finalChild,
+          // Keep the coordinator's live lease, approval, control and time
+          // budget authoritative throughout potentially long Local checks.
+          cancelled: () => { try { guard(); return false; } catch { return true; } }
+        });
+        guard();
+        if (!observations || !Array.isArray(observations.criteria) ||
+            typeof observations.readVerifiedEvidence !== 'function')
+          throw Error('Independent destination Evidence unavailable');
+        // Pin the mandatory criterion contract independently of the verdict.
+        // A later read-only projection must not infer the required set from a
+        // possibly truncated or altered COMPLETE decision artifact.
+        const observedCriteria = requireTrustedObjectiveCriteria(observations.criteria);
+        if (hash(observedCriteria) !== reviewedCriterionContract.criteriaHash)
+          throw Error('Destination verifier criterion set differs from owner-reviewed delivery grant');
+        if (!run.objectiveApprovedCriteriaRef)
+          throw Error('Pre-effect Objective criterion approval missing');
+        const mandatoryCriteria = approvedCriteria;
+        run.objectiveCriteriaRef = store.artifact({
+          kind:'OBJECTIVE_MANDATORY_CRITERIA_V1',objectiveId:run.id,
+          revision:run.revision,workflowHash:run.contractHash,
+          approvedCriteriaRef:run.objectiveApprovedCriteriaRef,
+          deliveryReceiptRef:run.deliveryReceiptRef,criteria:mandatoryCriteria
+        });
+        const decision = evaluateDeliveredObjective({
+          objectiveId:run.id,revision:run.revision,candidateHash:finalChild.candidateHash,
+          delivery:receipt,criteria:mandatoryCriteria,
+          evidenceRefs:observations.evidenceRefs,
+          readVerifiedEvidence:observations.readVerifiedEvidence
+        });
+        run.objectiveDecisionRef = store.artifact(decision);
+        if (decision.complete !== true) return save(
+          decision.outcome === 'HUMAN_HANDOFF' ? 'WAITING_HUMAN' : 'DELIVERED_NOT_VERIFIED',
+          decision.reason);
+        return save('COMPLETED', 'All mandatory Objective criteria independently verified on delivered destination tree');
       }
       run.workItemBlocks = {};
       for (const n of run.contract.items) if (run.states[n.id] !== 'SUCCEEDED') {
-        const prior = records.find(a => a.itemId === n.id);
+        const prior = records.filter(a => a.itemId === n.id).at(-1);
         const admission = policyAdmission(run, n.id, dependencies.workItemPolicy);
         const operator = workflowGuard(store, run)?.admission(run, n.id);
         const reasons = prior ? ['Previous attempt requires review; no replay'] :
@@ -316,20 +472,47 @@ async function executeWorkflow(store, id, dependencies, options) {
           run.workItemBlocks[n.id] = reasons.length ? reasons : ['Dependencies not satisfied'];
         } else run.states[n.id] = 'READY';
       }
-      const nodes = readyBatch(run.contract, run.states);
+      let nodes = readyBatch(run.contract, run.states);
       const final = run.contract.items.every(n => run.states[n.id] === 'SUCCEEDED');
+      let repairNode = null;
+      if (!nodes.length && !final && typeof dependencies.repairPolicy?.authorize === 'function') {
+        for (const item of run.contract.items) {
+          if (run.states[item.id] === 'SUCCEEDED' ||
+              item.dependencies.some(d => run.states[d] !== 'SUCCEEDED')) continue;
+          const history = records.filter(a => a.itemId === item.id);
+          const last = history.at(-1);
+          if (!last || last.status !== 'FAILED' || history.length >=
+              (dependencies.repairPolicy.maxGenerations ?? 2)) continue;
+          const previous = store.get(last.childId);
+          if (!previous.lastEvidenceHash) continue;
+          const granted = await dependencies.repairPolicy.authorize({
+            runId:run.id,revision:run.revision,workflowHash:run.contractHash,
+            itemId:item.id,previousChildId:last.childId,
+            failureEvidenceRef:previous.lastEvidenceHash,
+            nextGeneration:(last.generation ?? 1)+1,
+            remainingAttemptBudget:source.maxAttempts-run.attempts
+          });
+          guard();
+          if (granted !== true) continue;
+          run.states[item.id] = 'READY'; repairNode = item;
+          nodes = [item]; break;
+        }
+      }
       run.workflowStagesComplete = final;
       if (!nodes.length && !final) return save('WAITING_HUMAN', 'WorkItem capability, approval or dependency gates unsatisfied');
       const selection = await choose(); run.providerId ??= selection.providerId;
       const changes = {};
-      if (final) for (const a of records) {
+      if (final) for (const a of records.filter(a=>a.status==='SUCCEEDED' && a.itemId!=='final')) {
         const child = store.get(a.childId), patch = accepted(child);
         for (const [file, body] of Object.entries(patch.changedFiles)) {
           if (Object.hasOwn(changes, file)) throw Error('ChangeSet file conflict');
           changes[file] = body;
         }
       }
-      if (final) run.integrationHash = store.artifact({ base: run.base, revision: run.revision, graphHash: run.contractHash, children: records.map(a => a.childId), changes });
+      if (final) run.integrationHash = store.artifact({ base: run.base, revision: run.revision,
+        graphHash: run.contractHash, children: records.filter(a=>a.status==='SUCCEEDED').map(a => a.childId),
+        repairHistory: records.filter(a=>(a.generation ?? 1)>1).map(a=>({itemId:a.itemId,generation:a.generation,status:a.status})),
+        changes });
       save(final ? 'VERIFYING' : 'RUNNING', final ? 'Serial integration candidate' : 'Dependency-ready batch');
       const batch = [];
       // Reserve before launching; a crash in this window remains unresolved and
@@ -337,19 +520,47 @@ async function executeWorkflow(store, id, dependencies, options) {
       for (const node of final ? [null] : nodes) {
         const itemId = final ? 'final' : node.id;
         const contract = validateContract({ ...source, files: final ? source.files : node.files, tests: final ? source.tests : node.tests, maxAttempts: 1 });
-        const child = workflowStore.reserve(store, run, owner, itemId, contract);
+        // Bind every accepted ancestor's actual verified code before any new
+        // WorkItem is launched. A terminal state or model summary is insufficient.
+        const inherited = node
+          ? predecessorInput(run.contract, itemId, run.states, records,
+              childId => store.get(childId), accepted, run.revision)
+          : null;
+        const child = repairNode && itemId === repairNode.id
+          ? reserveRepairGeneration(store,run,owner,itemId,contract,{
+              expectedFailureEvidenceRef:store.get(records.filter(a=>a.itemId===itemId).at(-1).childId).lastEvidenceHash,
+              maxGenerations:dependencies.repairPolicy.maxGenerations ?? 2
+            })
+          : workflowStore.reserve(store, run, owner, itemId, contract);
         activeChildren.add(child.id);
-        batch.push({ node, itemId, child });
+        if (inherited) {
+          const inputRef = store.artifact(inherited.manifest);
+          store.event(child.id, 'WORKITEM_PREDECESSOR_INPUT_BOUND', {
+            parentRunId: run.id, itemId, inputRef, manifestHash: hash(inherited.manifest)
+          });
+        }
+        batch.push({ node, itemId, child, inherited });
         if (!final) run.states[itemId] = 'RUNNING';
       }
-      const responses = await Promise.allSettled(batch.map(async ({ node, child }) => {
+      const responses = await Promise.allSettled(batch.map(async ({ node, child, inherited }) => {
+        // The existing child Controller still constructs its candidate from
+        // pinned Git. Overlay the immutable, accepted ancestors into ONLY
+        // that isolated snapshot before context, baseline tests or Host calls.
+        const snapshotWithPredecessors = inherited
+          ? async (repo, base, directory) => {
+              const names = await (dependencies.snapshot ?? snapshot)(repo, base, directory);
+              await applyPredecessorOverlay(directory, names, inherited.changes);
+              return names;
+            }
+          : dependencies.snapshot ?? snapshot;
         const channels = run.contract.schemaVersion === 2 && !final
           ? Object.fromEntries(Object.keys(node.roles).map(role => {
             const token = delegate(store, run.id, child.id, owner, role);
             return [role, { assignment: token.assignment, send: message => sendMessage(store, token, message), read: correlationId => receiveMessages(store, token, correlationId) }];
           })) : null;
         if (channels && dependencies.collaborate) await dependencies.collaborate(channels);
-        return execute(store, child.id, { ...dependencies, propose: async request => {
+        return execute(store, child.id, { ...dependencies,
+          snapshot: snapshotWithPredecessors, propose: async request => {
           guard();
           if (final) return { cost: 0, proposal: { summary: 'Host integration of independently verified disjoint edits', edits: Object.entries(changes).map(([file, body]) => ({ path: file, oldText: request.files[file], newText: body })) } };
           await choose();
@@ -371,7 +582,9 @@ async function executeWorkflow(store, id, dependencies, options) {
           run.finalRunId = child.id; run.finalContractHash = child.contractHash;
           run.acceptedHash = response.acceptedHash; run.evidenceHash = response.evidenceHash; run.candidateHash = response.candidateHash;
         }
-        workflowStore.finish(store, run, owner, { itemId }, success ? 'SUCCEEDED' : 'FAILED');
+        workflowStore.finish(store, run, owner,
+          { itemId,generation:child.repairGeneration ?? 1 },
+          success ? 'SUCCEEDED' : 'FAILED');
         failed ||= !success;
       }
       guard();
@@ -381,6 +594,7 @@ async function executeWorkflow(store, id, dependencies, options) {
     if (leaseLost) throw error;
     const control = store.get(id).control;
     if (run.contract.schemaVersion === 2) { delete run.acceptedHash; delete run.evidenceHash; delete run.candidateHash; }
-    return save(control === 'cancel' ? 'CANCELLED' : control === 'pause' ? 'PAUSED' : 'WAITING_HUMAN', error.message);
+    const uncertainDelivery = Boolean(run.destinationDeliveryIntentRef && !run.deliveryReceiptRef);
+    return save(uncertainDelivery ? 'RECONCILING' : control === 'cancel' ? 'CANCELLED' : control === 'pause' ? 'PAUSED' : 'WAITING_HUMAN', error.message);
   } finally { clearInterval(heartbeat); store.release(id, owner); }
 }

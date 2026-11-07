@@ -33,8 +33,14 @@ export async function snapshot(repo, base, target) {
   return entries.map(e => e.name);
 }
 export async function context(directory, contract) {
+  const names = [...new Set([...contract.context, ...contract.tests])];
+  // The context manifest feeds an autonomous Host Turn. A regular leaf alone
+  // does not prove its parent directories stay within this candidate: readFile
+  // follows symlinked parents. Enforce the same portable regular-file boundary
+  // used by the Candidate and delivered-tree observers before consuming bytes.
+  if (names.length) await candidateHash(directory, names);
   const files = {}; let bytes = 0;
-  for (const name of new Set([...contract.context, ...contract.tests])) {
+  for (const name of names) {
     const stat = await lstat(path.join(directory, name));
     if (!stat.isFile() || stat.isSymbolicLink()) throw Error('Context must be regular files');
     const body = await readFile(path.join(directory, name), 'utf8'); bytes += Buffer.byteLength(body);
@@ -44,7 +50,61 @@ export async function context(directory, contract) {
   return files;
 }
 export async function candidateHash(directory, names) {
+  if (!path.isAbsolute(directory ?? '') || !Array.isArray(names) ||
+      !names.length || names.length > 1500 ||
+      new Set(names).size !== names.length ||
+      // On case-insensitive filesystems these names may alias the same file.
+      new Set(names.map(name => typeof name === 'string' ? name.toLowerCase() : name)).size !== names.length)
+    throw Error('Candidate tree requires bounded, unique paths and an absolute root');
+  const root = await lstat(directory);
+  if (!root.isDirectory() || root.isSymbolicLink())
+    throw Error('Candidate tree root must be a real directory');
+  // A real leaf directory is not enough: an intermediate junction or symlink
+  // redirects reads outside the approved Candidate / delivered repository.
+  // Walk every ancestor without resolving links and fail closed before I/O.
+  const absolute = path.resolve(directory);
+  let ancestor = path.parse(absolute).root;
+  const components = path.relative(ancestor, absolute).split(path.sep).filter(Boolean);
+  for (const component of components.slice(0, -1)) {
+    ancestor = path.join(ancestor, component);
+    const stat = await lstat(ancestor);
+    if (!stat.isDirectory() || stat.isSymbolicLink())
+      throw Error('Candidate tree ancestor is a symlink or non-directory');
+  }
   const rows = [];
-  for (const name of [...names].sort()) rows.push([name, hash(await readFile(path.join(directory, name)))]);
+  for (const name of [...names].sort()) {
+    // Byte equality alone is not a safe observation: readFile follows links.
+    // Recheck every path component before reading, including unchanged files
+    // that were present in the delivered tree but not written by delivery.
+    // Snapshot paths may legitimately include .gitattributes, .gitignore
+    // and .github; source-contract filePath() is too restrictive here.
+    // Match snapshot's portable tracked-file boundaries instead.
+    const parts = typeof name === 'string' ? name.split('/') : [];
+    if (typeof name !== 'string' || !name || name.startsWith('/') ||
+        /[\\:\u0000-\u001f\u007f]/.test(name) ||
+        parts.some(part => !part || part === '.' || part === '..' ||
+          /[. ]$/.test(part) || part.toLowerCase() === '.git' ||
+          /^(con|prn|aux|nul|com[0-9]|lpt[0-9])([.]|$)/i.test(part)))
+      throw Error('Unsafe tracked Candidate path: ' + String(name));
+    let current = directory;
+    let executable = false;
+    for (let index = 0; index < parts.length; index++) {
+      current = path.join(current, parts[index]);
+      const stat = await lstat(current);
+      if (stat.isSymbolicLink() ||
+          (index === parts.length - 1
+            ? !stat.isFile() || stat.nlink !== 1
+            : !stat.isDirectory()))
+        // Hard links are regular files but alias the bytes of an unapproved
+        // outside path, so content equality alone is not a safe boundary.
+        throw Error('Candidate tree contains a symlink or nonregular path (including hard link): ' + name);
+      if (index === parts.length - 1)
+        executable = (stat.mode & 0o111) !== 0;
+    }
+    // Executable files change behavior without changing bytes. Git preserves
+    // executable versus regular file mode; pin that distinction in Candidate
+    // and delivered-tree hashes instead of accepting same-byte mode drift.
+    rows.push([name, hash(await readFile(current)), executable ? '100755' : '100644']);
+  }
   return hash(rows);
 }

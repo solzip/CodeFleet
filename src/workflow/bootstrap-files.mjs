@@ -78,7 +78,7 @@ async function locate(root, relative) {
 async function present(target, sha256) {
   try {
     const s = await lstat(target);
-    if (!s.isFile() || s.isSymbolicLink()) return 'CONFLICT';
+    if (!s.isFile() || s.isSymbolicLink() || s.nlink !== 1) return 'CONFLICT';
     return hash(await readFile(target, 'utf8')) === sha256 ? 'ALREADY_CREATED' : 'CONFLICT';
   } catch (e) { if (e.code === 'ENOENT') return 'ABSENT'; throw e; }
 }
@@ -102,7 +102,19 @@ export async function createFiles(root, files, { cancelled = () => false, record
   const results = [];
   for (const f of files) {
     const prior = preflight.find(r => r.path === f.path);
-    if (prior.status === 'ALREADY_CREATED') { results.push({ path: f.path, status: 'ALREADY_CREATED', sha256: f.sha256, bytes: f.bytes }); record(results.at(-1)); continue; }
+    if (prior.status === 'ALREADY_CREATED') {
+      // A same-byte leaf at preflight may be replaced before its success is
+      // recorded. Reobserve the parent and content; an externally hard-linked
+      // leaf is not an independently owned materialization either.
+      const place = await locate(realRoot, f.path);
+      const stillCreated = !place.blocked && !place.missing.length &&
+        await present(place.target, f.sha256) === 'ALREADY_CREATED';
+      const result = stillCreated
+        ? { path: f.path, status: 'ALREADY_CREATED', sha256: f.sha256, bytes: f.bytes }
+        : { path: f.path, status: 'CONFLICT',
+          reason: place.blocked ?? 'Already-created file changed after preflight' };
+      results.push(result); record(result); continue;
+    }
     if (cancelled()) { results.push({ path: f.path, status: 'NOT_RUN', reason: 'Cancelled before write' }); continue; }
     let result;
     try {
@@ -136,7 +148,7 @@ async function observe(root, f) {
   if (place.blocked || place.missing.length) return { status: 'CONFLICT', reason: place.blocked ?? `Parent missing: ${f.path}` };
   try {
     const s = await lstat(place.target);
-    if (!s.isFile() || s.isSymbolicLink()) return { status: 'CONFLICT', reason: 'Target is not a regular file' };
+    if (!s.isFile() || s.isSymbolicLink() || s.nlink !== 1) return { status: 'CONFLICT', reason: 'Target is not an unshared regular file' };
   } catch (e) { if (e.code === 'ENOENT') return { status: 'CONFLICT', reason: 'Owned file is missing' }; throw e; }
   const disk = hash(await readFile(place.target, 'utf8'));
   return { target: place.target, disk, status: disk === f.baseSha256 ? 'PENDING' : disk === f.sha256 ? 'ALREADY_MODIFIED' : 'CONFLICT',
@@ -151,7 +163,15 @@ export async function modifyFiles(root, files, { cancelled = () => false, record
   const results = [];
   for (const f of files) {
     const prior = preflight.find(r => r.path === f.path);
-    if (prior.status === 'ALREADY_MODIFIED') { results.push({ path: f.path, status: 'ALREADY_MODIFIED', baseSha256: f.baseSha256, sha256: f.sha256, bytes: f.bytes }); record(results.at(-1)); continue; }
+    if (prior.status === 'ALREADY_MODIFIED') {
+      // An exact-match repair may be replaced after preflight by a changed
+      // leaf or an outside hard link. Do not record success on stale bytes.
+      const fresh = await observe(realRoot, f);
+      const result = fresh.status === 'ALREADY_MODIFIED'
+        ? { path: f.path, status: 'ALREADY_MODIFIED', baseSha256: f.baseSha256, sha256: f.sha256, bytes: f.bytes }
+        : { path: f.path, status: 'CONFLICT', reason: fresh.reason ?? 'Already-modified file changed after preflight' };
+      results.push(result); record(result); continue;
+    }
     if (cancelled()) { results.push({ path: f.path, status: 'NOT_RUN', reason: 'Cancelled before write' }); continue; }
     const temp = `${prior.target}.codefleet-${randomUUID()}.tmp`;
     let result;

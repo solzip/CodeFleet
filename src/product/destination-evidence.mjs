@@ -1,0 +1,138 @@
+// Trusted post-apply Local criterion producer. It consumes explicit operator
+// command approval, invokes the existing independent localBackend, and stores
+// content-addressed evidence on the real delivered destination tree.
+// NOT a protected verifier or a model-generated self-assessment.
+import path from 'node:path';
+import { hash } from '../alpha/contract.mjs';
+import { candidateHash } from '../alpha/workspace.mjs';
+import { localBackend, inspectLocalCommand } from '../verification/backends.mjs';
+import { requireTrustedObjectiveCriteria } from './objective-judge.mjs';
+
+const sha = x => typeof x === 'string' && /^[a-f0-9]{64}$/.test(x);
+
+export function createLocalDestinationVerifier(store, {
+  criteria, commandSpecs, obtainGrant, backend = localBackend()
+} = {}) {
+  if (!store || !Array.isArray(criteria) || !criteria.length ||
+      !commandSpecs || typeof obtainGrant !== 'function') throw Error('Trusted criterion commands and grant callback required');
+  const approvedCriteria = requireTrustedObjectiveCriteria(criteria);
+  if (approvedCriteria.some(c => !['LOCAL_EXECUTED','OWNER_REVIEW'].includes(c.requiredAuthority)))
+    throw Error('Invalid Local criterion/authority contract');
+  const specs = structuredClone(commandSpecs);
+  return {
+    // Expose a defensive copy to the Controller for pre-effect scope approval.
+    get approvedCriteria() { return structuredClone(approvedCriteria); },
+    // This is called by the trusted Controller only AFTER a destination delivery
+    // has been durably recorded. No verification command gets its own grant from
+    // any model output or CLI-supplied actor string.
+    async verify({ run, delivery, candidate, cancelled }) {
+      if (typeof cancelled !== 'function')
+        throw Error('Trusted destination verification cancellation fence required');
+      if (delivery?.status !== 'DELIVERED_NOT_VERIFIED' ||
+          !sha(delivery.targetTreeHash) || !sha(candidate?.candidateHash) ||
+          delivery.targetTreeHash !== candidate.candidateHash ||
+          delivery.candidateHash !== candidate.candidateHash ||
+          delivery.runId !== run?.id || delivery.revision !== run?.revision ||
+          delivery.semanticCriteriaVerified !== false ||
+          run?.repo !== candidate?.repo || !Array.isArray(candidate.candidatePaths))
+        throw Error('Delivered-tree verification binding absent');
+      const guard = () => {
+        if (cancelled()) throw Error('Destination verification cancelled or grant revoked');
+      };
+      guard();
+      if (await candidateHash(run.repo,candidate.candidatePaths) !== delivery.targetTreeHash)
+        throw Error('Destination changed before criterion verification');
+      const evidenceRefs = {};
+      const criteriaCopy = structuredClone(approvedCriteria);
+      for (const criterion of criteriaCopy) {
+        guard();
+        if (criterion.requiredAuthority === 'OWNER_REVIEW') continue;
+        const command = specs[criterion.id];
+        if (!command || command.directory !== run.repo || !path.isAbsolute(command.executable) ||
+            !Array.isArray(command.args) || !Number.isInteger(command.timeoutMs))
+          throw Error('Exact approved criterion command missing');
+        const request = { executable:command.executable,args:[...command.args],
+          directory:run.repo,timeoutMs:command.timeoutMs,
+          contractHash:run.contractHash, cancelled };
+        const inspected = await inspectLocalCommand(request);
+        guard();
+        // The owner must review the actual executable, argv and working tree,
+        // not merely a hash that hides the behavior of the Local command.
+        const reviewedCommand = Object.freeze({
+          ...inspected, args:Object.freeze([...inspected.args])
+        });
+        const granted = await obtainGrant(Object.freeze({
+          kind:'CODEFLEET_DESTINATION_CRITERION_GRANT_V1',
+          objectiveId:run.id,revision:run.revision,
+          workflowHash:run.contractHash,
+          criterion:Object.freeze({...criterion}),criterionId:criterion.id,
+          targetTreeHash:delivery.targetTreeHash,commandHash:inspected.commandHash,
+          executableHash:inspected.executableHash,timeoutMs:command.timeoutMs,
+          command:reviewedCommand,protection:'UNPROTECTED'
+        }));
+        if (granted !== true) throw Error('Exact Local verification approval missing');
+        guard();
+        // A grant can be asynchronous. Do not ask even a trusted backend to
+        // authorize a stale command or delivery after the owner's review.
+        const currentCommand = await inspectLocalCommand(request);
+        guard();
+        if (currentCommand.commandHash !== inspected.commandHash)
+          throw Error('Local criterion command/tree changed during approval');
+        if (await candidateHash(run.repo,candidate.candidatePaths) !== delivery.targetTreeHash)
+          throw Error('Destination changed during Local criterion approval');
+        guard();
+        const token = await backend.authorize(request,{
+          reviewedCommandHash:inspected.commandHash,
+          acknowledgeUnisolatedExecution:true
+        });
+        guard();
+        const observed = await backend.verify({ ...request,token,
+          beforeSpawn:async () => {
+            guard();
+            if (await candidateHash(run.repo,candidate.candidatePaths)!==delivery.targetTreeHash)
+              throw Error('Destination changed before verification command');
+          }
+        });
+        guard();
+        if (await candidateHash(run.repo,candidate.candidatePaths)!==delivery.targetTreeHash)
+          throw Error('Destination changed after verification command');
+        guard();
+        const complete = observed.status === 'LOCAL_PASSED' &&
+          observed.evidenceIntegrity === 'MATCHED' && observed.integrity === true &&
+          observed.executionAuthority === 'LOCAL_EXECUTED' &&
+          observed.commandHash === inspected.commandHash &&
+          observed.candidateTreeHash === inspected.candidateTreeHash &&
+          observed.contractHash === run.contractHash &&
+          observed.verificationBackend === 'local' &&
+          observed.exitCode === 0 &&
+          Number.isInteger(observed.tests) && observed.tests > 0 &&
+          observed.passed === observed.tests && observed.failed === 0 &&
+          observed.skipped === 0 && observed.todo === 0 &&
+          !observed.interrupted && !observed.truncated;
+        const evidence = {
+          kind:'OBJECTIVE_CRITERION_OBSERVATION_V1',objectiveId:run.id,
+          revision:run.revision,criterionId:criterion.id,
+          targetTreeHash:delivery.targetTreeHash,
+          authority: 'LOCAL_EXECUTED', independentObserver: true,
+          commandHash:inspected.commandHash,
+          observationHash:hash({ commandHash:inspected.commandHash,
+            exitCode:observed.exitCode,tests:observed.tests,passed:observed.passed,
+            failed:observed.failed,skipped:observed.skipped,todo:observed.todo,
+            evidenceIntegrity:observed.evidenceIntegrity }),
+          tests:observed.tests,passed:observed.passed,failed:observed.failed,
+          skipped:observed.skipped,todo:observed.todo,exitCode:observed.exitCode,
+          interrupted:Boolean(observed.interrupted),truncated:Boolean(observed.truncated),
+          integrity:complete?'MATCHED':'UNVERIFIED',complete,
+          verificationBackend:'local',protection:'UNPROTECTED'
+        };
+        evidenceRefs[criterion.id]=store.artifact(evidence);
+        if (!complete) break; // no false PASS or unauthorized subsequent effects
+      }
+      guard();
+      return {
+        criteria:criteriaCopy,evidenceRefs,
+        readVerifiedEvidence:ref=>store.readArtifact(ref),
+      };
+    }
+  };
+}

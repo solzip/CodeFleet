@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { repairRows, hasRepairStorage } from './repair-generations.mjs';
 import { hash } from '../alpha/contract.mjs';
 import { repository } from '../alpha/workspace.mjs';
 import { validateWorkflow, policyFor, parallelLimit } from './definition.mjs';
@@ -11,7 +12,7 @@ function transaction(store, fn) {
 }
 function idle(store, run) {
   const row = store.db.prepare('SELECT owner FROM runs WHERE id=?').get(run.id);
-  if (row.owner || store.db.prepare("SELECT 1 FROM workflow_attempts WHERE runId=? AND status='STARTED'").get(run.id) || ['COMPLETED', 'CANCELLED'].includes(run.state)) throw Error('Workflow is active, unresolved or terminal');
+  if (row.owner || store.db.prepare("SELECT 1 FROM workflow_attempts WHERE runId=? AND status='STARTED'").get(run.id) || repairRows(store,run.id).some(a=>a.status==='STARTED') || ['COMPLETED', 'CANCELLED'].includes(run.state)) throw Error('Workflow is active, unresolved or terminal');
 }
 export async function createWorkflow(store, repo, input, source, commandId = randomUUID()) {
   const workflow = validateWorkflow(input, source), selected = await repository(repo);
@@ -76,11 +77,20 @@ export function reviseWorkflow(store, runId, expectedRevision, proposed) {
     store.event(runId, 'GRAPH_REVISION_PROPOSED', { revision: current.revision, graphRef, requiresApproval: true }); return current;
   });
 }
-export function attempts(store, id) { return store.db.prepare('SELECT * FROM workflow_attempts WHERE runId=? ORDER BY rowid').all(id); }
+export function attempts(store, id) {
+  const originals = store.db.prepare('SELECT * FROM workflow_attempts WHERE runId=? ORDER BY rowid').all(id);
+  // Historical callers keep the original row shape until the optional,
+  // additive generation storage is explicitly enabled for this State.
+  if (!hasRepairStorage(store)) return originals;
+  return [...originals.map(row => ({ ...row, generation:1 })), ...repairRows(store,id)];
+}
 export function reserve(store, run, owner, itemId, contract) {
   return transaction(store, () => {
     approval(store, run);
-    const active = store.db.prepare("SELECT * FROM workflow_attempts WHERE status='STARTED'").all();
+    const active = [
+      ...store.db.prepare("SELECT * FROM workflow_attempts WHERE status='STARTED'").all(),
+      ...repairRows(store).filter(a=>a.status==='STARTED')
+    ];
     const limit = parallelLimit(run.contract);
     if (active.some(a => a.runId !== run.id || a.itemId === 'final') || active.length >= limit || (itemId === 'final' && active.length)) throw Error(limit === 1 ? 'Concurrency limit is one' : 'Parallel admission limit exceeded');
     const row = store.db.prepare('SELECT owner,leaseUntil,control,body FROM runs WHERE id=?').get(run.id);
@@ -106,7 +116,11 @@ export function finish(store, run, owner, attempt, status) {
   return transaction(store, () => {
     const row = store.db.prepare('SELECT owner,leaseUntil,body FROM runs WHERE id=?').get(run.id);
     if (row.owner !== owner || row.leaseUntil <= Date.now() || JSON.parse(row.body).revision !== run.revision) throw Error('Coordinator lease/revision lost');
-    const r = store.db.prepare("UPDATE workflow_attempts SET status=? WHERE runId=? AND itemId=? AND status='STARTED'").run(status, run.id, attempt.itemId);
+    const r = (attempt.generation ?? 1) > 1
+      ? store.db.prepare("UPDATE workflow_attempt_generations SET status=? WHERE runId=? AND itemId=? AND generation=? AND status='STARTED'")
+          .run(status,run.id,attempt.itemId,attempt.generation)
+      : store.db.prepare("UPDATE workflow_attempts SET status=? WHERE runId=? AND itemId=? AND status='STARTED'")
+          .run(status,run.id,attempt.itemId);
     if (r.changes !== 1) throw Error('Terminal attempt cannot be rewritten');
     store.db.prepare('UPDATE runs SET body=? WHERE id=? AND owner=?').run(JSON.stringify(run), run.id, owner);
     store.event(run.id, 'ATTEMPT_RECONCILED', { itemId: attempt.itemId, status });

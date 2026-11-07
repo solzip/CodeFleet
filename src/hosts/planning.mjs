@@ -106,7 +106,9 @@ export function submitPlanning(store, raw, current, { now = Date.now() } = {}) {
       if (result.evidence.outputHash !== responseHash) throw Error('Stored result mismatch');
       store.db.exec('COMMIT'); return { ...result, replay: true };
     }
-    if (row.status !== 'OPEN') throw Error('Planning session unavailable');
+    // A trusted managed Host planner records DISPATCHED before starting a
+    // billable Turn. The older data-only staged response contract keeps OPEN.
+    if (!['OPEN','DISPATCHED'].includes(row.status)) throw Error('Planning session unavailable');
     const validation = validateSemanticProposal(response.proposal, request.context, request.objective);
     const plan = { intent: { original: request.objective, authority: 'USER_REQUEST_ONLY', ref: request.intentRef },
       discovery: request.context.discovery, draft: response.proposal.draft, validation, executable: false };
@@ -127,7 +129,7 @@ export function submitPlanning(store, raw, current, { now = Date.now() } = {}) {
         tools: 'UNOBSERVED', fileChanges: 'UNOBSERVED', isolation: 'SEPARATE_PREFLIGHT_REQUIRED',
         usage: null, cost: null, unobserved: ['host execution', 'authentication', 'model transport'] } };
     const serialized = JSON.stringify(result);
-    store.db.prepare("UPDATE host_planning SET status='SUBMITTED',response=?,result=?,resultHash=? WHERE id=? AND status='OPEN'")
+    store.db.prepare("UPDATE host_planning SET status='SUBMITTED',response=?,result=?,resultHash=? WHERE id=? AND status IN ('OPEN','DISPATCHED')")
       .run(responseHash, serialized, hash(serialized), request.sessionId);
     store.db.exec('COMMIT'); return result;
   } catch (error) { store.db.exec('ROLLBACK'); throw error; }

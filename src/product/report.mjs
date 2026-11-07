@@ -7,6 +7,7 @@ import { messages } from '../workflow/collaboration.mjs';
 import { task, bootstrapView, bootstrapDrift, clarifiableFor } from './tasks.mjs';
 import { reservationStatus } from './reservations.mjs';
 import { localAcceptance } from './local-acceptance.mjs';
+import { readDeliveredObjectiveStatus } from './objective-status.mjs';
 
 function bootstrapNext(current, plan) {
   if (current.state === 'REJECTED') return 'Create a new plan';
@@ -110,14 +111,23 @@ export async function runReport(store, id) {
     const records = attempts(store, id);
     activeAttempts = records.filter(a => a.status === 'STARTED').map(a => ({ ...a, state: store.get(a.childId).state }));
     workItems = run.contract.items.map(n => {
-      const a = records.find(a => a.itemId === n.id), child = a ? store.get(a.childId) : null;
+      // Repair generations are immutable; the latest generation, not the first
+      // legacy attempt, determines the current WorkItem progress and reason.
+      const a = records.filter(a => a.itemId === n.id)
+        .sort((left,right) => (left.generation ?? 1) - (right.generation ?? 1)).at(-1);
+      const child = a ? store.get(a.childId) : null;
       return { id: n.id, dependencies: n.dependencies, roles: n.roles ?? null, state: child && a.status === 'STARTED' ? child.state : run.states[n.id], attempt: a ?? null, reason: child?.reason ?? run.workItemBlocks?.[n.id]?.join('; ') ?? null };
     });
   }
   const artifactPaths = Object.fromEntries(['acceptedHash', 'evidenceHash', 'integrationHash', 'graphRef', 'sourceRef'].filter(k => /^[a-f0-9]{64}$/.test(run[k] ?? '')).map(k => [k, path.join(store.directory, 'artifacts', run[k] + '.json')]));
   const usage = run.kind === 'workflow' ? attempts(store, id).map(a => store.get(a.childId)) : [run];
   const complete = run.state === 'COMPLETED' && verification.status === 'VERIFIED';
-  return { schemaVersion: 1, kind: 'RunReport', runId: id, state: run.state === 'COMPLETED' && !complete ? 'VERIFICATION_INVALID' : run.state, recordedState: run.state, complete, verification, authorization, provider: run.providerId ?? (run.kind === 'workflow' ? 'NOT_SELECTED' : 'claude-v1'), workItems, activeAttempts,
+  // The legacy 'complete' flag describes a verified Candidate/Workflow, not
+  // a delivered Objective. Public report/status must expose the same current
+  // delivered-tree criterion judgment as the read-only Objective projection.
+  const objective = run.kind === 'workflow'
+    ? await readDeliveredObjectiveStatus(store, id) : null;
+  return { schemaVersion: 1, kind: 'RunReport', runId: id, objective, objectiveComplete: objective?.objectiveComplete === true, state: run.state === 'COMPLETED' && !complete ? 'VERIFICATION_INVALID' : run.state, recordedState: run.state, complete, verification, authorization, provider: run.providerId ?? (run.kind === 'workflow' ? 'NOT_SELECTED' : 'claude-v1'), workItems, activeAttempts,
     attempts: run.attempts, cost: { reportedUsd: usage.reduce((n, r) => n + r.reportedCostUsd, 0), unknownAttempts: usage.reduce((n, r) => n + r.unknownCostAttempts, 0), authority: 'PROVIDER_REPORTED_ONLY' },
     reason: run.reason ?? null, artifactPaths, messages: run.kind === 'workflow' && run.contract.schemaVersion === 2 ? messages(store, run.id) : [], retry: activeAttempts.length ? 'RECONCILE_ONLY_NO_AUTOMATIC_REPLAY' : run.kind === 'workflow' && workItems.some(n => n.attempt) && !complete ? 'NEW_REVIEWED_TASK_REQUIRED' : 'WITHIN_PINNED_CONTRACT_ONLY',
     readiness: complete ? 'VERIFIED' : 'BLOCKED_OR_UNSUPPORTED', liveProviderVerification: 'NOT_ESTABLISHED_BY_THIS_REPORT', events: store.events(id) };
@@ -161,4 +171,41 @@ export async function taskReport(store, id) {
   return { schemaVersion: 1, kind: 'TaskReport', taskId: id, revision: current.revision, state: current.state === 'REJECTED' ? 'REJECTED' : run?.state ?? current.state, reviewState: current.state, plannerAttempt: current.plannerAttempt ?? null, plan, settings: current.settings, run,
     nextAction: current.state === 'REJECTED' ? 'Create a new plan' : !current.runId ? 'Review scope, then run to prepare a workflow' : 'Approve the exact workflow hash, then run with explicit model consent',
     workflowHash: current.runId ? store.get(current.runId).contractHash : null };
+}
+
+// Read-only current DAG + Repair progress for the Codex MVP entry point.
+// Advisory only: dependency readiness is not execution/lease/approval authority.
+export async function workflowProgress(store, id) {
+  const run = store.get(id);
+  if (run?.kind !== 'workflow' || !Number.isInteger(run.revision) ||
+      !Array.isArray(run.contract?.items) || !run.states)
+    throw Error('Workflow progress requires a persisted current Workflow');
+  const report = await runReport(store, id);
+  const effective = new Map(report.workItems.map(item => [item.id, item.state]));
+  const workItems = report.workItems.map(item => ({
+    id: item.id, state: item.state,
+    dependencies: [...item.dependencies],
+    waitingOn: item.dependencies.filter(dep => effective.get(dep) !== 'SUCCEEDED'),
+    attempt: item.attempt ? {
+      childId: item.attempt.childId,
+      generation: item.attempt.generation ?? 1,
+      status: item.attempt.status
+    } : null,
+    reason: item.reason
+  }));
+  return {
+    kind: 'CODEFLEET_WORKFLOW_PROGRESS_V1',
+    workflowId: id, revision: run.revision, workflowHash: run.contractHash,
+    workflowState: report.recordedState,
+    workItems,
+    dependencyReadyIds: workItems.filter(item =>
+      item.waitingOn.length === 0 && ['PENDING','READY'].includes(item.state))
+      .map(item => item.id),
+    activeAttemptIds: report.activeAttempts.map(item => item.childId),
+    objective: report.objective,
+    objectiveComplete: report.objectiveComplete,
+    cost: report.cost,
+    authority: 'READ_ONLY_ADVISORY', executionGranted: false,
+    hostLiveAcceptance: 'UNVERIFIED'
+  };
 }
