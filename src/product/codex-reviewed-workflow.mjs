@@ -231,15 +231,23 @@ export function inspectReviewedCodexWorkflow(store, workflowId) {
   if (!store?.db || typeof workflowId !== 'string' ||
       !/^planning-[a-f0-9-]{36}$/i.test(workflowId)) return blocked;
   try {
-    const plan=inspectReviewedCodexPlan(store,workflowId.slice('planning-'.length));
+    const sessionId=workflowId.slice('planning-'.length);
+    const plan=inspectReviewedCodexPlan(store,sessionId);
     if (plan.status !== 'REVIEW_REQUIRED') return blocked;
+    const { workflow: originatingGraph }=planRow(store,sessionId);
     const run=store.get(workflowId);
     const original=store.db.prepare(
       'SELECT digest,body FROM graph_revisions WHERE runId=? AND revision=1'
     ).get(workflowId);
+    // Revision 1 is the immutable, independently reviewed Planning DAG.
+    // A matching digest column and a self-declared workflowHash in a rewritten
+    // row are not enough: verify every WorkItem, dependency and criterion against
+    // the originating validated Planning artifact, even after later revisions.
+    const originalGraph=original && JSON.parse(original.body);
     if (!run || run.kind !== 'workflow' || !Number.isSafeInteger(run.revision) ||
         run.revision < 1 || !original || original.digest !== plan.workflowHash ||
-        JSON.parse(original.body).workflowHash !== original.digest ||
+        originalGraph.workflowHash !== original.digest ||
+        hash(originalGraph) !== hash(originatingGraph) ||
         run.base !== plan.sourceBaseline || hash(run.repo) !== plan.repositoryId ||
         run.contract?.workflowHash !== run.contractHash ||
         hash(run.contract) !== run.graphRef) return blocked;

@@ -939,6 +939,57 @@ test('public Codex Workflow review fails closed on stale planning or mutated DAG
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
 });
 
+
+test('reviewed Codex Workflow rejects a rewritten original DAG body before and during Operator admission',async t=>{
+ const f=await fixture(t);
+ const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+   authorizeReview:async()=>true
+ });
+ approveWorkflow(f.store,created.workflowId,{
+   actor:'local-fixture',workflowHash:created.workflowHash,expiresAt:Date.now()+60_000
+ });
+ const row=f.store.db.prepare(
+   'SELECT digest,body FROM graph_revisions WHERE runId=? AND revision=1'
+ ).get(created.workflowId);
+ const forged=JSON.parse(row.body);
+ forged.items[0].acceptanceCriteria=['Unreviewed weaker criterion'];
+ // The digest column and the graph's declared hash remain unchanged.
+ // Only the persisted original DAG body has been rewritten.
+ assert.equal(forged.workflowHash,row.digest);
+ const rewrite=body=>f.store.db.prepare(
+   'UPDATE graph_revisions SET body=? WHERE runId=? AND revision=1'
+ ).run(body,created.workflowId);
+ const forgedBody=JSON.stringify(forged);
+ const argv=['run-codex-workflow',created.workflowId,'--hash',created.workflowHash];
+ let operatorReviews=0,hostGrants=0;
+ const facade=createCodexMvpFacade(f.store,{
+   executable:process.execPath,model:'offline-fixture',enableHostTurns:true,
+   authorizeWorkflow:async()=>{hostGrants++;return false;}
+ });
+ const execution={codexAdmission:{
+   facade,authorizeOperator:async()=>{
+     operatorReviews++;
+     rewrite(forgedBody);
+     return true;
+   }
+ }};
+ rewrite(forgedBody);
+ const preReview=await productCli(['review-codex-workflow',created.workflowId],f.store.directory);
+ assert.equal(preReview.exitCode,2);
+ assert.equal(preReview.data.status,'BLOCKED');
+ await assert.rejects(dispatchProduct(argv,{store:f.store,execution}),
+   /originating Planning\/Contract\/DAG provenance invalid/);
+ assert.equal(operatorReviews,0);
+ rewrite(row.body);
+ const valid=await productCli(['review-codex-workflow',created.workflowId],f.store.directory);
+ assert.equal(valid.exitCode,0);
+ await assert.rejects(dispatchProduct(argv,{store:f.store,execution}),
+   /originating Planning provenance changed during authenticated admission/);
+ assert.equal(operatorReviews,1);
+ assert.equal(hostGrants,0);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+});
+
 test('reviewed Codex Workflow checkout freshness blocks dirty, cloned and changed-HEAD sources',async t=>{
   const f=await fixture(t);
   const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{

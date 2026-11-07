@@ -723,3 +723,17 @@ that Operator/Host callbacks and Attempt reservation are not reached
 when forbidden. This is an offline test expectation repair, not proof
 of Host Live, a public authentication provider, PROTECTED execution or
 Objective acceptance. The new commit requires its own Windows/Linux CI.
+
+## Original reviewed Codex DAG lineage cannot be rewritten (fresh CI required)
+
+The read-only `review-codex-workflow` and authenticated managed-Host
+admission now compare the complete persisted revision-1 DAG with the original
+VALIDATED Host Planning DAG, not merely the revision row's digest and the
+body's self-declared workflowHash. Rewriting a mandatory WorkItem criterion,
+dependency or file scope in the historical graph body blocks read-only review,
+and a rewrite during asynchronous Operator admission blocks before Host grant
+or Attempt reservation. An offline regression covers both entry-time and
+admission-time mutation and verifies zero Host grants/Attempts. This prevents
+a history/provenance integrity bypass; it does **not** authenticate an
+Operator, grant a Host, prove native Codex Live or accept an Objective.
+Windows/Linux CI for this change must be checked on its own commit.
