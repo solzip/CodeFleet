@@ -252,6 +252,58 @@ test('persisted Codex plan has a real read-only Objective / Contract / DAG revie
  }
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,before);
 });
+test('public hash-confirmed Codex plan creates an idempotent pending Workflow without executing',async t=>{
+ const f=await fixture(t);
+ const preview=await productCli([
+   'review-codex-plan',f.request.sessionId,'--repository',f.repo
+ ],f.store.directory);
+ assert.equal(preview.exitCode,0);
+ assert.equal(preview.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+ const argv=['prepare-codex-workflow',f.request.sessionId,'--repository',f.repo,
+   '--hash',preview.data.workflowHash,'--source-hash',preview.data.sourceContractHash];
+ const first=await productCli(argv,f.store.directory);
+ assert.equal(first.exitCode,0,first.data.error);
+ assert.equal(first.data.state,'WAITING_APPROVAL');
+ assert.equal(first.data.executionGranted,false);
+ assert.equal(first.data.approved,false);
+ assert.equal(first.data.reviewAuthority,'EXPLICIT_LOCAL_HASH_CONFIRMATION_ONLY');
+ assert.equal(first.data.hostLiveAcceptance,'UNVERIFIED');
+ assert.equal(f.store.get(first.data.workflowId).kind,'workflow');
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+ const repeated=await productCli(argv,f.store.directory);
+ assert.equal(repeated.exitCode,0);
+ assert.equal(repeated.data.workflowId,first.data.workflowId);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,1);
+});
+
+test('public Codex Workflow promotion refuses mismatched hashes, stale source and model flags',async t=>{
+ const f=await fixture(t);
+ const preview=await productCli([
+   'review-codex-plan',f.request.sessionId,'--repository',f.repo
+ ],f.store.directory);
+ assert.equal(preview.exitCode,0);
+ const argv=['prepare-codex-workflow',f.request.sessionId,'--repository',f.repo,
+   '--hash',preview.data.workflowHash,'--source-hash',preview.data.sourceContractHash];
+ for(const invalid of [
+   argv.map(v=>v===preview.data.workflowHash?'f'.repeat(64):v),
+   argv.map(v=>v===preview.data.sourceContractHash?'e'.repeat(64):v),
+   [...argv,'--allow-model'],
+   [...argv,'--actor','unverified'],
+   [...argv,'--trust','f'.repeat(64)],
+   ['prepare-codex-workflow',f.request.sessionId,'--repository','relative/path',
+     '--hash',preview.data.workflowHash,'--source-hash',preview.data.sourceContractHash]
+ ]){
+   const denied=await productCli(invalid,f.store.directory);
+   assert.equal(denied.exitCode,1,JSON.stringify({invalid,denied}));
+ }
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
+ await writeFile(join(f.repo,'src/a.js'),'export function add(x,y){ return x-y; }\\n');
+ const stale=await productCli(argv,f.store.directory);
+ assert.equal(stale.exitCode,1);
+ assert.match(stale.data.error,/pinned baseline/);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
+});
+
 test('untrusted or unsubmitted Codex planning state cannot be presented as review-ready',async t=>{
  const f=await fixture(t);
  f.store.db.prepare('UPDATE host_planning SET resultHash=? WHERE id=?')

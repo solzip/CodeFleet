@@ -552,3 +552,20 @@ WorkItem. Two offline negative/readability regressions cover both the swapped
 callback and default-denied review scope. This does **not** authorize a budget,
 measure subscription cost, authenticate a public Operator or verify Host Live.
 The new head needs its own Windows/Linux CI before claiming offline PASS.
+
+
+## Explicit public Codex plan → pending Workflow transition (new CI required)
+
+The existing Objective CLI now accepts `prepare-codex-workflow <session-id>
+--repository ABSOLUTE_PATH --hash <workflowHash> --source-hash <sourceContractHash>`.
+A user first inspects `review-codex-plan --repository ...`, then confirms both
+immutable Contract and source hashes. The command reuses the persisted planning
+validator, independent exact-scope review callback and pinned clean repository
+checks before creating a deterministic, idempotent **WAITING_APPROVAL** Workflow.
+It never starts Codex, approves the Workflow, grants budget/Host execution,
+or touches repository source files. This Local CLI hash confirmation is **not**
+authenticated Operator admission; the existing approval and trusted managed-Host
+execution authority remain separate. Offline positive, idempotence, altered
+hash, prohibited execution-flag and dirty-checkout tests were authored. The new
+commit requires its own Windows/Linux CI; native Codex Host Live and final
+independent Objective acceptance remain UNVERIFIED.
