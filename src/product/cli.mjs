@@ -18,6 +18,7 @@ import { repairProposalRequest } from './repair.mjs';
 import { inspectReviewedCodexPlan, inspectReviewedCodexPlanAtSource, prepareReviewedCodexWorkflow } from './codex-reviewed-workflow.mjs';
 import { readDeliveredObjectiveStatus } from './objective-status.mjs';
 import { isCodexMvpFacadeForStore } from './codex-mvp-facade.mjs';
+import { approval as requireWorkflowApproval } from '../workflow/persistence.mjs';
 
 export const help = `codefleet-alpha objective plan|run "goal" [repository]
   [--local-existing] (explicit existing Git working-tree Local contract; no Git writes)
@@ -155,7 +156,25 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       sourceRef:value.sourceRef, graphRef:value.graphRef, repo:value.repo,
       base:value.base, state:value.state, control:value.control ?? null
     });
+    // Operator authorization is for the exact, *currently approved* Workflow.
+    // The graph hash alone is not enough: an actor/expiry change can replace the
+    // Workflow grant while an asynchronous authenticated review is outstanding.
+    const approvalFingerprint = value => {
+      requireWorkflowApproval(store, value);
+      if (value.authorizationMode === 'OS_OPERATOR_V1')
+        return hash({ mode: 'OS_OPERATOR_V1', taskId: value.taskId ?? null,
+          operatorAuthorization: value.operatorAuthorization ?? null });
+      const row = store.db.prepare(
+        'SELECT digest,actor,expires FROM workflow_approvals WHERE runId=? AND revision=?'
+      ).get(value.id, value.revision);
+      if (!row || row.digest !== value.contractHash || !Number.isFinite(row.expires) ||
+          row.expires <= Date.now())
+        throw Error('Current Codex Workflow approval record required');
+      return hash({ mode: 'WORKFLOW_APPROVAL_V1', digest: row.digest,
+        actor: row.actor ?? null, expires: row.expires });
+    };
     const pinned = fingerprint(run);
+    const pinnedApproval = approvalFingerprint(run);
     const authorizeOperator = admission.authorizeOperator;
     const managedFacade = admission.facade;
     const scope = Object.freeze({
@@ -163,7 +182,7 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       workflowId:runId, revision:run.revision, workflowHash:run.contractHash,
       sourceRef:run.sourceRef, graphRef:run.graphRef, repo:run.repo,
       base:run.base, resume:action === 'resume-codex-workflow',
-      protectedVerified:false
+      workflowApprovalHash:pinnedApproval, protectedVerified:false
     });
     if (await Reflect.apply(authorizeOperator, admission, [scope]) !== true)
       throw Error('Authenticated Codex Operator admission denied');
@@ -173,6 +192,8 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
         admission.facade !== managedFacade || !refreshed ||
         fingerprint(refreshed) !== pinned)
       throw Error('Codex Workflow scope changed during authenticated admission');
+    if (approvalFingerprint(refreshed) !== pinnedApproval)
+      throw Error('Codex Workflow approval changed during authenticated admission');
     // The existing facade independently verifies current Workflow approval,
     // exact DAG, Host executable, budget, Lease and Host grant before dispatch.
     const data = await managedFacade.runExistingWorkflow(runId, { resume:scope.resume });

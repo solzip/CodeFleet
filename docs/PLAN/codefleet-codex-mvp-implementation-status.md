@@ -613,3 +613,17 @@ but Windows CI failed with `EBUSY` unlinking `state.sqlite`: the secondary close
 hooks ran after the fixture cleanup hook. This is test resource-lifetime repair,
 not an Operator authentication implementation or Host Live verification. The new
 head requires independent Windows/Linux CI results before claiming this fix passed.
+
+
+## Authenticated Codex entry pins the existing Workflow approval (fresh CI required)
+
+The trusted `run-codex-workflow` / `resume-codex-workflow` dispatcher now
+requires the existing Workflow approval **before** Operator admission and binds
+the exact approval identity (digest, actor and expiry, or existing protected
+Operator marker) into the immutable authenticated review scope. After an
+asynchronous Operator review it checks the same current approval snapshot
+before calling the managed facade; rotated actors or extended expiry cannot
+reuse the earlier Operator grant. An offline negative regression covers both
+mutations with zero Host grant and zero Attempt. This is **not** a deployed
+Operator authentication provider, nor Host Live, protected verification or
+Objective acceptance. Windows/Linux CI for this new head is still required.

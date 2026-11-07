@@ -689,17 +689,54 @@ test('authenticated Codex entry preserves separate Workflow and managed Host gra
  const execution={codexAdmission:admission};
  await assert.rejects(dispatchProduct(argv,{store:f.store,execution}),/Workflow approval absent/);
  assert.equal(hostReviews,0);
+ assert.equal(operatorScopes.length,0);
  approveWorkflow(f.store,created.workflowId,{
    actor:'local-test',workflowHash:created.workflowHash,expiresAt:Date.now()+60000
  });
  await assert.rejects(dispatchProduct(argv,{store:f.store,execution}),/grant denied/);
  assert.equal(hostReviews,1);
- assert.equal(operatorScopes.length,2);
+ assert.equal(operatorScopes.length,1);
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
  // A denied authenticated session never reaches the managed Host reviewer.
  admission.authorizeOperator=async()=>false;
  await assert.rejects(dispatchProduct(argv,{store:f.store,execution}),/Operator admission denied/);
  assert.equal(hostReviews,1);
+});
+
+test('Codex Operator admission pins current Workflow approval actor and expiry',async t=>{
+ const f=await fixture(t);
+ const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+   authorizeReview:async()=>true
+ });
+ approveWorkflow(f.store,created.workflowId,{
+   actor:'initial-reviewer',workflowHash:created.workflowHash,
+   expiresAt:Date.now()+60_000
+ });
+ const argv=['run-codex-workflow',created.workflowId,'--hash',created.workflowHash];
+ let hostReviews=0,operatorReviews=0;
+ const facade=createCodexMvpFacade(f.store,{
+   executable:process.execPath,model:'test-codex',enableHostTurns:true,
+   verificationBackend:{prepare:async()=>{},verify:async()=>{},cleanup:async()=>{}},
+   authorizeWorkflow:async()=>{hostReviews++;return true;}
+ });
+ for(const mutation of [
+   () => f.store.db.prepare('UPDATE workflow_approvals SET actor=? WHERE runId=?')
+     .run('replacement-reviewer',created.workflowId),
+   () => f.store.db.prepare('UPDATE workflow_approvals SET expires=expires+60000 WHERE runId=?')
+     .run(created.workflowId)
+ ]) {
+   const execution={codexAdmission:{facade,authorizeOperator:async scope=>{
+     operatorReviews++;
+     assert.match(scope.workflowApprovalHash,/^[a-f0-9]{64}$/);
+     mutation();
+     return true;
+   }}};
+   await assert.rejects(dispatchProduct(argv,{store:f.store,execution}),
+     /Workflow approval changed during authenticated admission/);
+ }
+ assert.equal(operatorReviews,2);
+ assert.equal(hostReviews,0);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
 });
 
 test('Codex execution entry refuses an approval scope changed during asynchronous authentication',async t=>{
