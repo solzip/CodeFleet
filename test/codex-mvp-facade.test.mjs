@@ -565,3 +565,30 @@ test('managed Host cannot dispatch when executable bytes change during Workflow 
   assert.equal(reviews,1);
   assert.equal(turns,0);
 });
+
+test('managed Host refuses a verifier implementation replaced during asynchronous owner grant', async () => {
+  for (const method of ['prepare', 'verify', 'cleanup']) {
+    const { store } = fixture();
+    let verifierCalls = 0, grants = 0;
+    const mutableVerifier = {
+      prepare: async () => { verifierCalls++; },
+      verify: async () => { verifierCalls++; },
+      cleanup: async () => { verifierCalls++; }
+    };
+    const api = createCodexMvpFacade(store, {
+      executable: process.execPath, model: 'fixture',
+      enableHostTurns: true, verificationBackend: mutableVerifier,
+      authorizeWorkflow: async scope => {
+        grants++;
+        assert.equal(scope.executionMode, 'HOST_READ_ONLY_PROPOSAL');
+        // Changed backend method with unchanged Workflow, approval and Host.
+        mutableVerifier[method] = async () => { verifierCalls++; };
+        return true;
+      }
+    });
+    await assert.rejects(api.runExistingWorkflow('run-fixture'),
+      /Independent Workflow verifier changed while awaiting trusted grant/);
+    assert.equal(grants, 1);
+    assert.equal(verifierCalls, 0);
+  }
+});

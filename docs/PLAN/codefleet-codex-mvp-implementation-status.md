@@ -498,3 +498,17 @@ an authorization-boundary integration fixture only: the Local actor is not
 OS-authenticated, the Host transport and verifier are fake, and no Host Live
 or final Objective acceptance occurred. The new commit requires its own
 Windows/Linux GitHub Actions result before claiming the test passed.
+
+## Managed Host independent verifier method pinning (fresh CI required)
+
+The trusted `runExistingWorkflow` entry now snapshots its injected verifier
+`prepare`, `verify` and `cleanup` functions before asynchronous owner
+execution review. A changed verifier implementation after review begins is
+refused before Controller reservation or Host dispatch. The Controller receives
+stable bound copies of the original methods, not mutable method slots on the
+embedding object. A negative test simulates replacement of each method during
+review without ever invoking the verifier or Host. This is a pre-dispatch
+method-identity fence, not authentication of the embedding, attestation of a
+protected backend, or protection from internal backend state mutation and
+OS-level races. Native Codex Host Live and independent Objective acceptance
+remain UNVERIFIED. This head needs its own Windows/Linux CI result.

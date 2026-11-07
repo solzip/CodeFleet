@@ -322,6 +322,13 @@ export function createCodexMvpFacade(store, {
       const resume = options.resume === true;
       const pinnedExecutable = await pinnedHostExecutable();
       const current = activeWorkflow(runId);
+      // Pin the actual trusted verifier methods before the asynchronous
+      // execution grant; a replaced method requires a new owner review.
+      const verifierMethods = Object.freeze({
+        prepare: verificationBackend.prepare,
+        verify: verificationBackend.verify,
+        cleanup: verificationBackend.cleanup
+      });
       const scope = callScope(current, resume, pinnedExecutable);
       if (await authorizeWorkflow(scope) !== true)
         invalid('Exact managed Workflow execution grant denied');
@@ -340,12 +347,22 @@ export function createCodexMvpFacade(store, {
         'Host executable changed while awaiting trusted grant');
       if (hash(callScope(refreshed, resume, pinnedExecutable)) !== hash(scope))
         invalid('Workflow scope changed while awaiting trusted grant');
+      if (Object.entries(verifierMethods).some(([name, method]) =>
+        verificationBackend[name] !== method))
+        invalid('Independent Workflow verifier changed while awaiting trusted grant');
+      // Bind Controller to the reviewed methods while preserving the backend's
+      // original receiver. This is not independent backend attestation.
+      const pinnedVerifier = Object.freeze(Object.fromEntries(
+        Object.entries(verifierMethods).map(([name, method]) => [
+          name, (...args) => Reflect.apply(method, verificationBackend, args)
+        ])
+      ));
       const hostExecution = createCodexManagedHostExecution(store, {
         executable, model, enabled: true, workspaceWrite, authorizeWorkspace,
         approvedExecutable: pinnedExecutable,
         ...invokeTransport
       });
-      const dependencies = { hostExecution, verificationBackend,
+      const dependencies = { hostExecution, verificationBackend: pinnedVerifier,
         ...(unknownCostBudget ? { unknownCostBudget } : {}),
         ...(repairPolicy ? { repairPolicy } : {}),
         // Use exactly the reviewed criterion snapshot for this execution.
