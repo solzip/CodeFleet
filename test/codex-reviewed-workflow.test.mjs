@@ -1081,7 +1081,7 @@ test('reviewed Codex Workflow binds active revised DAG to its persisted revision
    assert.equal(view.data.executionGranted,false);
    assert.equal(view.data.approvalState,undefined);
    await assert.rejects(dispatchProduct(executeArgs,{store:f.store,execution}),
-     /originating Planning\\/Contract\\/DAG provenance invalid/);
+     /originating Planning\/Contract\/DAG provenance invalid/);
    assert.equal(operatorReviews,0);
    assert.equal(hostGrants,0);
    assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);

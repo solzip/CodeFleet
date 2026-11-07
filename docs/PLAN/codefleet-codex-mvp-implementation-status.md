@@ -753,3 +753,18 @@ rejects missing/mismatched revision rows without Host grants or Attempts.
 This does not authenticate an Operator, grant execution, prove native Codex
 Host Live or independently accept an Objective. Fresh Windows/Linux CI must
 be checked for this commit.
+
+## CI regression repair: invalid JS regexp in active DAG revision fixture (fresh CI required)
+
+The prior head `2b321dc97c954af087dca8759ff172430a2fc264` failed the same `npm run test:codex-mvp` step on
+Windows and Linux before loading `test/codex-reviewed-workflow.test.mjs`:
+Node reported `SyntaxError: Invalid regular expression flags` at line 1084.
+The new active-revision negative fixture accidentally double-escaped the
+slash delimiters in the expected originating Planning/Contract/DAG error.
+The assertion now uses valid JavaScript regex escaping and still expects the
+same fail-closed admission error for missing/mismatched current revision rows.
+No product admission or execution logic changed. A local Node 22 syntax
+and sample-match smoke check covered the corrected regex expression only;
+the complete source test and full Windows/Linux CI remain unverified until
+this new commit's own results are available. No Codex Host Live or independent
+Objective acceptance was performed.
