@@ -30,7 +30,7 @@ test('binary contents or unsafe filenames are rejected before materialization',(
  assert.throws(()=>validateBootstrapHostProposal(escape,workflow,'create',3),/Unsafe/);
 });
 
-import { rm, readFile, realpath, mkdtemp, symlink, unlink, writeFile, rename, mkdir, stat } from 'node:fs/promises';
+import { rm, readFile, realpath, mkdtemp, symlink, unlink, writeFile, rename, mkdir, stat, link } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { prepared, built, request, approve } from './fixtures/bootstrap-reservation.mjs';
@@ -40,6 +40,7 @@ import { Store } from '../src/alpha/store.mjs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { taskReport } from '../src/product/report.mjs';
 import { createCodexMvpFacade } from '../src/product/codex-mvp-facade.mjs';
+import { createFiles, modifyFiles, preflightFiles } from '../src/workflow/bootstrap-files.mjs';
 
 const proposedTodoFiles = [
   {path:'package.json',content:'{"type":"module"}\\n'},
@@ -643,4 +644,53 @@ test('NEW_PROJECT uncertain Host Repair cannot replay after Store restart',async
   assert.equal(task(f.store,f.id).bootstrap.states.tests,'LOCAL_FAILED');
   assert.equal(await readFile(join(f.dir,'src/todo.mjs'),'utf8'),original);
   assert.equal(f.store.events(f.id).filter(e=>e.type==='BOOTSTRAP_HOST_TURN_RESERVED').length,1);
+});
+
+test('NEW_PROJECT repeated Fileset does not report success for a file changed after preflight',async t=>{
+  const root=await realpath(await mkdtemp(join(tmpdir(),'codefleet-fileset-drift-')));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  await writeFile(join(root,'reused.txt'),'approved');
+  const files=[
+    {path:'new.txt',content:'created',sha256:hash('created'),bytes:7},
+    {path:'reused.txt',content:'approved',sha256:hash('approved'),bytes:8}
+  ];
+  let beforeWrites=0;
+  const result=await createFiles(root,files,{beforeWrite:async()=>{
+    beforeWrites++;
+    await writeFile(join(root,'reused.txt'),'unapproved');
+  }});
+  assert.equal(beforeWrites,1);
+  assert.equal(result.status,'CONFLICT');
+  assert.equal(result.results.find(file=>file.path==='new.txt').status,'CREATED');
+  assert.equal(result.results.find(file=>file.path==='reused.txt').status,'CONFLICT');
+  assert.equal(await readFile(join(root,'reused.txt'),'utf8'),'unapproved');
+  assert.equal(await readFile(join(root,'new.txt'),'utf8'),'created');
+});
+
+test('NEW_PROJECT exact-match hard links cannot count as materialized or repairable owned files',async t=>{
+  const temp=await realpath(await mkdtemp(join(tmpdir(),'codefleet-fileset-hardlink-')));
+  t.after(()=>rm(temp,{recursive:true,force:true}));
+  const repo=join(temp,'repo');
+  await mkdir(repo);
+  const outside=join(temp,'outside.txt');
+  await writeFile(outside,'approved');
+  try { await link(outside,join(repo,'owned.txt')); }
+  catch(error) {
+    if (['EPERM','EACCES','ENOTSUP','EOPNOTSUPP'].includes(error.code))
+      return t.skip('Hard links unavailable on this runner');
+    throw error;
+  }
+  const file={path:'owned.txt',content:'approved',sha256:hash('approved'),bytes:8};
+  const before=await preflightFiles(repo,[file]);
+  assert.equal(before[0].status,'CONFLICT');
+  const created=await createFiles(repo,[file]);
+  assert.equal(created.status,'CONFLICT');
+  assert.equal(created.written,false);
+  const repaired=await modifyFiles(repo,[{
+    ...file,baseSha256:hash('approved'),content:'replacement',
+    sha256:hash('replacement'),bytes:11
+  }]);
+  assert.equal(repaired.status,'CONFLICT');
+  assert.equal(repaired.written,false);
+  assert.equal(await readFile(outside,'utf8'),'approved');
 });
