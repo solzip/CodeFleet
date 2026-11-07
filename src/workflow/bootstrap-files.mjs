@@ -163,7 +163,15 @@ export async function modifyFiles(root, files, { cancelled = () => false, record
   const results = [];
   for (const f of files) {
     const prior = preflight.find(r => r.path === f.path);
-    if (prior.status === 'ALREADY_MODIFIED') { results.push({ path: f.path, status: 'ALREADY_MODIFIED', baseSha256: f.baseSha256, sha256: f.sha256, bytes: f.bytes }); record(results.at(-1)); continue; }
+    if (prior.status === 'ALREADY_MODIFIED') {
+      // An exact-match repair may be replaced after preflight by a changed
+      // leaf or an outside hard link. Do not record success on stale bytes.
+      const fresh = await observe(realRoot, f);
+      const result = fresh.status === 'ALREADY_MODIFIED'
+        ? { path: f.path, status: 'ALREADY_MODIFIED', baseSha256: f.baseSha256, sha256: f.sha256, bytes: f.bytes }
+        : { path: f.path, status: 'CONFLICT', reason: fresh.reason ?? 'Already-modified file changed after preflight' };
+      results.push(result); record(result); continue;
+    }
     if (cancelled()) { results.push({ path: f.path, status: 'NOT_RUN', reason: 'Cancelled before write' }); continue; }
     const temp = `${prior.target}.codefleet-${randomUUID()}.tmp`;
     let result;

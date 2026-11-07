@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { writeFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { proposeNewProjectFileset,validateBootstrapHostProposal,validateBootstrapHostRepairProposal,bootstrapFilesOutputSchema,bootstrapRepairOutputSchema } from '../src/hosts/codex-bootstrap-files.mjs';
 
@@ -665,6 +666,35 @@ test('NEW_PROJECT repeated Fileset does not report success for a file changed af
   assert.equal(result.results.find(file=>file.path==='reused.txt').status,'CONFLICT');
   assert.equal(await readFile(join(root,'reused.txt'),'utf8'),'unapproved');
   assert.equal(await readFile(join(root,'new.txt'),'utf8'),'created');
+});
+
+test('NEW_PROJECT previously repaired files are rechecked after repair preflight',async t=>{
+  const root=await realpath(await mkdtemp(join(tmpdir(),'codefleet-repair-preflight-drift-')));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  await writeFile(join(root,'first.txt'),'original');
+  await writeFile(join(root,'already.txt'),'approved');
+  const files=[
+    {path:'first.txt',baseSha256:hash('original'),content:'updated',sha256:hash('updated'),bytes:7},
+    {path:'already.txt',baseSha256:hash('before'),content:'approved',sha256:hash('approved'),bytes:8}
+  ];
+  let writes=0;
+  const recorded=[];
+  const result=await modifyFiles(root,files,{
+    beforeWrite:()=>{
+      writes++;
+      // The second file matched its approved repair at preflight. Change it
+      // while the first file is being applied, before its success is recorded.
+      writeFileSync(join(root,'already.txt'),'outside-change');
+    },
+    record:entry=>recorded.push(entry)
+  });
+  assert.equal(writes,1);
+  assert.equal(result.status,'CONFLICT');
+  assert.equal(result.written,true);
+  assert.deepEqual(result.results.map(entry=>entry.status),['MODIFIED','CONFLICT']);
+  assert.deepEqual(recorded.map(entry=>entry.status),['MODIFIED','CONFLICT']);
+  assert.equal(await readFile(join(root,'first.txt'),'utf8'),'updated');
+  assert.equal(await readFile(join(root,'already.txt'),'utf8'),'outside-change');
 });
 
 test('NEW_PROJECT exact-match hard links cannot count as materialized or repairable owned files',async t=>{
