@@ -595,3 +595,33 @@ test('managed Host refuses a verifier implementation replaced during asynchronou
     assert.equal(verifierCalls, 0);
   }
 });
+
+test('managed Host rejects delivery approval or independent observer replaced during owner review', async () => {
+  for (const method of ['authorize', 'verify']) {
+    const { store } = fixture();
+    let grants = 0, deliveryCalls = 0;
+    const destinationDelivery = {
+      approvedCriteria: [{
+        id: 'C1', requiredAuthority: 'LOCAL_EXECUTED',
+        description: 'Inspect the delivered tree'
+      }],
+      authorize: async () => { deliveryCalls++; return true; },
+      verify: async () => { deliveryCalls++; return { criteria: [] }; }
+    };
+    const api = createCodexMvpFacade(store, {
+      executable: process.execPath, model: 'fixture',
+      enableHostTurns: true, verificationBackend: backend,
+      destinationDelivery,
+      authorizeWorkflow: async scope => {
+        grants++;
+        assert.equal(scope.destinationCriteria[0].id, 'C1');
+        destinationDelivery[method] = async () => { deliveryCalls++; };
+        return true;
+      }
+    });
+    await assert.rejects(api.runExistingWorkflow('run-fixture'),
+      /Destination delivery authority changed while awaiting trusted grant/);
+    assert.equal(grants, 1);
+    assert.equal(deliveryCalls, 0);
+  }
+});

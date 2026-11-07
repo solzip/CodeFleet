@@ -329,6 +329,12 @@ export function createCodexMvpFacade(store, {
         verify: verificationBackend.verify,
         cleanup: verificationBackend.cleanup
       });
+      // Delivery approval and independent delivered-tree observation must not
+      // be replaced while the Workflow owner is reviewing Host admission.
+      const destinationMethods = destinationDelivery ? Object.freeze({
+        authorize: destinationDelivery.authorize,
+        verify: destinationDelivery.verify
+      }) : null;
       const scope = callScope(current, resume, pinnedExecutable);
       if (await authorizeWorkflow(scope) !== true)
         invalid('Exact managed Workflow execution grant denied');
@@ -350,6 +356,9 @@ export function createCodexMvpFacade(store, {
       if (Object.entries(verifierMethods).some(([name, method]) =>
         verificationBackend[name] !== method))
         invalid('Independent Workflow verifier changed while awaiting trusted grant');
+      if (destinationMethods && Object.entries(destinationMethods).some(([name, method]) =>
+        destinationDelivery[name] !== method))
+        invalid('Destination delivery authority changed while awaiting trusted grant');
       // Bind Controller to the reviewed methods while preserving the backend's
       // original receiver. This is not independent backend attestation.
       const pinnedVerifier = Object.freeze(Object.fromEntries(
@@ -367,10 +376,13 @@ export function createCodexMvpFacade(store, {
         ...(repairPolicy ? { repairPolicy } : {}),
         // Use exactly the reviewed criterion snapshot for this execution.
         // A later mutation of the embedding's array cannot retarget delivery.
-        ...(destinationDelivery ? { destinationDelivery: {
-          ...destinationDelivery,
+        ...(destinationDelivery ? { destinationDelivery: Object.freeze({
+          // Controller cannot see later method-slot replacements on the
+          // embedding's mutable delivery service after this execution grant.
+          authorize: (...args) => Reflect.apply(destinationMethods.authorize, destinationDelivery, args),
+          verify: (...args) => Reflect.apply(destinationMethods.verify, destinationDelivery, args),
           approvedCriteria: scope.destinationCriteria.map(criterion => ({ ...criterion }))
-        } } : {}),
+        }) } : {}),
         ...(developmentPolicy ? { developmentPolicy } : {}),
         ...(workItemPolicy ? { workItemPolicy } : {})
       };

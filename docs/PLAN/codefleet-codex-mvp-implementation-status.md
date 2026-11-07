@@ -526,3 +526,16 @@ post-delivery source drift revokes the previously complete read-only status.
 This is a synthetic cross-module regression, **not** native Codex Host Live,
 OS-authenticated Operator admission, protected verification or final real
 project acceptance. This new commit requires its own Windows/Linux CI run.
+
+## Managed Host delivery authority method pinning (fresh CI required)
+
+The trusted managed Workflow execution grant now snapshots both the exact
+Local delivery owner-authorization callback and the independent delivered-tree
+verifier callback before asynchronous Host admission review. Replacing either
+callback during review blocks Controller reservation and Host dispatch. After
+review, the Controller receives only wrappers bound to the originally reviewed
+callback references, alongside the immutable criterion snapshot. Offline
+regressions cover both callback replacements with zero delivery effects. This
+does not authenticate the embedding, attest the verifier's internals or provide
+OS isolation; native Codex Host Live and final Objective acceptance remain
+UNVERIFIED. Windows/Linux CI for this new head must be evaluated separately.
