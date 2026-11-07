@@ -485,3 +485,16 @@ regressions cover repository-identity and dirty-status substitution with no
 Workflow or Attempt created. This is a bounded handoff integrity fix, not
 public Operator authentication, Host Live acceptance or Objective completion.
 The new commit requires its own Windows/Linux GitHub Actions results.
+
+## Offline reviewed-Goal-to-Host admission integration (new CI required)
+
+A real SQLite Store/repository integration test now joins the public read-only
+pinned Codex planning preview, trusted independent planning review, creation
+of a still-unapproved Workflow, explicit existing Local Workflow approval, and
+a separately denied managed-Host execution grant. It asserts that neither an
+unapproved Workflow nor a merely approved Workflow reserves an Attempt, runs
+a Host Turn, produces a delivery, or claims Objective completion. This is
+an authorization-boundary integration fixture only: the Local actor is not
+OS-authenticated, the Host transport and verifier are fake, and no Host Live
+or final Objective acceptance occurred. The new commit requires its own
+Windows/Linux GitHub Actions result before claiming the test passed.

@@ -6,6 +6,8 @@ import { hash } from '../src/alpha/contract.mjs';
 import { hybridDefinition } from '../src/workflow/definition.mjs';
 import { tmpdir } from 'node:os';
 import { Store } from '../src/alpha/store.mjs';
+import { approveWorkflow } from '../src/workflow/persistence.mjs';
+import { createCodexMvpFacade } from '../src/product/codex-mvp-facade.mjs';
 import { git } from '../src/alpha/workspace.mjs';
 import { beginPlanning,submitPlanning } from '../src/hosts/planning.mjs';
 import { prepareReviewedCodexWorkflow, inspectReviewedCodexPlan } from '../src/product/codex-reviewed-workflow.mjs';
@@ -388,4 +390,64 @@ test('public Codex plan review optionally checks a clean pinned repository befor
  const invalid=await productCli(['delivered-status','workflow-id','--repository',f.repo],f.store.directory);
  assert.equal(invalid.exitCode,1);
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,before);
+});
+
+test('reviewed Codex Goal to Workflow still requires independent Workflow and Host admission',async t=>{
+  const f=await fixture(t);
+  const preview=await productCli([
+    'review-codex-plan',f.request.sessionId,'--repository',f.repo
+  ],f.store.directory);
+  assert.equal(preview.exitCode,0);
+  assert.equal(preview.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+  assert.equal(preview.data.executionGranted,false);
+
+  let planReviews=0,hostReviews=0;
+  const api=createCodexMvpFacade(f.store,{
+    executable:process.execPath,model:'offline-fixture',enableHostTurns:true,
+    authorizeReviewedWorkflow:async scope=>{
+      planReviews++;
+      assert.equal(scope.workflowHash,preview.data.workflowHash);
+      assert.equal(scope.sourceContractHash,preview.data.sourceContractHash);
+      assert.equal(scope.executionGranted,false);
+      return true;
+    },
+    authorizeWorkflow:async scope=>{
+      hostReviews++;
+      assert.equal(scope.workflowHash,preview.data.workflowHash);
+      assert.equal(scope.objective,goal);
+      assert.deepEqual(scope.workItems.map(item=>item.id),['change']);
+      assert.equal(scope.executionMode,'HOST_READ_ONLY_PROPOSAL');
+      assert.equal(scope.protectedVerified,false);
+      return false;
+    },
+    verificationBackend:{
+      prepare:async()=>{throw Error('Unapproved verification must not run');},
+      verify:async()=>{throw Error('Unapproved verification must not run');},
+      cleanup:async()=>{throw Error('Unapproved verification must not run');}
+    },
+    transport:async()=>{throw Error('Unapproved Host Turn must not run');}
+  });
+  const created=await api.prepareReviewedExistingWorkflow(f.repo,f.request.sessionId);
+  assert.equal(planReviews,1);
+  assert.equal(created.state,'WAITING_APPROVAL');
+  assert.equal(created.approved,false);
+  assert.equal(created.executionGranted,false);
+  assert.equal(hostReviews,0);
+
+  // A valid reviewed Contract is not a Workflow approval or an execution grant.
+  await assert.rejects(api.runExistingWorkflow(created.workflowId),/Workflow approval absent/);
+  assert.equal(hostReviews,0);
+  approveWorkflow(f.store,created.workflowId,{
+    actor:'local-fixture-actor',workflowHash:created.workflowHash,
+    expiresAt:Date.now()+60_000
+  });
+  // Even an explicitly approved Local Workflow cannot invoke Codex without
+  // the independent exact managed-Host grant from the trusted embedding.
+  await assert.rejects(api.runExistingWorkflow(created.workflowId),
+    /Exact managed Workflow execution grant denied/);
+  assert.equal(hostReviews,1);
+  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+  const status=await api.status(created.workflowId);
+  assert.equal(status.objectiveComplete,false);
+  assert.equal(status.deliveryRecorded,false);
 });
