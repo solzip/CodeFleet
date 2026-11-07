@@ -793,13 +793,13 @@ test('authenticated Codex Operator review fails closed on changed source and DAG
    f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
      .run(JSON.stringify(changed),created.workflowId);
    await assert.rejects(dispatchProduct(argv,{store:f.store,execution}),
-     /Codex Workflow Contract\/DAG or source artifact invalid/);
+     /Codex Workflow originating Planning\/Contract\/DAG provenance invalid/);
  }
  assert.equal(operatorReviews,0);
  f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
    .run(JSON.stringify(original),created.workflowId);
  await assert.rejects(dispatchProduct(argv,{store:f.store,execution}),
-   /Codex Workflow Contract\/DAG or source artifact invalid/);
+   /Codex Workflow originating Planning provenance changed during authenticated admission/);
  assert.equal(operatorReviews,1);
  assert.equal(hostReviews,0);
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);

@@ -704,3 +704,22 @@ and grant-time provenance mutation, with no Host review or Attempt creation.
 This is not an authenticated Operator provider, Codex Host Live proof,
 PROTECTED verification or independently accepted Objective. Its new HEAD
 requires separate Windows/Linux CI results.
+
+## CI regression repair: authenticated provenance gate changes rejection precedence (fresh CI required)
+
+The previous commit `0155ad50a99148b2468ee5c43797b77a2b4a01d2`
+failed `npm run test:codex-mvp` on both Linux (239/240 passed)
+and Windows (235/240 passed; four skipped). The negative fixture
+`authenticated Codex Operator review fails closed on changed source and DAG artifacts`
+still expected the former Contract/DAG artifact-validation error after
+the new originating Planning provenance gate began rejecting the same
+tampering **before** Operator admission. After asynchronous Operator
+review, the same invalidating DAG mutation is also rejected by the
+pinned Planning provenance recheck, before Host grant or Attempt creation.
+
+The fixture now expects those two explicit fail-closed provenance error
+messages without changing execution logic, approvals, or test assertions
+that Operator/Host callbacks and Attempt reservation are not reached
+when forbidden. This is an offline test expectation repair, not proof
+of Host Live, a public authentication provider, PROTECTED execution or
+Objective acceptance. The new commit requires its own Windows/Linux CI.
