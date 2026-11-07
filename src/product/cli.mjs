@@ -200,6 +200,16 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
         throw Error('Codex Workflow Contract/DAG or source artifact invalid');
       }
     };
+    // The Codex-specific entry is only for Workflows promoted from a
+    // persisted VALIDATED Host Planning session. A valid arbitrary Workflow
+    // with a matching graph hash is not a reviewed Codex plan.
+    const planningReview = inspectReviewedCodexWorkflow(store, runId);
+    if (planningReview.status !== 'REVIEW_REQUIRED' ||
+        planningReview.workflowHash !== run.contractHash ||
+        planningReview.sourceContractHash !== run.sourceRef ||
+        planningReview.revision !== run.revision)
+      throw Error('Codex Workflow originating Planning/Contract/DAG provenance invalid');
+    const planningReviewHash = hash(planningReview);
     const inspected = inspectContract(run);
     const inspectedHash = hash(inspected);
     const freezeCopy = value => {
@@ -219,7 +229,9 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       workflowId:runId, revision:run.revision, workflowHash:run.contractHash,
       sourceRef:run.sourceRef, graphRef:run.graphRef, repo:run.repo,
       base:run.base, resume:action === 'resume-codex-workflow',
-      workflowApprovalHash:pinnedApproval, protectedVerified:false,
+      workflowApprovalHash:pinnedApproval,
+      planningSessionId:runId.slice('planning-'.length),
+      planningReviewHash, protectedVerified:false,
       // Detached and deeply immutable: the reviewer can inspect every
       // WorkItem dependency, acceptance criterion and source/budget limit.
       // This is review context, not a substitute for Operator identity.
@@ -236,6 +248,10 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       throw Error('Codex Workflow scope changed during authenticated admission');
     if (approvalFingerprint(refreshed) !== pinnedApproval)
       throw Error('Codex Workflow approval changed during authenticated admission');
+    const currentPlanningReview = inspectReviewedCodexWorkflow(store, runId);
+    if (currentPlanningReview.status !== 'REVIEW_REQUIRED' ||
+        hash(currentPlanningReview) !== planningReviewHash)
+      throw Error('Codex Workflow originating Planning provenance changed during authenticated admission');
     if (hash(inspectContract(refreshed)) !== inspectedHash)
       throw Error('Codex Workflow Contract/DAG changed during authenticated admission');
     // The existing facade independently verifies current Workflow approval,

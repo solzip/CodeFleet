@@ -689,3 +689,18 @@ three negative cases and a clean positive case. This is a point-in-time
 read-only UX boundary, **not** a Host execution grant, OS-authenticated Operator,
 Host Live verification, or final Objective acceptance. This head requires its
 own Windows/Linux CI result.
+
+## Authenticated Codex execution requires persisted Planning provenance (fresh CI required)
+
+The authenticated `run-codex-workflow` / `resume-codex-workflow` entry now
+requires the existing read-only reviewed-Workflow projection to validate the
+original submitted VALIDATED Host Planning result, immutable first DAG revision,
+source artifact, repository identity and current Contract/DAG before requesting
+Operator authentication. It pins the planning-review digest in the immutable
+Operator scope and revalidates it after asynchronous authentication, so a
+replaced planning record or first graph revision cannot be silently executed
+under a prior Operator decision. Offline denial coverage checks both pre-grant
+and grant-time provenance mutation, with no Host review or Attempt creation.
+This is not an authenticated Operator provider, Codex Host Live proof,
+PROTECTED verification or independently accepted Objective. Its new HEAD
+requires separate Windows/Linux CI results.

@@ -667,6 +667,56 @@ test('authenticated Codex entry refuses genuine facades bound to another Store c
  }
 });
 
+test('authenticated Codex execution requires unchanged originating Planning evidence',async t=>{
+ const f=await fixture(t);
+ const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+   authorizeReview:async()=>true
+ });
+ approveWorkflow(f.store,created.workflowId,{
+   actor:'local-test',workflowHash:created.workflowHash,
+   expiresAt:Date.now()+60_000
+ });
+ let operatorReviews=0,hostReviews=0;
+ const facade=createCodexMvpFacade(f.store,{
+   executable:process.execPath,model:'offline-test',enableHostTurns:true,
+   authorizeWorkflow:async()=>{hostReviews++;return false;},
+   verificationBackend:{prepare:async()=>{},verify:async()=>{},cleanup:async()=>{}}
+ });
+ const argv=['run-codex-workflow',created.workflowId,'--hash',created.workflowHash];
+ const original=f.store.db.prepare(
+   'SELECT digest FROM graph_revisions WHERE runId=? AND revision=1'
+ ).get(created.workflowId);
+ const invalidateOrigin=()=>f.store.db.prepare(
+   'UPDATE graph_revisions SET digest=? WHERE runId=? AND revision=1'
+ ).run('f'.repeat(64),created.workflowId);
+ const restoreOrigin=()=>f.store.db.prepare(
+   'UPDATE graph_revisions SET digest=? WHERE runId=? AND revision=1'
+ ).run(original.digest,created.workflowId);
+ const admission={facade,authorizeOperator:async scope=>{
+   operatorReviews++;
+   assert.equal(scope.planningSessionId,f.request.sessionId);
+   assert.match(scope.planningReviewHash,/^[a-f0-9]{64}$/);
+   invalidateOrigin();
+   return true;
+ }};
+ try {
+   invalidateOrigin();
+   await assert.rejects(dispatchProduct(argv,{store:f.store,execution:{
+     codexAdmission:admission
+   }}),/originating Planning\/Contract\/DAG provenance invalid/);
+   assert.equal(operatorReviews,0);
+   restoreOrigin();
+   await assert.rejects(dispatchProduct(argv,{store:f.store,execution:{
+     codexAdmission:admission
+   }}),/originating Planning provenance changed during authenticated admission/);
+   assert.equal(operatorReviews,1);
+   assert.equal(hostReviews,0);
+   assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+ } finally {
+   restoreOrigin();
+ }
+});
+
 test('authenticated Codex entry preserves separate Workflow and managed Host grants',async t=>{
  const f=await fixture(t);
  const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
