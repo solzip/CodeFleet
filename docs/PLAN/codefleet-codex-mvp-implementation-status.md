@@ -471,3 +471,17 @@ Previously persisted byte-only Candidate hashes are not silently promoted;
 they require the current bound verification path. Windows executable-bit
 mutation is not claimed to be supported or tested by the POSIX-specific case.
 Native Codex Host Live and final independent acceptance remain UNVERIFIED.
+
+## Submitted Codex planning discovery bound to original review scope (fresh CI required)
+
+The existing read-only `objective review-codex-plan` and trusted
+`prepareReviewedCodexWorkflow` bridge now reject a submitted Host Planning
+result whose repository-discovery snapshot differs from the original pinned
+request. This includes repository identity and clean/dirty source metadata,
+even if the stored result digest has been recomputed. The same validator is
+used before the public review displays a reviewable DAG and before the
+independent owner callback can create an unapproved Workflow. Offline negative
+regressions cover repository-identity and dirty-status substitution with no
+Workflow or Attempt created. This is a bounded handoff integrity fix, not
+public Operator authentication, Host Live acceptance or Objective completion.
+The new commit requires its own Windows/Linux GitHub Actions results.

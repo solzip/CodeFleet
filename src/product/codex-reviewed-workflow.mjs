@@ -26,6 +26,13 @@ function planRow(store, sessionId) {
       result?.evidence?.baseline !== body.baseline ||
       result?.evidence?.inputHash !== hash(body) ||
       result?.evidence?.intentRef !== body.intentRef ||
+      // The public read-only review and trusted Workflow promotion must agree
+      // on the *original* repository discovery, not only goal and Git HEAD.
+      // A changed submitted discovery is not an owner-reviewable plan even if
+      // someone recomputes its persisted resultHash.
+      !body.context?.discovery || !result?.plan?.discovery ||
+      !/^[a-f0-9]{64}$/.test(body.context.discovery.repositoryId ?? '') ||
+      hash(result.plan.discovery) !== hash(body.context.discovery) ||
       result?.plan?.intent?.original !== body.objective ||
       result?.plan?.discovery?.base !== body.baseline ||
       !result?.workflowPreview?.source || !result?.workflowPreview?.workflow)

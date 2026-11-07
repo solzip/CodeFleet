@@ -262,6 +262,35 @@ test('untrusted or unsubmitted Codex planning state cannot be presented as revie
  assert.equal(blocked.data.workflowHash,undefined);
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
 });
+test('submitted Host discovery drift is blocked before public review or independent Workflow grant',async t=>{
+  const f=await fixture(t);
+  const saved=f.store.db.prepare('SELECT result FROM host_planning WHERE id=?')
+    .get(f.request.sessionId).result;
+  for(const tamper of [
+    result=>{result.plan.discovery.repositoryId='f'.repeat(64);},
+    result=>{result.plan.discovery.dirty=true;}
+  ]){
+    const result=JSON.parse(saved);
+    tamper(result);
+    const forged=JSON.stringify(result);
+    // Simulate an internally inconsistent persisted result with a matching
+    // storage digest, not merely a stale SHA rejected by the outer Store.
+    f.store.db.prepare('UPDATE host_planning SET result=?,resultHash=? WHERE id=?')
+      .run(forged,hash(forged),f.request.sessionId);
+    const view=await productCli(['review-codex-plan',f.request.sessionId],f.store.directory);
+    assert.equal(view.exitCode,2);
+    assert.equal(view.data.status,'BLOCKED');
+    assert.equal(view.data.workflowHash,undefined);
+    assert.equal(view.data.executionGranted,false);
+    let reviewed=0;
+    await assert.rejects(prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+      authorizeReview:async()=>{reviewed++;return true;}
+    }),/Planning result, raw objective or baseline binding invalid/);
+    assert.equal(reviewed,0);
+  }
+  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
+  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+});
 test('a read-only Store without Host planning records reports UNAVAILABLE without migration',async t=>{
  const directory=await mkdtemp(join(tmpdir(),'codefleet-codex-review-empty-'));
  const store=new Store(directory);
