@@ -1059,3 +1059,19 @@ New Windows/Linux CI is required for this head.
 The prior head `3541c4384b94db0ec99d37934e03330d260c7513` failed `npm run test:codex-mvp` on **both Windows and Linux**: four existing negative Bootstrap Local verification tests provided only `authorize` as an injected backend. The new fail-closed facade constructor correctly requires **both** `authorize` and `verify`, so those fixtures failed during construction before reaching the intended revision, Plan, command immutability and owner-denial assertions.
 
 The four fake backends now explicitly implement `verify` as a throwing, call-counted forbidden operation alongside the already-throwing `authorize`. An additional constructor-negative regression asserts that an incomplete Local verifier is still rejected; the production interface check and exact owner approval remain unchanged. No real Host, user repository, credential, PROTECTED backend or Objective completion is exercised. This commit requires fresh Windows/Linux CI before these regression tests may be called passing.
+
+## Trusted NEW_PROJECT persisted single-step Codex continuation (fresh CI required)
+
+The trusted Objective CLI now exposes `advance-codex-bootstrap <task-id>` for
+one **NEW_PROJECT** continuation step selected from the existing persisted
+`taskReport().continuation` projection. A ready Local Fileset WorkItem may
+request an independently authorized Codex Host proposal; an already-approved
+Fileset may be materialized through the existing separately reviewed Bootstrap
+Controller. Each invocation performs **at most one** step. Pending Fileset
+approval, Local verification, Repair, drift and uncertain effects return an
+explicit human handoff rather than silently granting, retrying or skipping an
+action. Ordinary CLI calls and forged facade instances remain blocked.
+Synthetic cross-Store tests cover propose → approval wait → approved apply →
+Local verification wait and denial cases. This is not a new scheduler, not a
+deployed Operator authenticator, not Host Live proof and not Objective
+acceptance. Fresh Windows/Linux CI is required for this commit.

@@ -1256,3 +1256,99 @@ test('NEW_PROJECT Repair CLI fails closed on absent failure Evidence, forged fac
   assert.equal(task(f.store,f.id).bootstrap.states.todo,'MATERIALIZED');
   assert.equal(await readFile(join(f.dir,'src/todo.mjs'),'utf8'),original);
 });
+
+test('trusted NEW_PROJECT continuation advances exactly one persisted step and stops for human decisions',async t=>{
+  const f=await prepared({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  let turns=0,proposals=0,materializationGrants=0;
+  const createCodexAdmission=store=>({facade:createCodexMvpFacade(store,{
+    executable:process.execPath,model:'SYNTHETIC_ONLY',enableHostTurns:true,
+    authorizeBootstrap:async scope=>{
+      proposals++;
+      assert.equal(scope.taskId,f.id);
+      assert.equal(scope.itemId,'todo');
+      return true;
+    },
+    authorizeBootstrapMaterialization:async scope=>{
+      materializationGrants++;
+      assert.equal(scope.kind,'CODEFLEET_BOOTSTRAP_MATERIALIZATION_SCOPE_V1');
+      assert.equal(scope.itemId,'todo');
+      return true;
+    },
+    transport:async call=>{
+      turns++;
+      return fakeHostReceipt(JSON.parse(call.prompt));
+    }
+  })});
+  const advance=()=>productCli(['advance-codex-bootstrap',f.id],f.state,{createCodexAdmission});
+  const proposed=await advance();
+  assert.equal(proposed.exitCode,0,proposed.data?.error);
+  assert.equal(proposed.data.step,'PROPOSE_FILESET');
+  assert.equal(proposed.data.itemId,'todo');
+  assert.equal(proposed.data.result.approvalRequest.authority,'REQUEST_ONLY');
+  assert.equal(proposed.data.continuation.status,'AWAIT_OPERATOR');
+  assert.equal(proposed.data.hostLiveAcceptance,'UNVERIFIED');
+  assert.equal(proposed.data.protectedVerified,false);
+  assert.deepEqual([turns,proposals,materializationGrants],[1,1,0]);
+  await assert.rejects(readFile(join(f.dir,'src/todo.mjs'),'utf8'),{code:'ENOENT'});
+
+  const pending=await advance();
+  assert.equal(pending.exitCode,2);
+  assert.equal(pending.data.status,'HUMAN_HANDOFF');
+  assert.equal(pending.data.continuation.next.kind,'AWAIT_FILESET_APPROVAL');
+  assert.deepEqual([turns,proposals,materializationGrants],[1,1,0]);
+
+  approve(f,proposed.data.result.approvalRequest);
+  const materialized=await advance();
+  assert.equal(materialized.exitCode,0,materialized.data?.error);
+  assert.equal(materialized.data.step,'MATERIALIZE');
+  assert.equal(materialized.data.result.status,'MATERIALIZED');
+  assert.deepEqual([turns,proposals,materializationGrants],[1,1,1]);
+  for(const file of proposedTodoFiles)
+    assert.equal(await readFile(join(f.dir,file.path),'utf8'),file.content);
+
+  const needsLocalTrust=await advance();
+  assert.equal(needsLocalTrust.exitCode,2);
+  assert.equal(needsLocalTrust.data.status,'HUMAN_HANDOFF');
+  assert.equal(needsLocalTrust.data.continuation.next.kind,'RUN_LOCAL_VERIFICATION');
+  assert.deepEqual([turns,proposals,materializationGrants],[1,1,1]);
+  assert.equal(task(f.store,f.id).bootstrap.verifications?.tests,undefined);
+  assert.equal((await taskReport(f.store,f.id)).complete,false);
+});
+
+test('NEW_PROJECT continuation blocks plain CLI, malformed flags, forged facade and denied Host grant',async t=>{
+  const f=await prepared({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const entry=['advance-codex-bootstrap',f.id];
+  let factories=0,grants=0,turns=0;
+  const createCodexAdmission=store=>{
+    factories++;
+    return {facade:createCodexMvpFacade(store,{
+      executable:process.execPath,model:'SYNTHETIC_ONLY',enableHostTurns:true,
+      authorizeBootstrap:async()=>{grants++;return false;},
+      transport:async()=>{turns++;throw Error('Denied continuation cannot call Host');}
+    })};
+  };
+  for(const invalid of [
+    ['advance-codex-bootstrap'],[...entry,'extra'],[...entry,'--allow-model'],
+    [...entry,'--actor','untrusted'],[...entry,'--repository',f.dir]
+  ]){
+    const blocked=await productCli(invalid,f.state,{createCodexAdmission});
+    assert.equal(blocked.exitCode,1);
+    assert.match(blocked.data.error,/advance-codex-bootstrap requires|repository is only valid/);
+  }
+  assert.equal(factories,0);
+  const plain=await productCli(entry,f.state);
+  assert.equal(plain.exitCode,1);
+  assert.match(plain.data.error,/TRUSTED_CODEX_BOOTSTRAP_CONTINUATION_UNAVAILABLE/);
+  const forged=await productCli(entry,f.state,{createCodexAdmission:()=>({
+    facade:{proposeBootstrapFiles:async()=>({approvalRequest:{}})}
+  })});
+  assert.equal(forged.exitCode,1);
+  assert.match(forged.data.error,/TRUSTED_CODEX_BOOTSTRAP_CONTINUATION_UNAVAILABLE/);
+  const denied=await productCli(entry,f.state,{createCodexAdmission});
+  assert.equal(denied.exitCode,1);
+  assert.match(denied.data.error,/trusted exact bounded approval/);
+  assert.deepEqual([factories,grants,turns],[1,1,0]);
+  assert.equal(task(f.store,f.id).bootstrap.filesets.todo,undefined);
+});

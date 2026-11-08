@@ -39,6 +39,8 @@ codefleet-alpha objective plan-codex-goal "natural-language Goal" --repository A
   (trusted Host embedding only; independent read-only planning Turn grant, model usage may be billed; no Workflow approval or source writes)
 codefleet-alpha objective propose-codex-bootstrap-files <task-id> <local-edit-item-id>
   (trusted Host embedding only; separately approved NEW_PROJECT Fileset proposal, no filesystem writes or execution grant)
+codefleet-alpha objective advance-codex-bootstrap <task-id>
+  (trusted Host embedding only; one persisted NEW_PROJECT continuation step: propose or approved materialize; other states require human handoff)
 codefleet-alpha objective propose-codex-bootstrap-repair <task-id> <local-edit-item-id> <failed-verification-item-id>
   (trusted Host embedding only; requires current dependent LOCAL_FAILED Evidence; proposes a separately approvable Repair Fileset without writes)
 codefleet-alpha objective materialize-codex-bootstrap-files <task-id> <local-edit-item-id>
@@ -116,6 +118,12 @@ function requireCodexBootstrapEntryArgs(args, o, action = 'propose-codex-bootstr
   if (args.length !== 2 || args.some(value => !value || value.startsWith('-')) ||
       Object.keys(o).length !== 0)
     throw Error(action + ' requires exactly one Task ID and local-edit WorkItem ID; no flags or approval options');
+}
+
+function requireCodexBootstrapAdvanceArgs(args, o) {
+  if (args.length !== 1 || !args[0] || args[0].startsWith('-') ||
+      Object.keys(o).length !== 0)
+    throw Error('advance-codex-bootstrap requires one Task ID and no flags or approval options');
 }
 
 function requireCodexBootstrapRepairArgs(args, o) {
@@ -239,6 +247,49 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     const data = await binding.facade.verifyApprovedBootstrap(args[0], args[1], request);
     return { exitCode: data.status === 'LOCAL_PASSED' ? 0 : 2,
       data: { ...data, protection: 'UNPROTECTED', hostLiveAcceptance: 'UNVERIFIED' } };
+  }
+  if (action === 'advance-codex-bootstrap') {
+    requireCodexBootstrapAdvanceArgs(args, o);
+    const binding = execution?.codexAdmission;
+    if (!isCodexMvpFacadeForStore(binding?.facade, store))
+      throw Error('TRUSTED_CODEX_BOOTSTRAP_CONTINUATION_UNAVAILABLE: trusted Store-bound Host facade required');
+    // Persisted TaskReport already reconciles ready DAG items, approvals,
+    // failed Evidence, drift and uncertain effects. One invocation delegates
+    // at most ONE step; it is never a new scheduler or an approval grant.
+    const before = await taskReport(store, args[0]);
+    if (before.contractKind !== 'NEW_PROJECT' || !before.bootstrap)
+      throw Error('Codex Bootstrap continuation requires a prepared NEW_PROJECT Workflow');
+    const continuation = before.continuation;
+    const next = continuation?.next;
+    const step = continuation.status === 'HOST_PROPOSAL_REQUIRED' &&
+      next?.kind === 'PROPOSE_FILESET' ? 'PROPOSE_FILESET' :
+      continuation.status === 'AWAIT_OPERATOR' &&
+      next?.kind === 'MATERIALIZE' ? 'MATERIALIZE' : null;
+    if (!step || !next?.itemId)
+      return { exitCode: 2, data: {
+        schemaVersion: 1, status: 'HUMAN_HANDOFF',
+        continuation, executionGranted: false,
+        protectedVerified: false, hostLiveAcceptance: 'UNVERIFIED'
+      } };
+    // Recheck the persisted task before entering the approved Controller/Host
+    // path. The delegated facade performs its own exact per-step freshness,
+    // independent owner-grant, fileset and repository checks.
+    const current = task(store, args[0]);
+    if (current.revision !== before.revision ||
+        current.bootstrap?.workflowHash !== before.workflowHash)
+      throw Error('Bootstrap continuation changed before delegated step');
+    const result = step === 'PROPOSE_FILESET'
+      ? await binding.facade.proposeBootstrapFiles(args[0], next.itemId)
+      : await binding.facade.materializeApprovedBootstrap(args[0], next.itemId);
+    const after = await taskReport(store, args[0]);
+    return { exitCode: step === 'PROPOSE_FILESET'
+        ? result.approvalRequest ? 0 : 2
+        : result.status === 'MATERIALIZED' ? 0 : 2,
+      data: {
+        schemaVersion: 1, status: result.status ?? 'STEP_RECORDED',
+        step, itemId: next.itemId, result, continuation: after.continuation,
+        protectedVerified: false, hostLiveAcceptance: 'UNVERIFIED'
+      } };
   }
   if (action === 'review-codex-plan') {
     if (args.length !== 1 || Object.keys(o).some(k => k !== 'repository') || !args[0] || args[0].startsWith('-'))
@@ -605,7 +656,7 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
     requireDurableEntry(argv); // Before opening Store or reading caller JSON.
     const codexExecution = ['run-codex-workflow','resume-codex-workflow'].includes(argv[0]);
     const codexPlanning = argv[0] === 'plan-codex-goal';
-    const codexBootstrap = ['propose-codex-bootstrap-files','propose-codex-bootstrap-repair','materialize-codex-bootstrap-files','verify-codex-bootstrap'].includes(argv[0]);
+    const codexBootstrap = ['propose-codex-bootstrap-files','propose-codex-bootstrap-repair','materialize-codex-bootstrap-files','verify-codex-bootstrap','advance-codex-bootstrap'].includes(argv[0]);
     const codexTrusted = codexExecution || codexPlanning || codexBootstrap;
     let boundedBootstrapVerificationRequest;
     if (codexTrusted) {
@@ -615,6 +666,8 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
           : codexBootstrap
             ? argv[0] === 'materialize-codex-bootstrap-files'
               ? 'TRUSTED_CODEX_BOOTSTRAP_MATERIALIZATION_UNAVAILABLE: plain CLI has no trusted Fileset materialization binding'
+              : argv[0] === 'advance-codex-bootstrap'
+                ? 'TRUSTED_CODEX_BOOTSTRAP_CONTINUATION_UNAVAILABLE: plain CLI has no trusted continuation binding'
               : argv[0] === 'verify-codex-bootstrap'
                 ? 'TRUSTED_CODEX_BOOTSTRAP_VERIFICATION_UNAVAILABLE: plain CLI has no trusted Local verification binding'
                 : argv[0] === 'propose-codex-bootstrap-repair'
@@ -625,7 +678,9 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
       const { positional, options } = parse(argv.slice(1));
       if (codexPlanning) requireCodexGoalEntryArgs(positional, options);
       else if (codexBootstrap) {
-        if (argv[0] === 'verify-codex-bootstrap')
+        if (argv[0] === 'advance-codex-bootstrap')
+          requireCodexBootstrapAdvanceArgs(positional, options);
+        else if (argv[0] === 'verify-codex-bootstrap')
           requireCodexBootstrapVerificationArgs(positional, options);
         else if (argv[0] === 'propose-codex-bootstrap-repair')
           requireCodexBootstrapRepairArgs(positional, options);
