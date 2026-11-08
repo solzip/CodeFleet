@@ -841,3 +841,24 @@ during owner review without entering Controller dispatch. This does not
 authenticate a deployed Operator, enable unsupported capabilities, prove
 Codex Host Live or accept an Objective. Its new Windows/Linux CI results
 must be inspected independently.
+
+## Trusted product CLI admission factory for Codex Workflow (fresh CI required)
+
+A trusted Host embedding may now invoke the existing `productCli` wrapper with
+an in-process `createCodexAdmission(store)` factory. The factory receives the
+exact command-owned Store handle and must supply an authenticated Operator
+callback plus a genuine `createCodexMvpFacade` bound to that same Store.
+This connects the real CLI command dispatcher to the previously implemented
+managed-Host integration without requiring the embedding to manually open and
+close a matching Store. Malformed Workflow/hash/flag requests are refused
+before invoking the privileged factory; the command closes the Store on both
+authorization rejection and success. The ordinary `codefleet-alpha objective`
+process supplies **no** factory and still blocks Host execution before Store
+open. Existing independent Workflow approval, Operator admission, Controller,
+Lease, budget and exact Host grants remain mandatory. Offline regression
+fixtures exercise malformed options, missing Workflow approval, denied
+Operator admission for run/resume, and forged facade rejection, without
+launching a Host or recording any Attempt. This is a trusted injection
+**integration seam**, not an OS-authenticated Operator implementation,
+public Host execution permission, native Codex Host Live verification or
+Objective acceptance. Fresh Windows/Linux CI is required for this commit.

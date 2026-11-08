@@ -96,6 +96,12 @@ function parse(values) {
 const list = value => value?.split(',').filter(Boolean);
 const number = (value, fallback) => value === undefined ? fallback : Number(value);
 
+function requireCodexWorkflowEntryArgs(args, o) {
+  if (args.length !== 1 || !args[0] || args[0].startsWith('-') ||
+      Object.keys(o).length !== 1 || !/^[a-f0-9]{64}$/.test(o.hash ?? ''))
+    throw Error('Codex Workflow execution requires one Workflow ID and exact --hash only');
+}
+
 function requireDurableEntry(argv) {
   if (argv[0] === 'authorize-local' || argv[0] === 'verify' && argv.slice(1).some(v =>
     v === '--decision' || v.startsWith('--decision=') || v === '--request-id' || v.startsWith('--request-id='))) {
@@ -151,9 +157,7 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
   if (action === 'run-codex-workflow' || action === 'resume-codex-workflow') {
     // Only an authenticated Host embedding can provide this dependency.
     // Never accept an Operator identity, callback or approval from CLI JSON.
-    if (args.length !== 1 || !args[0] || args[0].startsWith('-') ||
-        Object.keys(o).length !== 1 || !/^[a-f0-9]{64}$/.test(o.hash ?? ''))
-      throw Error('Codex Workflow execution requires one Workflow ID and exact --hash only');
+    requireCodexWorkflowEntryArgs(args, o);
     const admission = execution?.codexAdmission;
     if (!admission || typeof admission.authorizeOperator !== 'function' ||
         !isCodexMvpFacadeForStore(admission.facade, store))
@@ -467,14 +471,30 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
   throw Error('Unknown objective command: ' + action);
 }
 
-export async function productCli(argv, directory) {
+// The ordinary CLI never supplies this dependency. A trusted Host embedding
+// may provide a factory that binds its authenticated Operator and genuine
+// managed-Host facade to the *same* Store opened for this command.
+export async function productCli(argv, directory, { createCodexAdmission } = {}) {
   let store;
   try {
     requireDurableEntry(argv); // Before opening Store or reading caller JSON.
-    if (['run-codex-workflow','resume-codex-workflow'].includes(argv[0]))
-      throw Error('AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE: plain CLI has no authenticated Host Operator binding');
+    const codexExecution = ['run-codex-workflow','resume-codex-workflow'].includes(argv[0]);
+    if (codexExecution) {
+      if (typeof createCodexAdmission !== 'function')
+        throw Error('AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE: plain CLI has no authenticated Host Operator binding');
+      // Reject untrusted CLI flags before calling the privileged admission
+      // factory. The only supplied authority comes from the Host embedding.
+      const { positional, options } = parse(argv.slice(1));
+      requireCodexWorkflowEntryArgs(positional, options);
+    }
     if (!argv[0] || ['help', '--help'].includes(argv[0])) return await dispatchProduct(argv);
     store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request', 'delivered-status', 'workflow-progress', 'review-codex-plan', 'review-codex-workflow'].includes(argv[0]) });
+    if (codexExecution) {
+      const codexAdmission = await createCodexAdmission(store);
+      // dispatchProduct still checks authentic facade identity, current Store
+      // binding, exact source/Workflow approval and Operator authorization.
+      return await dispatchProduct(argv, { store, execution: { codexAdmission } });
+    }
     return await dispatchProduct(argv, { store });
   }
   catch (e) { return { exitCode: 1, data: { schemaVersion: 1, status: 'BLOCKED_OR_UNSUPPORTED', error: e.message } }; }

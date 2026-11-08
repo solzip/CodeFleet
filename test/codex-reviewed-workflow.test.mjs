@@ -632,6 +632,65 @@ test('public Codex Workflow execution is unavailable without authenticated Host 
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
 });
 
+test('trusted CLI wrapper binds authenticated Codex admission to its own Store without granting Host execution',async t=>{
+ const f=await fixture(t);
+ const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+   authorizeReview:async()=>true
+ });
+ const argv=['run-codex-workflow',created.workflowId,'--hash',created.workflowHash];
+ let factoryCalls=0,operatorCalls=0;
+ const createCodexAdmission=store=>{
+   factoryCalls++;
+   assert.notEqual(store,f.store);
+   const facade=createCodexMvpFacade(store,{
+     executable:process.execPath,model:'OFFLINE_NO_HOST',enableHostTurns:false
+   });
+   return {facade,authorizeOperator:async scope=>{
+     operatorCalls++;
+     assert.equal(scope.workflowId,created.workflowId);
+     assert.equal(scope.workflowHash,created.workflowHash);
+     assert.equal(scope.protectedVerified,false);
+     return false;
+   }};
+ };
+ // Malformed requests must never reach the privileged Host injection.
+ const malformed=await productCli([...argv,'--actor','untrusted'],f.store.directory,{
+   createCodexAdmission
+ });
+ assert.equal(malformed.exitCode,1);
+ assert.match(malformed.data.error,/Codex Workflow execution requires one Workflow ID/);
+ assert.equal(factoryCalls,0);
+ // A valid factory is not a Workflow approval or a public Operator.
+ const pending=await productCli(argv,f.store.directory,{createCodexAdmission});
+ assert.equal(pending.exitCode,1);
+ assert.match(pending.data.error,/Workflow approval absent/);
+ assert.equal(factoryCalls,1);
+ assert.equal(operatorCalls,0);
+ approveWorkflow(f.store,created.workflowId,{
+   actor:'offline-reviewer',workflowHash:created.workflowHash,
+   expiresAt:Date.now()+60_000
+ });
+ for(const action of ['run-codex-workflow','resume-codex-workflow']){
+   const denied=await productCli([action,...argv.slice(1)],f.store.directory,{
+     createCodexAdmission
+   });
+   assert.equal(denied.exitCode,1);
+   assert.match(denied.data.error,/Authenticated Codex Operator admission denied/);
+ }
+ assert.equal(factoryCalls,3);
+ assert.equal(operatorCalls,2);
+ // A fabricated facade cannot substitute for the embedding-owned capability.
+ const forged=await productCli(argv,f.store.directory,{
+   createCodexAdmission:()=>({
+     facade:{runExistingWorkflow:async()=>{throw Error('must not execute');}},
+     authorizeOperator:async()=>true
+   })
+ });
+ assert.equal(forged.exitCode,1);
+ assert.match(forged.data.error,/AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE/);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+});
+
 test('authenticated Codex entry refuses genuine facades bound to another Store connection',async t=>{
  const f=await fixture(t);
  const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
