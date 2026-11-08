@@ -1170,23 +1170,41 @@ test('NEW_PROJECT trusted CLI runs approved Repair apply and fresh Local verific
   assert.ok(failureRef);
   assert.equal(await readFile(join(f.dir,'src/todo.mjs'),'utf8'),original);
 
-  const proposed=await productCli(
-    ['propose-codex-bootstrap-repair',f.id,'todo','tests'],
-    f.state,{createCodexAdmission});
+  const advance=extra=>productCli(['advance-codex-bootstrap',f.id,...extra],f.state,{createCodexAdmission});
+  const handoff=await advance([]);
+  assert.equal(handoff.exitCode,2,handoff.data?.error);
+  assert.equal(handoff.data.status,'HUMAN_HANDOFF');
+  assert.equal(handoff.data.continuation.status,'AWAIT_REPAIR_SELECTION');
+  assert.equal(handoff.data.continuation.next.itemId,'tests');
+  assert.equal(handoff.data.continuation.next.failedEvidenceRef,failureRef);
+  assert.deepEqual(handoff.data.continuation.next.repairCandidates,['todo','calendar']);
+  const wrong=await advance(['--repair-item','unknown']);
+  assert.equal(wrong.exitCode,1);
+  assert.match(wrong.data.error,/Repair selection/);
+  assert.equal(hostTurns,0,'No Host Turn before a valid explicit Repair selection');
+
+  const proposed=await advance(['--repair-item','todo']);
   assert.equal(proposed.exitCode,0,proposed.data?.error);
-  assert.equal(proposed.data.approvalRequest.operation,'modify');
-  assert.equal(proposed.data.materialized,false);
-  assert.equal(f.store.get(proposed.data.approvalRequest.runId).state,'WAITING_APPROVAL');
+  assert.equal(proposed.data.step,'PROPOSE_REPAIR_FILESET');
+  assert.equal(proposed.data.itemId,'todo');
+  assert.equal(proposed.data.verificationItem,'tests');
+  assert.equal(proposed.data.result.approvalRequest.operation,'modify');
+  assert.equal(proposed.data.result.materialized,false);
+  assert.equal(f.store.get(proposed.data.result.approvalRequest.runId).state,'WAITING_APPROVAL');
   assert.equal(await readFile(join(f.dir,'src/todo.mjs'),'utf8'),original);
   assert.equal(hostTurns,1);
+  const approvalWait=await advance([]);
+  assert.equal(approvalWait.exitCode,2);
+  assert.equal(approvalWait.data.continuation.next.kind,'AWAIT_FILESET_APPROVAL');
+  assert.equal(hostTurns,1,'A pending Repair must not cause a duplicate Turn');
 
   const apply=['materialize-codex-bootstrap-files',f.id,'todo'];
   const unapproved=await productCli(apply,f.state,{createCodexAdmission});
   assert.notEqual(unapproved.exitCode,0,'Pending Repair cannot write before approval');
   assert.equal(await readFile(join(f.dir,'src/todo.mjs'),'utf8'),original);
-  assert.equal(f.store.get(proposed.data.approvalRequest.runId).state,'WAITING_APPROVAL');
+  assert.equal(f.store.get(proposed.data.result.approvalRequest.runId).state,'WAITING_APPROVAL');
 
-  approve(f,proposed.data.approvalRequest);
+  approve(f,proposed.data.result.approvalRequest);
   const applied=await productCli(apply,f.state,{createCodexAdmission});
   assert.equal(applied.exitCode,0,applied.data?.error);
   assert.equal(applied.data.status,'MATERIALIZED');

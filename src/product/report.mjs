@@ -66,6 +66,26 @@ function bootstrapContinuation(current, view, actions) {
   const action = defect ?? actions[0];
   const itemId = action.items[0] ?? null;
   const next = { kind: action.kind, itemId };
+  if (action.kind === 'REPAIR_REQUIRED') {
+    // A failed verification can have more than one editable predecessor.
+    // Project that choice from the current DAG; never guess which bytes to
+    // repair or treat the failing Evidence as an execution grant.
+    const failed = view.items.find(i => i.id === itemId &&
+      i.kind === 'local-verification' && i.state === 'LOCAL_FAILED');
+    const byId = new Map(view.items.map(i => [i.id, i]));
+    const ancestors = new Set(), pending = [...(failed?.dependencies ?? [])];
+    while (pending.length) {
+      const id = pending.pop();
+      if (ancestors.has(id)) continue;
+      ancestors.add(id);
+      pending.push(...(byId.get(id)?.dependencies ?? []));
+    }
+    const repairCandidates = view.items.filter(i => ancestors.has(i.id) &&
+      i.kind === 'local-edit' && i.state === 'MATERIALIZED').map(i => i.id);
+    return { ...base, status: 'AWAIT_REPAIR_SELECTION',
+      next: { ...next, repairCandidates, failedEvidenceRef: failed?.verificationRef ?? null },
+      reason: 'Select an already-materialized predecessor for failed-Evidence Repair; a separate exact Host grant and Fileset approval are required' };
+  }
   if (action.kind === 'PROPOSE_FILESET') return { ...base, status: 'HOST_PROPOSAL_REQUIRED', next,
     reason: 'Submit a candidate bound to the current Task revision; proposal grants no execution' };
   if (action.kind === 'AWAIT_FILESET_APPROVAL') return { ...base, status: 'AWAIT_OPERATOR', next,

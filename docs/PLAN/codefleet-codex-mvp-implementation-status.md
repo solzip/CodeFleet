@@ -1111,3 +1111,20 @@ budget, Lease, Controller and protected verification behavior is unchanged.
 The Host receipt remains synthetic; no actual Codex Host Live or final
 Objective acceptance was run. This new head requires its own Windows/Linux
 GitHub Actions result before reporting an offline PASS.
+
+## Explicit persisted NEW_PROJECT Repair continuation (fresh CI required)
+
+The trusted `advance-codex-bootstrap <task-id> [--repair-item <local-edit-id>]`
+entry now derives the exact repairable ancestor WorkItems and current failed
+Local Evidence from the persisted Bootstrap DAG after a Local verification
+failure. It reports `AWAIT_REPAIR_SELECTION` and refuses to guess between
+Todo and Calendar. Only an explicitly selected current materialized predecessor
+can trigger **one** failure-Evidence-bound Host Repair Fileset proposal through
+the existing Store-bound facade and independent exact Host owner grant. The
+proposal remains `WAITING_APPROVAL`; it cannot write bytes or reuse a prior
+Fileset approval. Missing/invalid selections, pre-repair states, and repeated
+calls while approval is pending cannot silently start another Turn. An offline
+cross-Store CLI fixture checks multiple predecessor choices, denied selection,
+separate Repair approval and post-Repair Local re-verification. No real Codex
+Host, authenticated public Operator grant, PROTECTED verdict or Objective
+completion is established. Fresh Windows/Linux CI is required for this head.
