@@ -1307,8 +1307,13 @@ test('trusted NEW_PROJECT continuation advances exactly one persisted step and s
   for(const file of proposedTodoFiles)
     assert.equal(await readFile(join(f.dir,file.path),'utf8'),file.content);
 
+  // CI regression diagnosis: surface the exact fail-closed CLI reason rather
+  // than losing the underlying error behind a bare 1 !== 2 assertion.
+  assert.equal(materialized.data.continuation?.next?.kind,'RUN_LOCAL_VERIFICATION',
+    JSON.stringify(materialized.data.continuation));
   const needsLocalTrust=await advance();
-  assert.equal(needsLocalTrust.exitCode,2);
+  assert.equal(needsLocalTrust.exitCode,2,
+    'Expected read-only Local verification handoff: '+JSON.stringify(needsLocalTrust.data));
   assert.equal(needsLocalTrust.data.status,'HUMAN_HANDOFF');
   assert.equal(needsLocalTrust.data.continuation.next.kind,'RUN_LOCAL_VERIFICATION');
   assert.deepEqual([turns,proposals,materializationGrants],[1,1,1]);

@@ -1075,3 +1075,20 @@ Synthetic cross-Store tests cover propose → approval wait → approved apply �
 Local verification wait and denial cases. This is not a new scheduler, not a
 deployed Operator authenticator, not Host Live proof and not Objective
 acceptance. Fresh Windows/Linux CI is required for this commit.
+
+
+## NEW_PROJECT continuation CI failure — exact failure capture (fresh CI required)
+
+The prior head `6cc16d0f1a3f0cbcbe7ee876aec41afb44e06798` failed the same
+`npm run test:codex-mvp` step on Windows and Linux: the new cross-Store
+continuation fixture received exit code 1 instead of the required human-handoff
+exit code 2 after successful approved Fileset materialization. The failure was
+previously reported only as `1 !== 2`, which does not identify whether the
+persisted continuation, re-opened Store or CLI admission path failed.
+
+The fixture now checks the already returned post-materialization continuation
+and includes the complete later CLI error/status in its failure assertion. This
+is a diagnostic regression increment, **not a verified product bug fix**. The
+next action is to inspect this commit's own Windows/Linux CI logs and fix the
+identified cause without relaxing approval, Lease, Store or Host checks. No
+Codex Host Live, actual user source mutation or Objective acceptance occurred.
