@@ -982,3 +982,102 @@ test('NEW_PROJECT verification CLI denies malformed input, ordinary CLI, forged 
   assert.equal(task(f.store,f.id).bootstrap.verifications?.tests,undefined);
   assert.equal(f.store.events(f.id).filter(e=>e.type==='BOOTSTRAP_LOCAL_VERIFICATION_RECORDED').length,0);
 });
+
+
+test('trusted product CLI proposes only failure-Evidence-bound NEW_PROJECT Repair with no writes',async t=>{
+  const f=await built({protectedItem:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const preview=await verifyTask(f.store,f.id,'tests',request(f));
+  const failed=await verifyTask(f.store,f.id,'tests',request(f),{
+    trust:preview.commandHash,acknowledgeUnisolated:true
+  });
+  assert.equal(failed.status,'LOCAL_FAILED');
+  const original=await readFile(join(f.dir,'src/todo.mjs'),'utf8');
+  const replacement='export const add = (list, t) => [...list, t];\n';
+  let factories=0,grants=0,turns=0;
+  const entry=['propose-codex-bootstrap-repair',f.id,'todo','tests'];
+  const result=await productCli(entry,f.state,{
+    createCodexAdmission:store=>{
+      factories++;
+      return {facade:createCodexMvpFacade(store,{
+        executable:process.execPath,model:'SYNTHETIC_ONLY',enableHostTurns:true,
+        authorizeBootstrap:async scope=>{
+          grants++;
+          assert.equal(scope.operation,'repair');
+          assert.equal(scope.repair.verificationItem,'tests');
+          assert.equal(scope.repair.evidenceRef,failed.evidenceRef);
+          assert.equal(scope.repair.sourceFiles['src/todo.mjs'],original);
+          return true;
+        },
+        transport:async input=>{
+          turns++;
+          const scope=JSON.parse(input.prompt);
+          assert.equal(scope.kind,'CODEFLEET_NEW_PROJECT_REPAIR_FILESET_V1');
+          return {...fakeHostReceipt(scope),text:JSON.stringify({
+            revision:scope.revision,itemId:'todo',
+            repair:{verificationItem:'tests',evidenceRef:failed.evidenceRef},
+            files:[{path:'src/todo.mjs',content:replacement,baseSha256:hash(original)}]
+          })};
+        }
+      })};
+    }
+  });
+  assert.equal(result.exitCode,0,result.data?.error);
+  assert.equal(result.data.approvalRequest.operation,'modify');
+  assert.equal(result.data.materialized,false);
+  assert.equal(result.data.executionGranted,false);
+  assert.equal(result.data.hostLiveAcceptance,'UNVERIFIED');
+  assert.deepEqual([factories,grants,turns],[1,1,1]);
+  assert.equal(await readFile(join(f.dir,'src/todo.mjs'),'utf8'),original);
+  assert.equal(task(f.store,f.id).bootstrap.verifications.tests,failed.evidenceRef);
+  assert.equal(f.store.get(result.data.approvalRequest.runId).state,'WAITING_APPROVAL');
+});
+
+test('NEW_PROJECT Repair CLI fails closed on absent failure Evidence, forged facades, flags and denied grant',async t=>{
+  const f=await built({protectedItem:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const entry=['propose-codex-bootstrap-repair',f.id,'todo','tests'];
+  const original=await readFile(join(f.dir,'src/todo.mjs'),'utf8');
+  let factories=0,grants=0,turns=0;
+  const createCodexAdmission=store=>{
+    factories++;
+    return {facade:createCodexMvpFacade(store,{
+      executable:process.execPath,model:'SYNTHETIC_ONLY',enableHostTurns:true,
+      authorizeBootstrap:async()=>{grants++;return false;},
+      transport:async()=>{turns++;throw Error('Denied Repair must not dispatch Host');}
+    })};
+  };
+  for(const invalid of [
+    entry.slice(0,3),[...entry,'extra'],[...entry,'--allow-model'],
+    [...entry,'--actor','spoofed'],[...entry,'--repository',f.dir]
+  ]){
+    const blocked=await productCli(invalid,f.state,{createCodexAdmission});
+    assert.equal(blocked.exitCode,1);
+    assert.match(blocked.data.error,/propose-codex-bootstrap-repair requires|repository is only valid/);
+  }
+  assert.equal(factories,0);
+  const ordinary=await productCli(entry,f.state);
+  assert.equal(ordinary.exitCode,1);
+  assert.match(ordinary.data.error,/TRUSTED_CODEX_BOOTSTRAP_REPAIR_UNAVAILABLE/);
+  const forged=await productCli(entry,f.state,{
+    createCodexAdmission:()=>({facade:{proposeBootstrapRepairFiles:async()=>({approvalRequest:{operation:'modify'}})}})
+  });
+  assert.equal(forged.exitCode,1);
+  assert.match(forged.data.error,/TRUSTED_CODEX_BOOTSTRAP_REPAIR_UNAVAILABLE/);
+  const missing=await productCli(entry,f.state,{createCodexAdmission});
+  assert.equal(missing.exitCode,1);
+  assert.match(missing.data.error,/LOCAL_FAILED/);
+  assert.deepEqual([factories,grants,turns],[1,0,0]);
+  const preview=await verifyTask(f.store,f.id,'tests',request(f));
+  const failed=await verifyTask(f.store,f.id,'tests',request(f),{
+    trust:preview.commandHash,acknowledgeUnisolated:true
+  });
+  assert.equal(failed.status,'LOCAL_FAILED');
+  const denied=await productCli(entry,f.state,{createCodexAdmission});
+  assert.equal(denied.exitCode,1);
+  assert.match(denied.data.error,/trusted exact bounded approval/);
+  assert.deepEqual([factories,grants,turns],[2,1,0]);
+  assert.equal(task(f.store,f.id).bootstrap.verifications.tests,failed.evidenceRef);
+  assert.equal(task(f.store,f.id).bootstrap.states.todo,'MATERIALIZED');
+  assert.equal(await readFile(join(f.dir,'src/todo.mjs'),'utf8'),original);
+});

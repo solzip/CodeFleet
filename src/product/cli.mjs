@@ -39,6 +39,8 @@ codefleet-alpha objective plan-codex-goal "natural-language Goal" --repository A
   (trusted Host embedding only; independent read-only planning Turn grant, model usage may be billed; no Workflow approval or source writes)
 codefleet-alpha objective propose-codex-bootstrap-files <task-id> <local-edit-item-id>
   (trusted Host embedding only; separately approved NEW_PROJECT Fileset proposal, no filesystem writes or execution grant)
+codefleet-alpha objective propose-codex-bootstrap-repair <task-id> <local-edit-item-id> <failed-verification-item-id>
+  (trusted Host embedding only; requires current dependent LOCAL_FAILED Evidence; proposes a separately approvable Repair Fileset without writes)
 codefleet-alpha objective materialize-codex-bootstrap-files <task-id> <local-edit-item-id>
   (trusted Host embedding only; independently approved exact Fileset apply through the existing Bootstrap Controller; Local UNPROTECTED)
 codefleet-alpha objective verify-codex-bootstrap <task-id> <local-verification-item-id> REQUEST.json
@@ -116,6 +118,12 @@ function requireCodexBootstrapEntryArgs(args, o, action = 'propose-codex-bootstr
     throw Error(action + ' requires exactly one Task ID and local-edit WorkItem ID; no flags or approval options');
 }
 
+function requireCodexBootstrapRepairArgs(args, o) {
+  if (args.length !== 3 || args.some(value => !value || value.startsWith('-')) ||
+      Object.keys(o).length !== 0)
+    throw Error('propose-codex-bootstrap-repair requires Task ID, local-edit WorkItem ID and failed local-verification WorkItem ID; no flags or approval options');
+}
+
 function requireCodexBootstrapVerificationArgs(args, o) {
   if (args.length !== 3 || args.some(value => !value || value.startsWith('-')) ||
       Object.keys(o).length !== 0)
@@ -163,6 +171,17 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     // This proposes a NEW_PROJECT Fileset only. The existing Bootstrap
     // Controller still requires a separate exact owner materialization grant.
     const data = await binding.facade.proposeBootstrapFiles(args[0], args[1]);
+    return { exitCode: data.approvalRequest ? 0 : 2,
+      data: { ...data, hostLiveAcceptance: 'UNVERIFIED' } };
+  }
+  if (action === 'propose-codex-bootstrap-repair') {
+    requireCodexBootstrapRepairArgs(args, o);
+    const binding = execution?.codexAdmission;
+    if (!isCodexMvpFacadeForStore(binding?.facade, store))
+      throw Error('TRUSTED_CODEX_BOOTSTRAP_REPAIR_UNAVAILABLE: trusted Store-bound failure-Evidence Repair facade required');
+    // Reuse the existing failure-Evidence-bound Host repair proposal path.
+    // Neither the Host response nor this CLI command approves or applies files.
+    const data = await binding.facade.proposeBootstrapRepairFiles(...args);
     return { exitCode: data.approvalRequest ? 0 : 2,
       data: { ...data, hostLiveAcceptance: 'UNVERIFIED' } };
   }
@@ -556,7 +575,7 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
     requireDurableEntry(argv); // Before opening Store or reading caller JSON.
     const codexExecution = ['run-codex-workflow','resume-codex-workflow'].includes(argv[0]);
     const codexPlanning = argv[0] === 'plan-codex-goal';
-    const codexBootstrap = ['propose-codex-bootstrap-files','materialize-codex-bootstrap-files','verify-codex-bootstrap'].includes(argv[0]);
+    const codexBootstrap = ['propose-codex-bootstrap-files','propose-codex-bootstrap-repair','materialize-codex-bootstrap-files','verify-codex-bootstrap'].includes(argv[0]);
     const codexTrusted = codexExecution || codexPlanning || codexBootstrap;
     if (codexTrusted) {
       if (typeof createCodexAdmission !== 'function')
@@ -567,7 +586,9 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
               ? 'TRUSTED_CODEX_BOOTSTRAP_MATERIALIZATION_UNAVAILABLE: plain CLI has no trusted Fileset materialization binding'
               : argv[0] === 'verify-codex-bootstrap'
                 ? 'TRUSTED_CODEX_BOOTSTRAP_VERIFICATION_UNAVAILABLE: plain CLI has no trusted Local verification binding'
-                : 'TRUSTED_CODEX_BOOTSTRAP_UNAVAILABLE: plain CLI has no trusted Host Fileset proposal binding'
+                : argv[0] === 'propose-codex-bootstrap-repair'
+                  ? 'TRUSTED_CODEX_BOOTSTRAP_REPAIR_UNAVAILABLE: plain CLI has no trusted Host Repair binding'
+                  : 'TRUSTED_CODEX_BOOTSTRAP_UNAVAILABLE: plain CLI has no trusted Host Fileset proposal binding'
             : 'AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE: plain CLI has no authenticated Host Operator binding');
       // Reject untrusted CLI flags before calling the privileged Host factory.
       const { positional, options } = parse(argv.slice(1));
@@ -575,6 +596,8 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
       else if (codexBootstrap) {
         if (argv[0] === 'verify-codex-bootstrap')
           requireCodexBootstrapVerificationArgs(positional, options);
+        else if (argv[0] === 'propose-codex-bootstrap-repair')
+          requireCodexBootstrapRepairArgs(positional, options);
         else requireCodexBootstrapEntryArgs(positional, options, argv[0]);
       }
       else requireCodexWorkflowEntryArgs(positional, options);

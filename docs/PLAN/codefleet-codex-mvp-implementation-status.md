@@ -946,3 +946,21 @@ remains `LOCAL_EXECUTED` / `UNPROTECTED` with Objective `complete:false` and
 Host Live `UNVERIFIED`; it is not Protected verification, authenticated public
 Operator admission or independent Objective acceptance. This new commit needs
 its own Windows/Linux CI results before calling offline tests passing.
+
+## Trusted CLI NEW_PROJECT failure-Evidence Repair Fileset proposal (fresh CI required)
+
+The trusted Store-bound `productCli` now exposes
+`propose-codex-bootstrap-repair <task-id> <local-edit-item-id> <failed-verification-item-id>`.
+It reuses the existing `proposeBootstrapRepairFiles` facade and Bootstrap
+failure-Evidence-aware Host proposal path: only current dependent
+`LOCAL_FAILED` verification Evidence and the recorded materialized source
+hashes can be used to request an exact separately approved modification
+Fileset. An owner grant still gates the managed Host Turn, and the returned
+Fileset is `WAITING_APPROVAL` without modifying any destination file.
+Ordinary CLI calls, forged facades, malformed flags, missing failure Evidence
+and denied owner grants fail closed. Offline synthetic CLI regression tests
+exercise both the proposed repair and those refusal paths. Actual Fileset
+approval, materialization and Local re-verification remain separate actions;
+this is not autonomous Host Live Repair, Operator authentication, protected
+execution or Objective acceptance. This head requires its own Windows/Linux
+CI before any offline PASS claim.
