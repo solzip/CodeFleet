@@ -978,3 +978,18 @@ Objective remains incomplete, `UNPROTECTED`, and Host Live `UNVERIFIED`.
 This adds an offline CLI integration test only, not a real Codex Turn, an
 Operator authenticator, automatic approval, or final Objective acceptance.
 The new head requires its own Windows/Linux CI result.
+
+## NEW_PROJECT Local verification JSON preflight before trusted admission (fresh CI required)
+
+The Store-bound `verify-codex-bootstrap` CLI now parses and enforces the existing
+220 KB limit on untrusted `REQUEST.json` **before** opening SQLite or invoking
+the privileged `createCodexAdmission` factory. The validated JSON value is
+passed to the existing independent exact-command owner review as the same
+snapshot, avoiding a second filesystem read and request-file replacement gap.
+Direct trusted `dispatchProduct` callers retain their own bounded JSON read.
+Offline negative fixtures cover malformed and oversized JSON, zero privileged
+factory calls and zero verification Evidence; existing successful/denied Local
+verification fixtures cover the unchanged owner grant and Controller.
+This is input preflight, **not** authentication of the embedding, Host Live
+execution, PROTECTED verification or Objective acceptance. Its new Windows/Linux
+CI must be inspected separately before claiming tests PASS.

@@ -939,6 +939,26 @@ test('trusted product CLI performs separately reviewed NEW_PROJECT Local verific
   assert.equal((await taskReport(f.store,f.id)).complete,false);
 });
 
+test('NEW_PROJECT verification CLI refuses unparseable and oversized requests before trusted factory',async t=>{
+  const f=await built({passing:true,protectedItem:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const malformed=join(f.root,'malformed-verification.json');
+  const oversized=join(f.root,'oversized-verification.json');
+  await writeFile(malformed,'{"executable":');
+  await writeFile(oversized,' '.repeat(220001));
+  let factories=0;
+  const createCodexAdmission=()=>{factories++;throw Error('Untrusted JSON must not reach Host factory');};
+  const entry=['verify-codex-bootstrap',f.id,'tests'];
+  const invalid=await productCli([...entry,malformed],f.state,{createCodexAdmission});
+  assert.equal(invalid.exitCode,1);
+  assert.match(invalid.data.error,/JSON|Unexpected|Expected|end of/);
+  const tooBig=await productCli([...entry,oversized],f.state,{createCodexAdmission});
+  assert.equal(tooBig.exitCode,1);
+  assert.match(tooBig.data.error,/Host response exceeds limit/);
+  assert.equal(factories,0);
+  assert.equal(task(f.store,f.id).bootstrap.verifications?.tests,undefined);
+  assert.equal(f.store.events(f.id).filter(e=>e.type==='BOOTSTRAP_LOCAL_VERIFICATION_RECORDED').length,0);
+});
 test('NEW_PROJECT verification CLI denies malformed input, ordinary CLI, forged facade and owner rejection',async t=>{
   const f=await built({passing:true,protectedItem:true});
   t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});

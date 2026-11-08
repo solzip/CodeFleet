@@ -205,8 +205,12 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     // The REQUEST.json is not a grant. The genuine facade re-previews the
     // current repository, requests independent exact Local approval, and then
     // delegates execution and Evidence recording to the Bootstrap Controller.
-    const data = await binding.facade.verifyApprovedBootstrap(
-      args[0], args[1], await readResponse(args[2]));
+    // productCli parses bounded untrusted JSON before invoking the privileged
+    // Host factory. Reuse that exact snapshot, not a second filesystem read.
+    // Direct trusted dispatch still reads and bounds its own request file.
+    const request = execution.boundedBootstrapVerificationRequest === undefined
+      ? await readResponse(args[2]) : execution.boundedBootstrapVerificationRequest;
+    const data = await binding.facade.verifyApprovedBootstrap(args[0], args[1], request);
     return { exitCode: data.status === 'LOCAL_PASSED' ? 0 : 2,
       data: { ...data, protection: 'UNPROTECTED', hostLiveAcceptance: 'UNVERIFIED' } };
   }
@@ -577,6 +581,7 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
     const codexPlanning = argv[0] === 'plan-codex-goal';
     const codexBootstrap = ['propose-codex-bootstrap-files','propose-codex-bootstrap-repair','materialize-codex-bootstrap-files','verify-codex-bootstrap'].includes(argv[0]);
     const codexTrusted = codexExecution || codexPlanning || codexBootstrap;
+    let boundedBootstrapVerificationRequest;
     if (codexTrusted) {
       if (typeof createCodexAdmission !== 'function')
         throw Error(codexPlanning
@@ -601,6 +606,10 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
         else requireCodexBootstrapEntryArgs(positional, options, argv[0]);
       }
       else requireCodexWorkflowEntryArgs(positional, options);
+      // Malformed/oversized caller JSON is rejected before opening Store or
+      // creating an authenticated Host binding; parse it only once.
+      if (argv[0] === 'verify-codex-bootstrap')
+        boundedBootstrapVerificationRequest = await readResponse(positional[2]);
     }
     if (!argv[0] || ['help', '--help'].includes(argv[0])) return await dispatchProduct(argv);
     store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request', 'delivered-status', 'workflow-progress', 'review-codex-plan', 'review-codex-workflow'].includes(argv[0]) });
@@ -608,7 +617,9 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
       const codexAdmission = await createCodexAdmission(store);
       // dispatchProduct still checks authentic facade identity, current Store
       // binding, exact source/Workflow approval and Operator authorization.
-      return await dispatchProduct(argv, { store, execution: { codexAdmission } });
+      return await dispatchProduct(argv, { store, execution: {
+        codexAdmission, boundedBootstrapVerificationRequest
+      } });
     }
     return await dispatchProduct(argv, { store });
   }
