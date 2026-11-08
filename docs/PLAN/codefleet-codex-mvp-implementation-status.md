@@ -768,3 +768,18 @@ and sample-match smoke check covered the corrected regex expression only;
 the complete source test and full Windows/Linux CI remain unverified until
 this new commit's own results are available. No Codex Host Live or independent
 Objective acceptance was performed.
+
+## Read-only delivered Objective status invalidates concurrent Store changes (fresh CI required)
+
+The delivered Objective projection now pins the persisted Workflow and final
+Candidate/Attempt records before its asynchronous destination-tree observation.
+Immediately after the observation it re-reads both Store records and refuses
+a previously COMPLETE verdict if either record changed, disappeared or became
+unreadable during the filesystem await. Negative offline regressions cover
+revision, cancellation/reconciliation state, decision/approval reference changes,
+Candidate hash rotation and a failed final-record read. Existing stable-record
+and target-drift checks remain unchanged. This narrows a read-only stale-report
+race; it does not make filesystem reads atomic, attest Host execution, authorize
+delivery or constitute independent Host Live acceptance. The prior
+`38da77aefd256c225f6aabb069d07f779b54db95` CI passed Windows and Linux;
+the new head requires its own CI result.

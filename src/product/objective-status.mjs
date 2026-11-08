@@ -35,6 +35,9 @@ export async function readDeliveredObjectiveStatus(store, objectiveId, {
   if (run?.kind !== 'workflow' || typeof run.id !== 'string' ||
       !Number.isInteger(run.revision))
     throw Error('Objective status requires a persisted Workflow');
+  // A read-only projection must not report COMPLETE for a Workflow that
+  // changed while the asynchronous target-tree observer was inspecting it.
+  const pinnedRun = hash(run);
   const common = { candidateAvailable: Boolean(run.finalRunId && run.acceptedHash),
     deliveryRecorded: Boolean(run.deliveryReceiptRef) };
   if (run.state === 'RECONCILING' ||
@@ -74,9 +77,24 @@ export async function readDeliveredObjectiveStatus(store, objectiveId, {
     Array.isArray(child.candidatePaths) && child.candidatePaths.length > 0 &&
     typeof run.repo === 'string' && run.repo === child.repo;
   if (!binding) return incomplete(run,'Delivered target, pre-effect owner approval and final Candidate binding mismatch','BLOCKED', common);
+  const pinnedChild = hash(child);
   let observed;
   try { observed = await observeTree(run.repo, child.candidatePaths); }
   catch { return incomplete(run,'Current delivered target could not be independently observed','BLOCKED', common); }
+  // The observer may await filesystem reads while the persisted Workflow or
+  // final Attempt is revised, cancelled or re-bound. Re-read both records
+  // before evaluating saved Evidence; a stale COMPLETE must never escape.
+  try {
+    const current = store.get(objectiveId);
+    const currentChild = store.get(run.finalRunId);
+    if (!current || !currentChild ||
+        hash(current) !== pinnedRun || hash(currentChild) !== pinnedChild)
+      return incomplete(run,'Workflow or final Candidate changed during delivered-tree observation',
+        'BLOCKED',common);
+  } catch {
+    return incomplete(run,'Current Workflow or final Candidate could not be rechecked',
+      'BLOCKED',common);
+  }
   if (observed !== delivered.targetTreeHash)
     return incomplete(run,'Delivered target changed after verification; Objective requires re-evaluation',
       'INCOMPLETE',{...common, targetDrift: true, observedTreeHash: observed});

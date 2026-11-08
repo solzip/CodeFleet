@@ -80,6 +80,51 @@ test('delivered but unverified cannot claim complete',async()=>{
  assert.equal(result.status,'DELIVERED_NOT_VERIFIED');
  assert.equal(result.objectiveComplete,false);
 });
+test('read-only Objective status rejects a Workflow or final Candidate changed during target observation',async()=>{
+ for(const change of [
+   {kind:'workflow',fields:{revision:2}},
+   {kind:'workflow',fields:{state:'RECONCILING'}},
+   {kind:'workflow',fields:{objectiveDecisionRef:'new-decision'}},
+   {kind:'workflow',fields:{objectiveApprovedCriteriaRef:'new-criteria'}},
+   {kind:'child',fields:{candidateHash:OTHER}}
+ ]) {
+   const x=fixture();
+   const initialGet=x.store.get;
+   let observationCompleted=false;
+   x.store.get=id=>{
+     const row=initialGet(id);
+     const selected=(change.kind==='workflow' && id==='objective-1') ||
+       (change.kind==='child' && id==='final-1');
+     return observationCompleted && selected ? {...row,...change.fields} : row;
+   };
+   const result=await readDeliveredObjectiveStatus(x.store,'objective-1',{
+     observeTree:async(...args)=>{
+       const tree=await x.observeTree(...args);
+       observationCompleted=true;
+       return tree;
+     }
+   });
+   assert.equal(result.status,'BLOCKED',JSON.stringify(change));
+   assert.equal(result.objectiveComplete,false);
+ }
+});
+test('read-only Objective status fails closed if a persisted record is unavailable after observation',async()=>{
+ const x=fixture(),initialGet=x.store.get;
+ let observationCompleted=false;
+ x.store.get=id=>{
+   if(observationCompleted && id==='final-1') throw Error('Store unavailable');
+   return initialGet(id);
+ };
+ const result=await readDeliveredObjectiveStatus(x.store,'objective-1',{
+   observeTree:async(...args)=>{
+     const tree=await x.observeTree(...args);
+     observationCompleted=true;
+     return tree;
+   }
+ });
+ assert.equal(result.status,'BLOCKED');
+ assert.equal(result.objectiveComplete,false);
+});
 test('destination drift invalidates former COMPLETE decision',async()=>{
  const x=fixture({current:OTHER});const result=await readDeliveredObjectiveStatus(x.store,'objective-1',{observeTree:x.observeTree});
  assert.equal(result.status,'INCOMPLETE');assert.equal(result.targetDrift,true);
