@@ -804,3 +804,98 @@ test('NEW_PROJECT CLI rejects untrusted flags, forged facade and denied Host gra
   assert.equal(task(f.store,f.id).bootstrap.filesets.todo,undefined);
   await assert.rejects(readFile(join(f.dir,'src/todo.mjs'),'utf8'),{code:'ENOENT'});
 });
+
+
+test('trusted product CLI applies only a separately reviewed, already approved NEW_PROJECT Fileset',async t=>{
+  const f=await prepared({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  let hostTurns=0,ownerGrants=0,factories=0;
+  const proposalFacade=createCodexMvpFacade(f.store,{
+    executable:process.execPath,model:'SYNTHETIC_ONLY',enableHostTurns:true,
+    authorizeBootstrap:async()=>true,
+    transport:async request=>{
+      hostTurns++;
+      return fakeHostReceipt(JSON.parse(request.prompt));
+    }
+  });
+  const proposal=await proposalFacade.proposeBootstrapFiles(f.id,'todo');
+  assert.equal(proposal.materialized,false);
+  await assert.rejects(readFile(join(f.dir,'src/todo.mjs'),'utf8'),{code:'ENOENT'});
+  approve(f,proposal.approvalRequest);
+  const entry=['materialize-codex-bootstrap-files',f.id,'todo'];
+  const result=await productCli(entry,f.state,{
+    createCodexAdmission:store=>{
+      factories++;
+      return {facade:createCodexMvpFacade(store,{
+        executable:process.execPath,model:'SYNTHETIC_ONLY',
+        authorizeBootstrapMaterialization:async scope=>{
+          ownerGrants++;
+          assert.equal(scope.kind,'CODEFLEET_BOOTSTRAP_MATERIALIZATION_SCOPE_V1');
+          assert.equal(scope.repo,f.dir);
+          assert.equal(scope.taskId,f.id);
+          assert.equal(scope.itemId,'todo');
+          assert.equal(scope.protection,'UNPROTECTED');
+          assert.deepEqual(scope.files.map(file=>file.path),
+            proposedTodoFiles.map(file=>file.path));
+          assert.deepEqual(scope.files.map(file=>file.content),
+            proposedTodoFiles.map(file=>file.content));
+          assert.equal(Object.isFrozen(scope.files),true);
+          return true;
+        }
+      })};
+    }
+  });
+  assert.equal(result.exitCode,0,result.data?.error);
+  assert.equal(result.data.status,'MATERIALIZED');
+  assert.equal(result.data.protection,'UNPROTECTED');
+  assert.equal(result.data.hostLiveAcceptance,'UNVERIFIED');
+  assert.deepEqual([factories,hostTurns,ownerGrants],[1,1,1]);
+  for(const file of proposedTodoFiles)
+    assert.equal(await readFile(join(f.dir,file.path),'utf8'),file.content);
+});
+
+test('NEW_PROJECT CLI materialization rejects flags, missing trust and denied owner review without writes',async t=>{
+  const f=await prepared({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const proposer=createCodexMvpFacade(f.store,{
+    executable:process.execPath,model:'SYNTHETIC_ONLY',enableHostTurns:true,
+    authorizeBootstrap:async()=>true,
+    transport:async request=>fakeHostReceipt(JSON.parse(request.prompt))
+  });
+  const proposal=await proposer.proposeBootstrapFiles(f.id,'todo');
+  approve(f,proposal.approvalRequest);
+  const entry=['materialize-codex-bootstrap-files',f.id,'todo'];
+  let factories=0,grants=0;
+  const createCodexAdmission=store=>{
+    factories++;
+    return {facade:createCodexMvpFacade(store,{
+      executable:process.execPath,model:'SYNTHETIC_ONLY',
+      authorizeBootstrapMaterialization:async()=>{grants++;return false;}
+    })};
+  };
+  for(const invalid of [
+    entry.slice(0,2),
+    [...entry,'extra'],
+    [...entry,'--allow-model'],
+    [...entry,'--actor','spoofed'],
+    [...entry,'--repository',f.dir]
+  ]){
+    const blocked=await productCli(invalid,f.state,{createCodexAdmission});
+    assert.equal(blocked.exitCode,1);
+    assert.match(blocked.data.error,/requires exactly one Task ID|repository is only valid/);
+  }
+  assert.equal(factories,0);
+  const ordinary=await productCli(entry,f.state);
+  assert.equal(ordinary.exitCode,1);
+  assert.match(ordinary.data.error,/TRUSTED_CODEX_BOOTSTRAP_MATERIALIZATION_UNAVAILABLE/);
+  const forged=await productCli(entry,f.state,{
+    createCodexAdmission:()=>({facade:{materializeApprovedBootstrap:async()=>({status:'MATERIALIZED'})}})
+  });
+  assert.equal(forged.exitCode,1);
+  assert.match(forged.data.error,/TRUSTED_CODEX_BOOTSTRAP_MATERIALIZATION_UNAVAILABLE/);
+  const denied=await productCli(entry,f.state,{createCodexAdmission});
+  assert.equal(denied.exitCode,1);
+  assert.match(denied.data.error,/Exact Bootstrap materialization grant denied/);
+  assert.deepEqual([factories,grants],[1,1]);
+  await assert.rejects(readFile(join(f.dir,'src/todo.mjs'),'utf8'),{code:'ENOENT'});
+});

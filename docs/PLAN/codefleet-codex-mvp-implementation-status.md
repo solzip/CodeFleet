@@ -911,3 +911,20 @@ tests cover successful proposal-without-writes and malformed, forged or
 denied admission. This is not authenticated public Host execution, a live Codex
 Turn, protected verification or Objective acceptance. Its new Windows/Linux CI
 must be checked before reporting offline PASS.
+
+
+## Trusted CLI applies separately approved NEW_PROJECT Fileset (fresh CI required)
+
+The trusted `productCli` embedding now exposes
+`materialize-codex-bootstrap-files <task-id> <local-edit-item-id>`.
+Only a genuine Store-bound Codex MVP facade can invoke the existing
+`materializeApprovedBootstrap` path. The facade requires its separate
+owner-reviewed exact file contents and the underlying Bootstrap Controller
+still enforces the already-approved Fileset, Workflow, dependencies, hashes
+and destination drift before file creation. Ordinary CLI invocation, injected
+forged objects and execution/approval flags fail closed before an effect.
+Synthetic regression fixtures cover exact approved file creation and denial
+without writes. This is Local `UNPROTECTED` materialization, not an
+Operator authentication provider, a Codex Host Live demonstration or
+independently accepted Objective. The new HEAD requires its own Windows/Linux
+CI results before offline PASS can be claimed.
