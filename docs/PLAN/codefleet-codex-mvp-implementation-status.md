@@ -783,3 +783,18 @@ race; it does not make filesystem reads atomic, attest Host execution, authorize
 delivery or constitute independent Host Live acceptance. The prior
 `38da77aefd256c225f6aabb069d07f779b54db95` CI passed Windows and Linux;
 the new head requires its own CI result.
+
+## Read-only Objective status revalidates delivery and decision artifacts after observation (fresh CI required)
+
+A persisted Workflow and final Candidate can remain unchanged while a separate
+writer replaces or damages the content-addressed delivery receipt, pre-effect
+intent, approved/mandatory criterion snapshots or Objective decision during
+the asynchronous destination-tree observation. The read-only status projection
+now pins each loaded artifact and re-reads its exact reference before reporting
+a formerly COMPLETE Objective. Changed or unreadable records fail closed as
+BLOCKED, even when the delivered file bytes still match. Offline negative
+regressions cover all five artifact types and a failed post-observation read.
+The persistent artifact reader already verifies SHA-256; this addition closes
+the pre-read/post-await stale snapshot gap, not concurrent filesystem races,
+Host Live authorization, protected execution or final Objective acceptance.
+This commit requires its own Windows/Linux CI results.

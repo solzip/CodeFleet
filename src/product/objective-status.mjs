@@ -53,7 +53,7 @@ export async function readDeliveredObjectiveStatus(store, objectiveId, {
       : 'No delivered target with accepted candidate Evidence',
       common.candidateAvailable ? 'VERIFIED_CANDIDATE_AVAILABLE' : 'INCOMPLETE',common);
   }
-  let delivered, child, decision, required, approved, intent;
+  let delivered, child, decision, required, approved, intent, pinnedArtifacts;
   try {
     delivered = store.readArtifact(run.deliveryReceiptRef);
     child = store.get(run.finalRunId);
@@ -61,6 +61,16 @@ export async function readDeliveredObjectiveStatus(store, objectiveId, {
     if (run.objectiveCriteriaRef) required = store.readArtifact(run.objectiveCriteriaRef);
     if (run.objectiveApprovedCriteriaRef) approved = store.readArtifact(run.objectiveApprovedCriteriaRef);
     if (run.destinationDeliveryIntentRef) intent = store.readArtifact(run.destinationDeliveryIntentRef);
+    // Delivery/decision artifacts are loaded before the asynchronous target
+    // observation. Pin the exact bytes; Store rows alone are not sufficient.
+    pinnedArtifacts = [
+      [run.deliveryReceiptRef, delivered],
+      [run.destinationDeliveryIntentRef, intent],
+      [run.objectiveApprovedCriteriaRef, approved],
+      [run.objectiveCriteriaRef, required],
+      [run.objectiveDecisionRef, decision]
+    ].filter(([ref, value]) => typeof ref === 'string' && value !== undefined)
+      .map(([ref, value]) => [ref, hash(value)]);
   } catch {
     return incomplete(run,'Delivery or Objective Evidence is unreadable','BLOCKED', common);
   }
@@ -91,8 +101,13 @@ export async function readDeliveredObjectiveStatus(store, objectiveId, {
         hash(current) !== pinnedRun || hash(currentChild) !== pinnedChild)
       return incomplete(run,'Workflow or final Candidate changed during delivered-tree observation',
         'BLOCKED',common);
+    for (const [ref, digest] of pinnedArtifacts) {
+      if (hash(store.readArtifact(ref)) !== digest)
+        return incomplete(run,'Delivery or Objective Evidence changed during delivered-tree observation',
+          'BLOCKED',common);
+    }
   } catch {
-    return incomplete(run,'Current Workflow or final Candidate could not be rechecked',
+    return incomplete(run,'Workflow, final Candidate or Objective Evidence could not be rechecked',
       'BLOCKED',common);
   }
   if (observed !== delivered.targetTreeHash)

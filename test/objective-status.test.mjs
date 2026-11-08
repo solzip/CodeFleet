@@ -125,6 +125,52 @@ test('read-only Objective status fails closed if a persisted record is unavailab
  assert.equal(result.status,'BLOCKED');
  assert.equal(result.objectiveComplete,false);
 });
+test('read-only Objective status refuses artifacts rotated during target observation',async()=>{
+  // A separate writer may replace artifact bytes at a stable ref while
+  // filesystem observation awaits. Never judge the earlier artifact snapshot.
+  for (const [ref, change] of [
+    ['delivery-1',{status:'RECONCILING'}],
+    ['intent-1',{destination:'/changed-destination'}],
+    ['approved-1',{revision:2}],
+    ['criteria-1',{revision:2}],
+    ['decision-1',{complete:false}]
+  ]) {
+    const x=fixture();
+    const initialRead=x.store.readArtifact;
+    let observationCompleted=false;
+    x.store.readArtifact=id=>{
+      const artifact=initialRead(id);
+      return observationCompleted && id===ref ? {...artifact,...change} : artifact;
+    };
+    const result=await readDeliveredObjectiveStatus(x.store,'objective-1',{
+      observeTree:async(...args)=>{
+        const tree=await x.observeTree(...args);
+        observationCompleted=true;
+        return tree;
+      }
+    });
+    assert.equal(result.status,'BLOCKED',ref);
+    assert.equal(result.objectiveComplete,false,ref);
+  }
+});
+test('read-only Objective status blocks when a delivery artifact becomes unreadable during observation',async()=>{
+  const x=fixture();
+  const initialRead=x.store.readArtifact;
+  let observationCompleted=false;
+  x.store.readArtifact=id=>{
+    if (observationCompleted && id==='delivery-1') throw Error('Artifact changed or unavailable');
+    return initialRead(id);
+  };
+  const result=await readDeliveredObjectiveStatus(x.store,'objective-1',{
+    observeTree:async(...args)=>{
+      const tree=await x.observeTree(...args);
+      observationCompleted=true;
+      return tree;
+    }
+  });
+  assert.equal(result.status,'BLOCKED');
+  assert.equal(result.objectiveComplete,false);
+});
 test('destination drift invalidates former COMPLETE decision',async()=>{
  const x=fixture({current:OTHER});const result=await readDeliveredObjectiveStatus(x.store,'objective-1',{observeTree:x.observeTree});
  assert.equal(result.status,'INCOMPLETE');assert.equal(result.targetDrift,true);
