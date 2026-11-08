@@ -928,3 +928,21 @@ without writes. This is Local `UNPROTECTED` materialization, not an
 Operator authentication provider, a Codex Host Live demonstration or
 independently accepted Objective. The new HEAD requires its own Windows/Linux
 CI results before offline PASS can be claimed.
+
+## Trusted CLI NEW_PROJECT approved Local verification bridge (fresh CI required)
+
+The Store-bound trusted `productCli` now exposes
+`verify-codex-bootstrap <task-id> <local-verification-item-id> REQUEST.json`.
+The request file is untrusted command input, never proof of approval. Only an
+authentic Codex MVP facade for that exact Store may call the existing
+`verifyApprovedBootstrap` path, which independently previews executable,
+arguments, repository bytes and tree, requests an exact trusted owner grant,
+rechecks task revision and command hash, and delegates Local execution and
+Evidence recording to the existing Bootstrap Controller. Invalid CLI flags,
+missing trust binding, forged facades and denied grants are rejected before any
+verification subprocess. Offline synthetic regressions cover the actual
+disposable local test runner and negative admission cases. A successful check
+remains `LOCAL_EXECUTED` / `UNPROTECTED` with Objective `complete:false` and
+Host Live `UNVERIFIED`; it is not Protected verification, authenticated public
+Operator admission or independent Objective acceptance. This new commit needs
+its own Windows/Linux CI results before calling offline tests passing.

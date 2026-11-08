@@ -899,3 +899,86 @@ test('NEW_PROJECT CLI materialization rejects flags, missing trust and denied ow
   assert.deepEqual([factories,grants],[1,1]);
   await assert.rejects(readFile(join(f.dir,'src/todo.mjs'),'utf8'),{code:'ENOENT'});
 });
+
+test('trusted product CLI performs separately reviewed NEW_PROJECT Local verification without completing Objective',async t=>{
+  const f=await built({passing:true,protectedItem:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const requestFile=join(f.root,'codex-verification-request.json');
+  await writeFile(requestFile,JSON.stringify(request(f)));
+  const entry=['verify-codex-bootstrap',f.id,'tests',requestFile];
+  let factories=0,grants=0;
+  const result=await productCli(entry,f.state,{
+    createCodexAdmission:store=>{
+      factories++;
+      return {facade:createCodexMvpFacade(store,{
+        executable:process.execPath,model:'SYNTHETIC_ONLY',
+        authorizeBootstrapVerification:async scope=>{
+          grants++;
+          assert.equal(scope.kind,'CODEFLEET_BOOTSTRAP_LOCAL_CHECK_SCOPE_V1');
+          assert.equal(scope.taskId,f.id);
+          assert.equal(scope.itemId,'tests');
+          assert.equal(scope.repo,f.dir);
+          assert.equal(scope.protection,'UNPROTECTED');
+          assert.deepEqual(scope.command.args,['--test','--test-reporter=tap']);
+          assert.equal(scope.command.directory,await realpath(f.dir));
+          assert.equal(Object.isFrozen(scope.command.args),true);
+          return true;
+        }
+      })};
+    }
+  });
+  assert.equal(result.exitCode,0,result.data?.error);
+  assert.equal(result.data.status,'LOCAL_PASSED');
+  assert.equal(result.data.authority,'LOCAL_EXECUTED');
+  assert.equal(result.data.protection,'UNPROTECTED');
+  assert.equal(result.data.protectedVerification,'UNSATISFIED');
+  assert.equal(result.data.hostLiveAcceptance,'UNVERIFIED');
+  assert.equal(result.data.complete,false);
+  assert.deepEqual([factories,grants],[1,1]);
+  assert.equal(task(f.store,f.id).bootstrap.states.tests,'LOCAL_PASSED');
+  assert.equal((await taskReport(f.store,f.id)).complete,false);
+});
+
+test('NEW_PROJECT verification CLI denies malformed input, ordinary CLI, forged facade and owner rejection',async t=>{
+  const f=await built({passing:true,protectedItem:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const requestFile=join(f.root,'codex-verification-request.json');
+  await writeFile(requestFile,JSON.stringify(request(f)));
+  const entry=['verify-codex-bootstrap',f.id,'tests',requestFile];
+  const initialRevision=task(f.store,f.id).revision;
+  let factories=0,grants=0;
+  const createCodexAdmission=store=>{
+    factories++;
+    return {facade:createCodexMvpFacade(store,{
+      executable:process.execPath,model:'SYNTHETIC_ONLY',
+      authorizeBootstrapVerification:async()=>{grants++;return false;}
+    })};
+  };
+  for(const invalid of [
+    entry.slice(0,3),
+    [...entry,'extra'],
+    [...entry,'--allow-model'],
+    [...entry,'--trust','not-a-grant'],
+    [...entry,'--repository',f.dir]
+  ]) {
+    const blocked=await productCli(invalid,f.state,{createCodexAdmission});
+    assert.equal(blocked.exitCode,1);
+    assert.match(blocked.data.error,/verify-codex-bootstrap requires|repository is only valid/);
+  }
+  assert.equal(factories,0);
+  const ordinary=await productCli(entry,f.state);
+  assert.equal(ordinary.exitCode,1);
+  assert.match(ordinary.data.error,/TRUSTED_CODEX_BOOTSTRAP_VERIFICATION_UNAVAILABLE/);
+  const forged=await productCli(entry,f.state,{
+    createCodexAdmission:()=>({facade:{verifyApprovedBootstrap:async()=>({status:'LOCAL_PASSED'})}})
+  });
+  assert.equal(forged.exitCode,1);
+  assert.match(forged.data.error,/TRUSTED_CODEX_BOOTSTRAP_VERIFICATION_UNAVAILABLE/);
+  const denied=await productCli(entry,f.state,{createCodexAdmission});
+  assert.equal(denied.exitCode,1);
+  assert.match(denied.data.error,/Exact Bootstrap verification grant denied/);
+  assert.deepEqual([factories,grants],[1,1]);
+  assert.equal(task(f.store,f.id).revision,initialRevision);
+  assert.equal(task(f.store,f.id).bootstrap.verifications?.tests,undefined);
+  assert.equal(f.store.events(f.id).filter(e=>e.type==='BOOTSTRAP_LOCAL_VERIFICATION_RECORDED').length,0);
+});

@@ -41,6 +41,8 @@ codefleet-alpha objective propose-codex-bootstrap-files <task-id> <local-edit-it
   (trusted Host embedding only; separately approved NEW_PROJECT Fileset proposal, no filesystem writes or execution grant)
 codefleet-alpha objective materialize-codex-bootstrap-files <task-id> <local-edit-item-id>
   (trusted Host embedding only; independently approved exact Fileset apply through the existing Bootstrap Controller; Local UNPROTECTED)
+codefleet-alpha objective verify-codex-bootstrap <task-id> <local-verification-item-id> REQUEST.json
+  (trusted Host embedding only; separately approved exact Local check; UNPROTECTED Evidence, never Objective COMPLETE)
 codefleet-alpha objective prepare-codex-workflow <planning-session-id> --repository ABSOLUTE_PATH --hash <workflowHash> --source-hash <sourceContractHash>
   (explicitly confirm both hashes from review-codex-plan; create only a pending unapproved Workflow, never an execution or Operator grant)
 codefleet-alpha objective run-codex-workflow|resume-codex-workflow <workflow-id> --hash <workflowHash>
@@ -114,6 +116,12 @@ function requireCodexBootstrapEntryArgs(args, o, action = 'propose-codex-bootstr
     throw Error(action + ' requires exactly one Task ID and local-edit WorkItem ID; no flags or approval options');
 }
 
+function requireCodexBootstrapVerificationArgs(args, o) {
+  if (args.length !== 3 || args.some(value => !value || value.startsWith('-')) ||
+      Object.keys(o).length !== 0)
+    throw Error('verify-codex-bootstrap requires Task ID, local-verification WorkItem ID and bounded REQUEST.json; no flags or approval options');
+}
+
 function requireCodexWorkflowEntryArgs(args, o) {
   if (args.length !== 1 || !args[0] || args[0].startsWith('-') ||
       Object.keys(o).length !== 1 || !/^[a-f0-9]{64}$/.test(o.hash ?? ''))
@@ -168,6 +176,19 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     // existing approved Bootstrap Controller, with Local UNPROTECTED evidence.
     const data = await binding.facade.materializeApprovedBootstrap(args[0], args[1]);
     return { exitCode: data.status === 'MATERIALIZED' ? 0 : 2,
+      data: { ...data, protection: 'UNPROTECTED', hostLiveAcceptance: 'UNVERIFIED' } };
+  }
+  if (action === 'verify-codex-bootstrap') {
+    requireCodexBootstrapVerificationArgs(args, o);
+    const binding = execution?.codexAdmission;
+    if (!isCodexMvpFacadeForStore(binding?.facade, store))
+      throw Error('TRUSTED_CODEX_BOOTSTRAP_VERIFICATION_UNAVAILABLE: trusted Store-bound exact Local verification authority required');
+    // The REQUEST.json is not a grant. The genuine facade re-previews the
+    // current repository, requests independent exact Local approval, and then
+    // delegates execution and Evidence recording to the Bootstrap Controller.
+    const data = await binding.facade.verifyApprovedBootstrap(
+      args[0], args[1], await readResponse(args[2]));
+    return { exitCode: data.status === 'LOCAL_PASSED' ? 0 : 2,
       data: { ...data, protection: 'UNPROTECTED', hostLiveAcceptance: 'UNVERIFIED' } };
   }
   if (action === 'review-codex-plan') {
@@ -535,7 +556,7 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
     requireDurableEntry(argv); // Before opening Store or reading caller JSON.
     const codexExecution = ['run-codex-workflow','resume-codex-workflow'].includes(argv[0]);
     const codexPlanning = argv[0] === 'plan-codex-goal';
-    const codexBootstrap = ['propose-codex-bootstrap-files','materialize-codex-bootstrap-files'].includes(argv[0]);
+    const codexBootstrap = ['propose-codex-bootstrap-files','materialize-codex-bootstrap-files','verify-codex-bootstrap'].includes(argv[0]);
     const codexTrusted = codexExecution || codexPlanning || codexBootstrap;
     if (codexTrusted) {
       if (typeof createCodexAdmission !== 'function')
@@ -544,12 +565,18 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
           : codexBootstrap
             ? argv[0] === 'materialize-codex-bootstrap-files'
               ? 'TRUSTED_CODEX_BOOTSTRAP_MATERIALIZATION_UNAVAILABLE: plain CLI has no trusted Fileset materialization binding'
-              : 'TRUSTED_CODEX_BOOTSTRAP_UNAVAILABLE: plain CLI has no trusted Host Fileset proposal binding'
+              : argv[0] === 'verify-codex-bootstrap'
+                ? 'TRUSTED_CODEX_BOOTSTRAP_VERIFICATION_UNAVAILABLE: plain CLI has no trusted Local verification binding'
+                : 'TRUSTED_CODEX_BOOTSTRAP_UNAVAILABLE: plain CLI has no trusted Host Fileset proposal binding'
             : 'AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE: plain CLI has no authenticated Host Operator binding');
       // Reject untrusted CLI flags before calling the privileged Host factory.
       const { positional, options } = parse(argv.slice(1));
       if (codexPlanning) requireCodexGoalEntryArgs(positional, options);
-      else if (codexBootstrap) requireCodexBootstrapEntryArgs(positional, options, argv[0]);
+      else if (codexBootstrap) {
+        if (argv[0] === 'verify-codex-bootstrap')
+          requireCodexBootstrapVerificationArgs(positional, options);
+        else requireCodexBootstrapEntryArgs(positional, options, argv[0]);
+      }
       else requireCodexWorkflowEntryArgs(positional, options);
     }
     if (!argv[0] || ['help', '--help'].includes(argv[0])) return await dispatchProduct(argv);
