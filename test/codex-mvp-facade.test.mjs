@@ -323,6 +323,15 @@ test('Bootstrap filesystem effects remain unavailable without independent grants
  await assert.rejects(api.verifyApprovedBootstrap('task','item',{}),/verification grant required/);
 });
 
+test('Bootstrap Local verification injection rejects incomplete backends before any owner review',()=>{
+  const {store}=fixture();
+  assert.throws(()=>createCodexMvpFacade(store,{
+    executable:process.execPath,model:'fixture',
+    authorizeBootstrapVerification:async()=>true,
+    bootstrapVerifierBackend:{authorize:async()=>true}
+  }),/Bootstrap Local verifier must implement authorize and verify/);
+});
+
 test('Bootstrap exact verification grant is invalidated by a task revision change with identical bytes',async t=>{
   const f=await built({passing:true});
   t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
@@ -339,7 +348,10 @@ test('Bootstrap exact verification grant is invalidated by a task revision chang
         .run(JSON.stringify(changed),changed.revision,f.id);
       return true;
     },
-    bootstrapVerifierBackend:{authorize:async()=>{backendCalls++;throw Error('unexpected execution');}}
+    bootstrapVerifierBackend:{
+      authorize:async()=>{backendCalls++;throw Error('unexpected execution');},
+      verify:async()=>{backendCalls++;throw Error('unexpected verification');}
+    }
   });
   await assert.rejects(api.verifyApprovedBootstrap(f.id,'tests',request(f)),
     /verification scope changed during review/);
@@ -368,7 +380,10 @@ test('Bootstrap verification grant rejects a swapped immutable Plan even with id
         .run(JSON.stringify({...original,planRef:substituted}),f.id);
       return true;
     },
-    bootstrapVerifierBackend:{authorize:async()=>{backendCalls++;throw Error('unexpected execution');}}
+    bootstrapVerifierBackend:{
+      authorize:async()=>{backendCalls++;throw Error('unexpected execution');},
+      verify:async()=>{backendCalls++;throw Error('unexpected verification');}
+    }
   });
   await assert.rejects(api.verifyApprovedBootstrap(f.id,'tests',request(f)),
     /verification scope changed during review/);
@@ -399,7 +414,10 @@ test('Bootstrap Local reviewer sees an immutable exact command before authorizin
       assert.throws(()=>{scope.command.timeoutMs=1;},TypeError);
       return false;
     },
-    bootstrapVerifierBackend:{authorize:async()=>{backendCalls++;throw Error('unexpected execution');}}
+    bootstrapVerifierBackend:{
+      authorize:async()=>{backendCalls++;throw Error('unexpected execution');},
+      verify:async()=>{backendCalls++;throw Error('unexpected verification');}
+    }
   });
   await assert.rejects(api.verifyApprovedBootstrap(f.id,'tests',command),/grant denied/);
   assert.equal(reviews,1);
@@ -419,7 +437,10 @@ test('Bootstrap exact verification grant rejects a mutable command changed durin
       command.args.push('--test-name-pattern=not-reviewed');
       return true;
     },
-    bootstrapVerifierBackend:{authorize:async()=>{backendCalls++;throw Error('unexpected execution');}}
+    bootstrapVerifierBackend:{
+      authorize:async()=>{backendCalls++;throw Error('unexpected execution');},
+      verify:async()=>{backendCalls++;throw Error('unexpected verification');}
+    }
   });
   await assert.rejects(api.verifyApprovedBootstrap(f.id,'tests',command),
     /verification command\/tree changed during review/);

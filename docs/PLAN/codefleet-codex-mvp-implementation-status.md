@@ -1053,3 +1053,9 @@ review and assert no backend call or verification Evidence is recorded. This
 does **not** attest backend internals, create an OS-authenticated Operator,
 make Local verification PROTECTED, prove Codex Host Live, or accept an Objective.
 New Windows/Linux CI is required for this head.
+
+## CI repair: Bootstrap Local verifier fixtures must implement the full interface (fresh CI required)
+
+The prior head `3541c4384b94db0ec99d37934e03330d260c7513` failed `npm run test:codex-mvp` on **both Windows and Linux**: four existing negative Bootstrap Local verification tests provided only `authorize` as an injected backend. The new fail-closed facade constructor correctly requires **both** `authorize` and `verify`, so those fixtures failed during construction before reaching the intended revision, Plan, command immutability and owner-denial assertions.
+
+The four fake backends now explicitly implement `verify` as a throwing, call-counted forbidden operation alongside the already-throwing `authorize`. An additional constructor-negative regression asserts that an incomplete Local verifier is still rejected; the production interface check and exact owner approval remain unchanged. No real Host, user repository, credential, PROTECTED backend or Objective completion is exercised. This commit requires fresh Windows/Linux CI before these regression tests may be called passing.
