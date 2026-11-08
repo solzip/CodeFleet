@@ -37,6 +37,8 @@ codefleet-alpha objective review-codex-plan <planning-session-id> [--repository 
 codefleet-alpha objective review-codex-workflow <workflow-id> [--repository ABSOLUTE_PATH] (read-only Contract/DAG, approval and optional clean Git baseline check; no execution)
 codefleet-alpha objective plan-codex-goal "natural-language Goal" --repository ABSOLUTE_PATH
   (trusted Host embedding only; independent read-only planning Turn grant, model usage may be billed; no Workflow approval or source writes)
+codefleet-alpha objective propose-codex-bootstrap-files <task-id> <local-edit-item-id>
+  (trusted Host embedding only; separately approved NEW_PROJECT Fileset proposal, no filesystem writes or execution grant)
 codefleet-alpha objective prepare-codex-workflow <planning-session-id> --repository ABSOLUTE_PATH --hash <workflowHash> --source-hash <sourceContractHash>
   (explicitly confirm both hashes from review-codex-plan; create only a pending unapproved Workflow, never an execution or Operator grant)
 codefleet-alpha objective run-codex-workflow|resume-codex-workflow <workflow-id> --hash <workflowHash>
@@ -104,6 +106,12 @@ function requireCodexGoalEntryArgs(args, o) {
     throw Error('plan-codex-goal requires one nonempty Goal and absolute --repository only; no execution/approval flags');
 }
 
+function requireCodexBootstrapEntryArgs(args, o) {
+  if (args.length !== 2 || args.some(value => !value || value.startsWith('-')) ||
+      Object.keys(o).length !== 0)
+    throw Error('propose-codex-bootstrap-files requires exactly one Task ID and local-edit WorkItem ID; no flags or approval options');
+}
+
 function requireCodexWorkflowEntryArgs(args, o) {
   if (args.length !== 1 || !args[0] || args[0].startsWith('-') ||
       Object.keys(o).length !== 1 || !/^[a-f0-9]{64}$/.test(o.hash ?? ''))
@@ -135,6 +143,17 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     // flags or a Goal string, nor does it approve/promote the resulting DAG.
     const data = await binding.facade.planExisting(o.repository, args[0], { cwd: o.repository });
     return { exitCode: data.status === 'VALIDATED' ? 0 : 2,
+      data: { ...data, hostLiveAcceptance: 'UNVERIFIED' } };
+  }
+  if (action === 'propose-codex-bootstrap-files') {
+    requireCodexBootstrapEntryArgs(args, o);
+    const binding = execution?.codexAdmission;
+    if (!isCodexMvpFacadeForStore(binding?.facade, store))
+      throw Error('TRUSTED_CODEX_BOOTSTRAP_UNAVAILABLE: trusted Store-bound Host Fileset facade required');
+    // This proposes a NEW_PROJECT Fileset only. The existing Bootstrap
+    // Controller still requires a separate exact owner materialization grant.
+    const data = await binding.facade.proposeBootstrapFiles(args[0], args[1]);
+    return { exitCode: data.approvalRequest ? 0 : 2,
       data: { ...data, hostLiveAcceptance: 'UNVERIFIED' } };
   }
   if (action === 'review-codex-plan') {
@@ -493,27 +512,33 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
 
 // The ordinary CLI never supplies this dependency. A trusted Host embedding
 // may provide a factory that binds a genuine managed-Host facade to the *same*
-// Store opened for this command. Planning requires a separate exact planning
-// grant; Workflow execution additionally requires authenticated Operator admission.
+// Store opened for this command. Planning and NEW_PROJECT Fileset proposals
+// require separate bounded Host grants; Workflow execution additionally
+// requires authenticated Operator admission.
 export async function productCli(argv, directory, { createCodexAdmission } = {}) {
   let store;
   try {
     requireDurableEntry(argv); // Before opening Store or reading caller JSON.
     const codexExecution = ['run-codex-workflow','resume-codex-workflow'].includes(argv[0]);
     const codexPlanning = argv[0] === 'plan-codex-goal';
-    if (codexExecution || codexPlanning) {
+    const codexBootstrap = argv[0] === 'propose-codex-bootstrap-files';
+    const codexTrusted = codexExecution || codexPlanning || codexBootstrap;
+    if (codexTrusted) {
       if (typeof createCodexAdmission !== 'function')
         throw Error(codexPlanning
           ? 'TRUSTED_CODEX_PLANNING_UNAVAILABLE: plain CLI has no trusted Host planning binding'
-          : 'AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE: plain CLI has no authenticated Host Operator binding');
+          : codexBootstrap
+            ? 'TRUSTED_CODEX_BOOTSTRAP_UNAVAILABLE: plain CLI has no trusted Host Fileset proposal binding'
+            : 'AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE: plain CLI has no authenticated Host Operator binding');
       // Reject untrusted CLI flags before calling the privileged Host factory.
       const { positional, options } = parse(argv.slice(1));
       if (codexPlanning) requireCodexGoalEntryArgs(positional, options);
+      else if (codexBootstrap) requireCodexBootstrapEntryArgs(positional, options);
       else requireCodexWorkflowEntryArgs(positional, options);
     }
     if (!argv[0] || ['help', '--help'].includes(argv[0])) return await dispatchProduct(argv);
     store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request', 'delivered-status', 'workflow-progress', 'review-codex-plan', 'review-codex-workflow'].includes(argv[0]) });
-    if (codexExecution || codexPlanning) {
+    if (codexTrusted) {
       const codexAdmission = await createCodexAdmission(store);
       // dispatchProduct still checks authentic facade identity, current Store
       // binding, exact source/Workflow approval and Operator authorization.

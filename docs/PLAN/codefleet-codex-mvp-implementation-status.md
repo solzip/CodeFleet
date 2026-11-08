@@ -895,3 +895,19 @@ Node 22 SQLite smoke check covered absent, empty and populated optional-table
 states; the complete Codex MVP suite was not run locally. Fresh Windows/Linux
 CI must be checked for this new commit. Native Codex Host Live, authenticated
 Operator admission and final independent Objective acceptance remain UNVERIFIED.
+
+## Trusted CLI NEW_PROJECT Fileset proposal bridge (fresh CI required)
+
+The trusted `productCli` Host embedding now supports
+`propose-codex-bootstrap-files <task-id> <local-edit-item-id>` against a
+validated NEW_PROJECT Bootstrap task. It reuses the existing Store-bound Codex
+facade and the independent exact `authorizeBootstrap` owner grant, durable
+Host intent, revision/WorkItem validation and no-replay semantics. The command
+submits an unapproved Fileset proposal only; the separate exact Fileset approval
+and materialization/verification decisions remain mandatory. Invalid flags
+and a missing/forged trusted facade are rejected before any privileged Host
+factory or model Turn, and the ordinary CLI stays blocked. Offline synthetic
+tests cover successful proposal-without-writes and malformed, forged or
+denied admission. This is not authenticated public Host execution, a live Codex
+Turn, protected verification or Objective acceptance. Its new Windows/Linux CI
+must be checked before reporting offline PASS.

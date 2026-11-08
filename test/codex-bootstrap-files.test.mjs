@@ -41,6 +41,7 @@ import { Store } from '../src/alpha/store.mjs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { taskReport } from '../src/product/report.mjs';
 import { createCodexMvpFacade } from '../src/product/codex-mvp-facade.mjs';
+import { productCli } from '../src/product/cli.mjs';
 import { createFiles, modifyFiles, preflightFiles } from '../src/workflow/bootstrap-files.mjs';
 
 const proposedTodoFiles = [
@@ -723,4 +724,83 @@ test('NEW_PROJECT exact-match hard links cannot count as materialized or repaira
   assert.equal(repaired.status,'CONFLICT');
   assert.equal(repaired.written,false);
   assert.equal(await readFile(outside,'utf8'),'approved');
+});
+
+test('trusted product CLI exposes NEW_PROJECT Host Fileset proposal without materialization',async t=>{
+  const f=await prepared({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  let factories=0,grants=0,turns=0;
+  const entry=['propose-codex-bootstrap-files',f.id,'todo'];
+  const result=await productCli(entry,f.state,{
+    createCodexAdmission:store=>{
+      factories++;
+      return {facade:createCodexMvpFacade(store,{
+        executable:process.execPath,model:'SYNTHETIC_ONLY',enableHostTurns:true,
+        authorizeBootstrap:async scope=>{
+          grants++;
+          assert.equal(scope.taskId,f.id);
+          assert.equal(scope.itemId,'todo');
+          assert.equal(scope.operation,'create');
+          assert.deepEqual(scope.files,proposedTodoFiles.map(file=>file.path));
+          return true;
+        },
+        transport:async call=>{
+          turns++;
+          assert.equal(call.cwd,f.dir);
+          return fakeHostReceipt(JSON.parse(call.prompt));
+        }
+      })};
+    }
+  });
+  assert.equal(result.exitCode,0,result.data?.error);
+  assert.deepEqual([factories,grants,turns],[1,1,1]);
+  assert.equal(result.data.materialized,false);
+  assert.equal(result.data.executionGranted,false);
+  assert.equal(result.data.hostLiveAcceptance,'UNVERIFIED');
+  assert.equal(result.data.approvalRequest.authority,'REQUEST_ONLY');
+  assert.equal(f.store.get(result.data.approvalRequest.runId).state,'WAITING_APPROVAL');
+  assert.equal(task(f.store,f.id).bootstrap.states.todo,'FILESET_PROPOSED');
+  await assert.rejects(readFile(join(f.dir,'src/todo.mjs'),'utf8'),{code:'ENOENT'});
+});
+
+test('NEW_PROJECT CLI rejects untrusted flags, forged facade and denied Host grant',async t=>{
+  const f=await prepared({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const entry=['propose-codex-bootstrap-files',f.id,'todo'];
+  let factories=0,grants=0,turns=0;
+  const createCodexAdmission=store=>{
+    factories++;
+    return {facade:createCodexMvpFacade(store,{
+      executable:process.execPath,model:'SYNTHETIC_ONLY',enableHostTurns:true,
+      authorizeBootstrap:async()=>{grants++;return false;},
+      transport:async()=>{turns++;throw Error('Denied Fileset must not run Host');}
+    })};
+  };
+  for(const invalid of [
+    ['propose-codex-bootstrap-files',f.id],
+    ['propose-codex-bootstrap-files',f.id,'todo','extra'],
+    [...entry,'--allow-model'],
+    [...entry,'--actor','untrusted'],
+    [...entry,'--repository',f.dir]
+  ]){
+    const blocked=await productCli(invalid,f.state,{createCodexAdmission});
+    assert.equal(blocked.exitCode,1);
+    assert.match(blocked.data.error,/requires exactly one Task ID|repository is only valid/);
+  }
+  assert.equal(factories,0);
+  const plain=await productCli(entry,f.state);
+  assert.equal(plain.exitCode,1);
+  assert.match(plain.data.error,/TRUSTED_CODEX_BOOTSTRAP_UNAVAILABLE/);
+  const forged=await productCli(entry,f.state,{
+    createCodexAdmission:()=>({facade:{proposeBootstrapFiles:async()=>({})}})
+  });
+  assert.equal(forged.exitCode,1);
+  assert.match(forged.data.error,/TRUSTED_CODEX_BOOTSTRAP_UNAVAILABLE/);
+  const denied=await productCli(entry,f.state,{createCodexAdmission});
+  assert.equal(denied.exitCode,1);
+  assert.match(denied.data.error,/trusted exact bounded approval/);
+  assert.deepEqual([factories,grants,turns],[1,1,0]);
+  assert.equal(task(f.store,f.id).bootstrap.states.todo,'PENDING_FILESET');
+  assert.equal(task(f.store,f.id).bootstrap.filesets.todo,undefined);
+  await assert.rejects(readFile(join(f.dir,'src/todo.mjs'),'utf8'),{code:'ENOENT'});
 });
