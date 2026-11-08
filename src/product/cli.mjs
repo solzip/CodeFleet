@@ -209,6 +209,20 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
         planningReview.sourceContractHash !== run.sourceRef ||
         planningReview.revision !== run.revision)
       throw Error('Codex Workflow originating Planning/Contract/DAG provenance invalid');
+    // Inspect the actual checked-out source before consuming an authenticated
+    // Operator decision. A valid persisted Planning/DAG hash does not prove
+    // that the current repository is still the approved clean Git baseline.
+    const requireCurrentCodexSource = async phase => {
+      const observed = await inspectReviewedCodexWorkflowAtSource(store,runId,run.repo);
+      if (observed.status !== 'REVIEW_REQUIRED' ||
+          observed.sourceFreshness !== 'PINNED_CLEAN_AT_REVIEW' ||
+          observed.workflowHash !== run.contractHash ||
+          observed.sourceBaseline !== run.base ||
+          observed.repositoryId !== planningReview.repositoryId ||
+          observed.revision !== run.revision)
+        throw Error('Codex Workflow source changed ' + phase + ' authenticated admission');
+    };
+    await requireCurrentCodexSource('before');
     const planningReviewHash = hash(planningReview);
     const inspected = inspectContract(run);
     const inspectedHash = hash(inspected);
@@ -254,6 +268,10 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       throw Error('Codex Workflow originating Planning provenance changed during authenticated admission');
     if (hash(inspectContract(refreshed)) !== inspectedHash)
       throw Error('Codex Workflow Contract/DAG changed during authenticated admission');
+    // Repeat the live repository check after the potentially asynchronous
+    // identity decision and before the managed Controller/Host grant.
+    // This is a pre-dispatch freshness fence, not atomic OS confinement.
+    await requireCurrentCodexSource('during');
     // The existing facade independently verifies current Workflow approval,
     // exact DAG, Host executable, budget, Lease and Host grant before dispatch.
     const data = await managedFacade.runExistingWorkflow(runId, { resume:scope.resume });

@@ -812,3 +812,19 @@ Offline regressions cover switched authorization, expanded generations, changed
 storage policy and explicit Repair-disabled review. This does not grant Repair,
 authenticate a deployed Operator, run native Codex Host Live or independently
 accept an Objective. The new head requires its own Windows/Linux CI results.
+
+## Authenticated Codex admission rechecks current repository before and after review (fresh CI required)
+
+The public `run-codex-workflow` / `resume-codex-workflow` trusted-injection
+boundary now reuses the existing read-only reviewed-Workflow source check on the
+actual repository **before** consuming authenticated Operator approval and
+**after** the asynchronous callback, immediately before managed Host admission.
+A dirty tree, different canonical repository or a clean but changed Git HEAD
+cannot reuse the reviewed Planning/Workflow grant. Offline negative fixtures
+cover dirty source before review, dirty source introduced during review, and a
+new clean HEAD committed during review; each must stop without an Operator/Host
+review where appropriate or an Attempt. The source check is read-only and does
+not alter the user's working tree. This reduces stale-grant risk, but does not
+provide atomic filesystem confinement, implement an Operator authentication
+provider, invoke actual Codex Host Live or independently accept an Objective.
+The new head requires its **own** Windows/Linux CI result before claiming PASS.

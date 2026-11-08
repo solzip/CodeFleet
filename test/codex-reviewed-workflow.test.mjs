@@ -717,6 +717,72 @@ test('authenticated Codex execution requires unchanged originating Planning evid
  }
 });
 
+test('Codex authenticated entry refuses a dirty checkout before Operator admission',async t=>{
+  const f=await fixture(t);
+  const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+    authorizeReview:async()=>true
+  });
+  approveWorkflow(f.store,created.workflowId,{
+    actor:'local-test',workflowHash:created.workflowHash,expiresAt:Date.now()+60_000
+  });
+  let operatorReviews=0,hostReviews=0;
+  const facade=createCodexMvpFacade(f.store,{
+    executable:process.execPath,model:'offline-test',enableHostTurns:true,
+    authorizeWorkflow:async()=>{hostReviews++;return false;},
+    verificationBackend:{prepare:async()=>{},verify:async()=>{},cleanup:async()=>{}}
+  });
+  await writeFile(join(f.repo,'src/a.js'),'export function add(x,y){ return x-y; }\n');
+  const argv=['run-codex-workflow',created.workflowId,'--hash',created.workflowHash];
+  await assert.rejects(dispatchProduct(argv,{store:f.store,execution:{
+    codexAdmission:{facade,authorizeOperator:async()=>{operatorReviews++;return true;}}
+  }}),/Codex Workflow source changed before authenticated admission/);
+  assert.equal(operatorReviews,0);
+  assert.equal(hostReviews,0);
+  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+});
+
+test('Codex authenticated entry refuses dirty or replaced HEAD after Operator review',async t=>{
+  const f=await fixture(t);
+  const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+    authorizeReview:async()=>true
+  });
+  approveWorkflow(f.store,created.workflowId,{
+    actor:'local-test',workflowHash:created.workflowHash,expiresAt:Date.now()+60_000
+  });
+  let operatorReviews=0,hostReviews=0;
+  const facade=createCodexMvpFacade(f.store,{
+    executable:process.execPath,model:'offline-test',enableHostTurns:true,
+    authorizeWorkflow:async()=>{hostReviews++;return false;},
+    verificationBackend:{prepare:async()=>{},verify:async()=>{},cleanup:async()=>{}}
+  });
+  const argv=['resume-codex-workflow',created.workflowId,'--hash',created.workflowHash];
+  const changes=[
+    async()=>writeFile(join(f.repo,'src/a.js'),'export function add(x,y){ return x-y; }\n'),
+    async()=>{
+      await writeFile(join(f.repo,'src/a.js'),'export function add(x,y){ return x-y; }\n');
+      for(const args of [['add','src/a.js'],
+        ['-c','user.name=Fixture','-c','user.email=fixture@example.invalid',
+          'commit','-m','replacement baseline']]) {
+        const result=await git(f.repo,args);
+        assert.equal(result.exitCode,0,result.stderr.toString());
+      }
+    }
+  ];
+  for(const change of changes) {
+    await writeFile(join(f.repo,'src/a.js'),'export function add(x,y){ return x+y; }\n');
+    await assert.rejects(dispatchProduct(argv,{store:f.store,execution:{
+      codexAdmission:{facade,authorizeOperator:async()=>{
+        operatorReviews++;
+        await change();
+        return true;
+      }}
+    }}),/Codex Workflow source changed during authenticated admission/);
+  }
+  assert.equal(operatorReviews,2);
+  assert.equal(hostReviews,0);
+  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+});
+
 test('authenticated Codex entry preserves separate Workflow and managed Host grants',async t=>{
  const f=await fixture(t);
  const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
