@@ -32,6 +32,20 @@ export const isCodexMvpFacadeForStore = (value, store) =>
 const invalid = detail => { throw Error('Codex MVP trusted embedding: ' + detail); };
 const exactText = input => typeof input === 'string' && input.length > 0;
 const callable = input => typeof input === 'function';
+// A coordinator WorkItem policy restricts dispatch. Never pass the embedding's
+// mutable policy object directly into a post-approval Controller execution.
+const frozenPolicyCopy = value => {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    invalid('WorkItem policy must be an exact object');
+  const freeze = object => {
+    if (object && typeof object === 'object') {
+      Object.values(object).forEach(freeze);
+      Object.freeze(object);
+    }
+    return object;
+  };
+  return freeze(structuredClone(value));
+};
 
 export function createCodexMvpFacade(store, {
   executable, model, enableHostTurns = false,
@@ -101,7 +115,7 @@ export function createCodexMvpFacade(store, {
       actor:row.actor ?? null, expires:row.expires });
   };
   const pinnedHostExecutable = () => snapshotHostExecutable(executable);
-  const callScope = ({ run, source }, resume, executableIdentity) => Object.freeze({
+  const callScope = ({ run, source }, resume, executableIdentity, reviewedPolicy) => Object.freeze({
     kind: 'CODEFLEET_MANAGED_WORKFLOW_SCOPE_V1', runId: run.id,
     revision: run.revision, workflowHash: run.contractHash,
     graphRef: run.graphRef, sourceRef: run.sourceRef,
@@ -110,6 +124,9 @@ export function createCodexMvpFacade(store, {
     executableSha256: executableIdentity.sha256,
     resume,
     approvalSnapshotHash: approvalSnapshotHash(run),
+    // An additional policy may restrict every WorkItem. Expose its actual
+    // immutable rules, not just a hash, before asking the owner for a grant.
+    workItemPolicy: reviewedPolicy,
     // Independent execution review must see the real bounded contract, not
     // only an opaque graph hash. Everything nested is a frozen copy; reviewer
     // code cannot rewrite the DAG or broaden the file/command budget.
@@ -377,7 +394,10 @@ export function createCodexMvpFacade(store, {
         enableStorage: repairPolicy.enableStorage === true,
         maxGenerations: repairPolicy.maxGenerations ?? 2
       }) : null;
-      const scope = callScope(current, resume, pinnedExecutable);
+      const pinnedWorkItemPolicy = workItemPolicy == null
+        ? null : frozenPolicyCopy(workItemPolicy);
+      const pinnedWorkItemPolicyHash = hash(pinnedWorkItemPolicy);
+      const scope = callScope(current, resume, pinnedExecutable, pinnedWorkItemPolicy);
       if (await authorizeWorkflow(scope) !== true)
         invalid('Exact managed Workflow execution grant denied');
       // Re-read after potentially asynchronous human review. A caller cannot
@@ -393,7 +413,9 @@ export function createCodexMvpFacade(store, {
       // Reject a repointed executable alias before any billable dispatch.
       await requireSameHostExecutable(executable, pinnedExecutable,
         'Host executable changed while awaiting trusted grant');
-      if (hash(callScope(refreshed, resume, pinnedExecutable)) !== hash(scope))
+      if (hash(workItemPolicy ?? null) !== pinnedWorkItemPolicyHash)
+        invalid('WorkItem policy changed while awaiting trusted grant');
+      if (hash(callScope(refreshed, resume, pinnedExecutable, pinnedWorkItemPolicy)) !== hash(scope))
         invalid('Workflow scope changed while awaiting trusted grant');
       if (Object.entries(verifierMethods).some(([name, method]) =>
         verificationBackend[name] !== method))
@@ -445,7 +467,7 @@ export function createCodexMvpFacade(store, {
           approvedCriteria: scope.destinationCriteria.map(criterion => ({ ...criterion }))
         }) } : {}),
         ...(developmentPolicy ? { developmentPolicy } : {}),
-        ...(workItemPolicy ? { workItemPolicy } : {})
+        ...(pinnedWorkItemPolicy ? { workItemPolicy: structuredClone(pinnedWorkItemPolicy) } : {})
       };
       const workflow = await execute(store, runId, dependencies,
         { resume });

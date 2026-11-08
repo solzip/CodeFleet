@@ -229,6 +229,36 @@ test('managed Workflow owner grant pins immutable destination criteria through a
   assert.equal(grants,1);
 });
 
+test('managed Workflow grant reviews immutable WorkItem policy and rejects policy drift',async()=>{
+ const {store,workflow}=fixture();
+ const policy={
+   workflowHash:workflow.contractHash,revision:workflow.revision,
+   items:{fix:{kind:'analysis'}},capabilities:{'host-read':true}
+ };
+ let reviews=0;
+ const api=createCodexMvpFacade(store,{
+   executable:process.execPath,model:'fixture',
+   enableHostTurns:true,verificationBackend:backend,
+   workItemPolicy:policy,
+   authorizeWorkflow:async scope=>{
+     reviews++;
+     assert.deepEqual(scope.workItemPolicy,policy);
+     assert.equal(Object.isFrozen(scope.workItemPolicy),true);
+     assert.equal(Object.isFrozen(scope.workItemPolicy.items.fix),true);
+     assert.equal(Object.isFrozen(scope.workItemPolicy.capabilities),true);
+     assert.throws(()=>{scope.workItemPolicy.items.fix.kind='planning';},TypeError);
+     assert.throws(()=>{scope.workItemPolicy.capabilities['host-read']=false;},TypeError);
+     // Reconfigure the trusted embedding after granting the old policy.
+     // The Controller must not inherit these unreviewed rules.
+     policy.items.fix.kind='planning';
+     return true;
+   }
+ });
+ await assert.rejects(api.runExistingWorkflow('run-fixture'),
+   /WorkItem policy changed while awaiting trusted grant/);
+ assert.equal(reviews,1);
+});
+
 test('host execution options cannot be model-controlled through unexpected fields',async()=>{
  const {store}=fixture();
  const api=createCodexMvpFacade(store,{executable:process.execPath,model:'codex-fixture',

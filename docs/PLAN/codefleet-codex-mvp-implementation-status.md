@@ -828,3 +828,16 @@ not alter the user's working tree. This reduces stale-grant risk, but does not
 provide atomic filesystem confinement, implement an Operator authentication
 provider, invoke actual Codex Host Live or independently accept an Objective.
 The new head requires its **own** Windows/Linux CI result before claiming PASS.
+
+## Managed Workflow owner review pins optional WorkItem policy (fresh CI required)
+
+The trusted Codex Workflow execution facade now includes the full detached,
+deeply immutable optional WorkItem policy in the owner-reviewed Host scope.
+It snapshots the policy before asynchronous Workflow authorization, rejects a
+changed original policy after the grant, and passes only the reviewed detached
+rules to the existing Controller's per-WorkItem capability gate. An offline
+negative regression checks nested scope immutability and policy relaxation
+during owner review without entering Controller dispatch. This does not
+authenticate a deployed Operator, enable unsupported capabilities, prove
+Codex Host Live or accept an Objective. Its new Windows/Linux CI results
+must be inspected independently.
