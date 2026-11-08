@@ -1092,3 +1092,22 @@ is a diagnostic regression increment, **not a verified product bug fix**. The
 next action is to inspect this commit's own Windows/Linux CI logs and fix the
 identified cause without relaxing approval, Lease, Store or Host checks. No
 Codex Host Live, actual user source mutation or Objective acceptance occurred.
+
+## NEW_PROJECT Todo → Calendar continuation fixture correction (fresh CI required)
+
+The prior `d7db6739` run failed on Windows and Linux because the continuation
+test expected `RUN_LOCAL_VERIFICATION` immediately after Todo materialization.
+Its actual persisted DAG is `requirements → todo → calendar → tests`, and the
+Controller correctly selected `PROPOSE_FILESET(calendar)` next. The failure
+was an incorrect test expectation, not evidence of a Controller scheduling bug.
+
+The offline integration fixture now exercises **both** local-edit WorkItems:
+Todo proposal → human approval → materialization; then Calendar proposal →
+separate human approval → materialization; only then a Local verification
+human handoff. It checks that unapproved Calendar bytes are absent, calls
+advance once per step, preserves separate Host/owner grant counts, and never
+equates Local readiness with Objective COMPLETE. Existing Store, approval,
+budget, Lease, Controller and protected verification behavior is unchanged.
+The Host receipt remains synthetic; no actual Codex Host Live or final
+Objective acceptance was run. This new head requires its own Windows/Linux
+GitHub Actions result before reporting an offline PASS.

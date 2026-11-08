@@ -1260,24 +1260,33 @@ test('NEW_PROJECT Repair CLI fails closed on absent failure Evidence, forged fac
 test('trusted NEW_PROJECT continuation advances exactly one persisted step and stops for human decisions',async t=>{
   const f=await prepared({passing:true});
   t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const calendarFiles=[
+    {path:'src/calendar.mjs',content:'export const byDate = () => ({});\n'},
+    {path:'test/calendar.test.mjs',content:"import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { byDate } from '../src/calendar.mjs';\ntest('calendar groups', () => assert.deepEqual(byDate(), {}));\n"}
+  ];
   let turns=0,proposals=0,materializationGrants=0;
   const createCodexAdmission=store=>({facade:createCodexMvpFacade(store,{
     executable:process.execPath,model:'SYNTHETIC_ONLY',enableHostTurns:true,
     authorizeBootstrap:async scope=>{
       proposals++;
       assert.equal(scope.taskId,f.id);
-      assert.equal(scope.itemId,'todo');
+      assert.equal(scope.itemId,proposals===1?'todo':'calendar');
       return true;
     },
     authorizeBootstrapMaterialization:async scope=>{
       materializationGrants++;
       assert.equal(scope.kind,'CODEFLEET_BOOTSTRAP_MATERIALIZATION_SCOPE_V1');
-      assert.equal(scope.itemId,'todo');
+      assert.equal(scope.itemId,materializationGrants===1?'todo':'calendar');
       return true;
     },
     transport:async call=>{
       turns++;
-      return fakeHostReceipt(JSON.parse(call.prompt));
+      const scope=JSON.parse(call.prompt);
+      return scope.itemId==='calendar'
+        ? {...fakeHostReceipt(scope),text:JSON.stringify({
+            revision:scope.revision,itemId:'calendar',files:calendarFiles
+          })}
+        : fakeHostReceipt(scope);
     }
   })});
   const advance=()=>productCli(['advance-codex-bootstrap',f.id],f.state,{createCodexAdmission});
@@ -1307,16 +1316,43 @@ test('trusted NEW_PROJECT continuation advances exactly one persisted step and s
   for(const file of proposedTodoFiles)
     assert.equal(await readFile(join(f.dir,file.path),'utf8'),file.content);
 
-  // CI regression diagnosis: surface the exact fail-closed CLI reason rather
-  // than losing the underlying error behind a bare 1 !== 2 assertion.
-  assert.equal(materialized.data.continuation?.next?.kind,'RUN_LOCAL_VERIFICATION',
+  // The persisted DAG requires Calendar after Todo and only then Local
+  // verification; the previous fixture incorrectly skipped this dependency.
+  assert.equal(materialized.data.continuation?.next?.kind,'PROPOSE_FILESET',
     JSON.stringify(materialized.data.continuation));
+  assert.equal(materialized.data.continuation.next.itemId,'calendar');
+  const calendarProposed=await advance();
+  assert.equal(calendarProposed.exitCode,0,calendarProposed.data?.error);
+  assert.equal(calendarProposed.data.step,'PROPOSE_FILESET');
+  assert.equal(calendarProposed.data.itemId,'calendar');
+  assert.equal(calendarProposed.data.result.approvalRequest.authority,'REQUEST_ONLY');
+  assert.equal(calendarProposed.data.continuation.next.kind,'AWAIT_FILESET_APPROVAL');
+  assert.deepEqual([turns,proposals,materializationGrants],[2,2,1]);
+  await assert.rejects(readFile(join(f.dir,'src/calendar.mjs'),'utf8'),{code:'ENOENT'});
+
+  const calendarPending=await advance();
+  assert.equal(calendarPending.exitCode,2);
+  assert.equal(calendarPending.data.status,'HUMAN_HANDOFF');
+  assert.equal(calendarPending.data.continuation.next.kind,'AWAIT_FILESET_APPROVAL');
+  assert.deepEqual([turns,proposals,materializationGrants],[2,2,1]);
+
+  approve(f,calendarProposed.data.result.approvalRequest);
+  const calendarMaterialized=await advance();
+  assert.equal(calendarMaterialized.exitCode,0,calendarMaterialized.data?.error);
+  assert.equal(calendarMaterialized.data.step,'MATERIALIZE');
+  assert.equal(calendarMaterialized.data.itemId,'calendar');
+  assert.equal(calendarMaterialized.data.result.status,'MATERIALIZED');
+  assert.deepEqual([turns,proposals,materializationGrants],[2,2,2]);
+  for(const file of calendarFiles)
+    assert.equal(await readFile(join(f.dir,file.path),'utf8'),file.content);
+  assert.equal(calendarMaterialized.data.continuation?.next?.kind,'RUN_LOCAL_VERIFICATION',
+    JSON.stringify(calendarMaterialized.data.continuation));
   const needsLocalTrust=await advance();
   assert.equal(needsLocalTrust.exitCode,2,
     'Expected read-only Local verification handoff: '+JSON.stringify(needsLocalTrust.data));
   assert.equal(needsLocalTrust.data.status,'HUMAN_HANDOFF');
   assert.equal(needsLocalTrust.data.continuation.next.kind,'RUN_LOCAL_VERIFICATION');
-  assert.deepEqual([turns,proposals,materializationGrants],[1,1,1]);
+  assert.deepEqual([turns,proposals,materializationGrants],[2,2,2]);
   assert.equal(task(f.store,f.id).bootstrap.verifications?.tests,undefined);
   assert.equal((await taskReport(f.store,f.id)).complete,false);
 });
