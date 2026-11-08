@@ -993,3 +993,18 @@ verification fixtures cover the unchanged owner grant and Controller.
 This is input preflight, **not** authentication of the embedding, Host Live
 execution, PROTECTED verification or Objective acceptance. Its new Windows/Linux
 CI must be inspected separately before claiming tests PASS.
+
+## Bootstrap verification request shape preflight (new CI required)
+
+The trusted `verify-codex-bootstrap` CLI now rejects JSON values that are not an
+exact bounded native Local verification command **before** SQLite Store creation
+or privileged Host admission factory construction. A valid JSON scalar, array,
+extra authority field, non-array arguments, NUL argument, relative executable
+or out-of-range timeout cannot consume a trusted factory/owner review. The same
+pure input check also applies to directly injected trusted dispatch requests.
+The existing Bootstrap Controller remains responsible for executable/tree
+observation, task freshness, independent owner authorization and UNPROTECTED
+Local Evidence. A negative offline regression exercises eight malformed
+command shapes without Host admission or verification effects. This is not
+public Operator authentication, OS confinement, native Codex Host Live proof
+or Objective acceptance. Fresh Windows/Linux CI is required for this head.

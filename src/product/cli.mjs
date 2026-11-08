@@ -130,6 +130,27 @@ function requireCodexBootstrapVerificationArgs(args, o) {
     throw Error('verify-codex-bootstrap requires Task ID, local-verification WorkItem ID and bounded REQUEST.json; no flags or approval options');
 }
 
+// Reject untrusted Local verification commands before Store creation or a
+// privileged Host binding. This is a pure shape/bounds check; the existing
+// Bootstrap Controller independently resolves the command, observes the tree,
+// and requires an exact owner grant before running any subprocess.
+function requireCodexBootstrapVerificationRequest(request) {
+  const fields = ['executable', 'args', 'directory', 'timeoutMs'];
+  if (!request || typeof request !== 'object' || Array.isArray(request) ||
+      Object.keys(request).length !== fields.length ||
+      fields.some(key => !Object.hasOwn(request, key)) ||
+      typeof request.executable !== 'string' || !path.isAbsolute(request.executable) ||
+      /\\.(cmd|bat|ps1)$/i.test(request.executable) ||
+      typeof request.directory !== 'string' || !request.directory.trim() ||
+      !Array.isArray(request.args) || request.args.length > 100 ||
+      request.args.some(arg => typeof arg !== 'string' || arg.length > 8000 ||
+        arg.includes('\\0')) ||
+      !Number.isSafeInteger(request.timeoutMs) ||
+      request.timeoutMs < 1 || request.timeoutMs > 120000)
+    throw Error('verify-codex-bootstrap REQUEST.json requires exact bounded Local command fields');
+  return request;
+}
+
 function requireCodexWorkflowEntryArgs(args, o) {
   if (args.length !== 1 || !args[0] || args[0].startsWith('-') ||
       Object.keys(o).length !== 1 || !/^[a-f0-9]{64}$/.test(o.hash ?? ''))
@@ -208,8 +229,9 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     // productCli parses bounded untrusted JSON before invoking the privileged
     // Host factory. Reuse that exact snapshot, not a second filesystem read.
     // Direct trusted dispatch still reads and bounds its own request file.
-    const request = execution.boundedBootstrapVerificationRequest === undefined
-      ? await readResponse(args[2]) : execution.boundedBootstrapVerificationRequest;
+    const request = requireCodexBootstrapVerificationRequest(
+      execution.boundedBootstrapVerificationRequest === undefined
+        ? await readResponse(args[2]) : execution.boundedBootstrapVerificationRequest);
     const data = await binding.facade.verifyApprovedBootstrap(args[0], args[1], request);
     return { exitCode: data.status === 'LOCAL_PASSED' ? 0 : 2,
       data: { ...data, protection: 'UNPROTECTED', hostLiveAcceptance: 'UNVERIFIED' } };
@@ -609,7 +631,8 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
       // Malformed/oversized caller JSON is rejected before opening Store or
       // creating an authenticated Host binding; parse it only once.
       if (argv[0] === 'verify-codex-bootstrap')
-        boundedBootstrapVerificationRequest = await readResponse(positional[2]);
+        boundedBootstrapVerificationRequest = requireCodexBootstrapVerificationRequest(
+          await readResponse(positional[2]));
     }
     if (!argv[0] || ['help', '--help'].includes(argv[0])) return await dispatchProduct(argv);
     store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request', 'delivered-status', 'workflow-progress', 'review-codex-plan', 'review-codex-workflow'].includes(argv[0]) });

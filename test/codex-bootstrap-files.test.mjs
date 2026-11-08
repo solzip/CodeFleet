@@ -959,6 +959,31 @@ test('NEW_PROJECT verification CLI refuses unparseable and oversized requests be
   assert.equal(task(f.store,f.id).bootstrap.verifications?.tests,undefined);
   assert.equal(f.store.events(f.id).filter(e=>e.type==='BOOTSTRAP_LOCAL_VERIFICATION_RECORDED').length,0);
 });
+test('NEW_PROJECT verification CLI rejects unsafe command shapes before trusted Host admission',async t=>{
+  const f=await built({passing:true,protectedItem:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const requestFile=join(f.root,'unsafe-verification-request.json');
+  const entry=['verify-codex-bootstrap',f.id,'tests',requestFile];
+  const valid=request(f);
+  let factories=0;
+  const createCodexAdmission=()=>{factories++;throw Error('Untrusted command must not reach Host factory');};
+  const cases=[
+    null, [], {...valid,extraAuthority:'PROTECTED'},
+    {...valid,args:'--test'}, {...valid,args:['--test','\\0invalid']},
+    {...valid,timeoutMs:120001}, {...valid,executable:'node'},
+    {...valid,timeoutMs:0}
+  ];
+  for (const value of cases) {
+    await writeFile(requestFile,JSON.stringify(value));
+    const blocked=await productCli(entry,f.state,{createCodexAdmission});
+    assert.equal(blocked.exitCode,1,JSON.stringify(value));
+    assert.match(blocked.data.error,/exact bounded Local command fields/);
+  }
+  assert.equal(factories,0);
+  assert.equal(task(f.store,f.id).bootstrap.verifications?.tests,undefined);
+  assert.equal(f.store.events(f.id).filter(e=>e.type==='BOOTSTRAP_LOCAL_VERIFICATION_RECORDED').length,0);
+});
+
 test('NEW_PROJECT verification CLI denies malformed input, ordinary CLI, forged facade and owner rejection',async t=>{
   const f=await built({passing:true,protectedItem:true});
   t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
