@@ -649,6 +649,55 @@ test('managed Host rejects unknown-cost owner authority changed during Workflow 
   assert.equal(budgetCalls, 0);
 });
 
+test('managed Host binds Repair generations and separate authorization to the Workflow review', async () => {
+  for (const changed of ['authorize', 'maxGenerations', 'enableStorage']) {
+    const { store } = fixture();
+    let reviews = 0, repairGrants = 0, turns = 0;
+    const repairPolicy = {
+      enableStorage: true, maxGenerations: 2,
+      authorize: async () => { repairGrants++; return false; }
+    };
+    const api = createCodexMvpFacade(store, {
+      executable: process.execPath, model: 'fixture',
+      enableHostTurns: true, verificationBackend: backend, repairPolicy,
+      transport: async () => { turns++; throw Error('Host Turn must not start'); },
+      authorizeWorkflow: async scope => {
+        reviews++;
+        assert.deepEqual(scope.repair, {
+          authorization: 'EXACT_FAILURE_GRANT_REQUIRED',
+          storageEnabled: true, maxGenerations: 2
+        });
+        assert.equal(Object.isFrozen(scope.repair), true);
+        if (changed === 'authorize')
+          repairPolicy.authorize = async () => { repairGrants++; return true; };
+        else if (changed === 'maxGenerations') repairPolicy.maxGenerations = 5;
+        else repairPolicy.enableStorage = false;
+        return true;
+      }
+    });
+    await assert.rejects(api.runExistingWorkflow('run-fixture'),
+      /Repair policy changed while awaiting trusted grant|Workflow scope changed while awaiting trusted grant/);
+    assert.equal(reviews, 1);
+    assert.equal(repairGrants, 0);
+    assert.equal(turns, 0);
+  }
+});
+
+test('managed Host review states that Repair is disabled without separate policy', async () => {
+  const { store } = fixture();
+  const api = createCodexMvpFacade(store, {
+    executable: process.execPath, model: 'fixture',
+    enableHostTurns: true, verificationBackend: backend,
+    authorizeWorkflow: async scope => {
+      assert.deepEqual(scope.repair, {
+        authorization: 'DISABLED', storageEnabled: false, maxGenerations: null
+      });
+      return false;
+    }
+  });
+  await assert.rejects(api.runExistingWorkflow('run-fixture'), /grant denied/);
+});
+
 test('managed Host review discloses unknown-cost authorization disabled by default', async () => {
   const { store } = fixture();
   const api = createCodexMvpFacade(store, {

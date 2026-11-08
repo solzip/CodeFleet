@@ -798,3 +798,17 @@ The persistent artifact reader already verifies SHA-256; this addition closes
 the pre-read/post-await stale snapshot gap, not concurrent filesystem races,
 Host Live authorization, protected execution or final Objective acceptance.
 This commit requires its own Windows/Linux CI results.
+
+## Managed Host Repair authority and generation limit pinned across review (fresh CI required)
+
+The trusted Workflow execution grant now discloses whether bounded Repair is
+available, its immutable generation ceiling and whether opt-in Repair storage is
+enabled. The embedding's separate failure-Evidence-bound Repair callback and
+generation/storage settings are snapshotted before asynchronous owner review.
+Changing any of them during review blocks Controller entry; the Controller
+receives only the originally reviewed values and a bound callback. Invalid
+generation settings outside the existing 2..5 range are rejected before review.
+Offline regressions cover switched authorization, expanded generations, changed
+storage policy and explicit Repair-disabled review. This does not grant Repair,
+authenticate a deployed Operator, run native Codex Host Live or independently
+accept an Objective. The new head requires its own Windows/Linux CI results.

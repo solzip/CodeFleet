@@ -144,6 +144,15 @@ export function createCodexMvpFacade(store, {
     // must see whether a separate exact owner cost grant is available.
     unknownUsageAuthorization: callable(unknownCostBudget?.authorize)
       ? 'EXACT_OWNER_GRANT_REQUIRED' : 'BLOCKED_WITHOUT_OWNER_GRANT',
+    // A general Workflow grant must disclose whether failed WorkItems can
+    // incur further Host Turns and the maximum immutable generation count.
+    // The separate failure-Evidence-bound Repair authorization is still required.
+    repair: Object.freeze({
+      authorization: callable(repairPolicy?.authorize)
+        ? 'EXACT_FAILURE_GRANT_REQUIRED' : 'DISABLED',
+      storageEnabled: repairPolicy?.enableStorage === true,
+      maxGenerations: repairPolicy ? (repairPolicy.maxGenerations ?? 2) : null
+    }),
     executionMode: workspaceWrite
       ? 'HOST_WORKSPACE_WRITE_UNPROTECTED' : 'HOST_READ_ONLY_PROPOSAL',
     protectedVerified: false
@@ -353,6 +362,21 @@ export function createCodexMvpFacade(store, {
       // authorization. A mutable embedding must not replace that callback
       // while the main managed-Host execution grant is under review.
       const unknownCostAuthorize = unknownCostBudget?.authorize;
+      // Repair is an additional billable execution decision, not a property
+      // that an embedding may expand while the owner reviews the Workflow.
+      if (repairPolicy && (typeof repairPolicy !== 'object' ||
+          (repairPolicy.authorize !== undefined && !callable(repairPolicy.authorize)) ||
+          (repairPolicy.enableStorage !== undefined &&
+            typeof repairPolicy.enableStorage !== 'boolean') ||
+          (repairPolicy.maxGenerations !== undefined &&
+            (!Number.isSafeInteger(repairPolicy.maxGenerations) ||
+              repairPolicy.maxGenerations < 2 || repairPolicy.maxGenerations > 5))))
+        invalid('Repair policy must have bounded generations and an exact grant');
+      const pinnedRepair = repairPolicy ? Object.freeze({
+        authorize: repairPolicy.authorize,
+        enableStorage: repairPolicy.enableStorage === true,
+        maxGenerations: repairPolicy.maxGenerations ?? 2
+      }) : null;
       const scope = callScope(current, resume, pinnedExecutable);
       if (await authorizeWorkflow(scope) !== true)
         invalid('Exact managed Workflow execution grant denied');
@@ -379,6 +403,10 @@ export function createCodexMvpFacade(store, {
         invalid('Destination delivery authority changed while awaiting trusted grant');
       if (unknownCostBudget?.authorize !== unknownCostAuthorize)
         invalid('Unknown-cost budget authority changed while awaiting trusted grant');
+      if (pinnedRepair && (repairPolicy.authorize !== pinnedRepair.authorize ||
+          (repairPolicy.enableStorage === true) !== pinnedRepair.enableStorage ||
+          (repairPolicy.maxGenerations ?? 2) !== pinnedRepair.maxGenerations))
+        invalid('Repair policy changed while awaiting trusted grant');
       // Bind Controller to the reviewed methods while preserving the backend's
       // original receiver. This is not independent backend attestation.
       const pinnedVerifier = Object.freeze(Object.fromEntries(
@@ -398,7 +426,15 @@ export function createCodexMvpFacade(store, {
         ...(callable(unknownCostAuthorize) ? { unknownCostBudget: Object.freeze({
           authorize: (...args) => Reflect.apply(unknownCostAuthorize, unknownCostBudget, args)
         }) } : {}),
-        ...(repairPolicy ? { repairPolicy } : {}),
+        ...(pinnedRepair ? { repairPolicy: Object.freeze({
+          enableStorage: pinnedRepair.enableStorage,
+          maxGenerations: pinnedRepair.maxGenerations,
+          // Do not let an embedding replace a denied per-failure grant after
+          // the main Workflow review. Preserve the original receiver.
+          ...(callable(pinnedRepair.authorize) ? {
+            authorize: (...args) => Reflect.apply(pinnedRepair.authorize, repairPolicy, args)
+          } : {})
+        }) } : {}),
         // Use exactly the reviewed criterion snapshot for this execution.
         // A later mutation of the embedding's array cannot retarget delivery.
         ...(destinationDelivery ? { destinationDelivery: Object.freeze({
