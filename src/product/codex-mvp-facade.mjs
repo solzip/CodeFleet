@@ -71,6 +71,9 @@ export function createCodexMvpFacade(store, {
       !callable(verificationBackend.prepare) ||
       !callable(verificationBackend.cleanup)))
     invalid('Verification backend must implement actual prepare, verify and cleanup');
+  if (bootstrapVerifierBackend && (!callable(bootstrapVerifierBackend.authorize) ||
+      !callable(bootstrapVerifierBackend.verify)))
+    invalid('Bootstrap Local verifier must implement authorize and verify');
   const invokeTransport = transport ? { transport } : {};
   const available = () => {
     if (!enableHostTurns) invalid('Host Live disabled by trusted embedding');
@@ -286,6 +289,13 @@ export function createCodexMvpFacade(store, {
     async verifyApprovedBootstrap(taskId,itemId,command) {
       if (!callable(authorizeBootstrapVerification))
         invalid('Independent exact Bootstrap verification grant required');
+      // Pin the Local verifier methods before awaiting command/tree preview
+      // and independent owner review. An embedding cannot replace a verifier
+      // after the owner inspected the exact Local verification scope.
+      const verifierMethods=bootstrapVerifierBackend ? Object.freeze({
+        authorize:bootstrapVerifierBackend.authorize,
+        verify:bootstrapVerifierBackend.verify
+      }) : null;
       // Bind the independent approval to the current immutable task revision
       // and Workflow, not merely to reusable command bytes.
       const initial=bootstrapContext(store,taskId);
@@ -333,6 +343,13 @@ export function createCodexMvpFacade(store, {
           hash(currentPreview.command) !== hash(scope.command) ||
           hash(currentPreview.fileDigests) !== hash(scope.fileDigests))
         invalid('Bootstrap verification command/tree changed during review');
+      if (verifierMethods && Object.entries(verifierMethods).some(
+        ([name,method]) => bootstrapVerifierBackend[name] !== method))
+        invalid('Bootstrap Local verifier changed during owner review');
+      const pinnedBackend=verifierMethods ? Object.freeze({
+        authorize:(...args) => Reflect.apply(verifierMethods.authorize,bootstrapVerifierBackend,args),
+        verify:(...args) => Reflect.apply(verifierMethods.verify,bootstrapVerifierBackend,args)
+      }) : null;
       // The second preview checks the caller's latest command. Dispatch must
       // nevertheless use a detached, immutable copy of the owner's reviewed
       // canonical command: the original input may change while the Local
@@ -347,7 +364,7 @@ export function createCodexMvpFacade(store, {
       // exact trust hash and Local backend before recording any Evidence.
       return verifyTask(store,taskId,itemId,reviewedRequest,{
         trust:preview.commandHash,acknowledgeUnisolated:true,
-        ...(bootstrapVerifierBackend?{backend:bootstrapVerifierBackend}:{})
+        ...(pinnedBackend?{backend:pinnedBackend}:{})
       });
     },
     async runExistingWorkflow(runId, options = {}) {

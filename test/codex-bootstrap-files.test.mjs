@@ -900,6 +900,34 @@ test('NEW_PROJECT CLI materialization rejects flags, missing trust and denied ow
   await assert.rejects(readFile(join(f.dir,'src/todo.mjs'),'utf8'),{code:'ENOENT'});
 });
 
+test('Bootstrap Local verifier method rotation during owner review is blocked before execution or Evidence',async t=>{
+  for (const method of ['authorize','verify']) {
+    const f=await built({passing:true,protectedItem:true});
+    t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+    let reviews=0,backendCalls=0;
+    const backend={
+      async authorize(){backendCalls++;throw Error('Unapproved verifier must not execute');},
+      async verify(){backendCalls++;throw Error('Unapproved verifier must not execute');}
+    };
+    const api=createCodexMvpFacade(f.store,{
+      executable:process.execPath,model:'SYNTHETIC_ONLY',
+      bootstrapVerifierBackend:backend,
+      authorizeBootstrapVerification:async scope=>{
+        reviews++;
+        assert.equal(scope.protection,'UNPROTECTED');
+        backend[method]=async()=>{backendCalls++;throw Error('Replacement must not execute');};
+        return true;
+      }
+    });
+    await assert.rejects(api.verifyApprovedBootstrap(f.id,'tests',request(f)),
+      /Bootstrap Local verifier changed during owner review/);
+    assert.equal(reviews,1);
+    assert.equal(backendCalls,0);
+    assert.equal(task(f.store,f.id).bootstrap.verifications?.tests,undefined);
+    assert.equal(f.store.events(f.id).filter(e=>e.type==='BOOTSTRAP_LOCAL_VERIFICATION_RECORDED').length,0);
+  }
+});
+
 test('trusted product CLI performs separately reviewed NEW_PROJECT Local verification without completing Objective',async t=>{
   const f=await built({passing:true,protectedItem:true});
   t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});

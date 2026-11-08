@@ -1039,3 +1039,17 @@ verification Evidence. This preflight is not filesystem confinement, public
 Operator authentication, Host Live execution or Objective acceptance. The
 previous `5c20d8a9` Windows/Linux CI succeeded; this new head needs its own
 Windows/Linux CI before reporting PASS.
+
+## Bootstrap Local verifier method-rotation fence (fresh CI required)
+
+The NEW_PROJECT/EXISTING_LOCAL trusted `verifyApprovedBootstrap` bridge now pins
+an injected Local verification backend's `authorize` and `verify` methods
+before asynchronous command preview and independent owner review. It refuses
+method-slot rotation before submitting any Local subprocess, and passes
+receiver-bound wrappers for the originally reviewed methods to the existing
+Bootstrap Controller. An incomplete injected backend fails during facade
+construction. Offline negative regressions rotate each method during owner
+review and assert no backend call or verification Evidence is recorded. This
+does **not** attest backend internals, create an OS-authenticated Operator,
+make Local verification PROTECTED, prove Codex Host Live, or accept an Objective.
+New Windows/Linux CI is required for this head.
