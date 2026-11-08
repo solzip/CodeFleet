@@ -14,6 +14,15 @@ import { prepareReviewedCodexWorkflow, inspectReviewedCodexPlan } from '../src/p
 import { dispatchProduct, productCli } from '../src/product/cli.mjs';
 
 const goal='Repair arithmetic behavior in src/a.js with test/a.test.js and independently verify results.';
+
+// Planning-only fixtures may not initialize the optional Workflow Attempt
+// schema. Absence of the table is zero Attempts, not an SQL error.
+function countWorkflowAttempts(store) {
+ const exists=store.db.prepare(
+   "SELECT 1 FROM sqlite_master WHERE type='table' AND name='workflow_attempts'"
+ ).get();
+ return exists ? store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n : 0;
+}
 async function fixture(t) {
  const root=await mkdtemp(join(tmpdir(),'cf-plan-workflow-'));
  let store;
@@ -1272,7 +1281,7 @@ test('trusted CLI can route a natural-language Goal through reviewed Codex plann
   assert.equal(planningGrants,1);
   assert.equal(fakeTurns,1);
   assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
-  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+  assert.equal(countWorkflowAttempts(f.store),0);
 });
 
 test('Codex Goal CLI fails closed before trusted planning factory or billable Turn on invalid/denied admission',async t=>{
@@ -1313,5 +1322,6 @@ test('Codex Goal CLI fails closed before trusted planning factory or billable Tu
   assert.equal(grants,1);
   assert.equal(turns,0);
   assert.equal(f.store.db.prepare("SELECT count(*) AS n FROM host_planning WHERE status='CANCELLED'").get().n,1);
-  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
+  assert.equal(countWorkflowAttempts(f.store),0);
 });

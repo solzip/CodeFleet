@@ -878,3 +878,20 @@ unsupported flags. No Workflow approval, Host execution or Objective COMPLETE is
 automatically granted. The synthetic transport is **not** native Codex Live;
 actual Operator authentication, supported Host Live and independent final
 acceptance remain UNVERIFIED. This new head needs separate Windows/Linux CI.
+
+## CI repair: planning-only CLI fixtures do not initialize Workflow Attempt table (fresh CI required)
+
+The previous head `16c4a2bce499a52f1096c1c765c2f74321bfe43a` failed `npm run test:codex-mvp` on both
+Windows and Linux (two new offline CLI fixtures each) with SQLite
+`no such table: workflow_attempts`. A successful or denied managed Planning
+Turn need not create a Workflow, and this Store lazily initializes the optional
+Workflow Attempt table only when the Workflow path uses it. The new tests
+incorrectly queried that absent optional table as though it were always present.
+The two fixtures now count Attempts as zero if the optional table is absent,
+and still query/count rows if it exists. The denied-path fixture also asserts
+that no Workflow run was created. This changes **test assertions only**, not
+Planning approval, Host dispatch, persistence or schema migration. A local
+Node 22 SQLite smoke check covered absent, empty and populated optional-table
+states; the complete Codex MVP suite was not run locally. Fresh Windows/Linux
+CI must be checked for this new commit. Native Codex Host Live, authenticated
+Operator admission and final independent Objective acceptance remain UNVERIFIED.
