@@ -964,3 +964,17 @@ approval, materialization and Local re-verification remain separate actions;
 this is not autonomous Host Live Repair, Operator authentication, protected
 execution or Objective acceptance. This head requires its own Windows/Linux
 CI before any offline PASS claim.
+
+## Trusted CLI NEW_PROJECT Repair apply-to-reverification integration (fresh CI required)
+
+A disposable synthetic integration fixture now exercises the trusted CLI across
+separately opened SQLite Stores: an actual Local verification produces current
+`LOCAL_FAILED` Evidence; the fake Codex Host proposes a failure-bound Repair;
+an unapproved Fileset cannot modify bytes; explicit exact Fileset approval
+permits the existing Bootstrap Controller to apply only the reviewed source
+change; and a new independently approved Local verification records
+`LOCAL_PASSED` Evidence. The stale failure Evidence is not reused and the
+Objective remains incomplete, `UNPROTECTED`, and Host Live `UNVERIFIED`.
+This adds an offline CLI integration test only, not a real Codex Turn, an
+Operator authenticator, automatic approval, or final Objective acceptance.
+The new head requires its own Windows/Linux CI result.

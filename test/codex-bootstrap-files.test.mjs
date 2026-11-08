@@ -1033,6 +1033,99 @@ test('trusted product CLI proposes only failure-Evidence-bound NEW_PROJECT Repai
   assert.equal(f.store.get(result.data.approvalRequest.runId).state,'WAITING_APPROVAL');
 });
 
+
+test('NEW_PROJECT trusted CLI runs approved Repair apply and fresh Local verification across Store openings',async t=>{
+  // Synthetic Host receipt and disposable Local test command only. Each CLI
+  // invocation opens its own Store; none authenticates a real Codex Host.
+  const f=await built({protectedItem:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const requestFile=join(f.root,'codex-repair-verification-request.json');
+  await writeFile(requestFile,JSON.stringify(request(f)));
+  const original=await readFile(join(f.dir,'src/todo.mjs'),'utf8');
+  const replacement='export const add = (list, t) => [...list, t];\n';
+  let hostTurns=0,materializationGrants=0,verificationGrants=0;
+  let failureRef=null;
+  const createCodexAdmission=store=>({facade:createCodexMvpFacade(store,{
+    executable:process.execPath,model:'SYNTHETIC_ONLY',enableHostTurns:true,
+    authorizeBootstrap:async scope=>{
+      assert.equal(scope.operation,'repair');
+      assert.equal(scope.repair.verificationItem,'tests');
+      assert.equal(scope.repair.evidenceRef,failureRef);
+      assert.equal(scope.repair.sourceFiles['src/todo.mjs'],original);
+      return true;
+    },
+    transport:async call=>{
+      hostTurns++;
+      const scope=JSON.parse(call.prompt);
+      assert.equal(scope.kind,'CODEFLEET_NEW_PROJECT_REPAIR_FILESET_V1');
+      return {...fakeHostReceipt(scope),text:JSON.stringify({
+        revision:scope.revision,itemId:'todo',
+        repair:{verificationItem:'tests',evidenceRef:failureRef},
+        files:[{path:'src/todo.mjs',content:replacement,baseSha256:hash(original)}]
+      })};
+    },
+    authorizeBootstrapMaterialization:async scope=>{
+      materializationGrants++;
+      assert.equal(scope.operation,'modify');
+      assert.equal(scope.protection,'UNPROTECTED');
+      assert.deepEqual(scope.files.map(file=>file.path),['src/todo.mjs']);
+      assert.equal(scope.files[0].content,replacement);
+      return true;
+    },
+    authorizeBootstrapVerification:async scope=>{
+      verificationGrants++;
+      assert.equal(scope.itemId,'tests');
+      assert.equal(scope.protection,'UNPROTECTED');
+      assert.equal(scope.command.directory,await realpath(f.dir));
+      return true;
+    }
+  })});
+  const check=['verify-codex-bootstrap',f.id,'tests',requestFile];
+  const failed=await productCli(check,f.state,{createCodexAdmission});
+  assert.equal(failed.exitCode,2,failed.data?.error);
+  assert.equal(failed.data.status,'LOCAL_FAILED');
+  failureRef=task(f.store,f.id).bootstrap.verifications.tests;
+  assert.ok(failureRef);
+  assert.equal(await readFile(join(f.dir,'src/todo.mjs'),'utf8'),original);
+
+  const proposed=await productCli(
+    ['propose-codex-bootstrap-repair',f.id,'todo','tests'],
+    f.state,{createCodexAdmission});
+  assert.equal(proposed.exitCode,0,proposed.data?.error);
+  assert.equal(proposed.data.approvalRequest.operation,'modify');
+  assert.equal(proposed.data.materialized,false);
+  assert.equal(f.store.get(proposed.data.approvalRequest.runId).state,'WAITING_APPROVAL');
+  assert.equal(await readFile(join(f.dir,'src/todo.mjs'),'utf8'),original);
+  assert.equal(hostTurns,1);
+
+  const apply=['materialize-codex-bootstrap-files',f.id,'todo'];
+  const unapproved=await productCli(apply,f.state,{createCodexAdmission});
+  assert.notEqual(unapproved.exitCode,0,'Pending Repair cannot write before approval');
+  assert.equal(await readFile(join(f.dir,'src/todo.mjs'),'utf8'),original);
+  assert.equal(f.store.get(proposed.data.approvalRequest.runId).state,'WAITING_APPROVAL');
+
+  approve(f,proposed.data.approvalRequest);
+  const applied=await productCli(apply,f.state,{createCodexAdmission});
+  assert.equal(applied.exitCode,0,applied.data?.error);
+  assert.equal(applied.data.status,'MATERIALIZED');
+  assert.equal(applied.data.operation,'modify');
+  assert.equal(applied.data.protection,'UNPROTECTED');
+  assert.equal(applied.data.hostLiveAcceptance,'UNVERIFIED');
+  assert.equal(await readFile(join(f.dir,'src/todo.mjs'),'utf8'),replacement);
+  assert.equal(task(f.store,f.id).bootstrap.states.tests,'VERIFICATION_STALE');
+
+  const passed=await productCli(check,f.state,{createCodexAdmission});
+  assert.equal(passed.exitCode,0,passed.data?.error);
+  assert.equal(passed.data.status,'LOCAL_PASSED');
+  assert.notEqual(task(f.store,f.id).bootstrap.verifications.tests,failureRef);
+  assert.equal(passed.data.complete,false);
+  assert.equal(passed.data.protection,'UNPROTECTED');
+  assert.equal(passed.data.hostLiveAcceptance,'UNVERIFIED');
+  assert.equal((await taskReport(f.store,f.id)).complete,false);
+  assert.deepEqual([hostTurns,verificationGrants],[1,2]);
+  assert.equal(materializationGrants,2);
+});
+
 test('NEW_PROJECT Repair CLI fails closed on absent failure Evidence, forged facades, flags and denied grant',async t=>{
   const f=await built({protectedItem:true});
   t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
