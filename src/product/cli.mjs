@@ -140,11 +140,13 @@ function requireCodexBootstrapVerificationRequest(request) {
       Object.keys(request).length !== fields.length ||
       fields.some(key => !Object.hasOwn(request, key)) ||
       typeof request.executable !== 'string' || !path.isAbsolute(request.executable) ||
-      /\\.(cmd|bat|ps1)$/i.test(request.executable) ||
+      request.executable.includes('\0') ||
+      /\.(cmd|bat|ps1)$/i.test(request.executable) ||
       typeof request.directory !== 'string' || !request.directory.trim() ||
+      request.directory.includes('\0') ||
       !Array.isArray(request.args) || request.args.length > 100 ||
       request.args.some(arg => typeof arg !== 'string' || arg.length > 8000 ||
-        arg.includes('\\0')) ||
+        arg.includes('\0') || arg.includes('\\0')) ||
       !Number.isSafeInteger(request.timeoutMs) ||
       request.timeoutMs < 1 || request.timeoutMs > 120000)
     throw Error('verify-codex-bootstrap REQUEST.json requires exact bounded Local command fields');

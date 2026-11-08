@@ -970,6 +970,12 @@ test('NEW_PROJECT verification CLI rejects unsafe command shapes before trusted 
   const cases=[
     null, [], {...valid,extraAuthority:'PROTECTED'},
     {...valid,args:'--test'}, {...valid,args:['--test','\\0invalid']},
+    {...valid,args:['--test','\0actual-nul']},
+    {...valid,executable:valid.executable + '\0suffix'},
+    {...valid,directory:valid.directory + '\0suffix'},
+    {...valid,executable:join(f.root,'verify.cmd')},
+    {...valid,executable:join(f.root,'VERIFY.BAT')},
+    {...valid,executable:join(f.root,'verify.Ps1')},
     {...valid,timeoutMs:120001}, {...valid,executable:'node'},
     {...valid,timeoutMs:0}
   ];

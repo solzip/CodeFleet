@@ -1008,3 +1008,18 @@ Local Evidence. A negative offline regression exercises eight malformed
 command shapes without Host admission or verification effects. This is not
 public Operator authentication, OS confinement, native Codex Host Live proof
 or Objective acceptance. Fresh Windows/Linux CI is required for this head.
+
+## Bootstrap verification NUL and script-wrapper preflight correction (new CI required)
+
+The previous preflight checked a literal backslash-zero sequence rather than
+an actual NUL character in the Local verification request arguments. Its
+script-wrapper expression also failed to recognize ordinary `.cmd`, `.bat`,
+or `.ps1` executable suffixes reliably. The preflight now rejects actual NUL
+characters in executable, directory and argument strings and disallows
+case-insensitive script-wrapper suffixes before Store creation or privileged
+Host admission; the existing conservative literal backslash-zero argument
+refusal is preserved. Cross-platform synthetic negative fixtures exercise
+real NUL characters and all three wrapper suffixes while asserting no Host
+factory or verification Evidence is reached. This repairs an input-validation
+boundary, not Operator authentication, OS confinement, Host Live verification
+or Objective acceptance. Windows/Linux CI for this head must be checked.
