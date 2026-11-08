@@ -140,9 +140,11 @@ function requireCodexBootstrapVerificationRequest(request) {
       Object.keys(request).length !== fields.length ||
       fields.some(key => !Object.hasOwn(request, key)) ||
       typeof request.executable !== 'string' || !path.isAbsolute(request.executable) ||
+      request.executable.length > 4096 ||
       request.executable.includes('\0') ||
       /\.(cmd|bat|ps1)$/i.test(request.executable) ||
-      typeof request.directory !== 'string' || !request.directory.trim() ||
+      typeof request.directory !== 'string' || !path.isAbsolute(request.directory) ||
+      request.directory.length > 4096 || !request.directory.trim() ||
       request.directory.includes('\0') ||
       !Array.isArray(request.args) || request.args.length > 100 ||
       request.args.some(arg => typeof arg !== 'string' || arg.length > 8000 ||

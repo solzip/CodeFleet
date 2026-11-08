@@ -977,6 +977,9 @@ test('NEW_PROJECT verification CLI rejects unsafe command shapes before trusted 
     {...valid,executable:join(f.root,'VERIFY.BAT')},
     {...valid,executable:join(f.root,'verify.Ps1')},
     {...valid,timeoutMs:120001}, {...valid,executable:'node'},
+    {...valid,directory:'.'}, {...valid,directory:'../other-repository'},
+    {...valid,executable:join(f.root,'x'.repeat(4100))},
+    {...valid,directory:valid.directory + 'x'.repeat(4100)},
     {...valid,timeoutMs:0}
   ];
   for (const value of cases) {

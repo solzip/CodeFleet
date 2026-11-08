@@ -1023,3 +1023,19 @@ real NUL characters and all three wrapper suffixes while asserting no Host
 factory or verification Evidence is reached. This repairs an input-validation
 boundary, not Operator authentication, OS confinement, Host Live verification
 or Objective acceptance. Windows/Linux CI for this head must be checked.
+
+## Trusted NEW_PROJECT Local verification path bounds (fresh CI required)
+
+The `verify-codex-bootstrap` REQUEST.json preflight now requires an **absolute**
+verification directory and bounds both the executable and directory path strings
+to 4096 characters before opening a SQLite Store or calling the privileged
+Host admission factory. Previously a relative directory or arbitrarily long
+path could reach the trusted factory even though the downstream Controller
+would reject a nonmatching repository root or an invalid native command.
+The Controller retains independent canonical repository-root, exact command,
+owner-grant, revision and Evidence enforcement. Offline negative fixtures cover
+relative directories and oversized paths with zero factory calls and no
+verification Evidence. This preflight is not filesystem confinement, public
+Operator authentication, Host Live execution or Objective acceptance. The
+previous `5c20d8a9` Windows/Linux CI succeeded; this new head needs its own
+Windows/Linux CI before reporting PASS.
