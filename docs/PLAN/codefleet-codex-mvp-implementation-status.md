@@ -862,3 +862,19 @@ launching a Host or recording any Attempt. This is a trusted injection
 **integration seam**, not an OS-authenticated Operator implementation,
 public Host execution permission, native Codex Host Live verification or
 Objective acceptance. Fresh Windows/Linux CI is required for this commit.
+
+## Trusted Codex natural-language Goal CLI planning entry (fresh CI required)
+
+The trusted `productCli` Host embedding now accepts `plan-codex-goal "Goal"
+--repository ABSOLUTE_PATH` using the same Store-bound genuine Codex facade
+factory as reviewed Workflow execution. It routes directly to the existing
+read-only managed Codex planning Turn and its independent exact-scope
+`authorizePlanning` gate, preserving the pinned Git discovery, unknown-cost
+notice, durable session and cited Draft validation. Malformed Goal/repository
+or execution flags stop before invoking any privileged factory; ordinary CLI
+calls still fail closed before Store open. Offline regression coverage exercises
+a synthetic validated Host planning receipt, denied grants, fake facade and
+unsupported flags. No Workflow approval, Host execution or Objective COMPLETE is
+automatically granted. The synthetic transport is **not** native Codex Live;
+actual Operator authentication, supported Host Live and independent final
+acceptance remain UNVERIFIED. This new head needs separate Windows/Linux CI.

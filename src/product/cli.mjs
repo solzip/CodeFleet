@@ -35,6 +35,8 @@ codefleet-alpha objective delivered-status <workflow-id> (read-only delivered-tr
 codefleet-alpha objective workflow-progress <workflow-id> (read-only DAG/Repair progress and current delivered Objective; never grants execution)
 codefleet-alpha objective review-codex-plan <planning-session-id> [--repository ABSOLUTE_PATH] (read-only pinned Contract/DAG review; optional clean Git checkout check, never grants execution)
 codefleet-alpha objective review-codex-workflow <workflow-id> [--repository ABSOLUTE_PATH] (read-only Contract/DAG, approval and optional clean Git baseline check; no execution)
+codefleet-alpha objective plan-codex-goal "natural-language Goal" --repository ABSOLUTE_PATH
+  (trusted Host embedding only; independent read-only planning Turn grant, model usage may be billed; no Workflow approval or source writes)
 codefleet-alpha objective prepare-codex-workflow <planning-session-id> --repository ABSOLUTE_PATH --hash <workflowHash> --source-hash <sourceContractHash>
   (explicitly confirm both hashes from review-codex-plan; create only a pending unapproved Workflow, never an execution or Operator grant)
 codefleet-alpha objective run-codex-workflow|resume-codex-workflow <workflow-id> --hash <workflowHash>
@@ -96,6 +98,12 @@ function parse(values) {
 const list = value => value?.split(',').filter(Boolean);
 const number = (value, fallback) => value === undefined ? fallback : Number(value);
 
+function requireCodexGoalEntryArgs(args, o) {
+  if (args.length !== 1 || !args[0]?.trim() ||
+      Object.keys(o).length !== 1 || !path.isAbsolute(o.repository ?? ''))
+    throw Error('plan-codex-goal requires one nonempty Goal and absolute --repository only; no execution/approval flags');
+}
+
 function requireCodexWorkflowEntryArgs(args, o) {
   if (args.length !== 1 || !args[0] || args[0].startsWith('-') ||
       Object.keys(o).length !== 1 || !/^[a-f0-9]{64}$/.test(o.hash ?? ''))
@@ -115,8 +123,20 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
   const [action, ...rest] = argv;
   if (!action || ['help', '--help'].includes(action)) return { exitCode: 0, data: { schemaVersion: 1, help } };
   const { positional: args, options: o } = parse(rest);
-  if (o.repository !== undefined && !['review-codex-plan', 'review-codex-workflow', 'prepare-codex-workflow'].includes(action))
+  if (o.repository !== undefined && !['plan-codex-goal', 'review-codex-plan', 'review-codex-workflow', 'prepare-codex-workflow'].includes(action))
     throw Error('--repository is only valid for Codex planning/Workflow review or pending Workflow creation');
+  if (action === 'plan-codex-goal') {
+    requireCodexGoalEntryArgs(args, o);
+    const binding = execution?.codexAdmission;
+    if (!isCodexMvpFacadeForStore(binding?.facade, store))
+      throw Error('TRUSTED_CODEX_PLANNING_UNAVAILABLE: trusted Store-bound Host planning facade required');
+    // A genuine facade independently requires its trusted read-only planning
+    // grant before any billable Turn. This command cannot supply a grant from
+    // flags or a Goal string, nor does it approve/promote the resulting DAG.
+    const data = await binding.facade.planExisting(o.repository, args[0], { cwd: o.repository });
+    return { exitCode: data.status === 'VALIDATED' ? 0 : 2,
+      data: { ...data, hostLiveAcceptance: 'UNVERIFIED' } };
+  }
   if (action === 'review-codex-plan') {
     if (args.length !== 1 || Object.keys(o).some(k => k !== 'repository') || !args[0] || args[0].startsWith('-'))
       throw Error('review-codex-plan requires one Host Planning session ID and optional --repository only');
@@ -472,24 +492,28 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
 }
 
 // The ordinary CLI never supplies this dependency. A trusted Host embedding
-// may provide a factory that binds its authenticated Operator and genuine
-// managed-Host facade to the *same* Store opened for this command.
+// may provide a factory that binds a genuine managed-Host facade to the *same*
+// Store opened for this command. Planning requires a separate exact planning
+// grant; Workflow execution additionally requires authenticated Operator admission.
 export async function productCli(argv, directory, { createCodexAdmission } = {}) {
   let store;
   try {
     requireDurableEntry(argv); // Before opening Store or reading caller JSON.
     const codexExecution = ['run-codex-workflow','resume-codex-workflow'].includes(argv[0]);
-    if (codexExecution) {
+    const codexPlanning = argv[0] === 'plan-codex-goal';
+    if (codexExecution || codexPlanning) {
       if (typeof createCodexAdmission !== 'function')
-        throw Error('AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE: plain CLI has no authenticated Host Operator binding');
-      // Reject untrusted CLI flags before calling the privileged admission
-      // factory. The only supplied authority comes from the Host embedding.
+        throw Error(codexPlanning
+          ? 'TRUSTED_CODEX_PLANNING_UNAVAILABLE: plain CLI has no trusted Host planning binding'
+          : 'AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE: plain CLI has no authenticated Host Operator binding');
+      // Reject untrusted CLI flags before calling the privileged Host factory.
       const { positional, options } = parse(argv.slice(1));
-      requireCodexWorkflowEntryArgs(positional, options);
+      if (codexPlanning) requireCodexGoalEntryArgs(positional, options);
+      else requireCodexWorkflowEntryArgs(positional, options);
     }
     if (!argv[0] || ['help', '--help'].includes(argv[0])) return await dispatchProduct(argv);
     store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request', 'delivered-status', 'workflow-progress', 'review-codex-plan', 'review-codex-workflow'].includes(argv[0]) });
-    if (codexExecution) {
+    if (codexExecution || codexPlanning) {
       const codexAdmission = await createCodexAdmission(store);
       // dispatchProduct still checks authentic facade identity, current Store
       // binding, exact source/Workflow approval and Operator authorization.

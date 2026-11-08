@@ -1228,3 +1228,90 @@ test('reviewed Codex Workflow binds active revised DAG to its persisted revision
  assert.equal(restored.data.status,'REVIEW_REQUIRED');
  assert.equal(restored.data.approvalState,'CURRENT_WORKFLOW_APPROVAL_VALID');
 });
+
+test('trusted CLI can route a natural-language Goal through reviewed Codex planning without source effects', async t => {
+  const f=await fixture(t);
+  const argv=['plan-codex-goal',goal,'--repository',f.repo];
+  let factoryCalls=0, planningGrants=0, fakeTurns=0;
+  const accepted=await productCli(argv,f.store.directory,{
+    createCodexAdmission:store=>{
+      factoryCalls++;
+      return {facade:createCodexMvpFacade(store,{
+        executable:process.execPath,model:'offline-fixture',enableHostTurns:true,
+        authorizePlanning:async scope=>{
+          planningGrants++;
+          assert.equal(scope.objective,goal);
+          assert.equal(scope.repositoryRoot,await realpath(f.repo));
+          assert.equal(scope.requestedHostPolicy.writes,false);
+          assert.equal(scope.executionGranted,false);
+          return true;
+        },
+        transport:async call=>{
+          fakeTurns++;
+          const message=JSON.parse(call.prompt);
+          assert.equal(message.originalObjective,goal);
+          const draft={schemaVersion:2,objective:goal,
+            base:message.context.discovery.base,files:['src/a.js'],tests:['test/a.test.js'],
+            criteria:[{description:'Arithmetic regression passes',method:'protected-tests',
+              tests:['test/a.test.js']}],risks:[],unknowns:[],effects:['local-edit']};
+          return {terminalStatus:'completed',threadId:'offline-thread',turnId:'offline-turn',
+            authority:'PROVIDER_REPORTED_ONLY',protectedVerified:false,
+            text:JSON.stringify({sessionId:message.sessionId,requestHash:message.requestHash,
+              proposal:{draft,references:[{path:'src/a.js',line:1,quote:'export function'},
+                {path:'test/a.test.js',line:1,quote:'import test'}],inferences:[]}})};
+        }
+      })};
+    }
+  });
+  assert.equal(accepted.exitCode,0,accepted.data?.error);
+  assert.equal(accepted.data.status,'VALIDATED');
+  assert.equal(accepted.data.hostReceipt.threadId,'offline-thread');
+  assert.equal(accepted.data.authority,'PROVIDER_REPORTED_ONLY');
+  assert.equal(accepted.data.hostLiveAcceptance,'UNVERIFIED');
+  assert.equal(factoryCalls,1);
+  assert.equal(planningGrants,1);
+  assert.equal(fakeTurns,1);
+  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
+  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+});
+
+test('Codex Goal CLI fails closed before trusted planning factory or billable Turn on invalid/denied admission',async t=>{
+  const f=await fixture(t);
+  const argv=['plan-codex-goal',goal,'--repository',f.repo];
+  let factories=0,grants=0,turns=0;
+  const createCodexAdmission=store=>{
+    factories++;
+    return {facade:createCodexMvpFacade(store,{
+      executable:process.execPath,model:'offline-fixture',enableHostTurns:true,
+      authorizePlanning:async()=>{grants++;return false;},
+      transport:async()=>{turns++;throw Error('denied Host Turn must not execute');}
+    })};
+  };
+  for (const malformed of [
+    ['plan-codex-goal',' ','--repository',f.repo],
+    ['plan-codex-goal',goal,'--repository','relative/repo'],
+    [...argv,'--allow-model']
+  ]) {
+    const result=await productCli(malformed,f.store.directory,{createCodexAdmission});
+    assert.equal(result.exitCode,1);
+    assert.match(result.data.error,/plan-codex-goal requires one nonempty Goal/);
+  }
+  assert.equal(factories,0);
+  const plain=await productCli(argv,f.store.directory);
+  assert.equal(plain.exitCode,1);
+  assert.match(plain.data.error,/TRUSTED_CODEX_PLANNING_UNAVAILABLE/);
+  const forged=await productCli(argv,f.store.directory,{
+    createCodexAdmission:()=>({facade:{planExisting:async()=>{throw Error('forged');}}})
+  });
+  assert.equal(forged.exitCode,1);
+  assert.match(forged.data.error,/TRUSTED_CODEX_PLANNING_UNAVAILABLE/);
+  assert.equal(grants,0);
+  const denied=await productCli(argv,f.store.directory,{createCodexAdmission});
+  assert.equal(denied.exitCode,1);
+  assert.match(denied.data.error,/independently trusted bounded approval/);
+  assert.equal(factories,1);
+  assert.equal(grants,1);
+  assert.equal(turns,0);
+  assert.equal(f.store.db.prepare("SELECT count(*) AS n FROM host_planning WHERE status='CANCELLED'").get().n,1);
+  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
+});
