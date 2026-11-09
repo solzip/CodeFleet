@@ -127,6 +127,10 @@ test('read-only workflow-progress shows the current Repair generation and unreso
   });
   assert.deepEqual(result.data.workItems[1].waitingOn, ['a']);
   assert.deepEqual(result.data.activeAttemptIds, ['attempt-a-2']);
+  assert.deepEqual(result.data.continuation.itemIds, ['a']);
+  assert.equal(result.data.continuation.status, 'RECONCILE_REQUIRED');
+  assert.equal(result.data.continuation.automaticReplay, false);
+  assert.equal(result.data.continuation.executionGranted, false);
   assert.equal(result.data.objective.status, 'INCOMPLETE');
   assert.equal(result.data.objectiveComplete, false);
   assert.equal(result.data.executionGranted, false);
@@ -145,5 +149,43 @@ test('read-only workflow-progress shows the current Repair generation and unreso
   try {
     assert.equal(checked.events('workflow-progress-fixture').length, eventsBefore);
     assert.equal(checked.get('workflow-progress-fixture').state, 'RUNNING');
+  } finally { checked.close(); }
+});
+
+test('existing Workflow continuation exposes approval and Objective handoffs without writing State', async t => {
+  const stateDirectory = await mkdtemp(join(tmpdir(), 'codefleet-workflow-handoff-'));
+  t.after(() => rm(stateDirectory, { recursive: true, force: true }));
+  const store = new Store(stateDirectory);
+  const base = {
+    kind: 'workflow', revision: 1, contractHash: 'offline-synthetic-hash',
+    contract: { schemaVersion: 1, items: [{ id: 'change', dependencies: [] }] },
+    attempts: 0, reportedCostUsd: 0, unknownCostAttempts: 0
+  };
+  store.create({ ...base, id: 'workflow-awaits-approval', state: 'WAITING_APPROVAL',
+    states: { change: 'PENDING' } });
+  store.create({ ...base, id: 'workflow-candidate-only', state: 'COMPLETED',
+    states: { change: 'SUCCEEDED' } });
+  const eventCounts = Object.fromEntries(
+    ['workflow-awaits-approval', 'workflow-candidate-only']
+      .map(id => [id, store.events(id).length]));
+  store.close();
+
+  const pending = await productCli(['workflow-progress', 'workflow-awaits-approval'], stateDirectory);
+  assert.equal(pending.exitCode, 2);
+  assert.deepEqual(pending.data.dependencyReadyIds, ['change']);
+  assert.equal(pending.data.continuation.status, 'AWAIT_WORKFLOW_APPROVAL');
+  assert.equal(pending.data.continuation.executionGranted, false);
+  assert.equal(pending.data.continuation.automaticReplay, false);
+
+  const candidate = await productCli(['workflow-progress', 'workflow-candidate-only'], stateDirectory);
+  assert.equal(candidate.exitCode, 2);
+  assert.equal(candidate.data.objectiveComplete, false);
+  assert.equal(candidate.data.continuation.status, 'OBJECTIVE_EVIDENCE_REQUIRED');
+  assert.equal(candidate.data.continuation.executionGranted, false);
+
+  const checked = new Store(stateDirectory, { readOnly: true });
+  try {
+    for (const [id, count] of Object.entries(eventCounts))
+      assert.equal(checked.events(id).length, count, 'Read-only status cannot create a Workflow event');
   } finally { checked.close(); }
 });

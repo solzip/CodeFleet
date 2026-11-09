@@ -193,6 +193,47 @@ export async function taskReport(store, id) {
     workflowHash: current.runId ? store.get(current.runId).contractHash : null };
 }
 
+// A persisted existing-repository Workflow has its own recovery and approval
+// boundaries. Project one advisory handoff from the current Store snapshot;
+// this never reserves a WorkItem, replays an uncertain Turn or grants a Host.
+function existingWorkflowContinuation(run, report, workItems, readyIds) {
+  const step = (status, reason, itemIds = []) => ({
+    status, reason, itemIds, authority: 'READ_ONLY_ADVISORY',
+    executionGranted: false, automaticReplay: false
+  });
+  if (report.activeAttempts.length || run.state === 'RECONCILING')
+    return step('RECONCILE_REQUIRED',
+      'Inspect persisted Attempt effects and Lease before any resume; never automatically replay an uncertain Host Turn',
+      report.activeAttempts.map(a => a.itemId));
+  if (report.objectiveComplete)
+    return step('OBJECTIVE_COMPLETE', 'Current delivered-tree Objective Evidence and Judge are satisfied');
+  if (run.control === 'pause' || run.control === 'cancel' ||
+      ['CANCELLED', 'WAITING_HUMAN'].includes(run.state))
+    return step('HUMAN_HANDOFF', 'Workflow is paused, cancelled or requires an explicit human decision');
+  if (run.state === 'COMPLETED')
+    return step('OBJECTIVE_EVIDENCE_REQUIRED',
+      'Candidate completion is not delivered Objective completion; inspect current destination Evidence and independent Judge');
+  if (run.state === 'WAITING_APPROVAL' || report.authorization !== 'AUTHORIZED')
+    return step('AWAIT_WORKFLOW_APPROVAL',
+      'Current hash-bound Workflow approval is required before authenticated Host admission');
+  const failed = workItems.filter(item =>
+    item.attempt?.status === 'FAILED' ||
+    ['FAILED', 'WAITING_HUMAN', 'BLOCKED'].includes(item.state));
+  if (failed.length)
+    return step('REPAIR_REVIEW_REQUIRED',
+      'Inspect failure Evidence and seek separately authorized bounded Repair; do not reuse an old Host grant',
+      failed.map(item => item.id));
+  if (readyIds.length)
+    return step('AUTHENTICATED_HOST_ADMISSION_REQUIRED',
+      'Dependency-ready WorkItems still require current Operator authentication, Host grant, budget and Lease checks',
+      readyIds);
+  if (workItems.length && workItems.every(item => item.state === 'SUCCEEDED'))
+    return step('DELIVERY_AND_OBJECTIVE_JUDGE_REQUIRED',
+      'All WorkItems are recorded successful; destination delivery and independent Objective acceptance remain separate');
+  return step('WAITING_ON_DEPENDENCIES',
+    'Inspect persisted DAG blockers and any uncertain WorkItem state before dispatch');
+}
+
 // Read-only current DAG + Repair progress for the Codex MVP entry point.
 // Advisory only: dependency readiness is not execution/lease/approval authority.
 export async function workflowProgress(store, id) {
@@ -213,14 +254,16 @@ export async function workflowProgress(store, id) {
     } : null,
     reason: item.reason
   }));
+  const dependencyReadyIds = workItems.filter(item =>
+    item.waitingOn.length === 0 && ['PENDING','READY'].includes(item.state))
+    .map(item => item.id);
   return {
     kind: 'CODEFLEET_WORKFLOW_PROGRESS_V1',
     workflowId: id, revision: run.revision, workflowHash: run.contractHash,
     workflowState: report.recordedState,
     workItems,
-    dependencyReadyIds: workItems.filter(item =>
-      item.waitingOn.length === 0 && ['PENDING','READY'].includes(item.state))
-      .map(item => item.id),
+    dependencyReadyIds,
+    continuation: existingWorkflowContinuation(run, report, workItems, dependencyReadyIds),
     activeAttemptIds: report.activeAttempts.map(item => item.childId),
     objective: report.objective,
     objectiveComplete: report.objectiveComplete,

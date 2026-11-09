@@ -1164,3 +1164,19 @@ before Host factory and denied owner trust with no Evidence. This extends the
 NEW_PROJECT single-step product path without granting a public Operator identity,
 protected verification, automatic command approval, native Codex Host Live or
 Objective completion. Fresh Windows/Linux CI must be checked for this head.
+
+## Existing-repository persisted continuation and recovery handoff (fresh CI required)
+
+The read-only `objective workflow-progress <workflow-id>` projection now includes
+an advisory `continuation` derived from the existing Workflow, latest Repair
+generation, live Attempt records, current approval and delivered Objective Judge.
+An in-flight Attempt or RECONCILING state takes priority and requests effect/Lease
+reconciliation without replay; an unapproved Workflow requests hash-bound
+approval, and a COMPLETED Candidate without accepted destination criteria requests
+independent Objective Evidence rather than claiming COMPLETE. Failed generations
+require separate Repair review; dependency-ready items still need authenticated
+Operator/Host/budget/Lease admission. This does **not** schedule work, authorize
+execution, authenticate an Operator or change stored state. Offline CLI fixtures
+cover uncertain Repair Attempt precedence, missing approval, Candidate-only
+completion and unchanged event counts. Real Codex Host Live, independent final
+acceptance and Windows/Linux CI for this new head remain unverified.
