@@ -345,8 +345,13 @@ test('continuation hands off failures and uncertain execution without reusing lo
   const failed = await verify(f);
   const report = await taskReport(f.store, f.id);
   assert.equal(failed.status, 'LOCAL_FAILED');
-  assert.equal(report.continuation.status, 'HUMAN_HANDOFF');
+  // A known failed verification now requires explicit ancestor selection;
+  // it is a handoff, never a grant to retry or modify either predecessor.
+  assert.equal(report.continuation.status, 'AWAIT_REPAIR_SELECTION');
   assert.equal(report.continuation.next.kind, 'REPAIR_REQUIRED');
+  assert.deepEqual(report.continuation.next.repairCandidates, ['todo', 'calendar']);
+  assert.equal(report.continuation.next.failedEvidenceRef, report.localVerification.tests.evidenceRef);
+  assert.equal(report.continuation.automaticReplay, false);
   assert.equal(report.localVerification.tests.judgment.outcome, 'ESCALATE');
   assert.equal(report.continuation.executionGranted, false);
   // A terminal-looking local state must not hide uncertain execution.

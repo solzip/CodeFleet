@@ -1128,3 +1128,20 @@ cross-Store CLI fixture checks multiple predecessor choices, denied selection,
 separate Repair approval and post-Repair Local re-verification. No real Codex
 Host, authenticated public Operator grant, PROTECTED verdict or Objective
 completion is established. Fresh Windows/Linux CI is required for this head.
+
+## CI repair: failed Local verification continuation explicitly selects Repair ancestor (fresh CI required)
+
+The preceding head `aef61f97edc11593915b6a41f2c193896d334ff3` ran its
+Windows workflow job successfully but failed Linux (`test/bootstrap-verify.test.mjs`)
+because an older fixture still expected `HUMAN_HANDOFF` for a failed Local
+verification. The new persisted Repair continuation correctly projects
+`AWAIT_REPAIR_SELECTION` with the exact current failed Evidence and the
+materialized editable ancestors (Todo and Calendar); it does not auto-select
+or grant a new Host Turn. The fixture now asserts those candidate IDs, the
+failed-Evidence reference, `automaticReplay:false` and
+`executionGranted:false`. It continues to require `HUMAN_HANDOFF` on
+`INCONCLUSIVE` execution, preserving no-replay recovery behavior. Production
+scheduling, approval and verification policy are unchanged. No local Codex Host
+Live, user repository mutation, Protected verification or Objective acceptance
+was run. The updated head requires its own Windows/Linux GitHub Actions
+results before any offline PASS claim.
