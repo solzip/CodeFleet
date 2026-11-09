@@ -201,9 +201,12 @@ function existingWorkflowContinuation(run, report, workItems, readyIds) {
     status, reason, itemIds, authority: 'READ_ONLY_ADVISORY',
     executionGranted: false, automaticReplay: false
   });
-  if (report.activeAttempts.length || run.state === 'RECONCILING')
+  if (report.activeAttempts.length || run.state === 'RECONCILING' ||
+      report.objective?.status === 'RECONCILING')
     return step('RECONCILE_REQUIRED',
-      'Inspect persisted Attempt effects and Lease before any resume; never automatically replay an uncertain Host Turn',
+      report.objective?.status === 'RECONCILING'
+        ? 'Durable destination delivery intent is unresolved; inspect actual target effects before any replay or Objective acceptance'
+        : 'Inspect persisted Attempt effects and Lease before any resume; never automatically replay an uncertain Host Turn',
       report.activeAttempts.map(a => a.itemId));
   if (report.objectiveComplete)
     return step('OBJECTIVE_COMPLETE', 'Current delivered-tree Objective Evidence and Judge are satisfied');

@@ -168,8 +168,13 @@ test('existing Workflow continuation exposes approval and Objective handoffs wit
     states: { change: 'PENDING' } });
   store.create({ ...base, id: 'workflow-candidate-only', state: 'COMPLETED',
     states: { change: 'SUCCEEDED' } });
+  // A durable destination intent can survive a crash even while the legacy
+  // Workflow is marked COMPLETED. No receipt means external effects are unknown.
+  store.create({ ...base, id: 'workflow-unresolved-delivery', state: 'COMPLETED',
+    states: { change: 'SUCCEEDED' },
+    destinationDeliveryIntentRef: 'outstanding-delivery-intent' });
   const eventCounts = Object.fromEntries(
-    ['workflow-awaits-approval', 'workflow-candidate-only']
+    ['workflow-awaits-approval', 'workflow-candidate-only', 'workflow-unresolved-delivery']
       .map(id => [id, store.events(id).length]));
   store.close();
 
@@ -185,6 +190,18 @@ test('existing Workflow continuation exposes approval and Objective handoffs wit
   assert.equal(candidate.data.objectiveComplete, false);
   assert.equal(candidate.data.continuation.status, 'OBJECTIVE_EVIDENCE_REQUIRED');
   assert.equal(candidate.data.continuation.executionGranted, false);
+
+  const uncertain = await productCli(['workflow-progress', 'workflow-unresolved-delivery'], stateDirectory);
+  assert.equal(uncertain.exitCode, 2);
+  assert.equal(uncertain.data.workflowState, 'COMPLETED');
+  assert.equal(uncertain.data.objective.status, 'RECONCILING');
+  assert.equal(uncertain.data.objective.deliveryUncertain, true);
+  assert.equal(uncertain.data.objectiveComplete, false);
+  assert.equal(uncertain.data.continuation.status, 'RECONCILE_REQUIRED');
+  assert.match(uncertain.data.continuation.reason, /delivery intent is unresolved/);
+  assert.deepEqual(uncertain.data.continuation.itemIds, []);
+  assert.equal(uncertain.data.continuation.executionGranted, false);
+  assert.equal(uncertain.data.continuation.automaticReplay, false);
 
   const checked = new Store(stateDirectory, { readOnly: true });
   try {

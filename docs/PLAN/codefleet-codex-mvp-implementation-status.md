@@ -1198,3 +1198,20 @@ or authorize execution. The exact underlying CLI error was not emitted by the
 previous failing assertion; this is a source-inspection-based root-cause fix
 pending this commit's own Windows/Linux CI. No native Codex Host Live, real
 repository mutation or final Objective acceptance was performed.
+
+## Existing Workflow unresolved destination delivery intent handoff (fresh CI required)
+
+A completed Candidate Workflow can retain a durable destination delivery intent
+without an accepted delivery receipt after an interrupted external filesystem
+effect. The read-only delivered Objective already projects this as
+`RECONCILING`, but `workflow-progress` previously checked only the Workflow
+row's `RECONCILING` state and incorrectly advised
+`OBJECTIVE_EVIDENCE_REQUIRED` for a `COMPLETED` Workflow. The advisory
+continuation now prioritizes the actual delivered Objective's
+`RECONCILING` projection and requests destination-effect reconciliation,
+without replay, a new grant, or a claim that delivery succeeded. An offline
+CLI regression fixture covers the persisted `COMPLETED` / pending-intent /
+no-receipt case and checks read-only event counts. This is a Recovery handoff
+fix, **not** automated delivery recovery, Host Live acceptance or Objective
+completion. The immediately preceding `28ad6312` Windows/Linux CI passed;
+this change needs its own Windows/Linux CI before claiming offline PASS.
