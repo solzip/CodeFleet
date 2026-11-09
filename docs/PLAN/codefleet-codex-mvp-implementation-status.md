@@ -1233,3 +1233,19 @@ Workflow events. Candidate-only and unsettled delivery intent handoffs stay
 unchanged. The preceding `e61d324a` Windows/Linux CI passed; this commit
 requires its own CI. Native Codex Host Live, actual target mutation,
 authenticated Operator integration and Objective acceptance remain deferred.
+
+## Existing Workflow provider cost ambiguity in progress and recovery (fresh CI required)
+
+The read-only `workflow-progress` report previously summed every Attempt's
+`reportedCostUsd` and `unknownCostAttempts` without validating the persisted
+values. An older/incomplete Host Attempt without a cost field could yield
+`NaN` (serialized as `null` by JSON) and an invalid unknown count, obscuring
+whether a billable Turn was measured. The projection now returns
+`reportedUsd:null` when any Attempt lacks a finite nonnegative provider amount,
+and counts at least one unknown Attempt when its usage record is incomplete.
+Valid provider-reported subtotals and separately recorded unknown counts remain
+unchanged. Synthetic cross-Store regressions cover known and missing amounts,
+read-only event stability and no automatic replay during an active Attempt.
+This is budget **reporting**, not new billing authority, Host Live proof,
+Operator authentication or Objective acceptance. The preceding
+`98d3e96d` Windows/Linux CI passed; this head requires its own CI.

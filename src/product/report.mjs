@@ -141,6 +141,21 @@ export async function runReport(store, id) {
   }
   const artifactPaths = Object.fromEntries(['acceptedHash', 'evidenceHash', 'integrationHash', 'graphRef', 'sourceRef'].filter(k => /^[a-f0-9]{64}$/.test(run[k] ?? '')).map(k => [k, path.join(store.directory, 'artifacts', run[k] + '.json')]));
   const usage = run.kind === 'workflow' ? attempts(store, id).map(a => store.get(a.childId)) : [run];
+  // An incomplete/invalid provider cost record is not a zero-dollar Turn.
+  // Preserve the unknown count separately from the reported subtotal; never
+  // serialize NaN as an apparently valid budget observation.
+  const costFullyReported = usage.every(r =>
+    Number.isFinite(r.reportedCostUsd) && r.reportedCostUsd >= 0);
+  const reportedUsd = costFullyReported
+    ? usage.reduce((n, r) => n + r.reportedCostUsd, 0) : null;
+  const unknownAttempts = usage.reduce((n, r) => {
+    const countKnown = Number.isSafeInteger(r.unknownCostAttempts) &&
+      r.unknownCostAttempts >= 0;
+    const amountKnown = Number.isFinite(r.reportedCostUsd) &&
+      r.reportedCostUsd >= 0;
+    return n + Math.max(countKnown ? r.unknownCostAttempts : 0,
+      countKnown && amountKnown ? 0 : 1);
+  }, 0);
   const complete = run.state === 'COMPLETED' && verification.status === 'VERIFIED';
   // The legacy 'complete' flag describes a verified Candidate/Workflow, not
   // a delivered Objective. Public report/status must expose the same current
@@ -148,7 +163,7 @@ export async function runReport(store, id) {
   const objective = run.kind === 'workflow'
     ? await readDeliveredObjectiveStatus(store, id) : null;
   return { schemaVersion: 1, kind: 'RunReport', runId: id, objective, objectiveComplete: objective?.objectiveComplete === true, state: run.state === 'COMPLETED' && !complete ? 'VERIFICATION_INVALID' : run.state, recordedState: run.state, complete, verification, authorization, provider: run.providerId ?? (run.kind === 'workflow' ? 'NOT_SELECTED' : 'claude-v1'), workItems, activeAttempts,
-    attempts: run.attempts, cost: { reportedUsd: usage.reduce((n, r) => n + r.reportedCostUsd, 0), unknownAttempts: usage.reduce((n, r) => n + r.unknownCostAttempts, 0), authority: 'PROVIDER_REPORTED_ONLY' },
+    attempts: run.attempts, cost: { reportedUsd, unknownAttempts, authority: 'PROVIDER_REPORTED_ONLY' },
     reason: run.reason ?? null, artifactPaths, messages: run.kind === 'workflow' && run.contract.schemaVersion === 2 ? messages(store, run.id) : [], retry: activeAttempts.length ? 'RECONCILE_ONLY_NO_AUTOMATIC_REPLAY' : run.kind === 'workflow' && workItems.some(n => n.attempt) && !complete ? 'NEW_REVIEWED_TASK_REQUIRED' : 'WITHIN_PINNED_CONTRACT_ONLY',
     readiness: complete ? 'VERIFIED' : 'BLOCKED_OR_UNSUPPORTED', liveProviderVerification: 'NOT_ESTABLISHED_BY_THIS_REPORT', events: store.events(id) };
 }

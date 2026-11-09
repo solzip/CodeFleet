@@ -135,6 +135,8 @@ test('read-only workflow-progress shows the current Repair generation and unreso
   assert.equal(result.data.objectiveComplete, false);
   assert.equal(result.data.executionGranted, false);
   assert.equal(result.data.hostLiveAcceptance, 'UNVERIFIED');
+  assert.equal(result.data.cost.reportedUsd, 0.1);
+  assert.equal(result.data.cost.unknownAttempts, 1);
 
   for (const command of [
     ['workflow-progress','workflow-progress-fixture','--allow-model'],
@@ -226,4 +228,38 @@ test('existing Workflow continuation exposes approval and Objective handoffs wit
     for (const [id, count] of Object.entries(eventCounts))
       assert.equal(checked.events(id).length, count, 'Read-only status cannot create a Workflow event');
   } finally { checked.close(); }
+});
+
+
+test('workflow-progress reports missing provider cost as unknown after Store reopen', async t => {
+  const stateDirectory = await mkdtemp(join(tmpdir(), 'codefleet-workflow-unknown-cost-'));
+  t.after(() => rm(stateDirectory, { recursive: true, force: true }));
+  const store = new Store(stateDirectory);
+  store.enableWorkflows();
+  store.create({ id: 'workflow-missing-cost', kind: 'workflow', revision: 1,
+    state: 'RUNNING', contractHash: 'cost-fixture-hash',
+    contract: { schemaVersion: 1, items: [{ id: 'change', dependencies: [] }] },
+    states: { change: 'READY' }, attempts: 1,
+    reportedCostUsd: 0, unknownCostAttempts: 0 });
+  // A Host Turn without a reported amount must not become a $0 Turn merely
+  // because an older/partial Attempt omitted its cost fields.
+  store.create({ id: 'child-missing-cost', state: 'GENERATING', attempts: 1,
+    unknownCostAttempts: 0 });
+  store.db.prepare('INSERT INTO workflow_attempts VALUES (?,?,?,?,?)')
+    .run('workflow-missing-cost', 'change', 'child-missing-cost', 1, 'STARTED');
+  const before = store.events('workflow-missing-cost').length;
+  store.close();
+
+  const result = await productCli(['workflow-progress', 'workflow-missing-cost'], stateDirectory);
+  assert.equal(result.exitCode, 2);
+  assert.equal(result.data.cost.reportedUsd, null);
+  assert.equal(result.data.cost.unknownAttempts, 1);
+  assert.equal(result.data.continuation.status, 'RECONCILE_REQUIRED');
+  assert.equal(result.data.continuation.executionGranted, false);
+  assert.equal(result.data.continuation.automaticReplay, false);
+  const inspected = new Store(stateDirectory, { readOnly: true });
+  try {
+    assert.equal(inspected.events('workflow-missing-cost').length, before);
+    assert.equal(inspected.get('child-missing-cost').state, 'GENERATING');
+  } finally { inspected.close(); }
 });
