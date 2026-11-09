@@ -883,7 +883,14 @@ test('authenticated Codex entry preserves separate Workflow and managed Host gra
  approveWorkflow(f.store,created.workflowId,{
    actor:'local-test',workflowHash:created.workflowHash,expiresAt:Date.now()+60000
  });
- await assert.rejects(dispatchProduct(argv,{store:f.store,execution}),/grant denied/);
+ const denied=await dispatchProduct(argv,{store:f.store,execution});
+ assert.equal(denied.exitCode,1);
+ assert.equal(denied.data.status,'CODEX_WORKFLOW_EXECUTION_BLOCKED');
+ assert.match(denied.data.error,/Exact managed Workflow execution grant denied/);
+ assert.equal(denied.data.executionGranted,false);
+ assert.equal(denied.data.executionSucceeded,false);
+ assert.equal(denied.data.objectiveComplete,false);
+ assert.equal(denied.data.continuation.automaticReplay,false);
  assert.equal(hostReviews,1);
  assert.equal(operatorScopes.length,1);
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
