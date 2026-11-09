@@ -488,7 +488,26 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     await requireCurrentCodexSource('during');
     // The existing facade independently verifies current Workflow approval,
     // exact DAG, Host executable, budget, Lease and Host grant before dispatch.
-    const data = await managedFacade.runExistingWorkflow(runId, { resume:scope.resume });
+    // An authenticated Operator may need the persisted continuation even
+    // when the managed Controller or Host refuses/fails a dispatch. This is
+    // read-only reporting, not a fresh authorization or automatic replay.
+    let data;
+    try {
+      data = await managedFacade.runExistingWorkflow(runId, { resume:scope.resume });
+    } catch (error) {
+      // If the Store itself cannot be inspected, preserve the original error
+      // rather than fabricating a safe-to-resume or completed Workflow.
+      const progress = await workflowProgress(store, runId).catch(() => null);
+      if (!progress) throw error;
+      return { exitCode:1, data: {
+        schemaVersion:1, status:'CODEX_WORKFLOW_EXECUTION_BLOCKED',
+        workflowId:runId, error:error instanceof Error ? error.message : String(error),
+        progress, continuation:progress.continuation,
+        objectiveComplete:progress.objectiveComplete,
+        executionSucceeded:false, executionGranted:false,
+        hostLiveAcceptance:'UNVERIFIED', protectedVerified:false
+      } };
+    }
     return { exitCode:data.objective?.objectiveComplete === true ? 0 : 2, data };
   }
   if (action === 'workflow-progress') {

@@ -1325,3 +1325,58 @@ test('Codex Goal CLI fails closed before trusted planning factory or billable Tu
   assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
   assert.equal(countWorkflowAttempts(f.store),0);
 });
+
+test('authenticated Codex Host grant denial yields read-only persisted recovery handoff',async t=>{
+ const f=await fixture(t);
+ const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+   authorizeReview:async()=>true
+ });
+ approveWorkflow(f.store,created.workflowId,{
+   actor:'synthetic-local-owner',workflowHash:created.workflowHash,
+   expiresAt:Date.now()+60_000
+ });
+ const initialEvents=f.store.events(created.workflowId).length;
+ let operatorReviews=0,hostReviews=0,verifierCalls=0;
+ const response=await productCli(
+   ['run-codex-workflow',created.workflowId,'--hash',created.workflowHash],
+   f.store.directory,{
+     createCodexAdmission:store=>({
+       facade:createCodexMvpFacade(store,{
+         executable:process.execPath,model:'OFFLINE_NO_HOST',enableHostTurns:true,
+         authorizeWorkflow:async()=>{hostReviews++;return false;},
+         verificationBackend:{
+           prepare:async()=>{verifierCalls++;throw Error('Unexpected verifier prepare');},
+           verify:async()=>{verifierCalls++;throw Error('Unexpected verifier run');},
+           cleanup:async()=>{verifierCalls++;throw Error('Unexpected verifier cleanup');}
+         }
+       }),
+       authorizeOperator:async scope=>{
+         operatorReviews++;
+         assert.equal(scope.workflowId,created.workflowId);
+         assert.equal(scope.workflowHash,created.workflowHash);
+         return true;
+       }
+     })
+   });
+ assert.equal(response.exitCode,1);
+ assert.equal(response.data.status,'CODEX_WORKFLOW_EXECUTION_BLOCKED');
+ assert.match(response.data.error,/Exact managed Workflow execution grant denied/);
+ assert.equal(response.data.workflowId,created.workflowId);
+ assert.equal(response.data.executionGranted,false);
+ assert.equal(response.data.executionSucceeded,false);
+ assert.equal(response.data.objectiveComplete,false);
+ assert.equal(response.data.hostLiveAcceptance,'UNVERIFIED');
+ assert.equal(response.data.progress.kind,'CODEFLEET_WORKFLOW_PROGRESS_V1');
+ assert.deepEqual(response.data.progress.dependencyReadyIds,['change']);
+ assert.equal(response.data.continuation.status,'AUTHENTICATED_HOST_ADMISSION_REQUIRED');
+ assert.equal(response.data.continuation.automaticReplay,false);
+ assert.equal(response.data.continuation.executionGranted,false);
+ assert.equal(operatorReviews,1);
+ assert.equal(hostReviews,1);
+ assert.equal(verifierCalls,0);
+ assert.equal(countWorkflowAttempts(f.store),0);
+ assert.equal(f.store.events(created.workflowId).length,initialEvents);
+ const status=await productCli(['workflow-progress',created.workflowId],f.store.directory);
+ assert.equal(status.exitCode,2);
+ assert.deepEqual(response.data.progress.continuation,status.data.continuation);
+});

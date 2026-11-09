@@ -1265,3 +1265,20 @@ independently satisfied Local Objective, and a read-only no-replay completion
 handoff. This is **not** a public Operator authenticator, native Codex Host
 Live test, Protected verification or final product acceptance. Previous head
 `83723640` passed Windows/Linux GitHub CI; this new head needs fresh CI.
+
+## Authenticated existing-Workflow blocked Host handoff (fresh CI required)
+
+After a valid hash-bound Workflow approval and independently authenticated
+Operator admission, a managed Host/Controller failure previously surfaced only
+as a generic CLI error, hiding the persisted recovery guidance. The trusted
+`run-codex-workflow` and `resume-codex-workflow` entry now returns a nonzero
+`CODEX_WORKFLOW_EXECUTION_BLOCKED` response containing the original error,
+read-only `workflowProgress` snapshot and explicit no-replay continuation
+when that snapshot is available. If the Store report itself fails, the original
+execution error propagates rather than inventing progress. No Host grant,
+approval, repeat execution or Objective completion is inferred from this
+advisory output. An offline cross-Store regression confirms an actual
+independent managed Workflow grant denial produces a recovery handoff without
+Host/verifier effects, new Attempts or modified Workflow events. No real Codex
+Host Live, Operator credential flow, protected execution or final independent
+acceptance was run. Fresh Windows/Linux CI is required for this commit.
