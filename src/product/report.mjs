@@ -21,11 +21,14 @@ function bootstrapNext(current, plan) {
 const UNSATISFIED_LOCAL = ['PENDING_VERIFICATION', 'VERIFICATION_STALE', 'INCONCLUSIVE'];
 export function bootstrapActions(view) {
   const ready = view.items.filter(i => !i.waitingOn.length), ids = list => list.map(i => i.id);
-  const fileset = s => ready.filter(i => i.fileset && !i.fileset.state.startsWith('SUPERSEDED') && s.includes(i.fileset.state) && i.state !== 'MATERIALIZED');
+  const fileset = (s, items = ready) => items.filter(i => i.fileset && !i.fileset.state.startsWith('SUPERSEDED') && s.includes(i.fileset.state) && i.state !== 'MATERIALIZED');
   const actions = [];
   const add = (kind, items, text) => { if (items.length) actions.push({ kind, items: ids(items), text }); };
+  // An uncertain or already-started effect must be reconciled BEFORE offering
+  // another Fileset approval. Inspect all items, including ones whose DAG
+  // dependencies have since become blocked; they may already have written bytes.
+  add('RECONCILE', fileset(['MATERIALIZING', 'WAITING_HUMAN'], view.items), 'Inspect persisted files, results and Lease with objective recover; public materialize never replays a started fileset');
   add('AWAIT_FILESET_APPROVAL', fileset(['WAITING_APPROVAL']), 'An operator reviews and approves the filesetHash with objective approve');
-  add('RECONCILE', fileset(['MATERIALIZING', 'WAITING_HUMAN']), 'Inspect persisted files, results and Lease with objective recover; public materialize never replays a started fileset');
   add('MATERIALIZE', fileset(['READY']), 'objective materialize <task-id> <item-id>; requires a fresh approved fileset with no started effects');
   add('REPAIR_REQUIRED', ready.filter(i => i.kind === 'local-verification' && i.state === 'LOCAL_FAILED'), 'Local tests failed: propose a repair fileset (files with baseSha256 and repair evidenceRef) for a materialized local-edit item this verification depends on');
   add('PROPOSE_FILESET', ready.filter(i => i.kind === 'local-edit' && i.state === 'PENDING_FILESET'), 'Propose a fileset for these local-edit items');

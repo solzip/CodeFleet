@@ -39,7 +39,7 @@ import { task, verifyTask } from '../src/product/tasks.mjs';
 import { hash } from '../src/alpha/contract.mjs';
 import { Store } from '../src/alpha/store.mjs';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { taskReport } from '../src/product/report.mjs';
+import { taskReport, bootstrapActions } from '../src/product/report.mjs';
 import { createCodexMvpFacade } from '../src/product/codex-mvp-facade.mjs';
 import { productCli } from '../src/product/cli.mjs';
 import { createFiles, modifyFiles, preflightFiles } from '../src/workflow/bootstrap-files.mjs';
@@ -1490,4 +1490,31 @@ test('NEW_PROJECT continuation blocks plain CLI, malformed flags, forged facade 
   assert.match(denied.data.error,/trusted exact bounded approval/);
   assert.deepEqual([factories,grants,turns],[1,1,0]);
   assert.equal(task(f.store,f.id).bootstrap.filesets.todo,undefined);
+});
+
+test('NEW_PROJECT bootstrap reports uncertain Fileset effects ahead of unrelated approvals',()=>{
+ const items=[
+  {id:'approval',kind:'local-edit',state:'PENDING_FILESET',waitingOn:[],
+   fileset:{state:'WAITING_APPROVAL'},capability:'SUPPORTED'},
+  {id:'uncertain',kind:'local-edit',state:'MATERIALIZING',waitingOn:[],
+   fileset:{state:'MATERIALIZING'},capability:'SUPPORTED'}
+ ];
+ const actions=bootstrapActions({items});
+ assert.deepEqual(actions.slice(0,2).map(a=>a.kind),
+   ['RECONCILE','AWAIT_FILESET_APPROVAL']);
+ assert.deepEqual(actions[0].items,['uncertain']);
+ assert.deepEqual(actions[1].items,['approval']);
+ assert.equal(actions.some(a=>a.kind==='MATERIALIZE'),false);
+});
+test('NEW_PROJECT bootstrap also reconciles an already-started Fileset whose dependencies later block',()=>{
+ const items=[
+  {id:'approval',kind:'local-edit',state:'PENDING_FILESET',waitingOn:[],
+   fileset:{state:'WAITING_APPROVAL'},capability:'SUPPORTED'},
+  {id:'uncertain',kind:'local-edit',state:'WAITING_HUMAN',waitingOn:['approval'],
+   fileset:{state:'WAITING_HUMAN'},capability:'SUPPORTED'}
+ ];
+ const actions=bootstrapActions({items});
+ assert.equal(actions[0].kind,'RECONCILE');
+ assert.deepEqual(actions[0].items,['uncertain']);
+ assert.equal(actions[1].kind,'AWAIT_FILESET_APPROVAL');
 });

@@ -1282,3 +1282,15 @@ independent managed Workflow grant denial produces a recovery handoff without
 Host/verifier effects, new Attempts or modified Workflow events. No real Codex
 Host Live, Operator credential flow, protected execution or final independent
 acceptance was run. Fresh Windows/Linux CI is required for this commit.
+
+## NEW_PROJECT uncertain Fileset must precede unrelated approval (new CI required)
+
+The read-only Bootstrap next-action projection now puts `RECONCILE` ahead of
+`AWAIT_FILESET_APPROVAL` when an existing Fileset is still `MATERIALIZING` or
+`WAITING_HUMAN`. Such effects are included even if their DAG dependencies
+subsequently became blocked; dependency readiness must not hide a possibly
+partially applied Fileset. Separate offline regressions cover ready and
+dependency-blocked uncertain WorkItems alongside a second approval request.
+This only changes advisory recovery ordering and never replays writes, grants
+approval, establishes OS confinement, runs a native Codex Turn, or accepts an
+Objective. Fresh Windows/Linux CI is needed for this commit.
