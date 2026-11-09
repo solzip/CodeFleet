@@ -149,6 +149,15 @@ test('joined synthetic two-WorkItem Objective: A persisted before B, local deliv
   assert.equal(completed.authority,'TRUSTED_EMBEDDING_LOCAL_ONLY');
   assert.equal(completed.hostLiveAcceptance,'UNVERIFIED');
   assert.equal(completed.protectedVerified,false);
+  assert.equal(completed.progress.kind,'CODEFLEET_WORKFLOW_PROGRESS_V1');
+  assert.equal(completed.progress.workflowId,f.workflow.id);
+  assert.equal(completed.progress.objectiveComplete,true);
+  assert.equal(completed.progress.authority,'READ_ONLY_ADVISORY');
+  assert.equal(completed.progress.executionGranted,false);
+  assert.equal(completed.progress.continuation.status,'OBJECTIVE_COMPLETE');
+  assert.equal(completed.progress.continuation.automaticReplay,false);
+  assert.deepEqual(completed.progress.workItems.map(item=>[item.id,item.state]),
+    [['a','SUCCEEDED'],['b','SUCCEEDED']]);
   assert.equal(reviewedScopes.length,1);
   const rows=attempts(f.store,f.workflow.id);
   assert.deepEqual(rows.map(row=>[row.itemId,row.status]),[

@@ -15,6 +15,7 @@ import { createCodexManagedHostExecution } from '../hosts/codex-managed-host-exe
 import { planWithCodexManagedThread } from '../hosts/codex-managed-planning.mjs';
 import { proposeNewProjectFileset } from '../hosts/codex-bootstrap-files.mjs';
 import { readDeliveredObjectiveStatus } from './objective-status.mjs';
+import { workflowProgress } from './report.mjs';
 import { requireTrustedObjectiveCriteria } from './objective-judge.mjs';
 import { prepareReviewedCodexWorkflow } from './codex-reviewed-workflow.mjs';
 import { bootstrapContext, materializeTask, verifyTask } from './tasks.mjs';
@@ -488,8 +489,12 @@ export function createCodexMvpFacade(store, {
       };
       const workflow = await execute(store, runId, dependencies,
         { resume });
-      const objective = await readDeliveredObjectiveStatus(store, runId);
-      return { workflowId: runId, workflowState: workflow.state, objective,
+      // Reuse the persisted, read-only Workflow projection for the next
+      // operator handoff. A successful Host/Controller return is not proof
+      // that the delivered Objective is complete or another Turn is granted.
+      const progress = await workflowProgress(store, runId);
+      return { workflowId: runId, workflowState: workflow.state,
+        objective: progress.objective, progress,
         authority: 'TRUSTED_EMBEDDING_LOCAL_ONLY',
         hostLiveAcceptance: 'UNVERIFIED', protectedVerified: false };
     },

@@ -1249,3 +1249,19 @@ read-only event stability and no automatic replay during an active Attempt.
 This is budget **reporting**, not new billing authority, Host Live proof,
 Operator authentication or Objective acceptance. The preceding
 `98d3e96d` Windows/Linux CI passed; this head requires its own CI.
+
+## Trusted existing Workflow result includes persisted next-step handoff (fresh CI required)
+
+The trusted `runExistingWorkflow` response now includes the existing read-only
+`workflowProgress` projection immediately after the Controller settles. The
+same persisted DAG/Attempt, delivery Objective Judge, unknown-cost accounting and
+advisory continuation are available to the authenticated embedding without
+inventing a second scheduler or treating Host completion as Objective success.
+`progress.executionGranted` remains false and `automaticReplay` remains false;
+a follow-up Host Turn, Repair, verification or delivery still requires its own
+current grant and Controller checks. The synthetic A→B/delivery/Judge fixture
+asserts that the returned result contains successful persisted WorkItems, an
+independently satisfied Local Objective, and a read-only no-replay completion
+handoff. This is **not** a public Operator authenticator, native Codex Host
+Live test, Protected verification or final product acceptance. Previous head
+`83723640` passed Windows/Linux GitHub CI; this new head needs fresh CI.
