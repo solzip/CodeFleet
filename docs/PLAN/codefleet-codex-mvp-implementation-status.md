@@ -1215,3 +1215,21 @@ no-receipt case and checks read-only event counts. This is a Recovery handoff
 fix, **not** automated delivery recovery, Host Live acceptance or Objective
 completion. The immediately preceding `28ad6312` Windows/Linux CI passed;
 this change needs its own Windows/Linux CI before claiming offline PASS.
+
+## Existing Workflow invalid delivery Evidence must not be presented as verification-ready (fresh CI required)
+
+The existing-repository `workflow-progress` advisory previously treated a
+`COMPLETED` Workflow with a persisted but unreadable delivery receipt as
+`OBJECTIVE_EVIDENCE_REQUIRED`, even though the independent delivered Objective
+projection correctly returned `BLOCKED`. This could misdirect recovery toward
+new verification while the immutable receipt or approval chain was defective.
+The continuation now prioritizes `DELIVERED_EVIDENCE_REVIEW_REQUIRED` on
+`BLOCKED` and `DELIVERED_TARGET_DRIFT_REVIEW_REQUIRED` when the current
+delivered tree differs from its pinned Evidence, before offering any new
+Workflow or verification admission. Both are advisory, deny automatic replay,
+and confer no approval. The synthetic cross-Store CLI regression asserts a
+missing receipt is `BLOCKED`, cannot trigger execution, and does not mutate
+Workflow events. Candidate-only and unsettled delivery intent handoffs stay
+unchanged. The preceding `e61d324a` Windows/Linux CI passed; this commit
+requires its own CI. Native Codex Host Live, actual target mutation,
+authenticated Operator integration and Objective acceptance remain deferred.

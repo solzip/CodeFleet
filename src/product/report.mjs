@@ -213,6 +213,15 @@ function existingWorkflowContinuation(run, report, workItems, readyIds) {
   if (run.control === 'pause' || run.control === 'cancel' ||
       ['CANCELLED', 'WAITING_HUMAN'].includes(run.state))
     return step('HUMAN_HANDOFF', 'Workflow is paused, cancelled or requires an explicit human decision');
+  // Recorded destination Evidence failures are not missing verification
+  // requests. A damaged receipt, missing immutable approval or unreadable
+  // target must be reviewed, not reexecuted or silently reverified.
+  if (report.objective?.status === 'BLOCKED')
+    return step('DELIVERED_EVIDENCE_REVIEW_REQUIRED',
+      'Recorded destination or Objective Evidence is unreadable or inconsistent; inspect receipt, approval, Candidate and target without replay');
+  if (report.objective?.targetDrift === true)
+    return step('DELIVERED_TARGET_DRIFT_REVIEW_REQUIRED',
+      'Delivered target changed after verification; review drift and obtain separately approved recovery before any new effect');
   if (run.state === 'COMPLETED')
     return step('OBJECTIVE_EVIDENCE_REQUIRED',
       'Candidate completion is not delivered Objective completion; inspect current destination Evidence and independent Judge');

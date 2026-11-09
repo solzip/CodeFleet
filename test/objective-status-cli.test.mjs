@@ -173,8 +173,13 @@ test('existing Workflow continuation exposes approval and Objective handoffs wit
   store.create({ ...base, id: 'workflow-unresolved-delivery', state: 'COMPLETED',
     states: { change: 'SUCCEEDED' },
     destinationDeliveryIntentRef: 'outstanding-delivery-intent' });
+  // A recorded receipt that cannot be loaded is an evidence-integrity
+  // blocker, not a request to launch a new verification or Host Turn.
+  store.create({ ...base, id: 'workflow-broken-delivery', state: 'COMPLETED',
+    states: { change: 'SUCCEEDED' },
+    deliveryReceiptRef: 'missing-delivery-receipt' });
   const eventCounts = Object.fromEntries(
-    ['workflow-awaits-approval', 'workflow-candidate-only', 'workflow-unresolved-delivery']
+    ['workflow-awaits-approval', 'workflow-candidate-only', 'workflow-unresolved-delivery', 'workflow-broken-delivery']
       .map(id => [id, store.events(id).length]));
   store.close();
 
@@ -202,6 +207,17 @@ test('existing Workflow continuation exposes approval and Objective handoffs wit
   assert.deepEqual(uncertain.data.continuation.itemIds, []);
   assert.equal(uncertain.data.continuation.executionGranted, false);
   assert.equal(uncertain.data.continuation.automaticReplay, false);
+
+  const broken = await productCli(['workflow-progress', 'workflow-broken-delivery'], stateDirectory);
+  assert.equal(broken.exitCode, 2);
+  assert.equal(broken.data.objective.status, 'BLOCKED');
+  assert.equal(broken.data.objective.deliveryRecorded, true);
+  assert.equal(broken.data.objectiveComplete, false);
+  assert.equal(broken.data.continuation.status, 'DELIVERED_EVIDENCE_REVIEW_REQUIRED');
+  assert.match(broken.data.continuation.reason, /unreadable or inconsistent/);
+  assert.deepEqual(broken.data.continuation.itemIds, []);
+  assert.equal(broken.data.continuation.executionGranted, false);
+  assert.equal(broken.data.continuation.automaticReplay, false);
 
   const checked = new Store(stateDirectory, { readOnly: true });
   try {
