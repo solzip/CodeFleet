@@ -1375,6 +1375,86 @@ test('trusted NEW_PROJECT continuation advances exactly one persisted step and s
   assert.equal((await taskReport(f.store,f.id)).complete,false);
 });
 
+
+test('trusted NEW_PROJECT continuation executes only an explicitly requested, separately granted Local check',async t=>{
+  const f=await built({passing:true,protectedItem:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const requestFile=join(f.root,'advance-local-verification.json');
+  await writeFile(requestFile,JSON.stringify(request(f)));
+  const entry=['advance-codex-bootstrap',f.id,'--verification-request',requestFile];
+  assert.equal((await taskReport(f.store,f.id)).continuation.status,'AWAIT_LOCAL_TRUST');
+  let grants=0,turns=0;
+  const createCodexAdmission=store=>({facade:createCodexMvpFacade(store,{
+    executable:process.execPath,model:'SYNTHETIC_ONLY',
+    authorizeBootstrapVerification:async scope=>{
+      grants++;
+      assert.equal(scope.kind,'CODEFLEET_BOOTSTRAP_LOCAL_CHECK_SCOPE_V1');
+      assert.equal(scope.itemId,'tests');
+      assert.equal(scope.repo,f.dir);
+      assert.equal(scope.protection,'UNPROTECTED');
+      assert.deepEqual(scope.command.args,['--test','--test-reporter=tap']);
+      return true;
+    },
+    transport:async()=>{turns++;throw Error('Local verification must not invoke Codex Host');}
+  })});
+  const result=await productCli(entry,f.state,{createCodexAdmission});
+  assert.equal(result.exitCode,0,result.data?.error);
+  assert.equal(result.data.step,'RUN_LOCAL_VERIFICATION');
+  assert.equal(result.data.itemId,'tests');
+  assert.equal(result.data.result.status,'LOCAL_PASSED');
+  assert.equal(result.data.result.authority,'LOCAL_EXECUTED');
+  assert.equal(result.data.protection,'UNPROTECTED');
+  assert.equal(result.data.protectedVerified,false);
+  assert.equal(result.data.hostLiveAcceptance,'UNVERIFIED');
+  assert.equal(grants,1);
+  assert.equal(turns,0);
+  assert.equal(task(f.store,f.id).bootstrap.states.tests,'LOCAL_PASSED');
+  assert.equal((await taskReport(f.store,f.id)).complete,false);
+  const replay=await productCli(entry,f.state,{createCodexAdmission});
+  assert.equal(replay.exitCode,1);
+  assert.match(replay.data.error,/requires current ready verification WorkItem/);
+  assert.equal(grants,1,'A completed Local check cannot consume a second grant');
+});
+
+test('NEW_PROJECT continuation Local request rejects malformed inputs and denied trust without Evidence',async t=>{
+  const f=await built({passing:true,protectedItem:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const requestFile=join(f.root,'advance-local-untrusted.json');
+  const entry=['advance-codex-bootstrap',f.id,'--verification-request',requestFile];
+  let factories=0,grants=0;
+  const createCodexAdmission=store=>{
+    factories++;
+    return {facade:createCodexMvpFacade(store,{
+      executable:process.execPath,model:'SYNTHETIC_ONLY',
+      authorizeBootstrapVerification:async()=>{grants++;return false;}
+    })};
+  };
+  for(const invalid of [
+    ['advance-codex-bootstrap',f.id,'--repair-item','todo','--verification-request',requestFile],
+    ['advance-codex-bootstrap',f.id,'--verification-request',requestFile,'--allow-model']
+  ]){
+    const blocked=await productCli(invalid,f.state,{createCodexAdmission});
+    assert.equal(blocked.exitCode,1);
+    assert.match(blocked.data.error,/advance-codex-bootstrap requires/);
+  }
+  await writeFile(requestFile,'{"executable":');
+  const malformed=await productCli(entry,f.state,{createCodexAdmission});
+  assert.equal(malformed.exitCode,1);
+  assert.match(malformed.data.error,/JSON|Unexpected|Expected|end of/);
+  await writeFile(requestFile,JSON.stringify({...request(f),args:'--test'}));
+  const unsafe=await productCli(entry,f.state,{createCodexAdmission});
+  assert.equal(unsafe.exitCode,1);
+  assert.match(unsafe.data.error,/exact bounded Local command fields/);
+  assert.equal(factories,0,'Request preflight precedes privileged Host factory');
+  await writeFile(requestFile,JSON.stringify(request(f)));
+  const denied=await productCli(entry,f.state,{createCodexAdmission});
+  assert.equal(denied.exitCode,1);
+  assert.match(denied.data.error,/Exact Bootstrap verification grant denied/);
+  assert.deepEqual([factories,grants],[1,1]);
+  assert.equal(task(f.store,f.id).bootstrap.verifications?.tests,undefined);
+  assert.equal(f.store.events(f.id).filter(e=>e.type==='BOOTSTRAP_LOCAL_VERIFICATION_RECORDED').length,0);
+});
+
 test('NEW_PROJECT continuation blocks plain CLI, malformed flags, forged facade and denied Host grant',async t=>{
   const f=await prepared({passing:true});
   t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});

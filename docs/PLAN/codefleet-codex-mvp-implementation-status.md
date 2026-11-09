@@ -1145,3 +1145,22 @@ scheduling, approval and verification policy are unchanged. No local Codex Host
 Live, user repository mutation, Protected verification or Objective acceptance
 was run. The updated head requires its own Windows/Linux GitHub Actions
 results before any offline PASS claim.
+
+## Explicit NEW_PROJECT Local verification continuation (fresh CI required)
+
+The trusted `advance-codex-bootstrap <task-id> --verification-request REQUEST.json`
+command can now execute the next persisted `AWAIT_LOCAL_TRUST` verification
+WorkItem as **one** continuation step. The request file is parsed and shape/bounds
+checked before SQLite is opened or a trusted Host factory is constructed. The
+same frozen input snapshot is passed through the existing Store-bound Codex MVP
+facade, which independently previews current executable, argv and repository
+bytes, obtains a separate exact owner approval, checks revision/drift and invokes
+the existing Bootstrap Local verifier to record Evidence. Missing input still
+produces an explicit human handoff; failed, inconclusive or already completed
+checks cannot be silently replayed through continuation. Repair-selection and
+verification-request flags are mutually exclusive. Offline synthetic integration
+tests cover a passing executable Local check, once-only behavior, bad input
+before Host factory and denied owner trust with no Evidence. This extends the
+NEW_PROJECT single-step product path without granting a public Operator identity,
+protected verification, automatic command approval, native Codex Host Live or
+Objective completion. Fresh Windows/Linux CI must be checked for this head.

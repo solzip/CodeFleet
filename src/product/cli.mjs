@@ -39,8 +39,8 @@ codefleet-alpha objective plan-codex-goal "natural-language Goal" --repository A
   (trusted Host embedding only; independent read-only planning Turn grant, model usage may be billed; no Workflow approval or source writes)
 codefleet-alpha objective propose-codex-bootstrap-files <task-id> <local-edit-item-id>
   (trusted Host embedding only; separately approved NEW_PROJECT Fileset proposal, no filesystem writes or execution grant)
-codefleet-alpha objective advance-codex-bootstrap <task-id> [--repair-item <local-edit-item-id>]
-  (trusted Host embedding only; one persisted NEW_PROJECT step: propose, approved materialize or explicitly selected failed-Evidence Repair proposal; all owner approvals remain separate)
+codefleet-alpha objective advance-codex-bootstrap <task-id> [--repair-item <local-edit-item-id> | --verification-request REQUEST.json]
+  (trusted Host embedding only; one persisted NEW_PROJECT step: proposal, approved materialization, selected Repair, or explicit separately approved Local verification; never auto-trusts a command)
 codefleet-alpha objective propose-codex-bootstrap-repair <task-id> <local-edit-item-id> <failed-verification-item-id>
   (trusted Host embedding only; requires current dependent LOCAL_FAILED Evidence; proposes a separately approvable Repair Fileset without writes)
 codefleet-alpha objective materialize-codex-bootstrap-files <task-id> <local-edit-item-id>
@@ -93,7 +93,7 @@ No command enables an unverified Provider or performs remote delivery.`;
 function parse(values) {
   const positional = [], options = {};
   const flags = new Set(['allow-model', 'json', 'acknowledge-unisolated', 'local-existing']);
-  const allowed = new Set(['repair-item', 'acceptance', 'files', 'tests', 'criterion', 'item', 'parallel', 'attempts', 'timeout', 'budget', 'hash', 'actor', 'planner', 'codex-executable', 'claude-executable', 'unknown', 'scope', 'revision', 'trust', 'decision', 'request-id', 'expires', 'repository', 'source-hash']);
+  const allowed = new Set(['repair-item', 'verification-request', 'acceptance', 'files', 'tests', 'criterion', 'item', 'parallel', 'attempts', 'timeout', 'budget', 'hash', 'actor', 'planner', 'codex-executable', 'claude-executable', 'unknown', 'scope', 'revision', 'trust', 'decision', 'request-id', 'expires', 'repository', 'source-hash']);
   for (let i = 0; i < values.length; i++) {
     const value = values[i];
     if (!value.startsWith('--')) { positional.push(value); continue; }
@@ -122,11 +122,16 @@ function requireCodexBootstrapEntryArgs(args, o, action = 'propose-codex-bootstr
 
 function requireCodexBootstrapAdvanceArgs(args, o) {
   const repairItem = o['repair-item'];
+  const verificationRequest = o['verification-request'];
   if (args.length !== 1 || !args[0] || args[0].startsWith('-') ||
-      Object.keys(o).some(key => key !== 'repair-item') ||
+      Object.keys(o).some(key => !['repair-item', 'verification-request'].includes(key)) ||
       (repairItem !== undefined && (typeof repairItem !== 'string' ||
-        !repairItem.length || repairItem.length > 128 || repairItem.startsWith('-'))))
-    throw Error('advance-codex-bootstrap requires one Task ID and optional --repair-item <local-edit-id>; no approval or execution flags');
+        !repairItem.length || repairItem.length > 128 || repairItem.startsWith('-'))) ||
+      (verificationRequest !== undefined && (typeof verificationRequest !== 'string' ||
+        !verificationRequest.length || verificationRequest.length > 4096 ||
+        verificationRequest.startsWith('-'))) ||
+      (repairItem !== undefined && verificationRequest !== undefined))
+    throw Error('advance-codex-bootstrap requires one Task ID and optional --repair-item <local-edit-id> OR --verification-request REQUEST.json; no approval or execution flags');
 }
 
 function requireCodexBootstrapRepairArgs(args, o) {
@@ -265,6 +270,10 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     const continuation = before.continuation;
     const next = continuation?.next;
     const repairItem = o['repair-item'] ?? null;
+    const verificationRequest = o['verification-request'] ?? null;
+    if (verificationRequest && (continuation?.status !== 'AWAIT_LOCAL_TRUST' ||
+        next?.kind !== 'RUN_LOCAL_VERIFICATION'))
+      throw Error('Bootstrap Local verification request requires current ready verification WorkItem; failed or inconclusive commands are never replayed');
     if (repairItem && (continuation?.status !== 'AWAIT_REPAIR_SELECTION' ||
         next?.kind !== 'REPAIR_REQUIRED' ||
         !next?.failedEvidenceRef ||
@@ -275,7 +284,10 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       continuation.status === 'AWAIT_OPERATOR' &&
       next?.kind === 'MATERIALIZE' ? 'MATERIALIZE' :
       continuation.status === 'AWAIT_REPAIR_SELECTION' &&
-      next?.kind === 'REPAIR_REQUIRED' && repairItem ? 'PROPOSE_REPAIR_FILESET' : null;
+      next?.kind === 'REPAIR_REQUIRED' && repairItem ? 'PROPOSE_REPAIR_FILESET' :
+      continuation.status === 'AWAIT_LOCAL_TRUST' &&
+      next?.kind === 'RUN_LOCAL_VERIFICATION' && verificationRequest
+        ? 'RUN_LOCAL_VERIFICATION' : null;
     if (!step || !next?.itemId)
       return { exitCode: 2, data: {
         schemaVersion: 1, status: 'HUMAN_HANDOFF',
@@ -293,16 +305,25 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       ? await binding.facade.proposeBootstrapFiles(args[0], next.itemId)
       : step === 'PROPOSE_REPAIR_FILESET'
         ? await binding.facade.proposeBootstrapRepairFiles(args[0], repairItem, next.itemId)
-        : await binding.facade.materializeApprovedBootstrap(args[0], next.itemId);
+        : step === 'RUN_LOCAL_VERIFICATION'
+          ? await binding.facade.verifyApprovedBootstrap(args[0], next.itemId,
+              requireCodexBootstrapVerificationRequest(
+                execution.boundedBootstrapVerificationRequest === undefined
+                  ? await readResponse(verificationRequest)
+                  : execution.boundedBootstrapVerificationRequest))
+          : await binding.facade.materializeApprovedBootstrap(args[0], next.itemId);
     const after = await taskReport(store, args[0]);
     return { exitCode: ['PROPOSE_FILESET', 'PROPOSE_REPAIR_FILESET'].includes(step)
         ? result.approvalRequest ? 0 : 2
-        : result.status === 'MATERIALIZED' ? 0 : 2,
+        : step === 'RUN_LOCAL_VERIFICATION'
+          ? result.status === 'LOCAL_PASSED' ? 0 : 2
+          : result.status === 'MATERIALIZED' ? 0 : 2,
       data: {
         schemaVersion: 1, status: result.status ?? 'STEP_RECORDED',
         step, itemId: repairItem ?? next.itemId,
         ...(step === 'PROPOSE_REPAIR_FILESET' ? { verificationItem: next.itemId } : {}),
         result, continuation: after.continuation,
+        ...(step === 'RUN_LOCAL_VERIFICATION' ? { protection: 'UNPROTECTED' } : {}),
         protectedVerified: false, hostLiveAcceptance: 'UNVERIFIED'
       } };
   }
@@ -704,9 +725,11 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
       else requireCodexWorkflowEntryArgs(positional, options);
       // Malformed/oversized caller JSON is rejected before opening Store or
       // creating an authenticated Host binding; parse it only once.
-      if (argv[0] === 'verify-codex-bootstrap')
+      if (argv[0] === 'verify-codex-bootstrap' ||
+          (argv[0] === 'advance-codex-bootstrap' && options['verification-request']))
         boundedBootstrapVerificationRequest = requireCodexBootstrapVerificationRequest(
-          await readResponse(positional[2]));
+          await readResponse(argv[0] === 'verify-codex-bootstrap'
+            ? positional[2] : options['verification-request']));
     }
     if (!argv[0] || ['help', '--help'].includes(argv[0])) return await dispatchProduct(argv);
     store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request', 'delivered-status', 'workflow-progress', 'review-codex-plan', 'review-codex-workflow'].includes(argv[0]) });
