@@ -156,6 +156,9 @@ test('existing Workflow continuation exposes approval and Objective handoffs wit
   const stateDirectory = await mkdtemp(join(tmpdir(), 'codefleet-workflow-handoff-'));
   t.after(() => rm(stateDirectory, { recursive: true, force: true }));
   const store = new Store(stateDirectory);
+  // A real existing Workflow explicitly opts into its additive Attempt schema.
+  // Read-only CLI status must never initialize this schema on the caller's behalf.
+  store.enableWorkflows();
   const base = {
     kind: 'workflow', revision: 1, contractHash: 'offline-synthetic-hash',
     contract: { schemaVersion: 1, items: [{ id: 'change', dependencies: [] }] },
@@ -185,6 +188,8 @@ test('existing Workflow continuation exposes approval and Objective handoffs wit
 
   const checked = new Store(stateDirectory, { readOnly: true });
   try {
+    assert.equal(checked.db.prepare('PRAGMA user_version').get().user_version, 2);
+    assert.equal(checked.db.prepare('SELECT COUNT(*) AS count FROM workflow_attempts').get().count, 0);
     for (const [id, count] of Object.entries(eventCounts))
       assert.equal(checked.events(id).length, count, 'Read-only status cannot create a Workflow event');
   } finally { checked.close(); }

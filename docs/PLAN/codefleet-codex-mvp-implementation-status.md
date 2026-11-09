@@ -1180,3 +1180,21 @@ execution, authenticate an Operator or change stored state. Offline CLI fixtures
 cover uncertain Repair Attempt precedence, missing approval, Candidate-only
 completion and unchanged event counts. Real Codex Host Live, independent final
 acceptance and Windows/Linux CI for this new head remain unverified.
+
+
+## Existing Workflow continuation CI fixture schema correction (fresh CI required)
+
+The preceding head `b0428bf6886b1eb924f20b4389fad7f74051a492` failed `npm run test:codex-mvp` on
+both Windows and Linux in the new read-only `workflow-progress` fixture
+(`1 !== 2` at the first pending-approval query). The fixture inserted
+Workflow rows in an ordinary V1 Store without enabling the existing opt-in
+Workflow Attempt/approval tables, even though `runReport` reads those tables.
+The fixture now explicitly calls `Store.enableWorkflows()` **before** creating
+synthetic Workflow rows, mirroring the actual `createWorkflow` initializer.
+It also asserts that subsequent read-only status calls leave schema version 2,
+zero Attempt rows and original event counts unchanged. The production read path
+continues to fail closed on unmigrated state and does not silently initialize
+or authorize execution. The exact underlying CLI error was not emitted by the
+previous failing assertion; this is a source-inspection-based root-cause fix
+pending this commit's own Windows/Linux CI. No native Codex Host Live, real
+repository mutation or final Objective acceptance was performed.
