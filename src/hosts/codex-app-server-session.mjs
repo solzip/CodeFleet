@@ -178,7 +178,7 @@ export async function runCodexReadOnlyTurn({ executable, cwd, model, prompt, out
         killTimer.unref?.();
       }
       rejectPromise(error instanceof CodexTurnProtocolError ? error :
-        new CodexTurnProtocolError('Host Turn failed or became uncertain: ' + String(error?.message ?? error)));
+        new CodexTurnProtocolError('Host Turn failed or became uncertain; no replay'));
     };
     const deadline = setTimeout(() => fail(new CodexTurnProtocolError('Host Turn deadline exceeded; no replay')), timeoutMs);
     const cancelTimer = setInterval(() => {
@@ -186,6 +186,11 @@ export async function runCodexReadOnlyTurn({ executable, cwd, model, prompt, out
       catch { fail(new CodexTurnProtocolError('Attempt authorization check failed; no replay')); }
     }, 250);
     child.once('error', fail);
+    // A pipe may emit EPIPE/stream errors even when the child process itself
+    // emits no 'error'. Handle all three independently before the first write.
+    // Native I/O error strings can contain executable paths or private bytes.
+    for (const stream of [child.stdin, child.stdout, child.stderr])
+      stream?.on?.('error', fail);
     child.stderr?.on('data', chunk => {
       stderrBytes += chunk.length;
       if (stderrBytes > MAX_STDERR) fail(new CodexTurnProtocolError('Host stderr limit exceeded'));

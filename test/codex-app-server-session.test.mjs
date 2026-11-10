@@ -243,3 +243,41 @@ test('malformed Host stdout is rejected without exposing untrusted source bytes'
     return true;
   });
 });
+
+for (const streamName of ['stdin','stdout','stderr']) {
+  test('Host ' + streamName + ' stream errors are fail-closed, handled and redacted', async () => {
+    const secret = 'C:/private/secret-host-token-path';
+    let hadListener = false, killCalls = 0;
+    const spawnImpl = () => {
+      const child = new EventEmitter();
+      child.stdin = new EventEmitter();
+      child.stdin.write = () => true;
+      child.stdin.end = () => {};
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.exitCode = null;
+      child.signalCode = null;
+      child.kill = () => { killCalls++; return true; };
+      queueMicrotask(() => {
+        hadListener = child[streamName].listenerCount('error') > 0;
+        // A missing listener is reported through the existing child error
+        // channel, avoiding an uncaught test-runner exception on old code.
+        if (!hadListener) child.emit('error', new Error('Missing stream error handler'));
+        else child[streamName].emit('error', new Error('EPIPE ' + secret));
+      });
+      return child;
+    };
+    await assert.rejects(runCodexReadOnlyTurn({
+      executable: process.execPath, cwd: process.cwd(), model: 'fixture',
+      prompt: 'Return only a bounded proposal', outputSchema: { type: 'object' },
+      timeoutMs: 3000, spawnImpl,
+    }), error => {
+      assert.equal(error.effectStatus, 'UNVERIFIED');
+      assert.equal(error.message, 'Host Turn failed or became uncertain; no replay');
+      assert.equal(error.message.includes(secret), false);
+      return true;
+    });
+    assert.equal(hadListener, true, 'stream error listener missing');
+    assert.equal(killCalls, 1, 'uncertain Host child must be terminated');
+  });
+}
