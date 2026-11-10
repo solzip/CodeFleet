@@ -1467,3 +1467,26 @@ without modifying the underlying scheduler or adding a grant. It does not
 establish a native billable Codex model Turn, production Operator
 authentication, protected sandbox or independent real-world Objective
 acceptance. The new revision requires its own Windows/Linux GitHub CI.
+
+## NEW_PROJECT user-facing Todo → Calendar → actual Local verification (fresh CI required)
+
+A new offline integration test uses the existing trusted
+`advance-codex-bootstrap <task-id>` product CLI across independent Store
+openings, not a direct facade shortcut. It advances the persisted
+`requirements → todo → calendar → tests` DAG one step at a time, preserving
+separate Host Fileset proposal grants, explicit Fileset review/approval,
+per-item bounded materialization grants, and a separate exact Local command
+grant. The synthetic Codex Host returns scoped Todo and Calendar source/test
+files, but the final `node --test --test-reporter=tap` runs as an **actual
+Local subprocess** in the disposable NEW_PROJECT fixture. Both tests must
+pass, while Protected verification and Objective COMPLETE remain
+`UNSATISFIED`/false. A repeated Local request is rejected without a second
+grant; no Host Turn is replayed. The test neither supplies real Codex
+model output nor upgrades Local trust to protected acceptance.
+
+The existing-repository Codex semantic Planning compiler currently fixes
+`maxAttempts:1` and initially emits one `change` WorkItem; this
+NEW_PROJECT exercise is **not** evidence that natural-language Codex
+Planning can yet generate and authorize a multi-WorkItem source DAG. That
+capability needs a separately reviewed Contract/attempt-budget extension.
+Fresh Windows/Linux GitHub Actions CI is required for this change.

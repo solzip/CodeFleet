@@ -1607,3 +1607,124 @@ test('NEW_PROJECT drift without an uncertain Fileset remains a blocked no-replay
  assert.equal(result.executionGranted,false);
  assert.equal(result.automaticReplay,false);
 });
+
+
+test('trusted NEW_PROJECT CLI completes persisted Todo to Calendar to real Local verification without Protected acceptance',async t=>{
+  // This tests the user-facing one-step command, not direct calls to the
+  // facade. Codex is synthetic; only the local node:test subprocess is real.
+  const f=await prepared({passing:true,protectedItem:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const filesByItem={
+    todo:[
+      {path:'package.json',content:'{"type":"module"}\n'},
+      {path:'src/todo.mjs',content:'export const add = (xs, value) => [...xs, value];\n'},
+      {path:'test/todo.test.mjs',content:"import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {add} from '../src/todo.mjs';\ntest('append',()=>assert.deepEqual(add([],1),[1]));\n"}
+    ],
+    calendar:[
+      {path:'src/calendar.mjs',content:'export const byDate = () => ({});\n'},
+      {path:'test/calendar.test.mjs',content:"import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {byDate} from '../src/calendar.mjs';\ntest('group',()=>assert.deepEqual(byDate(),{}));\n"}
+    ]
+  };
+  const hostTurns=[],hostGrants=[],materializationGrants=[],localGrants=[];
+  const createCodexAdmission=store=>({facade:createCodexMvpFacade(store,{
+    executable:process.execPath,model:'OFFLINE_FAKE_ONLY',enableHostTurns:true,
+    authorizeBootstrap:async scope=>{
+      hostGrants.push(scope.itemId);
+      assert.equal(scope.repo,f.dir);
+      assert.deepEqual(scope.files,filesByItem[scope.itemId].map(file=>file.path));
+      assert.equal(scope.operation,'create');
+      return true;
+    },
+    transport:async request=>{
+      const scope=JSON.parse(request.prompt);
+      hostTurns.push(scope.itemId);
+      assert.equal(request.cwd,f.dir);
+      assert.equal(request.executable,await realpath(process.execPath));
+      assert.deepEqual(scope.files,filesByItem[scope.itemId].map(file=>file.path));
+      return {...fakeHostReceipt(scope),text:JSON.stringify({
+        revision:scope.revision,itemId:scope.itemId,files:filesByItem[scope.itemId]
+      })};
+    },
+    authorizeBootstrapMaterialization:async scope=>{
+      materializationGrants.push(scope.itemId);
+      assert.equal(scope.kind,'CODEFLEET_BOOTSTRAP_MATERIALIZATION_SCOPE_V1');
+      assert.equal(scope.protection,'UNPROTECTED');
+      assert.deepEqual(scope.files.map(file=>file.content),
+        filesByItem[scope.itemId].map(file=>file.content));
+      return true;
+    },
+    authorizeBootstrapVerification:async scope=>{
+      localGrants.push(scope.itemId);
+      assert.equal(scope.kind,'CODEFLEET_BOOTSTRAP_LOCAL_CHECK_SCOPE_V1');
+      assert.equal(scope.itemId,'tests');
+      assert.equal(scope.protection,'UNPROTECTED');
+      assert.equal(scope.command.directory,await realpath(f.dir));
+      assert.deepEqual(scope.command.args,['--test','--test-reporter=tap']);
+      return true;
+    }
+  })});
+  const advance=(flags=[])=>productCli(
+    ['advance-codex-bootstrap',f.id,...flags],f.state,{createCodexAdmission}
+  );
+  for(const itemId of ['todo','calendar']){
+    const proposed=await advance();
+    assert.equal(proposed.exitCode,0,proposed.data?.error);
+    assert.equal(proposed.data.step,'PROPOSE_FILESET');
+    assert.equal(proposed.data.itemId,itemId);
+    assert.equal(proposed.data.result.approvalRequest.authority,'REQUEST_ONLY');
+    assert.equal(proposed.data.protectedVerified,false);
+    for(const file of filesByItem[itemId])
+      await assert.rejects(readFile(join(f.dir,file.path)),{code:'ENOENT'});
+    const waiting=await advance();
+    assert.equal(waiting.exitCode,2);
+    assert.equal(waiting.data.status,'HUMAN_HANDOFF');
+    assert.equal(waiting.data.continuation.status,'AWAIT_OPERATOR');
+    assert.equal(waiting.data.continuation.automaticReplay,false);
+    approve(f,proposed.data.result.approvalRequest);
+    const applied=await advance();
+    assert.equal(applied.exitCode,0,applied.data?.error);
+    assert.equal(applied.data.step,'MATERIALIZE');
+    assert.equal(applied.data.itemId,itemId);
+    assert.equal(applied.data.result.status,'MATERIALIZED');
+    for(const file of filesByItem[itemId])
+      assert.equal(await readFile(join(f.dir,file.path),'utf8'),file.content);
+  }
+  assert.deepEqual(hostTurns,['todo','calendar']);
+  assert.deepEqual(hostGrants,hostTurns);
+  assert.deepEqual(materializationGrants,hostTurns);
+  assert.deepEqual(localGrants,[]);
+  const needsVerification=await advance();
+  assert.equal(needsVerification.exitCode,2);
+  assert.equal(needsVerification.data.status,'HUMAN_HANDOFF');
+  assert.equal(needsVerification.data.continuation.status,'AWAIT_LOCAL_TRUST');
+  assert.deepEqual(needsVerification.data.continuation.next,
+    {kind:'RUN_LOCAL_VERIFICATION',itemId:'tests'});
+  assert.equal(needsVerification.data.continuation.automaticReplay,false);
+
+  const requestFile=join(f.root,'user-approved-local-command.json');
+  await writeFile(requestFile,JSON.stringify(request(f)));
+  const verified=await advance(['--verification-request',requestFile]);
+  assert.equal(verified.exitCode,0,verified.data?.error);
+  assert.equal(verified.data.step,'RUN_LOCAL_VERIFICATION');
+  assert.equal(verified.data.itemId,'tests');
+  assert.equal(verified.data.result.status,'LOCAL_PASSED');
+  assert.equal(verified.data.result.tests,2);
+  assert.equal(verified.data.result.failed,0);
+  assert.equal(verified.data.result.authority,'LOCAL_EXECUTED');
+  assert.equal(verified.data.protection,'UNPROTECTED');
+  assert.equal(verified.data.protectedVerified,false);
+  assert.equal(verified.data.hostLiveAcceptance,'UNVERIFIED');
+  assert.equal(verified.data.continuation.automaticReplay,false);
+  assert.deepEqual(localGrants,['tests']);
+  const report=await taskReport(f.store,f.id);
+  assert.equal(report.complete,false);
+  assert.equal(report.protectedVerification,'UNSATISFIED');
+  assert.equal(task(f.store,f.id).bootstrap.states.tests,'LOCAL_PASSED');
+  assert.equal(report.continuation.executionGranted,false);
+  const repeated=await advance(['--verification-request',requestFile]);
+  assert.equal(repeated.exitCode,1);
+  assert.match(repeated.data.error,/requires current ready verification WorkItem/);
+  assert.deepEqual(hostTurns,['todo','calendar']);
+  assert.deepEqual(materializationGrants,['todo','calendar']);
+  assert.deepEqual(localGrants,['tests'],'Verified Local command cannot be replayed');
+});
