@@ -1664,3 +1664,23 @@ review and require no Workflow/Attempt creation or additional Host Turn.
 The current environment cannot check out the full repo or run Node 24/Docker;
 Windows/Linux CI for this new head is the pending independent offline check.
 This is not native Codex Host Live or Objective E2E acceptance.
+
+## Goal Plan-to-Workflow structured preparation handoff (fresh CI required)
+
+The trusted `plan-codex-goal` result and the read-only
+`codex-goal-progress <session-id> --repository ABSOLUTE_PATH` preview
+now return an exact `prepareCommand.argv` for the persisted, independently
+reviewable Plan when the original repository is currently pinned and clean.
+The structured argument vector carries the exact session, absolute source
+root and both bound Workflow/source-contract hashes. It avoids manual hash
+transcription in the developer's Goal → Contract/DAG → pending Workflow path.
+A missing/stale review, missing source check, or already-promoted Workflow
+does not produce a preparation command. This is a suggestion for **explicit
+human review**, not an automatic invocation, execution grant, Workflow
+approval or Operator admission. Existing source freshness and authorization
+guards remain authoritative at the actual preparation/execution boundary.
+Offline regressions assert exact argv for the trusted Planning and read-only
+Goal paths and omission after promotion or source drift. The full repository
+checkout, Node 24 and Docker are unavailable in this runtime, so the
+new HEAD requires independent Windows/Linux CI before any offline PASS claim.
+Native Codex Host Live and final Objective E2E acceptance remain deferred.

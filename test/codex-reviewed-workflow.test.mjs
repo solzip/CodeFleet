@@ -662,6 +662,11 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
   assert.equal(review.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
   assert.deepEqual(planned.data.planReview,review.data,
     'Single-command preview must match the separate independent Plan review');
+  assert.deepEqual(planned.data.prepareCommand,{
+    argv:['prepare-codex-workflow',sessionId,'--repository',f.repo,
+      '--hash',review.data.workflowHash,'--source-hash',review.data.sourceContractHash],
+    humanReviewRequired:true,approved:false,executionGranted:false
+  });
   assert.equal(review.data.workflowHash,f.result.workflowPreview.workflow.workflowHash);
   const staged=await productCli([
     'prepare-codex-workflow',sessionId,'--repository',f.repo,
@@ -1791,6 +1796,11 @@ test('Goal progress checks original repository readiness before dispatch without
  const review=await productCli(['review-codex-plan',id,'--repository',f.repo],f.store.directory);
  assert.equal(review.exitCode,0);
  assert.deepEqual(planning.data.planReview,review.data);
+ assert.deepEqual(planning.data.prepareCommand,{
+  argv:['prepare-codex-workflow',id,'--repository',f.repo,
+   '--hash',review.data.workflowHash,'--source-hash',review.data.sourceContractHash],
+  humanReviewRequired:true,approved:false,executionGranted:false
+ });
  assert.equal(planning.data.planReview.status,'REVIEW_REQUIRED');
  assert.equal(planning.data.planReview.approved,false);
  assert.equal(planning.data.planReview.executionGranted,false);
@@ -1804,6 +1814,7 @@ test('Goal progress checks original repository readiness before dispatch without
  assert.equal(clean.data.status,'WORKFLOW_IN_PROGRESS');
  assert.equal(clean.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
  assert.equal(clean.data.planReview,undefined);
+ assert.equal(clean.data.prepareCommand,undefined);
  assert.equal(clean.data.continuation.status,'AWAIT_WORKFLOW_APPROVAL');
  // The Goal-level pre-dispatch handoff must disclose the exact persisted
  // Workflow DAG, current approval state and the need for separate Host grants.
@@ -1850,6 +1861,7 @@ test('Goal readiness suppresses exact Plan review when pre-Workflow source is st
  assert.equal(stale.exitCode,2);
  assert.equal(stale.data.status,'SOURCE_REVIEW_REQUIRED');
  assert.equal(stale.data.planReview,undefined);
+ assert.equal(stale.data.prepareCommand,undefined);
  assert.equal(stale.data.continuation.kind,'REVIEW_SOURCE_OR_REPLAN');
  assert.equal(stale.data.executionGranted,false);
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);

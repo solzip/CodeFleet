@@ -114,6 +114,20 @@ function parse(values) {
 const list = value => value?.split(',').filter(Boolean);
 const number = (value, fallback) => value === undefined ? fallback : Number(value);
 
+// This exact argv is a read-only suggestion, not an implicit review, approval
+// or permission to dispatch a Host Turn.
+function reviewedGoalPrepareCommand(review, sessionId, repository) {
+  if (review?.status !== 'REVIEW_REQUIRED' ||
+      review.sourceFreshness !== 'PINNED_CLEAN_AT_REVIEW' ||
+      !/^[a-f0-9]{64}$/.test(review.workflowHash ?? '') ||
+      !/^[a-f0-9]{64}$/.test(review.sourceContractHash ?? '')) return null;
+  return {
+    argv: ['prepare-codex-workflow', sessionId, '--repository', repository,
+      '--hash', review.workflowHash, '--source-hash', review.sourceContractHash],
+    humanReviewRequired: true, approved: false, executionGranted: false
+  };
+}
+
 function requireCodexGoalEntryArgs(args, o) {
   if (args.length !== 1 || !args[0]?.trim() ||
       Object.keys(o).length !== 1 || !path.isAbsolute(o.repository ?? ''))
@@ -221,6 +235,7 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       const planReview = data.status === 'VALIDATED' && planningSessionId
         ? await inspectReviewedCodexPlanAtSource(store, planningSessionId, o.repository)
         : null;
+      const prepareCommand = reviewedGoalPrepareCommand(planReview, planningSessionId, o.repository);
       return { exitCode: data.status === 'VALIDATED' ? 0 : 2,
         data: { ...data, planningSessionId, ...(planReview ? {
           planReview,
@@ -228,7 +243,8 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
             planReview.sourceFreshness === 'PINNED_CLEAN_AT_REVIEW'
             ? 'Independently inspect planReview Contract/DAG and both hashes before explicitly preparing an unapproved Workflow'
             : 'Reobserve the exact clean repository and replan before preparing a Workflow'
-        } : {}), hostLiveAcceptance: 'UNVERIFIED' } };
+        } : {}), ...(prepareCommand ? { prepareCommand } : {}),
+        hostLiveAcceptance: 'UNVERIFIED' } };
     } catch (error) {
       // Only a genuinely reserved Host Turn can supply a bound session ID.
       // Do not manufacture a replayable request, approval or status from a
@@ -423,10 +439,13 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     // Once the exact repository has been independently reobserved, surface
     // the same immutable Contract/DAG preview as review-codex-plan in this
     // Goal-level handoff. Reading hashes is not signing or approving them.
+    const prepareCommand = data.status === 'AWAIT_WORKFLOW_REVIEW'
+      ? reviewedGoalPrepareCommand(review, args[0], o.repository) : null;
     return { exitCode:2, data:{
       ...data, sourceFreshness:'PINNED_CLEAN_AT_REVIEW',
       ...(data.status === 'AWAIT_WORKFLOW_REVIEW' ? { planReview:review } : {}),
-      ...(data.status === 'WORKFLOW_IN_PROGRESS' ? { workflowReview:review } : {})
+      ...(data.status === 'WORKFLOW_IN_PROGRESS' ? { workflowReview:review } : {}),
+      ...(prepareCommand ? { prepareCommand } : {})
     } };
   }
   if (action === 'codex-planning-status') {
