@@ -97,9 +97,13 @@ test('read-only session remains tool rejecting; workspace mode produces scoped p
    outputSchema:{type:'object'}};
  const p=createCodexTurnProtocol(base);
  p.accept({id:1,result:{}});
+ p.accept({id:2,result:{thread:{id:'t'}}});
+ p.accept({id:3,result:{turn:{id:'u'}}});
+ // Reach the read-only tool check with valid, bound Thread/Turn identities.
+ // Unbound items are separately rejected by the protocol identity tests.
  assert.throws(()=>p.accept({method:'item/started',params:{
    threadId:'t',turnId:'u',item:{id:'tool',type:'fileChange',status:'completed'}
- }}),/tool|unbound/);
+ }}),/tool/);
  const writable=createCodexTurnProtocol({...base,workspaceWrite:true});
  const next=writable.accept({id:1,result:{}});
  assert.equal(next[1].params.sandbox,'workspace-write');

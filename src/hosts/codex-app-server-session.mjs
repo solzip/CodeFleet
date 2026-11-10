@@ -54,10 +54,10 @@ export function createCodexTurnProtocol({ cwd, model, prompt, outputSchema, work
     name: 'codefleet', title: 'CodeFleet Reserved Turn', version: '0.1'
   } } }];
   const count = method => notifications.set(method, (notifications.get(method) ?? 0) + 1);
-  const safeItem = item => {
+  const safeItem = (item, completed = false) => {
     if (!object(item)) reject('Invalid Host item; effect is uncertain');
     if (INERT_ITEMS.has(item.type)) {
-      if (item.type === 'agentMessage' && typeof item.text === 'string') finalMessage = item.text;
+      if (item.type === 'agentMessage' && completed && typeof item.text === 'string') finalMessage = item.text;
       return;
     }
     if (!workspaceWrite || !recordId(item.id) ||
@@ -86,15 +86,17 @@ export function createCodexTurnProtocol({ cwd, model, prompt, outputSchema, work
         count(message.method);
         if (message.method === 'item/started' || message.method === 'item/completed') {
           if (!object(message.params) || !recordId(message.params.threadId) || !recordId(message.params.turnId)) reject('Unbound Host item notification');
-          if (threadId && message.params.threadId !== threadId) reject('Host item thread identity mismatch');
-          if (turnId && message.params.turnId !== turnId) reject('Host item Turn identity mismatch');
-          safeItem(message.params.item);
+          // An unbound agentMessage must not seed a later valid Turn's final receipt.
+          // Requiring both reserved IDs also fails closed on pre-response races.
+          if (!threadId || !turnId || message.params.threadId !== threadId ||
+              message.params.turnId !== turnId) reject('Host item thread/Turn identity mismatch');
+          safeItem(message.params.item, message.method === 'item/completed');
         }
         if (message.method === 'turn/completed') {
           const params = message.params;
           if (phase !== 'RUNNING' || !object(params) || params.threadId !== threadId ||
               !object(params.turn) || params.turn.id !== turnId) reject('Unexpected or unbound Turn completion');
-          for (const item of params.turn.items ?? []) safeItem(item);
+          for (const item of params.turn.items ?? []) safeItem(item, true);
           if (params.turn.status !== 'completed') reject('Host Turn was not completed');
           if (!finalMessage || Buffer.byteLength(finalMessage) > 128000) reject('Missing or oversized final agent message');
           phase = 'COMPLETE';

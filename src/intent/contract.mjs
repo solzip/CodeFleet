@@ -13,6 +13,8 @@ function list(xs) { if (!Array.isArray(xs) || xs.length > 20) throw Error('Expec
 function validateDraftWorkItems(items, draft) {
   if (!Array.isArray(items) || items.length < 2 || items.length > 5)
     throw Error('Planned WorkItem DAG must have 2..5 bounded items');
+  if (new Set(draft.criteria.map(criterion => criterion.description)).size !== draft.criteria.length)
+    throw Error('Duplicate Planned WorkItem criterion description');
   const ids = new Set(), owned = new Set(), criteria = new Set(),
     allFiles = new Set(draft.files), allTests = new Set(draft.tests);
   const byId = new Map();

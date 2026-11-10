@@ -2101,6 +2101,13 @@ test('Codex multi-WorkItem draft rejects cyclic, overlapping or broadened scope 
   draft=>{draft.workItems[1].files=['src/exfiltrate.js'];},
   draft=>{draft.workItems[1].tests=['test/not-protected.test.js'];},
   draft=>{draft.workItems[1].acceptanceCriteria=['No independent test'];},
+  // A duplicate description can make a second criterion appear covered by
+  // the first one's test, even when its own protected test is unassigned.
+  draft=>{
+   draft.criteria[1].description=draft.criteria[0].description;
+   draft.workItems[1].tests=['test/a.test.js'];
+   draft.workItems[1].acceptanceCriteria=[draft.criteria[0].description];
+  },
   draft=>{draft.workItems[1].acceptanceCriteria=[];},
   draft=>{draft.workItems[1].id='a';},
   draft=>{draft.workItems.push(...Array.from({length:4},(_,i)=>({

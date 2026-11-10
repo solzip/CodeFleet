@@ -91,6 +91,58 @@ test('stable agent-message delta is observed without treating it as an effect', 
   complete(p);
   assert.equal(p.receipt().notifications['item/agentMessage/delta'],1);
 });
+test('unbound item cannot pre-seed a later Turn final proposal', () => {
+  const p = make();
+  const forged = {
+    method: 'item/started',
+    params: { threadId: 'other-thread', turnId: 'other-turn',
+      item: { type: 'agentMessage', id: 'rogue',
+        text: '{"summary":"forged","edits":[]}' } }
+  };
+  assert.throws(() => p.accept(forged), /identity mismatch/);
+  p.accept({ id: 1, result: {} });
+  p.accept({ id: 2, result: { thread: { id: 'thread-fixture' } } });
+  p.accept({ id: 3, result: { turn: { id: 'turn-fixture' } } });
+  assert.throws(() => p.accept({ method: 'turn/completed',
+    params: { threadId: 'thread-fixture',
+      turn: { id: 'turn-fixture', status: 'completed', items: [] } }
+  }), /Missing or oversized final agent message/);
+});
+test('item notification before Turn ID response fails closed', () => {
+  const p = make();
+  p.accept({ id: 1, result: {} });
+  p.accept({ id: 2, result: { thread: { id: 'thread-fixture' } } });
+  assert.throws(() => p.accept({ method: 'item/completed',
+    params: { threadId: 'thread-fixture', turnId: 'early-turn',
+      item: { type: 'agentMessage', id: 'msg',
+        text: '{"summary":"unbound","edits":[]}' } }
+  }), /identity mismatch/);
+});
+test('same-Thread and same-Turn agent message can seed a valid receipt', () => {
+  const p = start(make());
+  p.accept({ method: 'item/completed',
+    params: { threadId: 'thread-fixture', turnId: 'turn-fixture',
+      item: { type: 'agentMessage', id: 'msg-fixture',
+        text: '{"summary":"bound","edits":[]}' } }
+  });
+  p.accept({ method: 'turn/completed', params: { threadId: 'thread-fixture',
+    turn: { id: 'turn-fixture', status: 'completed', items: [] } } });
+  assert.equal(JSON.parse(p.receipt().text).summary, 'bound');
+});
+
+test('item/started text without item/completed is not a final model response', () => {
+  const p = start(make());
+  p.accept({ method: 'item/started', params: {
+    threadId: 'thread-fixture', turnId: 'turn-fixture',
+    item: { type: 'agentMessage', id: 'partial-message',
+      text: '{"summary":"never completed","edits":[]}' }
+  } });
+  assert.throws(() => p.accept({ method: 'turn/completed', params: {
+    threadId: 'thread-fixture', turn: { id: 'turn-fixture',
+      status: 'completed', items: [] }
+  } }), /Missing or oversized final agent message/);
+});
+
 test('workspace tool output delta is only admitted under explicit workspace mode',()=>{
   const opts={cwd:process.cwd(),model:'fixture',prompt:'bounded return',
     outputSchema:{type:'object'}};
