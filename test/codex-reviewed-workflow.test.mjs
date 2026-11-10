@@ -648,6 +648,11 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
   assert.equal(planned.data.status,'VALIDATED');
   assert.equal(planned.data.hostLiveAcceptance,'UNVERIFIED');
   const sessionId=planned.data.evidence.sessionId;
+  assert.equal(planned.data.planningSessionId,sessionId);
+  assert.equal(planned.data.planReview.status,'REVIEW_REQUIRED');
+  assert.equal(planned.data.planReview.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+  assert.equal(planned.data.planReview.executionGranted,false);
+  assert.equal(planned.data.planReview.approved,false);
   assert.equal(planningScopes.length,1);
   assert.deepEqual(planningTurns,[sessionId]);
   const review=await productCli([
@@ -655,6 +660,8 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
   ],f.store.directory);
   assert.equal(review.exitCode,0,review.data?.error);
   assert.equal(review.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+  assert.deepEqual(planned.data.planReview,review.data,
+    'Single-command preview must match the separate independent Plan review');
   assert.equal(review.data.workflowHash,f.result.workflowPreview.workflow.workflowHash);
   const staged=await productCli([
     'prepare-codex-workflow',sessionId,'--repository',f.repo,
@@ -1430,6 +1437,11 @@ test('trusted CLI can route a natural-language Goal through reviewed Codex plann
   assert.equal(accepted.data.hostReceipt.threadId,'offline-thread');
   assert.equal(accepted.data.authority,'PROVIDER_REPORTED_ONLY');
   assert.equal(accepted.data.hostLiveAcceptance,'UNVERIFIED');
+  assert.equal(accepted.data.planningSessionId,accepted.data.evidence.sessionId);
+  assert.equal(accepted.data.planReview.status,'REVIEW_REQUIRED');
+  assert.equal(accepted.data.planReview.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+  assert.equal(accepted.data.planReview.workItems.length,1);
+  assert.match(accepted.data.nextAction,/inspect planReview Contract\/DAG/);
   assert.equal(factoryCalls,1);
   assert.equal(planningGrants,1);
   assert.equal(fakeTurns,1);

@@ -40,7 +40,7 @@ codefleet-alpha objective codex-goal-progress <planning-session-id> [--repositor
 codefleet-alpha objective review-codex-plan <planning-session-id> [--repository ABSOLUTE_PATH] (read-only pinned Contract/DAG review; optional clean Git checkout check, never grants execution)
 codefleet-alpha objective review-codex-workflow <workflow-id> [--repository ABSOLUTE_PATH] (read-only Contract/DAG, approval and optional clean Git baseline check; no execution)
 codefleet-alpha objective plan-codex-goal "natural-language Goal" --repository ABSOLUTE_PATH
-  (trusted Host embedding only; independent read-only planning Turn grant, model usage may be billed; no Workflow approval or source writes)
+  (trusted Host embedding only; read-only Host planning with current-source Contract/DAG review in response; model usage may be billed; no Workflow approval or source writes)
 codefleet-alpha objective propose-codex-bootstrap-files <task-id> <local-edit-item-id>
   (trusted Host embedding only; separately approved NEW_PROJECT Fileset proposal, no filesystem writes or execution grant)
 codefleet-alpha objective advance-codex-bootstrap <task-id> [--repair-item <local-edit-item-id> | --verification-request REQUEST.json]
@@ -214,8 +214,21 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     // flags or a Goal string, nor does it approve/promote the resulting DAG.
     try {
       const data = await binding.facade.planExisting(o.repository, args[0], { cwd: o.repository });
+      // Include the current-source, independent Contract/DAG review in the
+      // planning handoff. A VALIDATED Host result is not a Workflow approval,
+      // execution grant or evidence of actual Codex Host Live acceptance.
+      const planningSessionId = data.evidence?.sessionId ?? null;
+      const planReview = data.status === 'VALIDATED' && planningSessionId
+        ? await inspectReviewedCodexPlanAtSource(store, planningSessionId, o.repository)
+        : null;
       return { exitCode: data.status === 'VALIDATED' ? 0 : 2,
-        data: { ...data, hostLiveAcceptance: 'UNVERIFIED' } };
+        data: { ...data, planningSessionId, ...(planReview ? {
+          planReview,
+          nextAction: planReview.status === 'REVIEW_REQUIRED' &&
+            planReview.sourceFreshness === 'PINNED_CLEAN_AT_REVIEW'
+            ? 'Independently inspect planReview Contract/DAG and both hashes before explicitly preparing an unapproved Workflow'
+            : 'Reobserve the exact clean repository and replan before preparing a Workflow'
+        } : {}), hostLiveAcceptance: 'UNVERIFIED' } };
     } catch (error) {
       // Only a genuinely reserved Host Turn can supply a bound session ID.
       // Do not manufacture a replayable request, approval or status from a

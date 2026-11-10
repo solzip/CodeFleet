@@ -1647,3 +1647,20 @@ against the same persisted TaskReport at proposal, pending approval, materialize
 state and Local-verification handoff. This is not native Codex Host Live,
 protected verification or final independent Objective acceptance. The new
 commit requires its own Windows/Linux CI before claiming offline PASS.
+
+## Single-command Goal Planning returns a current-source Contract/DAG preview (new CI required)
+
+The trusted `plan-codex-goal` result now includes the Planning session ID and
+the existing independent `review-codex-plan --repository` projection for a
+persisted VALIDATED draft. The response exposes the source-bound Workflow and
+source-contract hashes, ordered WorkItems/dependencies, mandatory final
+acceptance criteria and limits immediately after the Host planning Turn.
+A changed/mismatched repository produces a BLOCKED review rather than a
+reviewable Contract; an unvalidated or denied plan has no review preview.
+The separate explicit `prepare-codex-workflow` confirmation, Workflow approval,
+authenticated Operator admission, Host grant and Lease remain mandatory.
+Offline regression assertions compare the embedded projection to the standalone
+review and require no Workflow/Attempt creation or additional Host Turn.
+The current environment cannot check out the full repo or run Node 24/Docker;
+Windows/Linux CI for this new head is the pending independent offline check.
+This is not native Codex Host Live or Objective E2E acceptance.
