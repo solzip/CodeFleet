@@ -517,10 +517,19 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
   // delivery path used by the synthetic A→B fixture. No model, credential,
   // real Host executable, protected backend or real user repository is used.
   const f=await fixture(t);
-  const hostTurns=[], verifierCalls=[], grants=[];
+  const hostTurns=[], verifierCalls=[], grants=[], planningTurns=[], planningScopes=[];
   const approvedCriteria=[{id:'C1',requiredAuthority:'LOCAL_EXECUTED'}];
   const createApi=store=>createCodexMvpFacade(store,{
     executable:process.execPath,model:'OFFLINE_FAKE_HOST',enableHostTurns:true,
+    authorizePlanning:async scope=>{
+      planningScopes.push(scope);
+      assert.equal(scope.objective,goal);
+      assert.equal(scope.repositoryRoot,await realpath(f.repo));
+      assert.equal(scope.requestedHostPolicy.writes,false);
+      assert.equal(scope.requestedHostPolicy.network,'deny');
+      assert.equal(scope.executionGranted,false);
+      return true;
+    },
     authorizeReviewedWorkflow:async scope=>{
       assert.equal(scope.executionGranted,false);
       assert.equal(scope.workflowHash,f.result.workflowPreview.workflow.workflowHash);
@@ -537,6 +546,26 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
     },
     transport:async request=>{
       const prompt=JSON.parse(request.prompt);
+      if(prompt.kind==='CODEFLEET_HOST_PLANNING_V1'){
+        planningTurns.push(prompt.sessionId);
+        assert.equal(prompt.originalObjective,goal);
+        assert.equal(request.cwd,await realpath(f.repo));
+        const draft={schemaVersion:2,objective:goal,
+          base:prompt.context.discovery.base,files:['src/a.js'],tests:['test/a.test.js'],
+          criteria:[{description:'Arithmetic regression passes',
+            method:'protected-tests',tests:['test/a.test.js']}],
+          risks:[],unknowns:[],effects:['local-edit']};
+        return {
+          terminalStatus:'completed',threadId:'fake-goal-planning-thread',
+          turnId:'fake-goal-planning-turn',authority:'PROVIDER_REPORTED_ONLY',
+          protectedVerified:false,
+          text:JSON.stringify({sessionId:prompt.sessionId,requestHash:prompt.requestHash,
+            proposal:{draft,references:[
+              {path:'src/a.js',line:1,quote:'export function'},
+              {path:'test/a.test.js',line:1,quote:'import test'}
+            ],inferences:[]}})
+        };
+      }
       assert.equal(prompt.workItemId,'change');
       hostTurns.push(prompt.workItemId);
       return {
@@ -589,15 +618,40 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
       }
     }
   });
-  // Reopen the same persisted Store via the actual trusted CLI wrapper for
-  // execution. This is not a new scheduler or an Operator bypass.
+  // Start at the real trusted Goal entry, not a fixture-provided Planning
+  // result. Exercise the entire public review/prepare boundary before the
+  // existing authenticated Operator and Controller/Host workflow lane.
+  const planned=await productCli([
+    'plan-codex-goal',goal,'--repository',f.repo
+  ],f.store.directory,{createCodexAdmission:store=>({facade:createApi(store)})});
+  assert.equal(planned.exitCode,0,planned.data?.error);
+  assert.equal(planned.data.status,'VALIDATED');
+  assert.equal(planned.data.hostLiveAcceptance,'UNVERIFIED');
+  const sessionId=planned.data.evidence.sessionId;
+  assert.equal(planningScopes.length,1);
+  assert.deepEqual(planningTurns,[sessionId]);
+  const review=await productCli([
+    'review-codex-plan',sessionId,'--repository',f.repo
+  ],f.store.directory);
+  assert.equal(review.exitCode,0,review.data?.error);
+  assert.equal(review.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+  assert.equal(review.data.workflowHash,f.result.workflowPreview.workflow.workflowHash);
+  const staged=await productCli([
+    'prepare-codex-workflow',sessionId,'--repository',f.repo,
+    '--hash',review.data.workflowHash,
+    '--source-hash',review.data.sourceContractHash
+  ],f.store.directory);
+  assert.equal(staged.exitCode,0,staged.data?.error);
+  assert.equal(staged.data.reviewAuthority,'EXPLICIT_LOCAL_HASH_CONFIRMATION_ONLY');
+  assert.equal(staged.data.executionGranted,false);
+  assert.equal(staged.data.approved,false);
   const api=createApi(f.store);
-  const created=await api.prepareReviewedExistingWorkflow(f.repo,f.request.sessionId);
+  const created=staged.data;
   assert.equal(created.state,'WAITING_APPROVAL');
   assert.equal(created.executionGranted,false);
   const before=await api.status(created.workflowId);
   assert.equal(before.objectiveComplete,false);
-  const pendingGoal=await productCli(['codex-goal-progress',f.request.sessionId],f.store.directory);
+  const pendingGoal=await productCli(['codex-goal-progress',sessionId],f.store.directory);
   assert.equal(pendingGoal.exitCode,2);
   assert.equal(pendingGoal.data.status,'WORKFLOW_IN_PROGRESS');
   assert.equal(pendingGoal.data.workflowId,created.workflowId);
@@ -612,7 +666,7 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
   });
   const operatorScopes=[];
   const goalCommand=await productCli([
-    'run-codex-goal',f.request.sessionId,'--hash',created.workflowHash
+    'run-codex-goal',sessionId,'--hash',created.workflowHash
   ],f.store.directory,{
     createCodexAdmission:store=>({
       facade:createApi(store),
@@ -620,7 +674,7 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
         operatorScopes.push(scope);
         assert.equal(scope.kind,'CODEFLEET_AUTHENTICATED_CODEX_ENTRY_V1');
         assert.equal(scope.workflowId,created.workflowId);
-        assert.equal(scope.planningSessionId,f.request.sessionId);
+        assert.equal(scope.planningSessionId,sessionId);
         assert.equal(scope.workflowHash,created.workflowHash);
         assert.equal(scope.protectedVerified,false);
         assert.equal(scope.resume,false);
@@ -632,7 +686,7 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
     })
   });
   assert.equal(goalCommand.exitCode,0,goalCommand.data?.error);
-  assert.equal(goalCommand.data.planningSessionId,f.request.sessionId);
+  assert.equal(goalCommand.data.planningSessionId,sessionId);
   assert.equal(operatorScopes.length,1);
   const completed=goalCommand.data;
   assert.equal(completed.workflowState,'COMPLETED',completed.objective?.reason);
@@ -640,6 +694,7 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
   assert.equal(completed.objective.protection,'UNPROTECTED');
   assert.equal(completed.hostLiveAcceptance,'UNVERIFIED');
   assert.equal(completed.protectedVerified,false);
+  assert.deepEqual(planningTurns,[sessionId]);
   assert.deepEqual(hostTurns,['change']);
   // The Controller independently checks baseline and candidate for both the
   // WorkItem and final integration, using the same pinned regression suite.
@@ -652,7 +707,7 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
   const observed=await dispatchProduct(['delivered-status',created.workflowId],{store:f.store});
   assert.equal(observed.exitCode,0);
   assert.equal(observed.data.objectiveComplete,true);
-  const goalComplete=await productCli(['codex-goal-progress',f.request.sessionId],f.store.directory);
+  const goalComplete=await productCli(['codex-goal-progress',sessionId],f.store.directory);
   assert.equal(goalComplete.exitCode,0);
   assert.equal(goalComplete.data.status,'OBJECTIVE_COMPLETE');
   assert.equal(goalComplete.data.objectiveComplete,true);
@@ -665,7 +720,7 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
   const settledEvents=f.store.events(created.workflowId).length;
   let onCompletionGrants=0;
   const alreadyDone=await productCli([
-    'run-codex-goal',f.request.sessionId,'--hash',created.workflowHash
+    'run-codex-goal',sessionId,'--hash',created.workflowHash
   ],f.store.directory,{createCodexAdmission:store=>({
     facade:createCodexMvpFacade(store,{
       executable:process.execPath,model:'OFFLINE_NO_REEXECUTION'
@@ -682,7 +737,7 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
   const drifted=await api.status(created.workflowId);
   assert.equal(drifted.objectiveComplete,false);
   assert.equal(drifted.targetDrift,true);
-  const goalDrift=await productCli(['codex-goal-progress',f.request.sessionId],f.store.directory);
+  const goalDrift=await productCli(['codex-goal-progress',sessionId],f.store.directory);
   assert.equal(goalDrift.exitCode,2);
   assert.equal(goalDrift.data.objectiveComplete,false);
   assert.equal(goalDrift.data.status,'WORKFLOW_IN_PROGRESS');

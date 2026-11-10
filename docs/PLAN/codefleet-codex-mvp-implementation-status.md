@@ -1445,3 +1445,25 @@ after a user file edit. The preexisting denial and hash-integrity tests are
 retained. It is not a native Codex model Turn, independent real-world
 verifier/protected OS isolation, public Operator authentication, or final
 MVP acceptance. Fresh Windows/Linux GitHub Actions CI is required.
+
+## Natural-language Goal CLI → reviewed Contract → authenticated execution → Objective joined fixture (CI pending)
+
+The synthetic accepted Goal trace now begins with a **fresh** trusted
+`plan-codex-goal` invocation, rather than pre-seeding a validated Planning
+result and invoking only the downstream execution command. The same original
+Goal is sent through the managed read-only Planning Turn using a fake Codex
+transport and independently reviewed immutable repository/context scope.
+The returned session ID drives the actual read-only `review-codex-plan`
+command, explicit hash-confirmed `prepare-codex-workflow`, separate
+Workflow approval and `run-codex-goal` with authenticated-embedding-only
+Operator and managed-Host grants. The existing Controller then applies a
+bounded fake proposal, performs independent fake regression checks, approved
+Local Delivery and criterion-indexed delivered Objective Judge. After
+Objective COMPLETE, another Goal command must not dispatch a Turn, and
+source drift must revoke the current completion projection.
+
+This extends the offline **product-CLI-to-product-CLI** acceptance coverage
+without modifying the underlying scheduler or adding a grant. It does not
+establish a native billable Codex model Turn, production Operator
+authentication, protected sandbox or independent real-world Objective
+acceptance. The new revision requires its own Windows/Linux GitHub CI.
