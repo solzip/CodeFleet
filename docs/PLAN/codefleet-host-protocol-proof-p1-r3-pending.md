@@ -66,3 +66,27 @@ copy, or new Fixture/manifest.
 
 No R3 execution command is authorized or published until the new private
 Fixture exists with reviewed hashes and separate explicit owner approval.
+
+## Read-only R3 source/manifest identity packet
+
+The candidate source and a deterministic **new, unapproved** manifest
+serialization can now be inspected directly from the reviewed PR #22 source,
+without starting Codex or creating or modifying a Fixture:
+
+~~~powershell
+node tools/proofs/p1-r3-source-packet.mjs
+~~~
+
+The tool accepts **no** command-line options, rejects --execute and
+--prepare, pins the reviewed source-client SHA-256, computes the fixed input
+and manifest SHA-256 from exact bytes, and emits an unapproved binding.
+The resulting candidate manifest bytes are exercised against the existing
+P1 strict identity validator using a *disposable fake* Codex file in CI.
+
+This packet does **not** observe the owner's native Codex binary, file
+system, ACLs, actual private Fixture, or owner approval. Its result says
+fixturePrepared=false / nativeCodexObserved=false /
+executionAuthorized=false / hostLiveVerified=false. Use these calculated
+identities only as inputs to a **subsequent** separately approved private
+Fixture preparation and local owner audit. Do not treat a newly printed
+manifest hash as approval of any real manifest on disk.
