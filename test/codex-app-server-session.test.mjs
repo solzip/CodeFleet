@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert';
 import test from 'node:test';
-import { createCodexTurnProtocol, CodexTurnProtocolError } from '../src/hosts/codex-app-server-session.mjs';
+import { EventEmitter } from 'node:events';
+import { createCodexTurnProtocol, CodexTurnProtocolError, runCodexReadOnlyTurn } from '../src/hosts/codex-app-server-session.mjs';
 
 const settings = () => ({
   cwd: process.cwd(), model: 'codex-fixture', prompt: 'Return a bounded structured proposal',
@@ -154,4 +155,81 @@ test('workspace tool output delta is only admitted under explicit workspace mode
   workspace.accept({id:1,result:{}});
   assert.deepEqual(workspace.accept({method:'item/commandExecution/outputDelta',
     params:{delta:'untrusted tool output'}}),[]);
+});
+
+const frame = message => JSON.stringify(message) + '\n';
+const validFrames = () => [
+  { id: 1, result: { userAgent: 'fixture' } },
+  { id: 2, result: { thread: { id: 'thread-fixture' } } },
+  { id: 3, result: { turn: { id: 'turn-fixture' } } },
+  { method: 'turn/completed', params: { threadId: 'thread-fixture',
+    turn: { id: 'turn-fixture', status: 'completed', items: [
+      { type: 'agentMessage', id: 'msg-fixture', text: '{"summary":"safe","edits":[]}' }
+    ] } } }
+];
+
+// Synthetic stdio only: no Codex binary, account, model, or workspace effect.
+async function runFakeTransport(chunks, { exitBeforeData = false } = {}) {
+  const calls = [];
+  const spawnImpl = () => {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.stdin = { write(data) { calls.push(JSON.parse(data)); }, end() {} };
+    child.exitCode = null;
+    child.signalCode = null;
+    child.kill = () => true;
+    queueMicrotask(() => {
+      if (exitBeforeData) { child.exitCode = 0; child.emit('exit', 0, null); }
+      for (const chunk of chunks) child.stdout.emit('data', Buffer.from(chunk));
+      if (!exitBeforeData) { child.exitCode = 0; child.emit('exit', 0, null); }
+      child.emit('close', 0, null);
+    });
+    return child;
+  };
+  const result = await runCodexReadOnlyTurn({
+    executable: process.execPath, cwd: process.cwd(), model: 'fixture',
+    prompt: 'Return exactly the authorized bounded proposal',
+    outputSchema: { type: 'object' }, timeoutMs: 3000, spawnImpl,
+  });
+  return { result, calls };
+}
+
+test('transport accepts exactly one completed Turn after stdout is fully drained', async () => {
+  const { result, calls } = await runFakeTransport([validFrames().map(frame).join('')]);
+  assert.equal(result.processExitCode, 0);
+  assert.equal(JSON.parse(result.text).summary, 'safe');
+  assert.deepEqual(calls.map(m => m.method),
+    ['initialize', 'initialized', 'thread/start', 'turn/start']);
+});
+
+test('transport refuses a post-completion server request in the same stdout chunk', async () => {
+  const unsolicited = { id: 99, method: 'item/commandExecution/requestApproval',
+    params: { command: 'unapproved' } };
+  const stream = [...validFrames(), unsolicited].map(frame).join('');
+  await assert.rejects(runFakeTransport([stream]), error => {
+    assert.equal(error.effectStatus, 'UNVERIFIED');
+    assert.match(error.message, /after completed Turn/);
+    return true;
+  });
+});
+
+test('transport refuses a post-completion event arriving as another chunk', async () => {
+  const valid = validFrames().map(frame).join('');
+  const extra = frame({ method: 'unregistered/notification', params: {} });
+  await assert.rejects(runFakeTransport([valid, extra]), /after completed Turn/);
+});
+
+test('transport rejects trailing unterminated JSONL after a completed Turn', async () => {
+  const valid = validFrames().map(frame).join('');
+  await assert.rejects(
+    runFakeTransport([valid + '{"id":99,"method":"unapproved/']),
+    /unterminated JSONL/
+  );
+});
+
+test('transport evaluates completed Turn only after the process close event', async () => {
+  const { result } = await runFakeTransport([validFrames().map(frame).join('')],
+    { exitBeforeData: true });
+  assert.equal(result.terminalStatus, 'completed');
 });

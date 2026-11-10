@@ -208,13 +208,19 @@ export async function runCodexReadOnlyTurn({ executable, cwd, model, prompt, out
           if (Buffer.byteLength(line) > MAX_LINE) reject('Host JSONL line too large');
           const outgoing = protocol.accept(JSON.parse(line));
           for (const message of outgoing) send(message);
-          if (protocol.completed) { child.stdin.end(); break; }
+          if (protocol.completed) child.stdin.end();
         }
       } catch (e) { fail(e); }
     });
-    child.once('exit', (code, signal) => {
+    // Node's 'exit' event may precede the final stdout chunks. Only 'close'
+    // confirms stdio has been drained; extra or partial protocol messages
+    // after completion must never be silently accepted as a valid receipt.
+    child.once('close', (code, signal) => {
       if (settled) return;
-      if (!protocol.completed || code !== 0 || signal !== null) return fail(new CodexTurnProtocolError('Host exited without accepted completed Turn'));
+      if ((buffer + decoder.end()).trim())
+        return fail(new CodexTurnProtocolError('Host stdout ended with unterminated JSONL; no replay'));
+      if (!protocol.completed || code !== 0 || signal !== null)
+        return fail(new CodexTurnProtocolError('Host exited without accepted completed Turn'));
       settled = true; clear();
       resolve({ ...protocol.receipt(), processExitCode: code,
         observedStdoutBytes: stdoutBytes, observedStderrBytes: stderrBytes });
