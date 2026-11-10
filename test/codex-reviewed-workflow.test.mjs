@@ -524,7 +524,8 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
     authorizePlanning:async scope=>{
       planningScopes.push(scope);
       assert.equal(scope.objective,goal);
-      assert.equal(scope.repositoryRoot,await realpath(f.repo));
+      // Windows can supply an 8.3 short path while realpath returns its long form.
+      assert.equal(await realpath(scope.repositoryRoot),await realpath(f.repo));
       assert.equal(scope.requestedHostPolicy.writes,false);
       assert.equal(scope.requestedHostPolicy.network,'deny');
       assert.equal(scope.executionGranted,false);
@@ -549,7 +550,7 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
       if(prompt.kind==='CODEFLEET_HOST_PLANNING_V1'){
         planningTurns.push(prompt.sessionId);
         assert.equal(prompt.originalObjective,goal);
-        assert.equal(request.cwd,await realpath(f.repo));
+        assert.equal(await realpath(request.cwd),await realpath(f.repo));
         const draft={schemaVersion:2,objective:goal,
           base:prompt.context.discovery.base,files:['src/a.js'],tests:['test/a.test.js'],
           criteria:[{description:'Arithmetic regression passes',
