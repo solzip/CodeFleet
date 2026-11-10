@@ -35,7 +35,7 @@ codefleet-alpha objective run|resume <task-id> --allow-model
 codefleet-alpha objective status [task-id] | report <task-or-run-id>
 codefleet-alpha objective delivered-status <workflow-id> (read-only delivered-tree Objective acceptance; never starts Host or writes State)
 codefleet-alpha objective workflow-progress <workflow-id> (read-only DAG/Repair progress and current delivered Objective; never grants execution)
-codefleet-alpha objective codex-planning-status <planning-session-id> (read-only Host Planning lifecycle and no-replay recovery handoff)
+codefleet-alpha objective codex-planning-status <planning-session-id> [--repository ABSOLUTE_PATH] (read-only Host Planning lifecycle; optional current-source check for validated results, no-replay recovery)
 codefleet-alpha objective codex-goal-progress <planning-session-id> (read-only Goal→Planning→Workflow/DAG→delivered Objective and no-replay continuation)
 codefleet-alpha objective review-codex-plan <planning-session-id> [--repository ABSOLUTE_PATH] (read-only pinned Contract/DAG review; optional clean Git checkout check, never grants execution)
 codefleet-alpha objective review-codex-workflow <workflow-id> [--repository ABSOLUTE_PATH] (read-only Contract/DAG, approval and optional clean Git baseline check; no execution)
@@ -194,7 +194,7 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
   const [action, ...rest] = argv;
   if (!action || ['help', '--help'].includes(action)) return { exitCode: 0, data: { schemaVersion: 1, help } };
   const { positional: args, options: o } = parse(rest);
-  if (o.repository !== undefined && !['plan-codex-goal', 'review-codex-plan', 'review-codex-workflow', 'prepare-codex-workflow'].includes(action))
+  if (o.repository !== undefined && !['plan-codex-goal', 'codex-planning-status', 'review-codex-plan', 'review-codex-workflow', 'prepare-codex-workflow'].includes(action))
     throw Error('--repository is only valid for Codex planning/Workflow review or pending Workflow creation');
   if (action === 'plan-codex-goal') {
     requireCodexGoalEntryArgs(args, o);
@@ -375,9 +375,25 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
   }
   if (action === 'codex-planning-status') {
     if (args.length !== 1 || !args[0] || args[0].startsWith('-') ||
-        Object.keys(o).length !== 0)
-      throw Error('codex-planning-status requires exactly one Planning session ID and no execution/approval options');
+        Object.keys(o).some(key => key !== 'repository') ||
+        (o.repository !== undefined && !path.isAbsolute(o.repository)))
+      throw Error('codex-planning-status requires one Planning session ID and optional absolute --repository only; no execution/approval options');
     const data = inspectCodexPlanningStatus(store, args[0]);
+    // Persisted VALIDATED is not a promise that this checkout is still the
+    // reviewed repository. Reuse the existing strict read-only source observer;
+    // no new approval, Store mutation or Host invocation is introduced.
+    if (o.repository && data.status === 'SUBMITTED' && data.validationStatus === 'VALIDATED') {
+      const review = await inspectReviewedCodexPlanAtSource(store, args[0], o.repository);
+      if (review.status !== 'REVIEW_REQUIRED')
+        return { exitCode:2, data: {
+          ...data, sourceFreshness:'STALE_OR_MISMATCHED', sourceReview:'BLOCKED',
+          reason:'Current repository differs from the persisted validated Planning source; review or replan before preparing a Workflow',
+          continuation:{kind:'REVIEW_SOURCE_OR_REPLAN',automaticReplay:false,executionGranted:false}
+        } };
+      return { exitCode:0, data: {
+        ...data, sourceFreshness:'PINNED_CLEAN_AT_REVIEW', sourceReview:'REVIEW_REQUIRED'
+      } };
+    }
     return { exitCode:['BLOCKED','NOT_FOUND','UNAVAILABLE'].includes(data.status) ? 2 : 0, data };
   }
   if (action === 'review-codex-plan') {

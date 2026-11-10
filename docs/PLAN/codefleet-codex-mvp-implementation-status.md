@@ -1392,3 +1392,16 @@ provenance, and prohibited flags. This improves one-Goal operator UX but
 does not provide public Operator authentication, Host Live proof, Protected
 confinement, cost measurements or final Objective E2E acceptance.
 Fresh Windows/Linux CI is required for this commit.
+
+## Current-source check for persisted Codex Planning status (offline CI pending)
+
+The read-only `codex-planning-status <session-id> --repository ABSOLUTE_PATH` now
+reuses the existing strict planning source observer for a persisted VALIDATED
+result. A clean pinned checkout shows `PINNED_CLEAN_AT_REVIEW`; a dirty,
+changed-HEAD or different repository reports `STALE_OR_MISMATCHED`, exits
+pending and directs explicit source review/replanning rather than presenting
+the original Contract/DAG as ready for promotion. Unsure/RECONCILING Host Turns
+keep their no-replay handoff and are not silently redispatched. The new test
+checks current and mutated source, invalid paths and zero Store events/runs.
+This is advisory read-only UX, not an approval, Host grant, independent Judge
+or Host Live acceptance. Windows/Linux CI for this new head is required.

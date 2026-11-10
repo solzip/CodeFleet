@@ -1437,6 +1437,37 @@ test('public Codex Planning lifecycle status is read-only and never treats valid
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,runs);
 });
 
+test('read-only Codex Planning status verifies current repository and directs stale-source recovery',async t=>{
+ const f=await fixture(t),sessionId=f.request.sessionId;
+ const events=f.store.db.prepare('SELECT count(*) AS n FROM events').get().n;
+ const runs=f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n;
+ const cmd=['codex-planning-status',sessionId,'--repository',f.repo];
+ const clean=await productCli(cmd,f.store.directory);
+ assert.equal(clean.exitCode,0,clean.data?.error);
+ assert.equal(clean.data.status,'SUBMITTED');
+ assert.equal(clean.data.sourceReview,'REVIEW_REQUIRED');
+ assert.equal(clean.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+ assert.equal(clean.data.continuation.kind,'REVIEW_CONTRACT_AT_CURRENT_SOURCE');
+ assert.equal(clean.data.executionGranted,false);
+ const invalid=await productCli(
+   ['codex-planning-status',sessionId,'--repository','relative/repo'],f.store.directory);
+ assert.equal(invalid.exitCode,1);
+ assert.match(invalid.data.error,/optional absolute --repository only/);
+ await writeFile(join(f.repo,'src/a.js'),'// source changed after the saved plan\n');
+ const stale=await productCli(cmd,f.store.directory);
+ assert.equal(stale.exitCode,2,stale.data?.error);
+ assert.equal(stale.data.status,'SUBMITTED');
+ assert.equal(stale.data.validationStatus,'VALIDATED');
+ assert.equal(stale.data.sourceReview,'BLOCKED');
+ assert.equal(stale.data.sourceFreshness,'STALE_OR_MISMATCHED');
+ assert.equal(stale.data.continuation.kind,'REVIEW_SOURCE_OR_REPLAN');
+ assert.equal(stale.data.continuation.automaticReplay,false);
+ assert.equal(stale.data.continuation.executionGranted,false);
+ assert.equal(stale.data.executionGranted,false);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM events').get().n,events);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,runs);
+});
+
 test('Codex Planning uncertainty is never a fresh Host Turn grant or automatic replay',async t=>{
  const f=await fixture(t),sessionId=f.request.sessionId;
  const start=f.store.db.prepare('SELECT count(*) AS n FROM events').get().n;
