@@ -233,3 +233,13 @@ test('transport evaluates completed Turn only after the process close event', as
     { exitBeforeData: true });
   assert.equal(result.terminalStatus, 'completed');
 });
+
+test('malformed Host stdout is rejected without exposing untrusted source bytes', async () => {
+  const untrusted = 'apiKey_SUPER_PRIVATE_987654';
+  await assert.rejects(runFakeTransport([untrusted + '\n']), error => {
+    assert.equal(error.effectStatus, 'UNVERIFIED');
+    assert.equal(error.message, 'Malformed App Server JSONL; no replay');
+    assert.equal(error.message.includes(untrusted), false);
+    return true;
+  });
+});

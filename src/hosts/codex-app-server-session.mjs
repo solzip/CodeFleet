@@ -206,7 +206,12 @@ export async function runCodexReadOnlyTurn({ executable, cwd, model, prompt, out
         for (const line of lines) {
           if (!line.trim()) continue;
           if (Buffer.byteLength(line) > MAX_LINE) reject('Host JSONL line too large');
-          const outgoing = protocol.accept(JSON.parse(line));
+          // JSON.parse errors may echo raw Host bytes, including private data.
+          // Never promote untrusted stdout fragments into persisted error text.
+          let incoming;
+          try { incoming = JSON.parse(line); }
+          catch { reject('Malformed App Server JSONL; no replay'); }
+          const outgoing = protocol.accept(incoming);
           for (const message of outgoing) send(message);
           if (protocol.completed) child.stdin.end();
         }
