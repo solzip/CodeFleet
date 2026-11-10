@@ -19,6 +19,7 @@ import { inspectReviewedCodexPlan, inspectReviewedCodexPlanAtSource, inspectRevi
 import { readDeliveredObjectiveStatus } from './objective-status.mjs';
 import { isCodexMvpFacadeForStore } from './codex-mvp-facade.mjs';
 import { inspectCodexPlanningStatus } from './codex-planning-status.mjs';
+import { CodexPlanningDispatchError } from '../hosts/codex-managed-planning.mjs';
 import { approval as requireWorkflowApproval } from '../workflow/persistence.mjs';
 import { validateWorkflow } from '../workflow/definition.mjs';
 
@@ -202,9 +203,26 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     // A genuine facade independently requires its trusted read-only planning
     // grant before any billable Turn. This command cannot supply a grant from
     // flags or a Goal string, nor does it approve/promote the resulting DAG.
-    const data = await binding.facade.planExisting(o.repository, args[0], { cwd: o.repository });
-    return { exitCode: data.status === 'VALIDATED' ? 0 : 2,
-      data: { ...data, hostLiveAcceptance: 'UNVERIFIED' } };
+    try {
+      const data = await binding.facade.planExisting(o.repository, args[0], { cwd: o.repository });
+      return { exitCode: data.status === 'VALIDATED' ? 0 : 2,
+        data: { ...data, hostLiveAcceptance: 'UNVERIFIED' } };
+    } catch (error) {
+      // Only a genuinely reserved Host Turn can supply a bound session ID.
+      // Do not manufacture a replayable request, approval or status from a
+      // generic transport error, missing Store record or untrusted CLI flag.
+      if (!(error instanceof CodexPlanningDispatchError)) throw error;
+      const progress = inspectCodexPlanningStatus(store, error.sessionId);
+      return { exitCode: 1, data: {
+        schemaVersion:1, status:'CODEX_PLANNING_TURN_BLOCKED',
+        sessionId:error.sessionId, error:error.message,
+        progress, continuation:progress.continuation,
+        costStatus:'UNKNOWN', automaticReplay:false,
+        executionGranted:false, executionSucceeded:false,
+        approved:false, hostLiveAcceptance:'UNVERIFIED',
+        protectedVerified:false
+      } };
+    }
   }
   if (action === 'propose-codex-bootstrap-files') {
     requireCodexBootstrapEntryArgs(args, o);

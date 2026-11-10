@@ -1331,6 +1331,9 @@ test('Codex Goal CLI fails closed before trusted planning factory or billable Tu
   assert.equal(f.store.db.prepare("SELECT count(*) AS n FROM host_planning WHERE status='CANCELLED'").get().n,1);
   assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
   assert.equal(countWorkflowAttempts(f.store),0);
+  assert.equal(denied.data.status,'BLOCKED_OR_UNSUPPORTED');
+  assert.equal(denied.data.sessionId,undefined,
+    'A denied pre-dispatch grant is not a possibly billable dispatched Turn');
 });
 
 test('authenticated Codex Host grant denial yields read-only persisted recovery handoff',async t=>{
@@ -1474,4 +1477,79 @@ test('Codex Planning status on a legacy Store does not initialize a planning tab
   ).get(),undefined);
   assert.equal(read.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
  }finally{read.close();}
+});
+
+test('Codex Goal CLI returns the persisted RECONCILING handoff after a reserved Host transport failure',async t=>{
+ const f=await fixture(t);
+ const argv=['plan-codex-goal',goal,'--repository',f.repo];
+ const runs=f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n;
+ const attempts=countWorkflowAttempts(f.store);
+ let grants=0,turns=0;
+ const failed=await productCli(argv,f.store.directory,{
+  createCodexAdmission:store=>({facade:createCodexMvpFacade(store,{
+    executable:process.execPath,model:'OFFLINE_FAKE_ONLY',enableHostTurns:true,
+    authorizePlanning:async()=>{grants++;return true;},
+    transport:async()=>{turns++;throw Error('offline Host transport disconnected');}
+  })})
+ });
+ assert.equal(failed.exitCode,1);
+ assert.equal(failed.data.status,'CODEX_PLANNING_TURN_BLOCKED');
+ assert.match(failed.data.error,/offline Host transport disconnected/);
+ assert.match(failed.data.sessionId,/^[a-f0-9-]{36}$/i);
+ assert.deepEqual([grants,turns],[1,1]);
+ assert.equal(failed.data.progress.kind,'CODEFLEET_CODEX_PLANNING_STATUS_V1');
+ assert.equal(failed.data.progress.sessionId,failed.data.sessionId);
+ assert.equal(failed.data.progress.status,'RECONCILING');
+ assert.equal(failed.data.progress.approved,false);
+ assert.equal(failed.data.progress.executionGranted,false);
+ assert.equal(failed.data.progress.validationStatus,undefined);
+ assert.equal(failed.data.continuation.kind,'RECONCILE_HOST_TURN');
+ assert.equal(failed.data.continuation.automaticReplay,false);
+ assert.equal(failed.data.automaticReplay,false);
+ assert.equal(failed.data.executionGranted,false);
+ assert.equal(failed.data.executionSucceeded,false);
+ assert.equal(failed.data.hostLiveAcceptance,'UNVERIFIED');
+ assert.equal(failed.data.protectedVerified,false);
+ assert.equal(failed.data.costStatus,'UNKNOWN');
+ const record=f.store.db.prepare('SELECT status FROM host_planning WHERE id=?')
+  .get(failed.data.sessionId);
+ assert.equal(record.status,'RECONCILING');
+ assert.ok(f.store.db.prepare(
+  "SELECT 1 FROM events WHERE runId=? AND type='HOST_PLANNING_TURN_RESERVED'"
+ ).get(failed.data.sessionId));
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,runs);
+ assert.equal(countWorkflowAttempts(f.store),attempts);
+ const observed=await productCli(
+  ['codex-planning-status',failed.data.sessionId],f.store.directory);
+ assert.equal(observed.exitCode,0,observed.data?.error);
+ assert.deepEqual(observed.data,failed.data.progress,
+  'The handoff must be the same durable read-only state later queried by the user');
+});
+
+test('a rejected completed-Host receipt returns a no-replay Planning handoff',async t=>{
+ const f=await fixture(t);
+ let turns=0;
+ const result=await productCli(
+  ['plan-codex-goal',goal,'--repository',f.repo],f.store.directory,{
+   createCodexAdmission:store=>({facade:createCodexMvpFacade(store,{
+     executable:process.execPath,model:'OFFLINE_FAKE_ONLY',enableHostTurns:true,
+     authorizePlanning:async()=>true,
+     transport:async()=>{turns++;return {
+       terminalStatus:'completed',text:'{}',
+       threadId:null,turnId:null,authority:'PROVIDER_REPORTED_ONLY',
+       protectedVerified:false
+     };}
+   })})
+  });
+ assert.equal(result.exitCode,1);
+ assert.equal(result.data.status,'CODEX_PLANNING_TURN_BLOCKED');
+ assert.match(result.data.error,/no acceptable receipt/);
+ assert.equal(result.data.progress.status,'RECONCILING');
+ assert.equal(result.data.continuation.kind,'RECONCILE_HOST_TURN');
+ assert.equal(result.data.continuation.automaticReplay,false);
+ assert.equal(result.data.executionSucceeded,false);
+ assert.equal(result.data.costStatus,'UNKNOWN');
+ assert.equal(turns,1);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
+ assert.equal(countWorkflowAttempts(f.store),0);
 });

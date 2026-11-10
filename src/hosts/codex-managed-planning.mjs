@@ -9,6 +9,18 @@ import { beginPlanning, cancelPlanning, submitPlanning, PLANNING_PROFILE } from 
 import { readCodeContext } from '../intent/semantic.mjs';
 import { runCodexReadOnlyTurn } from './codex-app-server-session.mjs';
 
+// Only raised after a durable managed Host Turn reservation. A caller may
+// inspect this exact persisted session, but must not infer that retry is safe.
+// An ordinary approval denial, preflight failure or expired pre-dispatch grant
+// does not become a possibly billable Host Turn.
+export class CodexPlanningDispatchError extends Error {
+  constructor(error, sessionId) {
+    super(error instanceof Error ? error.message : String(error), { cause:error });
+    this.name = 'CodexPlanningDispatchError';
+    this.sessionId = sessionId;
+  }
+}
+
 export const planningOutputSchema = {
   type: 'object', additionalProperties: false,
   required: ['sessionId','requestHash','proposal'],
@@ -178,6 +190,6 @@ export async function planWithCodexManagedThread(store, repo, objective, {
     store.event(request.sessionId,'HOST_PLANNING_RECONCILING',{
       dispatchRef,reason:'Host Turn or draft validation not accepted; no automatic replay'
     });
-    throw error;
+    throw new CodexPlanningDispatchError(error, request.sessionId);
   }
 }

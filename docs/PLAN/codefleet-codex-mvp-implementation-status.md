@@ -1352,3 +1352,21 @@ uncertain/cancelled states, tampering and forbidden flags, and legacy read-only
 compatibility. This is status UX, not authenticated Host admission, real
 Codex Host Live verification, protected execution or Objective acceptance.
 The new head requires Windows/Linux GitHub Actions CI before reporting PASS.
+
+## Trusted Codex Goal CLI preserves dispatched Planning recovery context (new CI required)
+
+The managed Codex planning adapter now distinguishes an error **after** the
+durable Host Turn reservation from pre-dispatch approval/preflight errors by
+a typed `CodexPlanningDispatchError` carrying only the exact session ID.
+The existing trusted `plan-codex-goal` entry catches that type and returns
+nonzero `CODEX_PLANNING_TURN_BLOCKED` with the original error, current
+read-only `codex-planning-status` projection, and persisted continuation.
+A thrown Host transport or unacceptable provider receipt must retain
+`RECONCILING`, explicit `UNKNOWN` cost visibility and `automaticReplay:false`;
+the CLI does not silently replay a potentially billable Turn, grant
+execution, or claim planning validation. Denied grants prior to dispatch keep
+the generic blocked result without pretending a Host Turn was reserved.
+Offline regressions cover a failed injected Host transport, invalid receipt,
+identical later read-only status and unchanged Workflow/Attempt counts.
+Native Codex Host Live and end-to-end Objective acceptance remain deferred;
+fresh Windows/Linux GitHub Actions CI is required before claiming PASS.
