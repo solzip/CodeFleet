@@ -1793,6 +1793,25 @@ test('Goal progress checks original repository readiness before dispatch without
  assert.equal(clean.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
  assert.equal(clean.data.planReview,undefined);
  assert.equal(clean.data.continuation.status,'AWAIT_WORKFLOW_APPROVAL');
+ // The Goal-level pre-dispatch handoff must disclose the exact persisted
+ // Workflow DAG, current approval state and the need for separate Host grants.
+ const pendingReview=await productCli([
+  'review-codex-workflow',created.workflowId,'--repository',f.repo
+ ],f.store.directory);
+ assert.equal(pendingReview.exitCode,0);
+ assert.deepEqual(clean.data.workflowReview,pendingReview.data);
+ assert.equal(clean.data.workflowReview.approvalState,'MISSING_OR_EXPIRED');
+ assert.equal(clean.data.workflowReview.executionGranted,false);
+ assert.equal(clean.data.workflowReview.authenticatedOperatorAvailable,false);
+ approveWorkflow(f.store,created.workflowId,{
+  actor:'offline-owner',workflowHash:created.workflowHash,
+  expiresAt:Date.now()+60_000
+ });
+ const approved=await productCli(cmd,f.store.directory);
+ assert.equal(approved.data.workflowReview.approvalState,'CURRENT_WORKFLOW_APPROVAL_VALID');
+ assert.equal(approved.data.workflowReview.executionGranted,false);
+ assert.equal(approved.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+ assert.equal(countWorkflowAttempts(f.store),0);
  const events=f.store.events(created.workflowId).length;
  const invalid=await productCli(['codex-goal-progress',id,'--repository','relative/repo'],f.store.directory);
  assert.equal(invalid.exitCode,1);
@@ -1802,6 +1821,7 @@ test('Goal progress checks original repository readiness before dispatch without
  assert.equal(stale.exitCode,2);
  assert.equal(stale.data.status,'SOURCE_REVIEW_REQUIRED');
  assert.equal(stale.data.sourceFreshness,'STALE_OR_MISMATCHED');
+ assert.equal(stale.data.workflowReview,undefined);
  assert.equal(stale.data.workflowId,created.workflowId);
  assert.equal(stale.data.continuation.kind,'REVIEW_SOURCE_OR_REPLAN');
  assert.equal(stale.data.continuation.automaticReplay,false);

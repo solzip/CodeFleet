@@ -1588,3 +1588,21 @@ An offline regression compares the embedded review with the existing
 independent review command and checks stale-source omission and no new
 Attempts. This is not Host Live or final Objective acceptance. The new
 HEAD needs independent Windows/Linux CI.
+
+## Goal-level approved Workflow review before first Host dispatch (fresh CI required)
+
+The read-only `codex-goal-progress <session-id> --repository ABSOLUTE_PATH`
+now includes the existing independent `review-codex-workflow` projection as
+`workflowReview` when a validated Plan has already been promoted, the exact
+original repository is still clean/pinned, and no WorkItem Attempt or Delivery
+requires recovery. This surfaces the current Workflow DAG and Contract hash,
+`MISSING_OR_EXPIRED` versus `CURRENT_WORKFLOW_APPROVAL_VALID` approval state,
+and the separate authenticated Operator/managed-Host grant handoff without
+asking the developer to guess another command. Source drift suppresses this
+review and demands explicit source review/replanning; after dispatch the
+persisted recovery and delivered Objective state remain authoritative.
+Offline regression checks parity with the existing Workflow review command,
+missing/valid approval, zero new Attempts, and review omission on source drift.
+This is read-only visibility, not permission to execute or evidence of Codex
+Host Live, PROTECTED verification or Objective completion. This HEAD requires
+its own Windows/Linux CI before treating the new regressions as passing.

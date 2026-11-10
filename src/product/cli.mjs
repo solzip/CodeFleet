@@ -36,7 +36,7 @@ codefleet-alpha objective status [task-id] | report <task-or-run-id>
 codefleet-alpha objective delivered-status <workflow-id> (read-only delivered-tree Objective acceptance; never starts Host or writes State)
 codefleet-alpha objective workflow-progress <workflow-id> (read-only DAG/Repair progress and current delivered Objective; never grants execution)
 codefleet-alpha objective codex-planning-status <planning-session-id> [--repository ABSOLUTE_PATH] (read-only Host Planning lifecycle; optional current-source check for validated results, no-replay recovery)
-codefleet-alpha objective codex-goal-progress <planning-session-id> [--repository ABSOLUTE_PATH] (read-only Goal→Planning→Workflow/DAG→delivered Objective; with --repository, expose exact current-source Plan review before Workflow creation; no-replay continuation)
+codefleet-alpha objective codex-goal-progress <planning-session-id> [--repository ABSOLUTE_PATH] (read-only Goal→Planning→Workflow/DAG→delivered Objective; with --repository, expose exact current-source Plan review or pending Workflow approval/Contract review before dispatch; no-replay continuation)
 codefleet-alpha objective review-codex-plan <planning-session-id> [--repository ABSOLUTE_PATH] (read-only pinned Contract/DAG review; optional clean Git checkout check, never grants execution)
 codefleet-alpha objective review-codex-workflow <workflow-id> [--repository ABSOLUTE_PATH] (read-only Contract/DAG, approval and optional clean Git baseline check; no execution)
 codefleet-alpha objective plan-codex-goal "natural-language Goal" --repository ABSOLUTE_PATH
@@ -407,7 +407,8 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     // Goal-level handoff. Reading hashes is not signing or approving them.
     return { exitCode:2, data:{
       ...data, sourceFreshness:'PINNED_CLEAN_AT_REVIEW',
-      ...(data.status === 'AWAIT_WORKFLOW_REVIEW' ? { planReview:review } : {})
+      ...(data.status === 'AWAIT_WORKFLOW_REVIEW' ? { planReview:review } : {}),
+      ...(data.status === 'WORKFLOW_IN_PROGRESS' ? { workflowReview:review } : {})
     } };
   }
   if (action === 'codex-planning-status') {
