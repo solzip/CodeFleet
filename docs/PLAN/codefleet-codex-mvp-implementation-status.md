@@ -1633,3 +1633,17 @@ The two-WorkItem synthetic CLI fixture checks both aliases, unchanged
 attempt/event counts, exact current Goal progress, and no additional Turns.
 This is offline UX consistency, not a Host Live or Protected Objective proof.
 Fresh Windows/Linux CI is required for this change.
+
+## NEW_PROJECT one-command progress and handoff parity (fresh CI required)
+
+The trusted `advance-codex-bootstrap` response now includes the existing
+read-only `TaskReport` snapshot for both one-step results and human handoffs,
+with Task ID, Local completion diagnostic and explicit non-Objective completion.
+A developer can continue the NEW_PROJECT Fileset → approved materialization →
+Local verification handoff without a separate status round-trip. No new
+execution, approval, replay, source write or scheduler authority is introduced.
+The existing synthetic Todo/Calendar progression fixture checks the response
+against the same persisted TaskReport at proposal, pending approval, materialized
+state and Local-verification handoff. This is not native Codex Host Live,
+protected verification or final independent Objective acceptance. The new
+commit requires its own Windows/Linux CI before claiming offline PASS.

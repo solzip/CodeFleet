@@ -320,7 +320,10 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     if (!step || !next?.itemId)
       return { exitCode: 2, data: {
         schemaVersion: 1, status: 'HUMAN_HANDOFF',
-        continuation, executionGranted: false,
+        taskId: args[0], progress: before, continuation,
+        localComplete: before.acceptance?.complete === true,
+        objectiveComplete: false, automaticReplay: false,
+        executionGranted: false,
         protectedVerified: false, hostLiveAcceptance: 'UNVERIFIED'
       } };
     // Recheck the persisted task before entering the approved Controller/Host
@@ -367,9 +370,11 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
           : result.status === 'MATERIALIZED' ? 0 : 2,
       data: {
         schemaVersion: 1, status: result.status ?? 'STEP_RECORDED',
-        step, itemId: repairItem ?? next.itemId,
+        taskId: args[0], step, itemId: repairItem ?? next.itemId,
         ...(step === 'PROPOSE_REPAIR_FILESET' ? { verificationItem: next.itemId } : {}),
-        result, continuation: after.continuation,
+        result, progress: after, continuation: after.continuation,
+        localComplete: after.acceptance?.complete === true,
+        objectiveComplete: false, automaticReplay: false, executionGranted: false,
         ...(step === 'RUN_LOCAL_VERIFICATION' ? { protection: 'UNPROTECTED' } : {}),
         protectedVerified: false, hostLiveAcceptance: 'UNVERIFIED'
       } };

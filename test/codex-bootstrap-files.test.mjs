@@ -1314,6 +1314,12 @@ test('trusted NEW_PROJECT continuation advances exactly one persisted step and s
   assert.equal(proposed.data.itemId,'todo');
   assert.equal(proposed.data.result.approvalRequest.authority,'REQUEST_ONLY');
   assert.equal(proposed.data.continuation.status,'AWAIT_OPERATOR');
+  assert.equal(proposed.data.taskId,f.id);
+  assert.deepEqual(proposed.data.progress,await taskReport(f.store,f.id));
+  assert.equal(proposed.data.progress.continuation.status,proposed.data.continuation.status);
+  assert.equal(proposed.data.objectiveComplete,false);
+  assert.equal(proposed.data.executionGranted,false);
+  assert.equal(proposed.data.automaticReplay,false);
   assert.equal(proposed.data.hostLiveAcceptance,'UNVERIFIED');
   assert.equal(proposed.data.protectedVerified,false);
   assert.deepEqual([turns,proposals,materializationGrants],[1,1,0]);
@@ -1323,6 +1329,10 @@ test('trusted NEW_PROJECT continuation advances exactly one persisted step and s
   assert.equal(pending.exitCode,2);
   assert.equal(pending.data.status,'HUMAN_HANDOFF');
   assert.equal(pending.data.continuation.next.kind,'AWAIT_FILESET_APPROVAL');
+  assert.equal(pending.data.taskId,f.id);
+  assert.deepEqual(pending.data.progress,await taskReport(f.store,f.id));
+  assert.equal(pending.data.objectiveComplete,false);
+  assert.equal(pending.data.automaticReplay,false);
   assert.deepEqual([turns,proposals,materializationGrants],[1,1,0]);
 
   approve(f,proposed.data.result.approvalRequest);
@@ -1330,6 +1340,10 @@ test('trusted NEW_PROJECT continuation advances exactly one persisted step and s
   assert.equal(materialized.exitCode,0,materialized.data?.error);
   assert.equal(materialized.data.step,'MATERIALIZE');
   assert.equal(materialized.data.result.status,'MATERIALIZED');
+  assert.deepEqual(materialized.data.progress,await taskReport(f.store,f.id));
+  assert.equal(materialized.data.progress.continuation.status,
+    materialized.data.continuation.status);
+  assert.equal(materialized.data.objectiveComplete,false);
   assert.deepEqual([turns,proposals,materializationGrants],[1,1,1]);
   for(const file of proposedTodoFiles)
     assert.equal(await readFile(join(f.dir,file.path),'utf8'),file.content);
@@ -1370,6 +1384,10 @@ test('trusted NEW_PROJECT continuation advances exactly one persisted step and s
     'Expected read-only Local verification handoff: '+JSON.stringify(needsLocalTrust.data));
   assert.equal(needsLocalTrust.data.status,'HUMAN_HANDOFF');
   assert.equal(needsLocalTrust.data.continuation.next.kind,'RUN_LOCAL_VERIFICATION');
+  assert.deepEqual(needsLocalTrust.data.progress,await taskReport(f.store,f.id));
+  assert.equal(needsLocalTrust.data.taskId,f.id);
+  assert.equal(needsLocalTrust.data.objectiveComplete,false);
+  assert.equal(needsLocalTrust.data.executionGranted,false);
   assert.deepEqual([turns,proposals,materializationGrants],[2,2,2]);
   assert.equal(task(f.store,f.id).bootstrap.verifications?.tests,undefined);
   assert.equal((await taskReport(f.store,f.id)).complete,false);
