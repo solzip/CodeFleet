@@ -36,7 +36,7 @@ codefleet-alpha objective status [task-id] | report <task-or-run-id>
 codefleet-alpha objective delivered-status <workflow-id> (read-only delivered-tree Objective acceptance; never starts Host or writes State)
 codefleet-alpha objective workflow-progress <workflow-id> (read-only DAG/Repair progress and current delivered Objective; never grants execution)
 codefleet-alpha objective codex-planning-status <planning-session-id> [--repository ABSOLUTE_PATH] (read-only Host Planning lifecycle; optional current-source check for validated results, no-replay recovery)
-codefleet-alpha objective codex-goal-progress <planning-session-id> (read-only Goal→Planning→Workflow/DAG→delivered Objective and no-replay continuation)
+codefleet-alpha objective codex-goal-progress <planning-session-id> [--repository ABSOLUTE_PATH] (read-only Goal→Planning→Workflow/DAG→delivered Objective; optional pinned pre-dispatch source check; no-replay continuation)
 codefleet-alpha objective review-codex-plan <planning-session-id> [--repository ABSOLUTE_PATH] (read-only pinned Contract/DAG review; optional clean Git checkout check, never grants execution)
 codefleet-alpha objective review-codex-workflow <workflow-id> [--repository ABSOLUTE_PATH] (read-only Contract/DAG, approval and optional clean Git baseline check; no execution)
 codefleet-alpha objective plan-codex-goal "natural-language Goal" --repository ABSOLUTE_PATH
@@ -202,7 +202,7 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
   const [action, ...rest] = argv;
   if (!action || ['help', '--help'].includes(action)) return { exitCode: 0, data: { schemaVersion: 1, help } };
   const { positional: args, options: o } = parse(rest);
-  if (o.repository !== undefined && !['plan-codex-goal', 'codex-planning-status', 'review-codex-plan', 'review-codex-workflow', 'prepare-codex-workflow'].includes(action))
+  if (o.repository !== undefined && !['plan-codex-goal', 'codex-planning-status', 'codex-goal-progress', 'review-codex-plan', 'review-codex-workflow', 'prepare-codex-workflow'].includes(action))
     throw Error('--repository is only valid for Codex planning/Workflow review or pending Workflow creation');
   if (action === 'plan-codex-goal') {
     requireCodexGoalEntryArgs(args, o);
@@ -376,10 +376,33 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
   }
   if (action === 'codex-goal-progress') {
     if (args.length !== 1 || !args[0] || args[0].startsWith('-') ||
-        Object.keys(o).length !== 0)
-      throw Error('codex-goal-progress requires exactly one Planning session ID and no execution/approval options');
+        Object.keys(o).some(key => key !== 'repository') ||
+        (o.repository !== undefined && !path.isAbsolute(o.repository)))
+      throw Error('codex-goal-progress requires one Planning session ID and optional absolute --repository only; no execution/approval options');
     const data = await inspectCodexGoalProgress(store,args[0]);
-    return { exitCode:data.objectiveComplete === true ? 0 : 2, data };
+    if (!o.repository) return { exitCode:data.objectiveComplete === true ? 0 : 2, data };
+    // This is a pre-dispatch source check, never an execution or replay grant.
+    // After an Attempt or Delivery, the persisted recovery and independently
+    // observed delivered Objective take precedence over the original baseline.
+    if (data.status === 'OBJECTIVE_COMPLETE' ||
+        data.workflow?.workItems?.some(item => item.attempt !== null) ||
+        data.workflow?.workflowState === 'COMPLETED' ||
+        data.workflow?.continuation?.status === 'RECONCILE_REQUIRED')
+      return { exitCode:data.objectiveComplete === true ? 0 : 2,
+        data:{...data,sourceFreshness:'NOT_RECHECKED_AFTER_DISPATCH'} };
+    if (!['AWAIT_WORKFLOW_REVIEW','WORKFLOW_IN_PROGRESS'].includes(data.status))
+      return { exitCode:2, data:{...data,sourceFreshness:'NOT_CHECKED'} };
+    const review = data.workflowId
+      ? await inspectReviewedCodexWorkflowAtSource(store,data.workflowId,o.repository)
+      : await inspectReviewedCodexPlanAtSource(store,args[0],o.repository);
+    if (review.status !== 'REVIEW_REQUIRED' ||
+        review.sourceFreshness !== 'PINNED_CLEAN_AT_REVIEW')
+      return { exitCode:2, data:{
+        ...data, status:'SOURCE_REVIEW_REQUIRED', sourceFreshness:'STALE_OR_MISMATCHED',
+        continuation:{kind:'REVIEW_SOURCE_OR_REPLAN',
+          automaticReplay:false,executionGranted:false}
+      } };
+    return { exitCode:2, data:{...data,sourceFreshness:'PINNED_CLEAN_AT_REVIEW'} };
   }
   if (action === 'codex-planning-status') {
     if (args.length !== 1 || !args[0] || args[0].startsWith('-') ||

@@ -1767,6 +1767,38 @@ test('Codex Goal progress starts from validated Planning and preserves existing 
  assert.equal(countWorkflowAttempts(f.store),0);
 });
 
+test('Goal progress checks original repository readiness before dispatch without granting attempts',async t=>{
+ const f=await fixture(t),id=f.request.sessionId;
+ const cmd=['codex-goal-progress',id,'--repository',f.repo];
+ const planning=await productCli(cmd,f.store.directory);
+ assert.equal(planning.exitCode,2);
+ assert.equal(planning.data.status,'AWAIT_WORKFLOW_REVIEW');
+ assert.equal(planning.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+ const created=await prepareReviewedCodexWorkflow(f.store,f.repo,id,{
+  authorizeReview:async()=>true
+ });
+ const clean=await productCli(cmd,f.store.directory);
+ assert.equal(clean.data.status,'WORKFLOW_IN_PROGRESS');
+ assert.equal(clean.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+ assert.equal(clean.data.continuation.status,'AWAIT_WORKFLOW_APPROVAL');
+ const events=f.store.events(created.workflowId).length;
+ const invalid=await productCli(['codex-goal-progress',id,'--repository','relative/repo'],f.store.directory);
+ assert.equal(invalid.exitCode,1);
+ assert.match(invalid.data.error,/absolute --repository only/);
+ await writeFile(join(f.repo,'src/a.js'),'export function add(x,y){ return x-y; }\n');
+ const stale=await productCli(cmd,f.store.directory);
+ assert.equal(stale.exitCode,2);
+ assert.equal(stale.data.status,'SOURCE_REVIEW_REQUIRED');
+ assert.equal(stale.data.sourceFreshness,'STALE_OR_MISMATCHED');
+ assert.equal(stale.data.workflowId,created.workflowId);
+ assert.equal(stale.data.continuation.kind,'REVIEW_SOURCE_OR_REPLAN');
+ assert.equal(stale.data.continuation.automaticReplay,false);
+ assert.equal(stale.data.executionGranted,false);
+ assert.equal(stale.data.objectiveComplete,false);
+ assert.equal(f.store.events(created.workflowId).length,events);
+ assert.equal(countWorkflowAttempts(f.store),0);
+});
+
 test('Codex Goal progress blocks forged Workflow provenance and execution options without new effects',async t=>{
  const f=await fixture(t);
  const missing=await productCli(
@@ -2101,6 +2133,12 @@ test('reviewed Codex multi-WorkItem Goal executes ordered A then B through authe
  const progress=await productCli(['codex-goal-progress',sessionId],f.store.directory);
  assert.equal(progress.exitCode,0);
  assert.equal(progress.data.objectiveComplete,true);
+ const afterDelivery=await productCli([
+  'codex-goal-progress',sessionId,'--repository',f.repo
+ ],f.store.directory);
+ assert.equal(afterDelivery.exitCode,0);
+ assert.equal(afterDelivery.data.status,'OBJECTIVE_COMPLETE');
+ assert.equal(afterDelivery.data.sourceFreshness,'NOT_RECHECKED_AFTER_DISPATCH');
 });
 
 test('Codex multi-WorkItem draft rejects cyclic, overlapping or broadened scope before a Workflow',async t=>{

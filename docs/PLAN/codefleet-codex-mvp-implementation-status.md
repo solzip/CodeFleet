@@ -1553,3 +1553,20 @@ Synthetic regressions cover a rejected Host grant and a delivered two-WorkItem
 Goal. This is not native Codex Host Live, authenticated Operator credential
 integration, protected execution or independent final Objective acceptance.
 Fresh Windows/Linux CI is required.
+
+## One-command Goal source readiness before Host dispatch (fresh CI required)
+
+The read-only `codex-goal-progress <planning-session-id> --repository ABSOLUTE_PATH`
+option checks the canonical checkout against the original persisted
+Planning/Workflow repository identity and clean pinned Git baseline before
+any WorkItem dispatch. A different repository, dirty working tree, changed
+HEAD or missing checkout returns `SOURCE_REVIEW_REQUIRED` with an explicit
+no-replay review/replan handoff rather than suggesting Workflow approval
+against stale source. Once a WorkItem has been attempted or delivery has
+settled, the optional pre-dispatch check is skipped and labeled
+`NOT_RECHECKED_AFTER_DISPATCH`: persisted recovery and independent delivered
+Objective re-observation remain authoritative. Offline regressions cover
+Planning and pending Workflow, source drift, invalid relative paths, unchanged
+Store events/Attempts and completed Delivery. This grants no Operator/Host
+authority and does not prove Host Live or final Objective acceptance.
+New Windows/Linux CI is required for this revision.
