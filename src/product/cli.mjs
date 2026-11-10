@@ -18,6 +18,7 @@ import { repairProposalRequest } from './repair.mjs';
 import { inspectReviewedCodexPlan, inspectReviewedCodexPlanAtSource, inspectReviewedCodexWorkflow, inspectReviewedCodexWorkflowAtSource, prepareReviewedCodexWorkflow } from './codex-reviewed-workflow.mjs';
 import { readDeliveredObjectiveStatus } from './objective-status.mjs';
 import { isCodexMvpFacadeForStore } from './codex-mvp-facade.mjs';
+import { inspectCodexPlanningStatus } from './codex-planning-status.mjs';
 import { approval as requireWorkflowApproval } from '../workflow/persistence.mjs';
 import { validateWorkflow } from '../workflow/definition.mjs';
 
@@ -33,6 +34,7 @@ codefleet-alpha objective run|resume <task-id> --allow-model
 codefleet-alpha objective status [task-id] | report <task-or-run-id>
 codefleet-alpha objective delivered-status <workflow-id> (read-only delivered-tree Objective acceptance; never starts Host or writes State)
 codefleet-alpha objective workflow-progress <workflow-id> (read-only DAG/Repair progress and current delivered Objective; never grants execution)
+codefleet-alpha objective codex-planning-status <planning-session-id> (read-only Host Planning lifecycle and no-replay recovery handoff)
 codefleet-alpha objective review-codex-plan <planning-session-id> [--repository ABSOLUTE_PATH] (read-only pinned Contract/DAG review; optional clean Git checkout check, never grants execution)
 codefleet-alpha objective review-codex-workflow <workflow-id> [--repository ABSOLUTE_PATH] (read-only Contract/DAG, approval and optional clean Git baseline check; no execution)
 codefleet-alpha objective plan-codex-goal "natural-language Goal" --repository ABSOLUTE_PATH
@@ -344,6 +346,13 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
         ...(step === 'RUN_LOCAL_VERIFICATION' ? { protection: 'UNPROTECTED' } : {}),
         protectedVerified: false, hostLiveAcceptance: 'UNVERIFIED'
       } };
+  }
+  if (action === 'codex-planning-status') {
+    if (args.length !== 1 || !args[0] || args[0].startsWith('-') ||
+        Object.keys(o).length !== 0)
+      throw Error('codex-planning-status requires exactly one Planning session ID and no execution/approval options');
+    const data = inspectCodexPlanningStatus(store, args[0]);
+    return { exitCode:['BLOCKED','NOT_FOUND','UNAVAILABLE'].includes(data.status) ? 2 : 0, data };
   }
   if (action === 'review-codex-plan') {
     if (args.length !== 1 || Object.keys(o).some(k => k !== 'repository') || !args[0] || args[0].startsWith('-'))
@@ -769,7 +778,7 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
             ? positional[2] : options['verification-request']));
     }
     if (!argv[0] || ['help', '--help'].includes(argv[0])) return await dispatchProduct(argv);
-    store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request', 'delivered-status', 'workflow-progress', 'review-codex-plan', 'review-codex-workflow'].includes(argv[0]) });
+    store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request', 'delivered-status', 'workflow-progress', 'codex-planning-status', 'review-codex-plan', 'review-codex-workflow'].includes(argv[0]) });
     if (codexTrusted) {
       const codexAdmission = await createCodexAdmission(store);
       // dispatchProduct still checks authentic facade identity, current Store

@@ -1334,3 +1334,21 @@ effect. Drift without an uncertain Fileset remains a blocking handoff with no
 next execution step. Neither case grants approval, retries a write, runs a
 Host, or reports protected Objective acceptance. The two offline regression
 tests require fresh Windows/Linux CI; Host Live acceptance remains unverified.
+
+## Public read-only Codex Planning lifecycle and uncertain Host handoff (new CI required)
+
+The existing `codefleet-alpha objective` CLI now supports
+`codex-planning-status <planning-session-id>`. It opens the existing Store
+read-only and validates the persisted Codex request digest, profile/context/
+skill binding and submitted outcome/Contract integrity before reporting any
+reviewable result. `SUBMITTED`/VALIDATED requires an independent Contract
+review of the current checkout; it is NOT an execution approval.
+`DISPATCHED` and `RECONCILING` expose a manual Host Turn reconciliation
+handoff without automatic replay, even if the original approval expired.
+`CANCELLED` needs a new planning review. Tampered/absent/legacy state is
+reported only as BLOCKED/NOT_FOUND/UNAVAILABLE without leaking raw provider
+response or creating tables. Four offline regressions cover valid submission,
+uncertain/cancelled states, tampering and forbidden flags, and legacy read-only
+compatibility. This is status UX, not authenticated Host admission, real
+Codex Host Live verification, protected execution or Objective acceptance.
+The new head requires Windows/Linux GitHub Actions CI before reporting PASS.

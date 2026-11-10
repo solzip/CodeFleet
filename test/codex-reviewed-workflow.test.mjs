@@ -1387,3 +1387,91 @@ test('authenticated Codex Host grant denial yields read-only persisted recovery 
  assert.equal(status.exitCode,2);
  assert.deepEqual(response.data.progress.continuation,status.data.continuation);
 });
+
+test('public Codex Planning lifecycle status is read-only and never treats validation as execution',async t=>{
+ const f=await fixture(t);
+ const sessionId=f.request.sessionId;
+ const events=f.store.db.prepare('SELECT count(*) AS n FROM events').get().n;
+ const runs=f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n;
+ const result=await productCli(['codex-planning-status',sessionId],f.store.directory);
+ assert.equal(result.exitCode,0,result.data?.error);
+ assert.equal(result.data.kind,'CODEFLEET_CODEX_PLANNING_STATUS_V1');
+ assert.equal(result.data.status,'SUBMITTED');
+ assert.equal(result.data.validationStatus,'VALIDATED');
+ assert.equal(result.data.requestHash,f.request.requestHash);
+ assert.equal(result.data.sourceBaseline,f.request.context.discovery.base);
+ assert.equal(result.data.continuation.kind,'REVIEW_CONTRACT_AT_CURRENT_SOURCE');
+ assert.equal(result.data.continuation.automaticReplay,false);
+ assert.equal(result.data.continuation.executionGranted,false);
+ assert.equal(result.data.sourceFreshness,'NOT_RECHECKED');
+ assert.equal(result.data.approved,false);
+ assert.equal(result.data.executionGranted,false);
+ assert.equal(result.data.hostLiveAcceptance,'UNVERIFIED');
+ assert.equal(result.data.protectedVerified,false);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM events').get().n,events);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,runs);
+});
+
+test('Codex Planning uncertainty is never a fresh Host Turn grant or automatic replay',async t=>{
+ const f=await fixture(t),sessionId=f.request.sessionId;
+ const start=f.store.db.prepare('SELECT count(*) AS n FROM events').get().n;
+ for(const [status,kind] of [
+  ['DISPATCHED','RECONCILE_HOST_TURN'],
+  ['RECONCILING','RECONCILE_HOST_TURN'],
+  ['CANCELLED','NEW_PLANNING_REVIEW_REQUIRED']
+ ]) {
+  f.store.db.prepare(
+   'UPDATE host_planning SET status=?,response=NULL,result=NULL,resultHash=NULL WHERE id=?'
+  ).run(status,sessionId);
+  const read=await productCli(['codex-planning-status',sessionId],f.store.directory);
+  assert.equal(read.exitCode,0,read.data?.error);
+  assert.equal(read.data.status,status);
+  assert.equal(read.data.continuation.kind,kind);
+  assert.equal(read.data.continuation.automaticReplay,false);
+  assert.equal(read.data.continuation.executionGranted,false);
+  assert.equal(read.data.executionGranted,false);
+  assert.equal(read.data.validationStatus,undefined);
+  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM events').get().n,start);
+ }
+});
+
+test('Codex Planning status blocks tampered outcomes and rejects execution flags',async t=>{
+ const f=await fixture(t),sessionId=f.request.sessionId;
+ const invalid=await productCli(['codex-planning-status',sessionId,'--allow-model'],f.store.directory);
+ assert.equal(invalid.exitCode,1);
+ assert.match(invalid.data.error,/no execution\/approval options/);
+ const missing=await productCli(
+  ['codex-planning-status','00000000-0000-4000-8000-000000000000'],f.store.directory);
+ assert.equal(missing.exitCode,2);
+ assert.equal(missing.data.status,'NOT_FOUND');
+ assert.equal(missing.data.automaticReplay,false);
+ f.store.db.prepare('UPDATE host_planning SET resultHash=? WHERE id=?')
+  .run('f'.repeat(64),sessionId);
+ const corrupted=await productCli(['codex-planning-status',sessionId],f.store.directory);
+ assert.equal(corrupted.exitCode,2);
+ assert.equal(corrupted.data.status,'BLOCKED');
+ assert.equal(corrupted.data.approved,false);
+ assert.equal(corrupted.data.executionGranted,false);
+ assert.equal(corrupted.data.continuation.automaticReplay,false);
+ assert.equal(corrupted.data.validationStatus,undefined);
+ assert.equal(corrupted.data.objectiveHash,undefined);
+});
+
+test('Codex Planning status on a legacy Store does not initialize a planning table',async t=>{
+ const directory=await mkdtemp(join(tmpdir(),'codefleet-planning-status-'));
+ const store=new Store(directory);
+ store.close();
+ t.after(async()=>rm(directory,{recursive:true,force:true}));
+ const result=await productCli(
+  ['codex-planning-status','00000000-0000-4000-8000-000000000000'],directory);
+ assert.equal(result.exitCode,2);
+ assert.equal(result.data.status,'UNAVAILABLE');
+ assert.equal(result.data.executionGranted,false);
+ const read=new Store(directory,{readOnly:true});
+ try {
+  assert.equal(read.db.prepare(
+   "SELECT 1 FROM sqlite_master WHERE type='table' AND name='host_planning'"
+  ).get(),undefined);
+  assert.equal(read.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
+ }finally{read.close();}
+});
