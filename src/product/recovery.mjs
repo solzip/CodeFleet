@@ -3,6 +3,7 @@ import { hash } from '../alpha/contract.mjs';
 import { bootstrapContext, task } from './tasks.mjs';
 import { continuationSnapshot, pendingHostProposals } from './continuation.mjs';
 import { localTree } from '../verification/backends.mjs';
+import { coordinationLog, supervisedHandoffAdopted } from './work-log.mjs';
 
 // A checkpoint detects stale context; it is never an authenticator or execution grant.
 function recoveryExpectation(input, taskId) {
@@ -68,9 +69,13 @@ export async function recoverObjective(store, taskId, expected) {
         row.revision!==pending.revision||latest?.body.revision!==pending.revision||latest?.body.planRef!==pending.planRef)
         throw Error('Unprepared task has inconsistent lifecycle records');
       if(expected)throw Error('Workflow binding unavailable before preparation');
-      return {...result,status:'RECOVERED',stage:'DRAFT',draftBinding:{revision:pending.revision,taskHash:hash(pending),planHash:pending.planRef},
+      const coordination = coordinationLog(store, taskId);
+      const directivePending = coordination.pendingDirectives.length > 0;
+      return {...result,status:directivePending?'HUMAN_HANDOFF':'RECOVERED',stage:'DRAFT',coordination,
+        blockers:directivePending?['DIRECTIVE_REVIEW_REQUIRED']:[],contextCompaction:'NOT_VERIFIED',
+        draftBinding:{revision:pending.revision,taskHash:hash(pending),planHash:pending.planRef},
         objective:{id:taskId,text:plan.draft.objective,criteria:plan.draft.criteria,scope:plan.draft.scope,planRef:pending.planRef},
-        validation:plan.validation,next:{kind:pending.state==='VALIDATED'?'PREPARE_WORKFLOW':'REVIEW_DRAFT'},
+        validation:plan.validation,next:directivePending?null:{kind:pending.state==='VALIDATED'?'PREPARE_WORKFLOW':'REVIEW_DRAFT'},
         humanHandoff:true,requiredNextApproval:'DRAFT_REVIEW_NOT_EXECUTION',
         workLog:{eventCount:events.length,lastSequence:events.at(-1)?.seq??null,hash:hash(events)},
         verification:'NOT_RUN',protectedVerification:'UNSATISFIED'};
@@ -119,6 +124,7 @@ export async function recoverObjective(store, taskId, expected) {
       const validNow = Boolean(run.control !== 'cancel' && run.contract.workflowHash === workflow.workflowHash &&
         approval && approval.digest === run.contractHash && approval.expires > Date.now());
       return { runId: r.id, itemId: run.itemId, state: run.state, filesetHash: run.contractHash, files: run.contract.files,
+        ...(run.supervisedProposal ? {proposalProvenance:run.supervisedProposal,hostHandoffObservation:'NOT_ESTABLISHED_BY_REVIEW'} : {}),
         materializationRef: run.materializationRef ?? null, results: run.results, approval: approval ?? null,
         approvalValidNow: validNow, alreadyApplied: run.state === 'COMPLETED', executionGranted: false };
     });
@@ -127,6 +133,22 @@ export async function recoverObjective(store, taskId, expected) {
       run.kind === 'bootstrap-fileset' && run.state !== 'COMPLETED' && Object.keys(run.results ?? {}).length; })
       .map(r => ({ runId: r.id, state: JSON.parse(r.body).state, effects: 'UNCONFIRMED', resolution: 'RECONCILE_WITHOUT_RELAUNCH_OR_REFUND' }));
     result.hostProposals = pendingHostProposals(store, taskId);
+    result.coordination = coordinationLog(store, taskId);
+    result.agentMessages = store.db.prepare('SELECT runId,digest,body FROM agent_messages ORDER BY seq').all()
+      .filter(m => m.runId === taskId || runs.some(r => r.id === m.runId)).map(m => {
+        const body = JSON.parse(m.body);
+        if (hash(body) !== m.digest) throw Error('Agent message integrity defect');
+        return { runId: m.runId, digest: m.digest, body, authority: 'PROVIDER_REPORTED_ONLY' };
+      });
+    result.contextCompaction = 'NOT_VERIFIED';
+    result.directives = { effective: { contractRevision: result.contractRevision,
+      objective: plan.draft.objective, requirements: plan.draft.requirements, decisions: plan.draft.decisions },
+      history: result.coordination.directives };
+    if (result.coordination.pendingDirectives.length) block('DIRECTIVE_REVIEW_REQUIRED');
+    if (result.coordination.pendingHandoffs.some(h => !supervisedHandoffAdopted(store, taskId, h))) block('AGENT_HANDOFF_UNCONFIRMED');
+    result.effects.push(...result.coordination.pendingHandoffs.filter(h => h.status === 'DELIVERY_UNCONFIRMED')
+      .map(h => ({ handoffId: h.handoffId, agentId: h.agentId, effects: 'HOST_DELIVERY_UNCONFIRMED',
+        resolution: 'RECONCILE_WITHOUT_RELAUNCH_OR_REFUND' })));
     if (result.hostProposals.length) {
       result.effects.push(...result.hostProposals);
       block('HOST_PROPOSALS_UNCONFIRMED_NO_REPLAY');
@@ -142,7 +164,8 @@ export async function recoverObjective(store, taskId, expected) {
     if (hash(task(store, taskId)) !== result.binding.taskHash || hash(store.events(taskId)) !== eventHash ||
         await localTree(current.repo) !== candidateHash) block('RECOVERY_CHANGED_DURING_INSPECTION');
     result.observationHash = hash({ binding: result.binding, eventHash, filesets: result.filesets, leases: result.leases,
-      reservations: result.reservations, workItems: result.workItems, budget: result.budget, judgments: result.judgments });
+      reservations: result.reservations, workItems: result.workItems, budget: result.budget, judgments: result.judgments,
+      agentMessages: result.agentMessages });
     if (prior.checkpoint?.workLogHash && prior.checkpoint.workLogHash !== eventHash) changes.push('workLog');
     if (prior.checkpoint?.observationHash && prior.checkpoint.observationHash !== result.observationHash) changes.push('executionState');
     if (prior.checkpoint && changes.length) block('STALE_RECOVERY_CHECKPOINT');

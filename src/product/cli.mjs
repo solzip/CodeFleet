@@ -15,6 +15,10 @@ import { developmentProposalRequest, developmentProposalBatch, reviewDevelopment
 import { recoverObjective } from './recovery.mjs';
 import { prepareContractRevision, acceptContractRevision, revokeContractRevision } from './contract-revisions.mjs';
 import { repairProposalRequest } from './repair.mjs';
+import { assignWorkItem, recordDirective, decideDirective, prepareAgentHandoff, closeUndeliveredHandoff } from './work-log.mjs';
+import { reconcileDirective } from './directives.mjs';
+import { reviewSupervisedProposal } from './continuation.mjs';
+import { submitBootstrapFiles } from './tasks.mjs';
 import { inspectReviewedCodexPlan, inspectReviewedCodexPlanAtSource, inspectReviewedCodexWorkflow, inspectReviewedCodexWorkflowAtSource, prepareReviewedCodexWorkflow } from './codex-reviewed-workflow.mjs';
 import { readDeliveredObjectiveStatus } from './objective-status.mjs';
 import { isCodexMvpFacadeForStore } from './codex-mvp-facade.mjs';
@@ -58,11 +62,18 @@ codefleet-alpha objective run-codex-workflow|resume-codex-workflow <workflow-id>
 codefleet-alpha objective run-codex-goal|resume-codex-goal <planning-session-id> --hash <workflowHash>
   (authenticated embedding only; uses the exact reviewed Goal→Workflow mapping and existing Host/Operator admission; no extra grant)
 codefleet-alpha objective proposal-request <task-id> <item-id> (eligible source context only; no model call or execution approval)
+codefleet-alpha objective supervised-proposal-review <task-id> <proposal-ref> (read-only eligibility; no Host observation or execution)
+codefleet-alpha objective supervised-proposal-register <task-id> <proposal-ref> (explicit registration only; then separate local-files-review/accept)
 codefleet-alpha objective repair-proposal-request <task-id> (settled Local failure context; no model call or approval)
 codefleet-alpha objective proposal-batch <task-id> [OPTIONS.json] (maxAgents 1..3, parallelBenefit; proposal-only, no model grant)
 codefleet-alpha objective proposal-start <task-id> BATCH.json (record pending Host handoff; not permission or proof of invocation)
 codefleet-alpha objective proposal-results <task-id> BATCH.json RESULTS.json (validate all results, record proposal feedback; never apply or approve)
 codefleet-alpha objective recover <task-id> [RECOVERY.json|BINDING.json] (compare prior checkpoint; never execute, renew or replay)
+codefleet-alpha objective work-log <task-id> (persisted recovery and coordination; no execution)
+codefleet-alpha objective assign|directive|handoff <task-id> INPUT.json (record scope/directive/prepare handoff; never deliver)
+codefleet-alpha objective handoff-close <task-id> INPUT.json (requires independent nondelivery evidence; currently HOST_ADAPTER_UNAVAILABLE)
+codefleet-alpha objective directive-review <task-id> <directive-id> PROPOSAL.json (existing exact contract review; no execution)
+codefleet-alpha objective directive-decision <task-id> INPUT.json (explicit defer/reject/retain with reason; never approves execution)
 codefleet-alpha objective revision-review <task-id> PROPOSAL.json (revision, full revised draft, optional additionalAttempts 0..2 and additionalTimeSeconds 0..120; no execution)
 codefleet-alpha objective revision-accept <review-ref> --trust <review-hash> --acknowledge-unisolated
 codefleet-alpha objective revision-revoke <review-ref> (revoke a prepared revision review)
@@ -641,6 +652,27 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     const data = await readDeliveredObjectiveStatus(store, args[0]);
     return { exitCode: data.objectiveComplete === true ? 0 : 2, data };
   }
+  if (['supervised-proposal-review', 'supervised-proposal-register'].includes(action)) {
+    if (args.length !== 2 || Object.keys(o).length) throw Error('Supervised proposal requires Task and stored proposal ref only');
+    const review = await reviewSupervisedProposal(store, args[0], args[1]);
+    return { exitCode: action === 'supervised-proposal-review' ? 0 : 2,
+      data: action === 'supervised-proposal-review' ? review :
+        await submitBootstrapFiles(store, args[0], review.input, { supervisedProposalRef: args[1] }) };
+  }
+  if (action === 'work-log') {
+    if (args.length !== 1 || Object.keys(o).length) throw Error('work-log requires Task only');
+    const data = await recoverObjective(store, args[0]);
+    return { exitCode: data.status === 'RECOVERED' ? 0 : 2, data };
+  }
+  if (['assign','directive','directive-decision','handoff','handoff-close'].includes(action)) {
+    if (args.length !== 2 || Object.keys(o).length) throw Error('Coordination requires Task and input only');
+    const fn = { assign: assignWorkItem, directive: recordDirective, 'directive-decision': decideDirective, handoff: prepareAgentHandoff, 'handoff-close': closeUndeliveredHandoff }[action];
+    return { exitCode: 0, data: fn(store, args[0], await readResponse(args[1])) };
+  }
+  if (action === 'directive-review') {
+    if (args.length !== 3 || Object.keys(o).length) throw Error('directive-review requires Task, directive and proposal');
+    return { exitCode: 2, data: await reconcileDirective(store, args[0], args[1], await readResponse(args[2])) };
+  }
   if (action === 'proposal-start') {
     if (args.length !== 2 || Object.keys(o).length) throw Error('proposal-start requires Task and exact batch');
     return { exitCode: 0, data: await recordProposalDispatch(store, args[0], await readResponse(args[1])) };
@@ -873,7 +905,7 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
             ? positional[2] : options['verification-request']));
     }
     if (!argv[0] || ['help', '--help'].includes(argv[0])) return await dispatchProduct(argv);
-    store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request', 'delivered-status', 'workflow-progress', 'codex-planning-status', 'codex-goal-progress', 'review-codex-plan', 'review-codex-workflow'].includes(argv[0]) });
+    store = new Store(directory, { readOnly: ['recover', 'work-log', 'proposal-batch', 'repair-proposal-request', 'supervised-proposal-review', 'delivered-status', 'workflow-progress', 'codex-planning-status', 'codex-goal-progress', 'review-codex-plan', 'review-codex-workflow'].includes(argv[0]) });
     if (codexTrusted) {
       const codexAdmission = await createCodexAdmission(store);
       // dispatchProduct still checks authentic facade identity, current Store
