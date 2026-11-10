@@ -83,6 +83,12 @@ and manifest SHA-256 from exact bytes, and emits an unapproved binding.
 The resulting candidate manifest bytes are exercised against the existing
 P1 strict identity validator using a *disposable fake* Codex file in CI.
 
+The current deterministic **candidate** manifest SHA-256 is
+764FAF1953D739FDAB3B0108F78FBBEC273F6DAC653AE10732A3283D3ABAB455.
+This serialization reproduces the old R2 Manifest digest exactly when
+substituting the old client's SHA-256, which cross-checks the expected
+format. It is **not** the hash of an observed R3 Manifest on the owner PC.
+
 This packet does **not** observe the owner's native Codex binary, file
 system, ACLs, actual private Fixture, or owner approval. Its result says
 fixturePrepared=false / nativeCodexObserved=false /

@@ -5,7 +5,7 @@ import { cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from '
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildR3SourcePacket, R3_CLIENT_SHA256, main } from './p1-r3-source-packet.mjs';
+import { buildR3SourcePacket, R3_CLIENT_SHA256, R3_MANIFEST_SHA256, main } from './p1-r3-source-packet.mjs';
 import { sha256File, validateIdentity } from './p1-appserver-handshake.mjs';
 
 const cli = fileURLToPath(new URL('./p1-r3-source-packet.mjs', import.meta.url));
@@ -16,7 +16,9 @@ test('R3 packet binds exact reviewed client bytes and excludes execution authori
   assert.equal(packet.binding.candidateClientSha256, R3_CLIENT_SHA256);
   assert.equal(await sha256File(sourceClient), R3_CLIENT_SHA256);
   assert.match(packet.binding.inputSha256,/^[A-F0-9]{64}$/);
-  assert.match(packet.binding.candidateManifestSha256,/^[A-F0-9]{64}$/);
+  assert.equal(packet.binding.candidateManifestSha256, R3_MANIFEST_SHA256);
+  assert.equal(R3_MANIFEST_SHA256,
+    '764FAF1953D739FDAB3B0108F78FBBEC273F6DAC653AE10732A3283D3ABAB455');
   assert.equal(packet.binding.fixturePrepared,false);
   assert.equal(packet.binding.nativeCodexObserved,false);
   assert.equal(packet.binding.ownerFixtureObserved,false);

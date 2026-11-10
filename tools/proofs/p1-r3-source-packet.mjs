@@ -9,6 +9,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 export const R3_CLIENT_SHA256 =
   '7B51CC058EE5D8C2E29B7558539C6314BB57650CED662731FBBB4DDFC401EDF9';
 export const R3_INPUT = 'CODEFLEET_HOST_PROTOCOL_PROOF_P1_INPUT_V1\n';
+export const R3_MANIFEST_SHA256 =
+  '764FAF1953D739FDAB3B0108F78FBBEC273F6DAC653AE10732A3283D3ABAB455';
 const CLIENT = fileURLToPath(new URL('./p1-appserver-handshake.mjs', import.meta.url));
 const sha256 = value => createHash('sha256').update(value).digest('hex').toUpperCase();
 
@@ -33,11 +35,13 @@ export async function buildR3SourcePacket(sourceClient = CLIENT) {
   // Exact bytes of this candidate are deterministic on Windows and Linux.
   // They are not yet the owner's actual on-disk Fixture manifest.
   const manifestBytes = Buffer.from(JSON.stringify(manifestData, null, 2) + '\n', 'utf8');
+  if (sha256(manifestBytes) !== R3_MANIFEST_SHA256)
+    throw Error('R3 candidate manifest serialization changed');
   const binding = Object.freeze({
     status: 'P1_R3_SOURCE_BINDING_CANDIDATE_UNAPPROVED',
     candidateClientSha256: R3_CLIENT_SHA256,
     inputSha256,
-    candidateManifestSha256: sha256(manifestBytes),
+    candidateManifestSha256: R3_MANIFEST_SHA256,
     nativeCodexSha256: null,
     nativeCodexObserved: false,
     ownerFixtureObserved: false,
