@@ -2346,6 +2346,18 @@ test('Codex Goal read-only continuation offers bounded resume only for an idle s
  const withRepo=await productCli([...argv,'--repository',f.repo],f.store.directory);
  assert.equal(withRepo.data.sourceFreshness,'NOT_RECHECKED_AFTER_DISPATCH');
  assert.deepEqual(withRepo.data.resumeCommand,ready.data.resumeCommand);
+ // WAITING_HUMAN without a failed Attempt must remain a manual decision,
+ // not be misclassified as a Repair or made automatically resumable.
+ run.state='WAITING_HUMAN';
+ f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
+  .run(JSON.stringify(run),prepared.workflowId);
+ const awaitingDecision=await productCli(argv,f.store.directory);
+ assert.equal(awaitingDecision.data.continuation.status,'HUMAN_HANDOFF');
+ assert.equal(awaitingDecision.data.resumeCommand,undefined);
+ assert.equal(awaitingDecision.data.recoveryHandoff,undefined);
+ run.state='RUNNING';
+ f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
+  .run(JSON.stringify(run),prepared.workflowId);
  // Active coordinator Lease means another invocation is not a recovery.
  f.store.db.prepare('UPDATE runs SET owner=?,leaseUntil=?,control=? WHERE id=?')
   .run('synthetic-active-owner',Date.now()+60_000,'run',prepared.workflowId);
@@ -2380,13 +2392,19 @@ test('Codex Goal read-only continuation offers bounded resume only for an idle s
  b.reason='Synthetic B verification failed';
  f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
   .run(JSON.stringify(b),b.id);
- run.states.b='FAILED';
+ // Match the real Controller's failed-child terminal handoff: its
+ // persisted Workflow becomes WAITING_HUMAN, not a synthetic RUNNING state.
+ run.states.b='BLOCKED';run.state='WAITING_HUMAN';
+ run.reason='WorkItem capability, approval or dependency gates unsatisfied';
  f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
   .run(JSON.stringify(run),prepared.workflowId);
  f.store.db.prepare('UPDATE workflow_attempts SET status=? WHERE runId=? AND itemId=?')
   .run('FAILED',prepared.workflowId,'b');
  const repair=await productCli(argv,f.store.directory);
  assert.equal(repair.data.continuation.status,'REPAIR_REVIEW_REQUIRED');
+ const directWorkflow=await productCli(['workflow-progress',prepared.workflowId],f.store.directory);
+ assert.equal(directWorkflow.data.continuation.status,'REPAIR_REVIEW_REQUIRED');
+ assert.deepEqual(directWorkflow.data.continuation.itemIds,['b']);
  assert.equal(repair.data.resumeCommand,undefined);
  assert.deepEqual(repair.data.recoveryHandoff,{
   kind:'REVIEW_FAILED_WORKITEM_EVIDENCE',

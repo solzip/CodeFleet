@@ -1763,3 +1763,22 @@ A-settled/B-uncertain-to-failed transition, resolves the actual recorded child
 report and checks there is no new Attempt or Workflow event. It is not an actual
 Host failure or native Codex recovery proof. Fresh Windows/Linux CI is required;
 Host Live and final Objective E2E acceptance remain UNVERIFIED.
+
+
+## Controller WAITING_HUMAN failed-WorkItem Repair handoff (fresh CI required)
+
+A real managed-Host child failure is persisted by the existing Controller as
+an immutable FAILED WorkItem Attempt while the parent Workflow enters
+`WAITING_HUMAN`. The read-only Workflow/Goal progress projection previously
+returned a generic HUMAN_HANDOFF before inspecting that failed Attempt, so
+its already implemented `recoveryHandoff` and exact child `report` command
+were missing in this ordinary post-failure path. It now exposes
+`REPAIR_REVIEW_REQUIRED` for persisted failed children even when the parent
+is waiting, with the current evidence, budget and approval requiring separate
+human review; pause/cancel and WAITING_HUMAN without failure retain generic
+HUMAN_HANDOFF. No automatic replay, new grant, or Repair Attempt is created.
+The offline regression models the real WAITING_HUMAN state after B failure,
+compares the Workflow and Goal status, and checks the existing diagnostic
+child-report/no-additional-Attempt contract. Native Host Live and Objective
+E2E acceptance are still unverified; independent Windows/Linux CI for the
+new commit must be checked before reporting an offline test PASS.

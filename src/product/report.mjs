@@ -237,9 +237,19 @@ function existingWorkflowContinuation(run, report, workItems, readyIds) {
       report.activeAttempts.map(a => a.itemId));
   if (report.objectiveComplete)
     return step('OBJECTIVE_COMPLETE', 'Current delivered-tree Objective Evidence and Judge are satisfied');
-  if (run.control === 'pause' || run.control === 'cancel' ||
-      ['CANCELLED', 'WAITING_HUMAN'].includes(run.state))
+  if (run.control === 'pause' || run.control === 'cancel' || run.state === 'CANCELLED')
     return step('HUMAN_HANDOFF', 'Workflow is paused, cancelled or requires an explicit human decision');
+  // A real failed child normally leaves the Controller in WAITING_HUMAN.
+  // Do not hide its persisted failure evidence behind a generic handoff;
+  // this remains review-only, and a new Repair still needs separate grants.
+  if (run.state === 'WAITING_HUMAN') {
+    const failedAttempts = workItems.filter(item => item.attempt?.status === 'FAILED');
+    if (failedAttempts.length)
+      return step('REPAIR_REVIEW_REQUIRED',
+        'Inspect persisted failed WorkItem Evidence and review current budget, approval and bounded Repair before any new Attempt',
+        failedAttempts.map(item => item.id));
+    return step('HUMAN_HANDOFF', 'Workflow requires an explicit human decision');
+  }
   // Recorded destination Evidence failures are not missing verification
   // requests. A damaged receipt, missing immutable approval or unreadable
   // target must be reviewed, not reexecuted or silently reverified.
