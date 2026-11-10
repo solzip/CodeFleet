@@ -21,6 +21,8 @@ jobs:
       # Native Windows scope only. The mandatory linux-alpha job runs the
       # unchanged Alpha suite, including every Docker/UID/IPC/seccomp test.
       - run: npm run pretest
+      - name: P1 fake-process protocol regression (no real Codex)
+        run: npm run test:p1-proof-offline
       - run: npm run test:codex-mvp
       - run: npm run test:legacy
       - run: npm run test:host-core
@@ -58,6 +60,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - name: P1 fake-process protocol regression (no real Codex)
+        run: npm run test:p1-proof-offline
       - run: npm run test:codex-mvp
       - name: Prepare real Linux Docker and immutable verification images
         run: node scripts/prepare-alpha-ci.mjs "$GITHUB_ENV"
