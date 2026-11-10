@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { spawn, spawnSync } from 'node:child_process';
+import { cp, mkdtemp, mkdir, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { reviewP1Artifacts, reviewP1EvidenceBytes } from './p1-r2-evidence-review.mjs';
+import { runProof, sha256File } from './p1-appserver-handshake.mjs';
 
 const script = fileURLToPath(new URL('./p1-r2-evidence-review.mjs', import.meta.url));
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex').toUpperCase();
@@ -132,4 +133,57 @@ test('raw credentials in model summaries are rejected even if hashes agree',()=>
   records.at(-1).result.data=[{...model,apiKey:'secret'}];
   const [result,lines]=encode(records);
   assert.throws(()=>reviewP1EvidenceBytes(result,lines),/MODEL_SUMMARY_INVALID/);
+});
+
+// Contract-level fake-process integration only. The process is Node running
+// the explicit fake server, never the installed native Codex App Server.
+const fakeServer = fileURLToPath(new URL('./p1-appserver-fake.mjs', import.meta.url));
+const proofClient = fileURLToPath(new URL('./p1-appserver-handshake.mjs', import.meta.url));
+async function generatedFakeProof(t, scenario) {
+  const root=await realpath(await mkdtemp(join(tmpdir(),'cf-p1-generated-fake-')));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const artifacts=join(root,'proof-artifacts');
+  const clientDir=join(root,'proof-client');
+  await mkdir(artifacts);
+  await mkdir(clientDir);
+  const client=join(clientDir,'p1-appserver-handshake.mjs');
+  await cp(proofClient,client);
+  const input=join(root,'input.txt'), manifest=join(root,'fixture-manifest.json');
+  await writeFile(input,'CODEFLEET_HOST_PROTOCOL_PROOF_P1_INPUT_V1\n');
+  const clientSha256=await sha256File(client),inputSha256=await sha256File(input);
+  await writeFile(manifest,JSON.stringify({
+    manifestVersion:1,proofRoot:'<PROOF_ROOT>',artifacts:'<PROOF_ARTIFACTS>',
+    input:{path:'<PROOF_INPUT>',sha256:inputSha256},
+    proofClient:{path:'<PROOF_CLIENT>',sha256:clientSha256},
+    proofOutput:{path:'<PROOF_OUTPUT>',exists:false},
+    artifactCount:0,linksOrJunctions:false
+  },null,2)+'\n');
+  const options={codexExe:process.execPath,fixture:root,artifacts,manifest,
+    codexSha256:await sha256File(process.execPath),clientSha256,inputSha256,
+    manifestSha256:await sha256File(manifest),timeoutMs:3000};
+  const dependencies={clientPath:client,platform:'test',command:process.execPath,
+    commandArgs:[fakeServer,scenario],spawnImpl:spawn,shutdownMs:1000};
+  if(scenario==='unknown-notification') {
+    await assert.rejects(runProof(options,dependencies),/unapproved server notification/);
+  } else {
+    const result=await runProof(options,dependencies);
+    assert.equal(result.status,'P1_HANDSHAKE_OBSERVED');
+    assert.equal(result.passed,true);
+  }
+  assert.deepEqual((await readdir(artifacts)).sort(),
+    ['p1-redacted-transcript.jsonl','p1-result.json']);
+  return artifacts;
+}
+test('actual fake-process P1 evidence is reviewable, never automatically accepted',async t=>{
+  const artifacts=await generatedFakeProof(t,'remote-control-notification');
+  const audit=await reviewP1Artifacts(artifacts);
+  assert.equal(audit.status,'P1_EVIDENCE_STRUCTURALLY_CONSISTENT_REVIEW_REQUIRED');
+  assert.equal(audit.notificationCount,1);
+  assert.equal(audit.p1Accepted,false);
+  assert.equal(audit.hostProtocolVerified,false);
+  assert.equal(audit.appServerExecutionAuthenticated,false);
+});
+test('actual fake-process failed P1 evidence cannot be promoted by structural review',async t=>{
+  const artifacts=await generatedFakeProof(t,'unknown-notification');
+  await assert.rejects(reviewP1Artifacts(artifacts),/P1_FAILED_OR_INCOMPLETE/);
 });
