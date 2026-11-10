@@ -1309,3 +1309,17 @@ that neither path grants execution nor automatic replay. This is advisory
 Recovery UX only, not actual Host Live proof, autonomous recovery,
 Protected Evidence or Objective acceptance. The new commit requires its own
 Windows/Linux CI result.
+
+## Trusted NEW_PROJECT step failure includes persisted handoff (new CI required)
+
+The one-step `advance-codex-bootstrap` entry returns a nonzero
+`CODEX_BOOTSTRAP_STEP_BLOCKED` result after a denied or failed separately
+reviewed Host/Fileset/Repair/Local-verification action. It preserves the
+original error plus the current read-only `TaskReport` and its advisory
+continuation. A failed grant never authorizes an automatic replay or future
+effect. The result distinguishes optional Local completion from protected
+Objective acceptance; if the current Store cannot be read after failure,
+the original error is propagated rather than inventing recovery readiness.
+Existing denial fixtures verify the result with no additional Host or
+verification effects. New Windows/Linux CI is required; native Codex Host
+Live and final Objective E2E remain unverified.

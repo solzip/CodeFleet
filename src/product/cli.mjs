@@ -301,17 +301,35 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     if (current.revision !== before.revision ||
         current.bootstrap?.workflowHash !== before.workflowHash)
       throw Error('Bootstrap continuation changed before delegated step');
-    const result = step === 'PROPOSE_FILESET'
-      ? await binding.facade.proposeBootstrapFiles(args[0], next.itemId)
-      : step === 'PROPOSE_REPAIR_FILESET'
-        ? await binding.facade.proposeBootstrapRepairFiles(args[0], repairItem, next.itemId)
-        : step === 'RUN_LOCAL_VERIFICATION'
-          ? await binding.facade.verifyApprovedBootstrap(args[0], next.itemId,
-              requireCodexBootstrapVerificationRequest(
-                execution.boundedBootstrapVerificationRequest === undefined
-                  ? await readResponse(verificationRequest)
-                  : execution.boundedBootstrapVerificationRequest))
-          : await binding.facade.materializeApprovedBootstrap(args[0], next.itemId);
+    let result;
+    try {
+      result = step === 'PROPOSE_FILESET'
+        ? await binding.facade.proposeBootstrapFiles(args[0], next.itemId)
+        : step === 'PROPOSE_REPAIR_FILESET'
+          ? await binding.facade.proposeBootstrapRepairFiles(args[0], repairItem, next.itemId)
+          : step === 'RUN_LOCAL_VERIFICATION'
+            ? await binding.facade.verifyApprovedBootstrap(args[0], next.itemId,
+                requireCodexBootstrapVerificationRequest(
+                  execution.boundedBootstrapVerificationRequest === undefined
+                    ? await readResponse(verificationRequest)
+                    : execution.boundedBootstrapVerificationRequest))
+            : await binding.facade.materializeApprovedBootstrap(args[0], next.itemId);
+    } catch (error) {
+      // Return the persisted handoff on denied grants or delegated errors.
+      // This is read-only and never permits replay of an uncertain effect.
+      const progress = await taskReport(store, args[0]).catch(() => null);
+      if (!progress) throw error;
+      return { exitCode: 1, data: {
+        schemaVersion: 1, status: 'CODEX_BOOTSTRAP_STEP_BLOCKED',
+        taskId: args[0], step, itemId: repairItem ?? next.itemId,
+        error: error instanceof Error ? error.message : String(error),
+        progress, continuation: progress.continuation,
+        localComplete: progress.acceptance?.complete === true,
+        objectiveComplete: false, executionSucceeded: false,
+        executionGranted: false, protectedVerified: false,
+        hostLiveAcceptance: 'UNVERIFIED'
+      } };
+    }
     const after = await taskReport(store, args[0]);
     return { exitCode: ['PROPOSE_FILESET', 'PROPOSE_REPAIR_FILESET'].includes(step)
         ? result.approvalRequest ? 0 : 2
