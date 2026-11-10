@@ -2305,3 +2305,66 @@ test('Codex multi-WorkItem draft rejects cyclic, overlapping or broadened scope 
  assert.equal(countWorkflowAttempts(f.store),0);
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
 });
+
+test('Codex Goal read-only continuation offers bounded resume only for an idle settled A to ready B',async t=>{
+ const f=await fixture(t,{multi:true}),id=f.request.sessionId;
+ const prepared=await prepareReviewedCodexWorkflow(f.store,f.repo,id,{
+  authorizeReview:async()=>true
+ });
+ approveWorkflow(f.store,prepared.workflowId,{
+  actor:'offline-continuation-reviewer',workflowHash:prepared.workflowHash,
+  expiresAt:Date.now()+60_000
+ });
+ const argv=['codex-goal-progress',id];
+ const fresh=await productCli(argv,f.store.directory);
+ assert.equal(fresh.data.continuation.status,'AUTHENTICATED_HOST_ADMISSION_REQUIRED');
+ assert.equal(fresh.data.resumeCommand,undefined,
+  'Initial ready A is a run, not a resumed WorkItem');
+ // Synthetic persisted A terminal checkpoint; this does not purport to be
+ // independent Accepted Evidence or an actual Host crash/Host Live proof.
+ const run=f.store.get(prepared.workflowId);
+ run.states.a='SUCCEEDED';run.states.b='PENDING';run.state='RUNNING';
+ f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
+  .run(JSON.stringify(run),prepared.workflowId);
+ const a={id:'synthetic-settled-a',state:'COMPLETED',
+  reportedCostUsd:0,unknownCostAttempts:0};
+ f.store.db.prepare('INSERT INTO runs(id,body) VALUES (?,?)')
+  .run(a.id,JSON.stringify(a));
+ f.store.db.prepare('INSERT INTO workflow_attempts VALUES (?,?,?,?,?)')
+  .run(prepared.workflowId,'a',a.id,run.revision,'SUCCEEDED');
+ const events=f.store.events(prepared.workflowId).length;
+ const attempts=countWorkflowAttempts(f.store);
+ const ready=await productCli(argv,f.store.directory);
+ assert.equal(ready.data.continuation.status,'AUTHENTICATED_HOST_ADMISSION_REQUIRED');
+ assert.deepEqual(ready.data.workflow.dependencyReadyIds,['b']);
+ assert.deepEqual(ready.data.resumeCommand,{
+  argv:['resume-codex-goal',id,'--hash',prepared.workflowHash],
+  sourceRechecked:false,trustedEmbeddingRequired:true,
+  authenticatedOperatorRequired:true,managedHostGrantRequired:true,
+  executionGranted:false,automaticReplay:false
+ });
+ const withRepo=await productCli([...argv,'--repository',f.repo],f.store.directory);
+ assert.equal(withRepo.data.sourceFreshness,'NOT_RECHECKED_AFTER_DISPATCH');
+ assert.deepEqual(withRepo.data.resumeCommand,ready.data.resumeCommand);
+ // Active coordinator Lease means another invocation is not a recovery.
+ f.store.db.prepare('UPDATE runs SET owner=?,leaseUntil=?,control=? WHERE id=?')
+  .run('synthetic-active-owner',Date.now()+60_000,'run',prepared.workflowId);
+ const owned=await productCli(argv,f.store.directory);
+ assert.equal(owned.data.resumeCommand,undefined);
+ f.store.db.prepare('UPDATE runs SET owner=NULL,leaseUntil=0 WHERE id=?')
+  .run(prepared.workflowId);
+ // A reserved-but-unsettled B must be reconciled, never replayed.
+ const b={id:'synthetic-unsettled-b',state:'READY',
+  reportedCostUsd:0,unknownCostAttempts:0};
+ f.store.db.prepare('INSERT INTO runs(id,body) VALUES (?,?)')
+  .run(b.id,JSON.stringify(b));
+ f.store.db.prepare('INSERT INTO workflow_attempts VALUES (?,?,?,?,?)')
+  .run(prepared.workflowId,'b',b.id,run.revision,'STARTED');
+ const uncertain=await productCli(argv,f.store.directory);
+ assert.equal(uncertain.data.continuation.status,'RECONCILE_REQUIRED');
+ assert.equal(uncertain.data.resumeCommand,undefined);
+ assert.equal(uncertain.data.continuation.automaticReplay,false);
+ assert.equal(f.store.events(prepared.workflowId).length,events);
+ assert.equal(countWorkflowAttempts(f.store),attempts+1,
+  'Read-only status must not create an additional Attempt');
+});

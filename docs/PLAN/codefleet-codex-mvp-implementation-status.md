@@ -1717,3 +1717,20 @@ unapproved, approved, stale and delivered views without extra Attempts.
 This is a read-only UX improvement, not Host Live or Objective acceptance.
 Local Node 24/full-checkout/Docker validation is unavailable here; this HEAD
 must receive separate Windows/Linux CI before claiming an offline PASS.
+
+## Persisted A-to-B Goal resume command handoff (independent CI required)
+
+The read-only `codex-goal-progress` projection now returns an exact
+`resume-codex-goal <planning-session-id> --hash <workflowHash>` argv only
+when at least one WorkItem has a persisted terminal SUCCEEDED attempt,
+another dependency-ready WorkItem remains, Workflow approval is current,
+and the coordinator's lease is inactive. Live leases, pending/uncertain
+Attempts, incomplete approval and completed Objectives expose no resume
+command. The command is **advisory only**, explicitly states that source was
+not rechecked, and still requires a new authenticated Operator review,
+the existing Controller/Lease/budget guard and a separate managed Host grant.
+Offline tests model a settled A, ready B, active Lease and unresolved B;
+they do not certify accepted child Evidence, real process restart or Host Live.
+The runtime here has Node 22, no full GitHub checkout/Docker and cannot run
+the required Node 24/Alpha regression locally. The new HEAD requires its own
+Windows/Linux GitHub CI before these tests can be called passing.

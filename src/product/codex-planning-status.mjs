@@ -137,11 +137,35 @@ export async function inspectCodexGoalProgress(store, sessionId) {
         workflow.workflowHash !== reviewed.workflowHash ||
         workflow.revision !== reviewed.revision)
       throw Error('Workflow changed during Goal observation');
+    // An interrupted multi-WorkItem Goal can be resumed from persisted
+    // accepted A after the coordinator has released its Lease. This is only
+    // a command hint: the actual resume independently rechecks original
+    // source, authenticated Operator, Workflow approval, budget and Host grant.
+    // Never suggest a second entry while a coordinator or Host Turn is live,
+    // on uncertain effects, before any WorkItem settles, or after completion.
+    const coordinator = store.db.prepare(
+      'SELECT owner,leaseUntil,control FROM runs WHERE id=?'
+    ).get(workflowId);
+    const coordinatorIdle = (!coordinator?.owner ||
+      coordinator.leaseUntil <= Date.now()) &&
+      (!coordinator?.control || coordinator.control === 'run');
+    const resumable = !workflow.objectiveComplete &&
+      workflow.continuation.status === 'AUTHENTICATED_HOST_ADMISSION_REQUIRED' &&
+      workflow.workItems.some(item => item.attempt?.status === 'SUCCEEDED') &&
+      workflow.dependencyReadyIds.length > 0 &&
+      workflow.activeAttemptIds.length === 0 && coordinatorIdle;
+    const resumeCommand = resumable ? {
+      argv:['resume-codex-goal',sessionId,'--hash',workflow.workflowHash],
+      sourceRechecked:false, trustedEmbeddingRequired:true,
+      authenticatedOperatorRequired:true,managedHostGrantRequired:true,
+      executionGranted:false,automaticReplay:false
+    } : null;
     return { ...base, status:workflow.objectiveComplete
       ? 'OBJECTIVE_COMPLETE' : 'WORKFLOW_IN_PROGRESS',
       workflowId, workflow, objective:workflow.objective,
       objectiveComplete:workflow.objectiveComplete === true,
-      continuation:workflow.continuation };
+      continuation:workflow.continuation,
+      ...(resumeCommand ? { resumeCommand } : {}) };
   } catch {
     // A failed delivered-tree observation is not a valid Objective verdict.
     return { ...base, status:'BLOCKED',
