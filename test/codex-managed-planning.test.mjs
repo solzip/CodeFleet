@@ -60,6 +60,7 @@ test('Codex planning grant inspects immutable Goal, pinned source and requested 
    assert.equal(scope.repositoryRoot,await realpath(f.repo));
    assert.equal(scope.executablePath,process.execPath);
    assert.equal(scope.executableResolvedPath,await realpath(process.execPath));
+   assert.match(scope.executableSha256,/^[a-f0-9]{64}$/);
    assert.match(scope.sourceBaseline,/^[a-f0-9]{40,64}$/);
    assert.equal(scope.executionGranted,false);
    assert.equal(scope.costVisibility,'UNKNOWN');
@@ -330,6 +331,47 @@ test('repointed executable alias during Host Turn makes planning result uncertai
    ...f.settings,executable:link.path,
    authorize:async()=>true,
    transport:async call=>{turns++;await link.redirect();return proposedReceipt(call);}
+ }),/Planning Host executable changed during Host Turn/);
+ assert.equal(turns,1);
+ assert.deepEqual(f.store.db.prepare('SELECT status FROM host_planning').all().map(r=>r.status),['RECONCILING']);
+});
+
+
+test('same-path executable content mutation during planning grant cancels before any Turn', async t => {
+ const f=await setup(t);
+ // Fake bytes are never invoked; the mocked transport must remain untouched.
+ const executable=join(dirname(f.repo),'fake-planning-codex.exe');
+ await writeFile(executable,'FAKE_EXECUTABLE_ORIGINAL_BYTES');
+ let turns=0,approvals=0;
+ await assert.rejects(planWithCodexManagedThread(f.store,f.repo,goal,{
+   ...f.settings,executable,
+   authorize:async scope=>{
+     approvals++;
+     assert.equal(scope.executableResolvedPath,await realpath(executable));
+     assert.match(scope.executableSha256,/^[a-f0-9]{64}$/);
+     await writeFile(executable,'FAKE_EXECUTABLE_MUTATED_SAME_PATH');
+     return true;
+   },
+   transport:async()=>{turns++;throw Error('mutated binary must never dispatch');}
+ }),/Planning Host executable changed while awaiting approval/);
+ assert.equal(approvals,1);
+ assert.equal(turns,0);
+ assert.deepEqual(f.store.db.prepare('SELECT status FROM host_planning').all().map(r=>r.status),['CANCELLED']);
+});
+
+test('same-path executable content mutation during planning Turn stays RECONCILING', async t => {
+ const f=await setup(t);
+ const executable=join(dirname(f.repo),'fake-planning-codex.exe');
+ await writeFile(executable,'FAKE_EXECUTABLE_ORIGINAL_BYTES');
+ let turns=0;
+ await assert.rejects(planWithCodexManagedThread(f.store,f.repo,goal,{
+   ...f.settings,executable,authorize:async()=>true,
+   transport:async call=>{
+     turns++;
+     assert.equal(call.executable,await realpath(executable));
+     await writeFile(executable,'FAKE_EXECUTABLE_MUTATED_DURING_TURN');
+     return proposedReceipt(call);
+   }
  }),/Planning Host executable changed during Host Turn/);
  assert.equal(turns,1);
  assert.deepEqual(f.store.db.prepare('SELECT status FROM host_planning').all().map(r=>r.status),['RECONCILING']);

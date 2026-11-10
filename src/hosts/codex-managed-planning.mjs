@@ -2,7 +2,8 @@
 // validator. This is only an injected, approved, read-only capability.
 // A created planning session is a durable reservation before a billable Turn;
 // an unresolved dispatch is never replayed automatically.
-import { realpath, stat } from 'node:fs/promises';
+import { realpath } from 'node:fs/promises';
+import { snapshotHostExecutable, requireSameHostExecutable } from './host-executable-identity.mjs';
 import { isAbsolute } from 'node:path';
 import { hash } from '../alpha/contract.mjs';
 import { beginPlanning, cancelPlanning, submitPlanning, PLANNING_PROFILE } from './planning.mjs';
@@ -55,15 +56,14 @@ export async function planWithCodexManagedThread(store, repo, objective, {
     throw Error('Codex Host planning cwd must resolve to the observed repository');
   // Exact executable identity is part of the human-reviewed and persisted
   // dispatch scope, not an uninspected trusted-caller configuration detail.
-  const pinnedExecutable = await realpath(executable);
-  if (!(await stat(pinnedExecutable)).isFile())
-    throw Error('Codex Host planning executable must resolve to a regular file');
+  const pinnedExecutable = await snapshotHostExecutable(executable);
   const request = await beginPlanning(store, repo, objective, { host:'codex', version });
   const binding = { sessionId: request.sessionId, requestHash:request.requestHash,
     contextHash:request.contextHash, profileHash:request.profileHash,
     skillHash:request.skillHash, expiresAt:request.expiresAt,
     model, hostVersion:version, cwd,
-    executablePath:executable, executableResolvedPath:pinnedExecutable };
+    executablePath:executable, executableResolvedPath:pinnedExecutable.resolvedPath,
+    executableSha256:pinnedExecutable.sha256 };
   // A billable Host Turn must be approved against an inspectable exact
   // Objective, repository and source inventory, not opaque hashes alone.
   // Show only pinned file identities (not source bytes) and the requested
@@ -107,8 +107,8 @@ export async function planWithCodexManagedThread(store, repo, objective, {
     // must never start in a different directory from the pinned source.
     if (await realpath(repo) !== pinnedRepo || await realpath(cwd) !== pinnedRepo)
       throw Error('Planning repository or Host cwd changed while awaiting approval');
-    if (await realpath(executable) !== pinnedExecutable)
-      throw Error('Planning Host executable changed while awaiting approval');
+    await requireSameHostExecutable(executable,pinnedExecutable,
+      'Planning Host executable changed while awaiting approval');
     const current = await readCodeContext(repo, objective);
     if (hash(current) !== request.contextHash ||
         current.discovery.dirty || current.discovery.base !== request.baseline)
@@ -164,7 +164,7 @@ export async function planWithCodexManagedThread(store, repo, objective, {
   }
   try {
     const receipt = await transport({
-      executable:pinnedExecutable,cwd,model,prompt,outputSchema:planningOutputSchema,
+      executable:pinnedExecutable.resolvedPath,cwd,model,prompt,outputSchema:planningOutputSchema,
       timeoutMs:Math.min(PLANNING_PROFILE.timeoutMs,remainingMs),
     });
     if (receipt?.terminalStatus !== 'completed' || typeof receipt.text !== 'string' ||
@@ -174,8 +174,8 @@ export async function planWithCodexManagedThread(store, repo, objective, {
     // a response for the original pinned Objective, even if source bytes match.
     if (await realpath(repo) !== pinnedRepo || await realpath(cwd) !== pinnedRepo)
       throw Error('Planning repository or Host cwd changed during Host Turn');
-    if (await realpath(executable) !== pinnedExecutable)
-      throw Error('Planning Host executable changed during Host Turn');
+    await requireSameHostExecutable(executable,pinnedExecutable,
+      'Planning Host executable changed during Host Turn');
     const current = await readCodeContext(repo, objective);
     if (hash(current) !== request.contextHash) throw Error('Planning source context changed during Host Turn');
     const result = submitPlanning(store, receipt.text, {
