@@ -55,6 +55,8 @@ codefleet-alpha objective prepare-codex-workflow <planning-session-id> --reposit
   (explicitly confirm both hashes from review-codex-plan; create only a pending unapproved Workflow, never an execution or Operator grant)
 codefleet-alpha objective run-codex-workflow|resume-codex-workflow <workflow-id> --hash <workflowHash>
   (authenticated embedding only; separate Workflow approval and exact Host grant; ordinary CLI remains BLOCKED)
+codefleet-alpha objective run-codex-goal|resume-codex-goal <planning-session-id> --hash <workflowHash>
+  (authenticated embedding only; uses the exact reviewed Goal→Workflow mapping and existing Host/Operator admission; no extra grant)
 codefleet-alpha objective proposal-request <task-id> <item-id> (eligible source context only; no model call or execution approval)
 codefleet-alpha objective repair-proposal-request <task-id> (settled Local failure context; no model call or approval)
 codefleet-alpha objective proposal-batch <task-id> [OPTIONS.json] (maxAgents 1..3, parallelBenefit; proposal-only, no model grant)
@@ -173,6 +175,12 @@ function requireCodexBootstrapVerificationRequest(request) {
       request.timeoutMs < 1 || request.timeoutMs > 120000)
     throw Error('verify-codex-bootstrap REQUEST.json requires exact bounded Local command fields');
   return request;
+}
+
+function requireCodexGoalExecutionArgs(args, o) {
+  if (args.length !== 1 || !/^[a-f0-9-]{36}$/i.test(args[0] ?? '') ||
+      Object.keys(o).length !== 1 || !/^[a-f0-9]{64}$/.test(o.hash ?? ''))
+    throw Error('Codex Goal execution requires one Planning session ID and exact --hash only');
 }
 
 function requireCodexWorkflowEntryArgs(args, o) {
@@ -432,6 +440,29 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       hostLiveAcceptance: 'UNVERIFIED',
       nextAction: 'Separate Workflow approval and trusted managed-Host execution grant required'
     } };
+  }
+  if (action === 'run-codex-goal' || action === 'resume-codex-goal') {
+    requireCodexGoalExecutionArgs(args, o);
+    // Resolve only the deterministic, independently reviewed Planning → DAG
+    // provenance. A supplied Goal ID cannot select an arbitrary Workflow.
+    // Delegate to the exact existing authenticated Workflow execution entry,
+    // which enforces current Operator approval, source freshness, budget,
+    // Lease, Host grant and cancellation without a second execution engine.
+    const progress = await inspectCodexGoalProgress(store, args[0]);
+    if (!['WORKFLOW_IN_PROGRESS','OBJECTIVE_COMPLETE'].includes(progress.status) ||
+        progress.workflowId !== 'planning-'+args[0] ||
+        progress.workflow?.workflowHash !== o.hash)
+      throw Error('Codex Goal requires a current reviewed Workflow and exact hash; inspect codex-goal-progress');
+    if (progress.objectiveComplete) {
+      return { exitCode:0, data: {
+        ...progress, executionSucceeded:false, executionGranted:false,
+        nextAction:'Delivered Objective already complete; no Host Turn started'
+      } };
+    }
+    return dispatchProduct([
+      action === 'resume-codex-goal' ? 'resume-codex-workflow' : 'run-codex-workflow',
+      progress.workflowId, '--hash', o.hash
+    ], {store,execution,plannerRegistry});
   }
   if (action === 'run-codex-workflow' || action === 'resume-codex-workflow') {
     // Only an authenticated Host embedding can provide this dependency.
@@ -778,7 +809,8 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
   let store;
   try {
     requireDurableEntry(argv); // Before opening Store or reading caller JSON.
-    const codexExecution = ['run-codex-workflow','resume-codex-workflow'].includes(argv[0]);
+    const codexExecution = ['run-codex-workflow','resume-codex-workflow',
+      'run-codex-goal','resume-codex-goal'].includes(argv[0]);
     const codexPlanning = argv[0] === 'plan-codex-goal';
     const codexBootstrap = ['propose-codex-bootstrap-files','propose-codex-bootstrap-repair','materialize-codex-bootstrap-files','verify-codex-bootstrap','advance-codex-bootstrap'].includes(argv[0]);
     const codexTrusted = codexExecution || codexPlanning || codexBootstrap;
@@ -810,6 +842,8 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
           requireCodexBootstrapRepairArgs(positional, options);
         else requireCodexBootstrapEntryArgs(positional, options, argv[0]);
       }
+      else if (['run-codex-goal','resume-codex-goal'].includes(argv[0]))
+        requireCodexGoalExecutionArgs(positional, options);
       else requireCodexWorkflowEntryArgs(positional, options);
       // Malformed/oversized caller JSON is rejected before opening Store or
       // creating an authenticated Host binding; parse it only once.

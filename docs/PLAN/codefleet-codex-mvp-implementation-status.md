@@ -1405,3 +1405,25 @@ keep their no-replay handoff and are not silently redispatched. The new test
 checks current and mutated source, invalid paths and zero Store events/runs.
 This is advisory read-only UX, not an approval, Host grant, independent Judge
 or Host Live acceptance. Windows/Linux CI for this new head is required.
+
+## Trusted Goal-ID execution delegates to existing authenticated Workflow lane (CI pending)
+
+The existing `codefleet-alpha objective` CLI now exposes
+`run-codex-goal|resume-codex-goal <planning-session-id> --hash <workflowHash>`.
+This is a user-facing handoff from a natural-language Goal to its reviewed
+Contract/DAG and previously approved Controller lane. The exact persisted
+`planning-<session-id>` Workflow must pass the read-only Goal provenance,
+current revision, hash and Objective checks. The invocation then delegates
+directly to the existing `run-codex-workflow|resume-codex-workflow`
+implementation with the **same Store-bound authenticated facade and Operator
+callback**. It does not create a Workflow, approve an Operator identity, start
+a second scheduler, bypass current Git source/Lease/budget checks or issue a
+new Host grant. The plain CLI remains unavailable for model execution without
+a trusted embedding; invalid IDs, hashes and extra flags fail before invoking
+the privileged admission factory. A fully delivered and currently independently
+verified Objective returns a no-op COMPLETE projection with no new Host Turn.
+Offline regressions cover Planning-only, pending approval, separate Operator
+and Host grant denials, no attempted model/verifier effects, resume handoff,
+incorrect hashes and already-COMPLETE no-op. This does not establish native
+Codex Host Live, real Operator authentication integration, PROTECTED execution
+or final product Objective acceptance. Fresh Windows/Linux CI is required.

@@ -629,6 +629,24 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
   assert.equal(goalComplete.data.workflow.continuation.status,'OBJECTIVE_COMPLETE');
   assert.equal(goalComplete.data.hostLiveAcceptance,'UNVERIFIED');
   assert.equal(goalComplete.data.executionGranted,false);
+  // The Goal execution alias must not dispatch another Host/Controller Turn
+  // once the independently reobserved delivered Objective is complete.
+  const settledEvents=f.store.events(created.workflowId).length;
+  let onCompletionGrants=0;
+  const alreadyDone=await productCli([
+    'run-codex-goal',f.request.sessionId,'--hash',created.workflowHash
+  ],f.store.directory,{createCodexAdmission:store=>({
+    facade:createCodexMvpFacade(store,{
+      executable:process.execPath,model:'OFFLINE_NO_REEXECUTION'
+    }),authorizeOperator:async()=>{onCompletionGrants++;throw Error('Completed Objective must not request an execution grant');}
+  })});
+  assert.equal(alreadyDone.exitCode,0,alreadyDone.data?.error);
+  assert.equal(alreadyDone.data.status,'OBJECTIVE_COMPLETE');
+  assert.equal(alreadyDone.data.objectiveComplete,true);
+  assert.equal(alreadyDone.data.executionSucceeded,false);
+  assert.equal(alreadyDone.data.executionGranted,false);
+  assert.equal(onCompletionGrants,0);
+  assert.equal(f.store.events(created.workflowId).length,settledEvents);
   await writeFile(join(f.repo,'src/a.js'),'user drift after delivery');
   const drifted=await api.status(created.workflowId);
   assert.equal(drifted.objectiveComplete,false);
@@ -1678,4 +1696,91 @@ test('Codex Goal progress blocks forged Workflow provenance and execution option
  assert.equal(rejected.data.executionGranted,false);
  assert.equal(f.store.events(created.workflowId).length,events);
  assert.equal(countWorkflowAttempts(f.store),0);
+});
+
+
+test('Goal execution alias preserves reviewed DAG, exact hash and independent Host/Operator grants',async t=>{
+ const f=await fixture(t);
+ const sessionId=f.request.sessionId;
+ const validHash=f.result.workflowPreview.workflow.workflowHash;
+ const entry=['run-codex-goal',sessionId,'--hash',validHash];
+ let factories=0,operatorReviews=0,hostGrants=0,hostTurns=0,verifications=0;
+ const createCodexAdmission=store=>{
+  factories++;
+  return {facade:createCodexMvpFacade(store,{
+   executable:process.execPath,model:'OFFLINE_DENIED_HOST',enableHostTurns:true,
+   authorizeWorkflow:async()=>{hostGrants++;return false;},
+   verificationBackend:{
+    prepare:async()=>{verifications++;throw Error('Unexpected verifier prepare');},
+    verify:async()=>{verifications++;throw Error('Unexpected verifier run');},
+    cleanup:async()=>{verifications++;throw Error('Unexpected verifier cleanup');}
+   },
+   transport:async()=>{hostTurns++;throw Error('Unexpected Codex Turn');}
+  }),authorizeOperator:async scope=>{
+   operatorReviews++;
+   assert.equal(scope.workflowId,'planning-'+sessionId);
+   assert.equal(scope.workflowHash,validHash);
+   assert.equal(scope.planningSessionId,sessionId);
+   assert.equal(scope.protectedVerified,false);
+   return true;
+  }};
+ };
+ for(const invalid of [
+  [...entry,'--actor','untrusted'],
+  [...entry,'--allow-model'],
+  ['run-codex-goal','not-a-planning-id','--hash',validHash],
+  ['resume-codex-goal',sessionId,'--hash','invalid']
+ ]) {
+  const r=await productCli(invalid,f.store.directory,{createCodexAdmission});
+  assert.equal(r.exitCode,1);
+  assert.match(r.data.error,/Codex Goal execution requires/);
+ }
+ assert.equal(factories,0,'Invalid Goal execution requests cannot create a trusted Host binding');
+ const plain=await productCli(entry,f.store.directory);
+ assert.equal(plain.exitCode,1);
+ assert.match(plain.data.error,/AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE/);
+ const notPrepared=await productCli(entry,f.store.directory,{createCodexAdmission});
+ assert.equal(notPrepared.exitCode,1);
+ assert.match(notPrepared.data.error,/current reviewed Workflow and exact hash/);
+ assert.equal(operatorReviews,0);
+ assert.equal(hostGrants,0);
+ const created=await prepareReviewedCodexWorkflow(f.store,f.repo,sessionId,{
+  authorizeReview:async()=>true
+ });
+ assert.equal(created.workflowHash,validHash);
+ const beforeApproval=await productCli(entry,f.store.directory,{createCodexAdmission});
+ assert.equal(beforeApproval.exitCode,1);
+ assert.match(beforeApproval.data.error,/Workflow approval absent/);
+ assert.equal(operatorReviews,0);
+ approveWorkflow(f.store,created.workflowId,{
+  actor:'offline-fixture-reviewer',workflowHash:validHash,
+  expiresAt:Date.now()+60_000
+ });
+ const eventCount=f.store.events(created.workflowId).length;
+ for(const action of ['run-codex-goal','resume-codex-goal']) {
+  const blocked=await productCli([
+   action,sessionId,'--hash',validHash
+  ],f.store.directory,{createCodexAdmission});
+  assert.equal(blocked.exitCode,1,blocked.data?.error);
+  assert.equal(blocked.data.status,'CODEX_WORKFLOW_EXECUTION_BLOCKED');
+  assert.equal(blocked.data.workflowId,created.workflowId);
+  assert.match(blocked.data.error,/Exact managed Workflow execution grant denied/);
+  assert.equal(blocked.data.progress.kind,'CODEFLEET_WORKFLOW_PROGRESS_V1');
+  assert.equal(blocked.data.continuation.status,'AUTHENTICATED_HOST_ADMISSION_REQUIRED');
+  assert.equal(blocked.data.continuation.automaticReplay,false);
+  assert.equal(blocked.data.executionGranted,false);
+  assert.equal(blocked.data.executionSucceeded,false);
+  assert.equal(blocked.data.hostLiveAcceptance,'UNVERIFIED');
+ }
+ const mismatched=await productCli([
+  'run-codex-goal',sessionId,'--hash','f'.repeat(64)
+ ],f.store.directory,{createCodexAdmission});
+ assert.equal(mismatched.exitCode,1);
+ assert.match(mismatched.data.error,/current reviewed Workflow and exact hash/);
+ assert.equal(operatorReviews,2);
+ assert.equal(hostGrants,2);
+ assert.equal(hostTurns,0);
+ assert.equal(verifications,0);
+ assert.equal(countWorkflowAttempts(f.store),0);
+ assert.equal(f.store.events(created.workflowId).length,eventCount);
 });
