@@ -1527,3 +1527,14 @@ boundary, immutable submission, and no implicit Workflow approval.
 This is not a real Codex Host Live run, protected verification, production
 Operator credential flow or final Objective E2E acceptance. Fresh Windows/Linux
 CI is required.
+
+## Persisted A→B handoff observation during a managed Turn (CI pending)
+
+The existing reviewed multi-WorkItem Goal CLI integration test now opens an
+independent read-only Store during the synthetic **B** Host Turn. It checks that
+A was durably recorded as SUCCEEDED before B dispatch, B is explicitly STARTED
+and unresolved, and the user-facing Goal continuation requires reconciliation
+rather than automatic replay after interruption. This tests recovery visibility
+at the dependent WorkItem boundary; it does not simulate a native Codex process
+crash, certify Host Live, or accept a Protected Objective. Fresh Windows/Linux
+CI is required for this test-only revision.

@@ -1976,8 +1976,21 @@ test('reviewed Codex multi-WorkItem Goal executes ordered A then B through authe
     transport:async request=>{
      const prompt=JSON.parse(request.prompt),id=prompt.workItemId;
      assert.ok(['a','b'].includes(id));
-     if(id==='b') assert.match(prompt.files['src/a.js'],/return x-y;/,
+     if(id==='b') {
+      assert.match(prompt.files['src/a.js'],/return x-y;/,
        'B must receive accepted A rather than the stale baseline');
+      // A second read-only CLI opens a fresh Store while B is dispatched.
+      // On an interruption it must observe A as durable, B as uncertain,
+      // and never imply permission to replay the in-flight Host Turn.
+      const boundary=await productCli(['codex-goal-progress',sessionId],f.store.directory);
+      assert.equal(boundary.exitCode,2);
+      assert.deepEqual(boundary.data.workflow.workItems.map(item=>[
+       item.id,item.attempt?.status
+      ]),[['a','SUCCEEDED'],['b','STARTED']]);
+      assert.equal(boundary.data.workflow.continuation.status,'RECONCILE_REQUIRED');
+      assert.equal(boundary.data.workflow.continuation.automaticReplay,false);
+      assert.equal(boundary.data.objectiveComplete,false);
+     }
      hostTurns.push(id);
      return {threadId:'fake-thread-'+id,turnId:'fake-turn-'+id,
       terminalStatus:'completed',authority:'PROVIDER_REPORTED_ONLY',
