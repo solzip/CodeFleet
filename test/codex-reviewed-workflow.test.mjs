@@ -1922,11 +1922,29 @@ test('Goal execution alias preserves reviewed DAG, exact hash and independent Ho
  const plain=await productCli(entry,f.store.directory);
  assert.equal(plain.exitCode,1);
  assert.match(plain.data.error,/AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE/);
- const notPrepared=await productCli(entry,f.store.directory,{createCodexAdmission});
- assert.equal(notPrepared.exitCode,1);
- assert.match(notPrepared.data.error,/current reviewed Workflow and exact hash/);
+ for(const action of ['run-codex-goal','resume-codex-goal']) {
+  const notPrepared=await productCli([
+   action,sessionId,'--hash',validHash
+  ],f.store.directory,{createCodexAdmission});
+  assert.equal(notPrepared.exitCode,1);
+  assert.equal(notPrepared.data.status,'CODEX_GOAL_EXECUTION_NOT_READY');
+  assert.equal(notPrepared.data.planningSessionId,sessionId);
+  assert.equal(notPrepared.data.workflowId,null);
+  assert.equal(notPrepared.data.goalProgressStatus,'OBSERVED');
+  assert.equal(notPrepared.data.goalProgress.status,'AWAIT_WORKFLOW_REVIEW');
+  assert.equal(notPrepared.data.continuation.kind,'REVIEW_AND_PREPARE_WORKFLOW');
+  assert.equal(notPrepared.data.continuation.automaticReplay,false);
+  assert.match(notPrepared.data.nextAction,/codex-goal-progress --repository/);
+  assert.equal(notPrepared.data.objectiveComplete,false);
+  assert.equal(notPrepared.data.executionGranted,false);
+  assert.equal(notPrepared.data.executionSucceeded,false);
+  assert.deepEqual(notPrepared.data.goalProgress,
+   (await productCli(['codex-goal-progress',sessionId],f.store.directory)).data);
+ }
  assert.equal(operatorReviews,0);
  assert.equal(hostGrants,0);
+ assert.equal(hostTurns,0);
+ assert.equal(countWorkflowAttempts(f.store),0);
  const created=await prepareReviewedCodexWorkflow(f.store,f.repo,sessionId,{
   authorizeReview:async()=>true
  });

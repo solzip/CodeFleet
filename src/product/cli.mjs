@@ -479,6 +479,23 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     // which enforces current Operator approval, source freshness, budget,
     // Lease, Host grant and cancellation without a second execution engine.
     const progress = await inspectCodexGoalProgress(store, args[0]);
+    // A validated Goal may still be waiting for its independently reviewed
+    // Workflow. Preserve the persisted handoff instead of returning an opaque
+    // hash error; neither this response nor the supplied hash is a run grant.
+    if (['PLANNING_NOT_READY','AWAIT_WORKFLOW_REVIEW','BLOCKED'].includes(progress.status) &&
+        progress.workflowId === null)
+      return { exitCode:1, data: {
+        schemaVersion:1, status:'CODEX_GOAL_EXECUTION_NOT_READY',
+        planningSessionId:args[0], workflowId:null,
+        error:'Codex Goal has no current reviewed Workflow ready for execution',
+        goalProgress:progress, goalProgressStatus:'OBSERVED',
+        continuation:progress.continuation, objectiveComplete:false,
+        automaticReplay:false, executionSucceeded:false, executionGranted:false,
+        hostLiveAcceptance:'UNVERIFIED', protectedVerified:false,
+        nextAction:progress.status === 'AWAIT_WORKFLOW_REVIEW'
+          ? 'Review current source with codex-goal-progress --repository ABSOLUTE_PATH, then explicitly prepare the reviewed Workflow'
+          : 'Inspect codex-planning-status and resolve Planning or provenance before execution'
+      } };
     if (!['WORKFLOW_IN_PROGRESS','OBJECTIVE_COMPLETE'].includes(progress.status) ||
         progress.workflowId !== 'planning-'+args[0] ||
         progress.workflow?.workflowHash !== o.hash)

@@ -1607,6 +1607,19 @@ This is read-only visibility, not permission to execute or evidence of Codex
 Host Live, PROTECTED verification or Objective completion. This HEAD requires
 its own Windows/Linux CI before treating the new regressions as passing.
 
+## Goal execution before Workflow review returns actionable handoff (fresh CI required)
+
+The trusted `run-codex-goal` and `resume-codex-goal` aliases now return an
+explicit `CODEX_GOAL_EXECUTION_NOT_READY` response when the persisted Goal
+is still in Planning, awaiting independent Workflow preparation, or blocked
+by invalid provenance. It includes the current read-only `goalProgress`,
+a non-replay continuation and a concrete review/replan instruction rather than
+only an opaque Workflow hash error. An invalid hash against an existing
+reviewed Workflow still fails closed. Offline regressions exercise both
+aliases before Workflow creation with zero Host Turns or WorkItem Attempts.
+This is a recovery/entry UX improvement, not a grant, native Host Live
+evidence or Objective acceptance. The new HEAD requires its own CI result.
+
 ## Delivered Goal run/resume no-op response parity (fresh CI required)
 
 After a previously delivered Goal has a currently independently observed
