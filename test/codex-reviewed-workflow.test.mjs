@@ -2367,13 +2367,19 @@ test('Codex Goal read-only continuation offers bounded resume only for an idle s
  assert.deepEqual(uncertain.data.recoveryHandoff,{
   kind:'RECONCILE_EXISTING_EFFECTS',
   workflowId:prepared.workflowId,revision:run.revision,itemIds:['b'],
-  attempts:[{itemId:'b',childId:b.id,generation:1,status:'STARTED'}],
+  attempts:[{itemId:'b',childId:b.id,generation:1,status:'STARTED',
+   reason:null,reportCommand:{argv:['report',b.id],
+    diagnosticOnly:true,executionGranted:false,automaticReplay:false}}],
   inspectCommand:{argv:['workflow-progress',prepared.workflowId],readOnly:true},
   requiredNextAction:'INSPECT_PERSISTED_EFFECTS_AND_LEASE',
   executionGranted:false,automaticReplay:false
  });
  // Resolve the synthetic uncertain B as a terminal failure. A retry must
  // remain separately reviewed bounded Repair, not a resumed Host Turn.
+ b.state='FAILED';
+ b.reason='Synthetic B verification failed';
+ f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
+  .run(JSON.stringify(b),b.id);
  run.states.b='FAILED';
  f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
   .run(JSON.stringify(run),prepared.workflowId);
@@ -2385,13 +2391,24 @@ test('Codex Goal read-only continuation offers bounded resume only for an idle s
  assert.deepEqual(repair.data.recoveryHandoff,{
   kind:'REVIEW_FAILED_WORKITEM_EVIDENCE',
   workflowId:prepared.workflowId,revision:run.revision,itemIds:['b'],
-  attempts:[{itemId:'b',childId:b.id,generation:1,status:'FAILED'}],
+  attempts:[{itemId:'b',childId:b.id,generation:1,status:'FAILED',
+   reason:'Synthetic B verification failed',
+   reportCommand:{argv:['report',b.id],
+    diagnosticOnly:true,executionGranted:false,automaticReplay:false}}],
   inspectCommand:{argv:['workflow-progress',prepared.workflowId],readOnly:true},
   requiredNextAction:'REVIEW_FAILURE_EVIDENCE_AND_NEW_REPAIR_GRANT',
   executionGranted:false,automaticReplay:false
  });
 
+ // The handoff points to the exact persisted failed child, whose report
+ // can be inspected without submitting a Host or Repair attempt.
+ const childReport=await productCli(repair.data.recoveryHandoff.attempts[0].reportCommand.argv,
+  f.store.directory);
+ assert.equal(childReport.exitCode,0);
+ assert.equal(childReport.data.runId,b.id);
+ assert.equal(childReport.data.reason,b.reason);
+ assert.equal(childReport.data.verification.status,'NOT_RUN');
  assert.equal(f.store.events(prepared.workflowId).length,events);
  assert.equal(countWorkflowAttempts(f.store),attempts+1,
-  'Read-only status must not create an additional Attempt');
+  'Read-only status and child report must not create an additional Attempt');
 });

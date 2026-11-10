@@ -174,7 +174,12 @@ export async function inspectCodexGoalProgress(store, sessionId) {
       attempts:workflow.workItems
         .filter(item=>workflow.continuation.itemIds.includes(item.id) && item.attempt)
         .map(item=>({itemId:item.id,childId:item.attempt.childId,
-          generation:item.attempt.generation,status:item.attempt.status})),
+          generation:item.attempt.generation,status:item.attempt.status,
+          // A prior child report can expose persisted failure diagnostics.
+          // It is not a retry command or an independently accepted verdict.
+          reason:item.reason ?? null,
+          reportCommand:{argv:['report',item.attempt.childId],
+            diagnosticOnly:true,executionGranted:false,automaticReplay:false}})),
       inspectCommand:{argv:['workflow-progress',workflowId],readOnly:true},
       ...(workflow.objective?.status === 'RECONCILING'
         ? {deliveredStatusCommand:{argv:['delivered-status',workflowId],readOnly:true}}

@@ -1750,3 +1750,16 @@ checks both no-replay and separate Repair review. Full local Node 24/Docker
 regression is not available in the current environment; the new commit needs
 its own Windows/Linux CI. Host Live and final Objective E2E acceptance
 remain deferred.
+
+## Persisted WorkItem recovery diagnostics through the existing report command (fresh CI required)
+
+A failed or uncertain WorkItem in the read-only `codex-goal-progress`
+`recoveryHandoff` now includes its persisted diagnostic reason and an exact
+`report <childId>` command for that same generation's child Run. This reuses
+the existing RunReport rather than inventing a second evidence reader. The
+report command is diagnostic, not an execution grant, approval, replay, verified
+Evidence or an automatic Repair. An offline regression exercises a synthetic
+A-settled/B-uncertain-to-failed transition, resolves the actual recorded child
+report and checks there is no new Attempt or Workflow event. It is not an actual
+Host failure or native Codex recovery proof. Fresh Windows/Linux CI is required;
+Host Live and final Objective E2E acceptance remain UNVERIFIED.
