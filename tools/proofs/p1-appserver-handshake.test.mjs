@@ -210,3 +210,32 @@ test("execution acknowledgement is necessary but explicitly not sufficient", () 
   assert.equal(result.status, 1);
   assert.match(result.stderr, /does not replace owner approval or hash verification/);
 });
+
+test("trailing-incomplete proof output cannot be accepted as a completed P1", async (t) => {
+  const { prepared, promise } = await runScenario(t, "trailing-incomplete");
+  await assert.rejects(promise, /incomplete JSONL/);
+  const recorded = JSON.parse(await readFile(join(prepared.artifacts, "p1-result.json"), "utf8"));
+  assert.equal(recorded.status, "P1_FAILED");
+  assert.equal(recorded.passed, false);
+  assert.equal(recorded.termination.confirmed, true);
+});
+
+test("post-completion server request is rejected after model/list", async (t) => {
+  const { prepared, promise } = await runScenario(t, "trailing-server-request");
+  await assert.rejects(promise, /after handshake completion/);
+  const recorded = JSON.parse(await readFile(join(prepared.artifacts, "p1-result.json"), "utf8"));
+  assert.equal(recorded.status, "P1_FAILED");
+  assert.equal(recorded.passed, false);
+  assert.equal(JSON.stringify(recorded).includes("never-record"), false);
+});
+
+test("proof rejection does not echo attacker-selected server notification names", () => {
+  const state = new HandshakeState();
+  const marker = "OWNER_PRIVATE_NOTIFICATION_017";
+  assert.throws(() => state.accept({ method: "unverified/" + marker, params: {} }),
+    error => {
+      assert.equal(error.message, "unapproved server notification");
+      assert.equal(error.message.includes(marker), false);
+      return true;
+    });
+});

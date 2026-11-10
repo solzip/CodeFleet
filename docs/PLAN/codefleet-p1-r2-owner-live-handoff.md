@@ -1,5 +1,14 @@
 # P1 R2 Owner Live Handoff — Native Windows (No Model Turns)
 
+> **HOLD — prepared R2 client NOT safe for owner Live acceptance.**
+> An offline safety audit after this handoff was written found that its
+> originally pinned P1 client can accept a completed model/list response while
+> discarding a trailing incomplete JSONL fragment. The client must observe
+> fully drained stdio before success. **Do not run the old R2 command below**.
+> This preparation remains historical; use a separately reviewed and
+> owner-approved replacement client/new Fixture. See
+> codefleet-host-protocol-proof-p1-r3-pending.md. P1 R2 was NOT_RUN.
+>
 **State:** P1_R2_READY_FOR_OWNER_APPROVAL / HOST_PROTOCOL_UNVERIFIED / NOT_RUN
 
 **Not an execution approval.** This handoff does not run Codex, alter the

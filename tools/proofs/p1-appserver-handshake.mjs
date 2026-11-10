@@ -58,8 +58,8 @@ export class HandshakeState {
   accept(message) {
     if (this.complete) throw new Error("message received after handshake completion");
     if (Object.hasOwn(message, "method")) {
-      if (Object.hasOwn(message, "id")) throw new Error(`unapproved server request: ${String(message.method)}`);
-      if (!ALLOWED_SERVER_NOTIFICATIONS.has(message.method)) throw new Error(`unapproved server notification: ${String(message.method)}`);
+      if (Object.hasOwn(message, "id")) throw new Error("unapproved server request");
+      if (!ALLOWED_SERVER_NOTIFICATIONS.has(message.method)) throw new Error("unapproved server notification");
       this.notificationCounts.set(message.method, (this.notificationCounts.get(message.method) ?? 0) + 1);
       return [];
     }
@@ -139,12 +139,14 @@ export async function validateIdentity(options, dependencies = {}) {
 }
 
 function writeJsonLine(stream, message) { assertAllowedOutbound(message); stream.write(`${JSON.stringify(message)}\n`); }
-function waitForExit(child) { return child.exitCode !== null || child.signalCode !== null ? Promise.resolve({ code: child.exitCode, signal: child.signalCode }) : new Promise((resolveExit) => child.once("exit", (code, signal) => resolveExit({ code, signal }))); }
 async function waitBounded(promise, timeoutMs, label) { let timer; try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(label)), timeoutMs); })]); } finally { clearTimeout(timer); } }
-async function stopChild(child, shutdownMs) {
+// 'exit' can occur while stdout/stderr is still readable. A proof that only
+// observes exitCode can incorrectly accept unexamined Host protocol bytes.
+// Capture 'close' *before* writing initialize; only that event drains stdio.
+async function stopChild(child, closed, shutdownMs) {
   child.stdin?.end();
-  try { return { ...(await waitBounded(waitForExit(child), shutdownMs, "App Server did not terminate after stdin EOF")), confirmed: true, forced: false }; }
-  catch { child.kill(); try { return { ...(await waitBounded(waitForExit(child), shutdownMs, "App Server termination could not be confirmed")), confirmed: true, forced: true }; } catch { return { code: child.exitCode, signal: child.signalCode, confirmed: false, forced: true }; } }
+  try { return { ...(await waitBounded(closed, shutdownMs, "App Server stdio did not close after stdin EOF")), confirmed: true, forced: false }; }
+  catch { child.kill(); try { return { ...(await waitBounded(closed, shutdownMs, "App Server close could not be confirmed")), confirmed: true, forced: true }; } catch { return { code: child.exitCode, signal: child.signalCode, confirmed: false, forced: true }; } }
 }
 
 async function writeEvidence(paths, transcript, result) {
@@ -162,12 +164,16 @@ export async function runProof(options, dependencies = {}) {
   const replacements = [[paths.codexExe, "<CODEX_EXE>"], [paths.fixture, "<PROOF_ROOT>"], [paths.artifacts, "<PROOF_ARTIFACTS>"], [paths.clientPath, "<PROOF_CLIENT>"]];
   const commandArgs = dependencies.commandArgs ?? ["app-server", "--listen", "stdio://", "--strict-config"];
   const child = (dependencies.spawnImpl ?? spawn)(dependencies.command ?? paths.codexExe, commandArgs, { cwd: paths.fixture, shell: false, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+  // Do not miss an early close between spawn and the Handshake resolution.
+  const closed = new Promise(resolveClose => child.once("close", (code, signal) => resolveClose({ code, signal })));
   const state = new HandshakeState();
   const transcript = [];
   let stdoutBytes = 0; let stderrBytes = 0; let stdoutBuffer = ""; let failure; let handshakeResolve; let handshakeReject;
   const handshake = new Promise((resolveHandshake, rejectHandshake) => { handshakeResolve = resolveHandshake; handshakeReject = rejectHandshake; });
   const fail = (error) => { if (!failure) { failure = error instanceof Error ? error : new Error(String(error)); handshakeReject(failure); } };
-  child.once("error", fail);
+  child.once("error", () => fail(new Error("App Server process failure; no retry")));
+  for (const stream of [child.stdin, child.stdout, child.stderr])
+    stream?.on?.("error", () => fail(new Error("App Server stream failure; no retry")));
   child.stderr.on("data", (chunk) => { stderrBytes += chunk.length; if (stderrBytes > LIMITS.stderrBytes) fail(new Error("stderr exceeded approved size limit")); });
   child.stdout.on("data", (chunk) => {
     stdoutBytes += chunk.length;
@@ -184,10 +190,13 @@ export async function runProof(options, dependencies = {}) {
       }
     } catch (error) { fail(error); }
   });
-  child.once("exit", (code, signal) => { if (!state.complete) fail(new Error(`App Server exited before handshake completion (${code ?? signal})`)); });
+  child.once("close", () => { if (!state.complete) fail(new Error("App Server exited before handshake completion")); });
   const initial = initializeRequest(); transcript.push(minimalProtocolRecord("out", initial)); writeJsonLine(child.stdin, initial);
   try { await waitBounded(handshake, options.timeoutMs, "P1 handshake timeout"); } catch (error) { failure = failure ?? error; }
-  const termination = await stopChild(child, dependencies.shutdownMs ?? LIMITS.shutdownMs);
+  const termination = await stopChild(child, closed, dependencies.shutdownMs ?? LIMITS.shutdownMs);
+  // Partial data after a successful model/list response must not be ignored.
+  // The post-close check is deliberately after stdio has been fully drained.
+  if (stdoutBuffer.trim()) failure = failure ?? new Error("App Server stdout ended with incomplete JSONL");
   if (!termination.confirmed) failure = failure ?? new Error("App Server termination could not be confirmed");
   if (!failure && termination.forced) failure = new Error("App Server required forced termination after handshake");
   if (!failure && termination.code !== 0) failure = new Error(`App Server exited with nonzero status ${termination.code}`);
