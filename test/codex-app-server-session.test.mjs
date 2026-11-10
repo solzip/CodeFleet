@@ -130,6 +130,19 @@ test('same-Thread and same-Turn agent message can seed a valid receipt', () => {
   assert.equal(JSON.parse(p.receipt().text).summary, 'bound');
 });
 
+test('item/started text without item/completed is not a final model response', () => {
+  const p = start(make());
+  p.accept({ method: 'item/started', params: {
+    threadId: 'thread-fixture', turnId: 'turn-fixture',
+    item: { type: 'agentMessage', id: 'partial-message',
+      text: '{"summary":"never completed","edits":[]}' }
+  } });
+  assert.throws(() => p.accept({ method: 'turn/completed', params: {
+    threadId: 'thread-fixture', turn: { id: 'turn-fixture',
+      status: 'completed', items: [] }
+  } }), /Missing or oversized final agent message/);
+});
+
 test('workspace tool output delta is only admitted under explicit workspace mode',()=>{
   const opts={cwd:process.cwd(),model:'fixture',prompt:'bounded return',
     outputSchema:{type:'object'}};
