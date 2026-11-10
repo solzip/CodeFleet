@@ -519,7 +519,7 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
   const f=await fixture(t);
   const hostTurns=[], verifierCalls=[], grants=[];
   const approvedCriteria=[{id:'C1',requiredAuthority:'LOCAL_EXECUTED'}];
-  const api=createCodexMvpFacade(f.store,{
+  const createApi=store=>createCodexMvpFacade(store,{
     executable:process.execPath,model:'OFFLINE_FAKE_HOST',enableHostTurns:true,
     authorizeReviewedWorkflow:async scope=>{
       assert.equal(scope.executionGranted,false);
@@ -589,6 +589,9 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
       }
     }
   });
+  // Reopen the same persisted Store via the actual trusted CLI wrapper for
+  // execution. This is not a new scheduler or an Operator bypass.
+  const api=createApi(f.store);
   const created=await api.prepareReviewedExistingWorkflow(f.repo,f.request.sessionId);
   assert.equal(created.state,'WAITING_APPROVAL');
   assert.equal(created.executionGranted,false);
@@ -607,7 +610,31 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
     actor:'offline-fixture-reviewer',workflowHash:created.workflowHash,
     expiresAt:Date.now()+60_000
   });
-  const completed=await api.runExistingWorkflow(created.workflowId);
+  const operatorScopes=[];
+  const goalCommand=await productCli([
+    'run-codex-goal',f.request.sessionId,'--hash',created.workflowHash
+  ],f.store.directory,{
+    createCodexAdmission:store=>({
+      facade:createApi(store),
+      authorizeOperator:async scope=>{
+        operatorScopes.push(scope);
+        assert.equal(scope.kind,'CODEFLEET_AUTHENTICATED_CODEX_ENTRY_V1');
+        assert.equal(scope.workflowId,created.workflowId);
+        assert.equal(scope.planningSessionId,f.request.sessionId);
+        assert.equal(scope.workflowHash,created.workflowHash);
+        assert.equal(scope.protectedVerified,false);
+        assert.equal(scope.resume,false);
+        assert.equal(Object.isFrozen(scope.sourceContract),true);
+        assert.equal(Object.isFrozen(scope.workflowContract),true);
+        assert.deepEqual(scope.workflowContract.items.map(item=>item.id),['change']);
+        return true;
+      }
+    })
+  });
+  assert.equal(goalCommand.exitCode,0,goalCommand.data?.error);
+  assert.equal(goalCommand.data.planningSessionId,f.request.sessionId);
+  assert.equal(operatorScopes.length,1);
+  const completed=goalCommand.data;
   assert.equal(completed.workflowState,'COMPLETED',completed.objective?.reason);
   assert.equal(completed.objective.status,'COMPLETE',completed.objective?.reason);
   assert.equal(completed.objective.protection,'UNPROTECTED');
@@ -618,6 +645,10 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
   // WorkItem and final integration, using the same pinned regression suite.
   assert.deepEqual(verifierCalls,Array.from({length:4},()=>['test/a.test.js']));
   assert.equal(grants.length,1);
+  assert.equal(completed.progress.continuation.status,'OBJECTIVE_COMPLETE');
+  assert.equal(completed.progress.executionGranted,false);
+  assert.equal(completed.progress.continuation.automaticReplay,false);
+  assert.equal(completed.progress.objectiveComplete,true);
   const observed=await dispatchProduct(['delivered-status',created.workflowId],{store:f.store});
   assert.equal(observed.exitCode,0);
   assert.equal(observed.data.objectiveComplete,true);

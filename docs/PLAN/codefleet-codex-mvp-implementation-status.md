@@ -1427,3 +1427,21 @@ and Host grant denials, no attempted model/verifier effects, resume handoff,
 incorrect hashes and already-COMPLETE no-op. This does not establish native
 Codex Host Live, real Operator authentication integration, PROTECTED execution
 or final product Objective acceptance. Fresh Windows/Linux CI is required.
+
+## Goal-ID authenticated CLI positive joined trace (fresh CI required)
+
+The original synthetic accepted Objective fixture now executes through the
+`run-codex-goal <planning-session-id> --hash <workflowHash>` trusted CLI
+wrapper with a fresh Store connection, instead of invoking the trusted facade
+runner directly. It first promotes an independently reviewed Host Planning
+result to a pending Workflow; separate exact Workflow approval, authenticated
+Operator review, and independent bounded Host grant are then required.
+A fake Codex proposal travels through the existing Controller, independent
+fake verifier, approved Local Delivery, criterion Evidence, Objective Judge
+and persisted Goal progress. The fixture checks the one Operator review,
+one managed-Host grant, single WorkItem Turn, read-only Goal COMPLETE
+projection, no automatic replay and revocation of current Objective COMPLETE
+after a user file edit. The preexisting denial and hash-integrity tests are
+retained. It is not a native Codex model Turn, independent real-world
+verifier/protected OS isolation, public Operator authentication, or final
+MVP acceptance. Fresh Windows/Linux GitHub Actions CI is required.
