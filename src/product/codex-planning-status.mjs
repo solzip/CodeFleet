@@ -160,12 +160,37 @@ export async function inspectCodexGoalProgress(store, sessionId) {
       authenticatedOperatorRequired:true,managedHostGrantRequired:true,
       executionGranted:false,automaticReplay:false
     } : null;
+    // Expose an inspectable, read-only handoff at the two persisted recovery
+    // boundaries. An uncertain Host effect must be reconciled before retry;
+    // a terminal failure requires independently reviewed bounded Repair.
+    // References are diagnostics, never a fresh Host/Operator grant.
+    const recoveryKind = workflow.continuation.status === 'RECONCILE_REQUIRED'
+      ? 'RECONCILE_EXISTING_EFFECTS'
+      : workflow.continuation.status === 'REPAIR_REVIEW_REQUIRED'
+        ? 'REVIEW_FAILED_WORKITEM_EVIDENCE' : null;
+    const recoveryHandoff = recoveryKind ? {
+      kind:recoveryKind,workflowId,revision:workflow.revision,
+      itemIds:[...workflow.continuation.itemIds],
+      attempts:workflow.workItems
+        .filter(item=>workflow.continuation.itemIds.includes(item.id) && item.attempt)
+        .map(item=>({itemId:item.id,childId:item.attempt.childId,
+          generation:item.attempt.generation,status:item.attempt.status})),
+      inspectCommand:{argv:['workflow-progress',workflowId],readOnly:true},
+      ...(workflow.objective?.status === 'RECONCILING'
+        ? {deliveredStatusCommand:{argv:['delivered-status',workflowId],readOnly:true}}
+        : {}),
+      requiredNextAction:recoveryKind === 'RECONCILE_EXISTING_EFFECTS'
+        ? 'INSPECT_PERSISTED_EFFECTS_AND_LEASE'
+        : 'REVIEW_FAILURE_EVIDENCE_AND_NEW_REPAIR_GRANT',
+      executionGranted:false,automaticReplay:false
+    } : null;
     return { ...base, status:workflow.objectiveComplete
       ? 'OBJECTIVE_COMPLETE' : 'WORKFLOW_IN_PROGRESS',
       workflowId, workflow, objective:workflow.objective,
       objectiveComplete:workflow.objectiveComplete === true,
       continuation:workflow.continuation,
-      ...(resumeCommand ? { resumeCommand } : {}) };
+      ...(resumeCommand ? { resumeCommand } : {}),
+      ...(recoveryHandoff ? { recoveryHandoff } : {}) };
   } catch {
     // A failed delivered-tree observation is not a valid Objective verdict.
     return { ...base, status:'BLOCKED',

@@ -2364,6 +2364,33 @@ test('Codex Goal read-only continuation offers bounded resume only for an idle s
  assert.equal(uncertain.data.continuation.status,'RECONCILE_REQUIRED');
  assert.equal(uncertain.data.resumeCommand,undefined);
  assert.equal(uncertain.data.continuation.automaticReplay,false);
+ assert.deepEqual(uncertain.data.recoveryHandoff,{
+  kind:'RECONCILE_EXISTING_EFFECTS',
+  workflowId:prepared.workflowId,revision:run.revision,itemIds:['b'],
+  attempts:[{itemId:'b',childId:b.id,generation:1,status:'STARTED'}],
+  inspectCommand:{argv:['workflow-progress',prepared.workflowId],readOnly:true},
+  requiredNextAction:'INSPECT_PERSISTED_EFFECTS_AND_LEASE',
+  executionGranted:false,automaticReplay:false
+ });
+ // Resolve the synthetic uncertain B as a terminal failure. A retry must
+ // remain separately reviewed bounded Repair, not a resumed Host Turn.
+ run.states.b='FAILED';
+ f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
+  .run(JSON.stringify(run),prepared.workflowId);
+ f.store.db.prepare('UPDATE workflow_attempts SET status=? WHERE runId=? AND itemId=?')
+  .run('FAILED',prepared.workflowId,'b');
+ const repair=await productCli(argv,f.store.directory);
+ assert.equal(repair.data.continuation.status,'REPAIR_REVIEW_REQUIRED');
+ assert.equal(repair.data.resumeCommand,undefined);
+ assert.deepEqual(repair.data.recoveryHandoff,{
+  kind:'REVIEW_FAILED_WORKITEM_EVIDENCE',
+  workflowId:prepared.workflowId,revision:run.revision,itemIds:['b'],
+  attempts:[{itemId:'b',childId:b.id,generation:1,status:'FAILED'}],
+  inspectCommand:{argv:['workflow-progress',prepared.workflowId],readOnly:true},
+  requiredNextAction:'REVIEW_FAILURE_EVIDENCE_AND_NEW_REPAIR_GRANT',
+  executionGranted:false,automaticReplay:false
+ });
+
  assert.equal(f.store.events(prepared.workflowId).length,events);
  assert.equal(countWorkflowAttempts(f.store),attempts+1,
   'Read-only status must not create an additional Attempt');

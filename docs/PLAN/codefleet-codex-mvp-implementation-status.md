@@ -1734,3 +1734,19 @@ they do not certify accepted child Evidence, real process restart or Host Live.
 The runtime here has Node 22, no full GitHub checkout/Docker and cannot run
 the required Node 24/Alpha regression locally. The new HEAD requires its own
 Windows/Linux GitHub CI before these tests can be called passing.
+
+## Goal WorkItem reconciliation and bounded Repair review handoff (fresh CI required)
+
+The read-only `codex-goal-progress` projection now returns a structured
+`recoveryHandoff` when the existing Controller reports an unresolved
+Host/Delivery effect or a terminal failed WorkItem. It identifies the current
+Workflow revision, affected WorkItems, persisted Attempt child/generation/status,
+and a read-only `workflow-progress` inspection command; uncertain delivery
+also points to read-only `delivered-status`. It never suggests
+`resume-codex-goal` for uncertain or failed work and cannot mint a Repair
+authorization, Operator grant or Host execution capability. An offline
+regression changes synthetic B from STARTED to FAILED after persisted A and
+checks both no-replay and separate Repair review. Full local Node 24/Docker
+regression is not available in the current environment; the new commit needs
+its own Windows/Linux CI. Host Live and final Objective E2E acceptance
+remain deferred.
