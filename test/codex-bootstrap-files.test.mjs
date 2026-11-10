@@ -1573,3 +1573,37 @@ test('NEW_PROJECT continuation keeps Evidence defect as first handoff without un
  assert.equal(continuation.executionGranted,false);
  assert.equal(continuation.automaticReplay,false);
 });
+
+test('NEW_PROJECT with both drift and an uncertain Fileset keeps the exact reconciliation target',()=>{
+ const items=[
+   {id:'uncertain',kind:'local-edit',state:'MATERIALIZING',waitingOn:['other'],
+     fileset:{state:'MATERIALIZING'},capability:'SUPPORTED'},
+   {id:'broken',kind:'local-verification',state:'EVIDENCE_INVALID',
+     waitingOn:[],capability:'SUPPORTED'},
+   {id:'approval',kind:'local-edit',state:'PENDING_FILESET',waitingOn:[],
+     fileset:{state:'WAITING_APPROVAL'},capability:'SUPPORTED'}
+ ];
+ const view={items,drift:[{path:'src/unsettled.js',reason:'CURRENT_FILE_CHANGED'}]};
+ const actions=bootstrapActions(view);
+ const result=bootstrapContinuation({revision:4,bootstrap:{workflowHash:'fixture-hash'}},
+   view,actions);
+ assert.equal(result.status,'HUMAN_HANDOFF');
+ assert.equal(result.reason,'UNCERTAIN_FILESET_EFFECT_WITH_TARGET_DRIFT');
+ assert.deepEqual(result.next,{kind:'RECONCILE',itemId:'uncertain'});
+ assert.equal(result.executionGranted,false);
+ assert.equal(result.automaticReplay,false);
+ assert.equal(result.taskRevision,4);
+});
+test('NEW_PROJECT drift without an uncertain Fileset remains a blocked no-replay handoff',()=>{
+ const view={items:[
+   {id:'approval',kind:'local-edit',state:'PENDING_FILESET',waitingOn:[],
+     fileset:{state:'WAITING_APPROVAL'},capability:'SUPPORTED'}
+ ],drift:[{path:'src/user-changed.js',reason:'CURRENT_FILE_CHANGED'}]};
+ const result=bootstrapContinuation({revision:4,bootstrap:{workflowHash:'fixture-hash'}},
+   view,bootstrapActions(view));
+ assert.equal(result.status,'HUMAN_HANDOFF');
+ assert.equal(result.reason,'FILES_CHANGED_OUTSIDE_CODEFLEET');
+ assert.equal(result.next,null);
+ assert.equal(result.executionGranted,false);
+ assert.equal(result.automaticReplay,false);
+});

@@ -1323,3 +1323,14 @@ the original error is propagated rather than inventing recovery readiness.
 Existing denial fixtures verify the result with no additional Host or
 verification effects. New Windows/Linux CI is required; native Codex Host
 Live and final Objective E2E remain unverified.
+
+## NEW_PROJECT drift plus uncertain Fileset keeps targeted recovery (new CI required)
+
+The read-only Bootstrap continuation now preserves the exact `RECONCILE`
+target when the same Project has changed files and a Fileset still in
+`MATERIALIZING` or `WAITING_HUMAN`. Previously the drift guard returned
+only a generic changed-files handoff, hiding a potentially partially applied
+effect. Drift without an uncertain Fileset remains a blocking handoff with no
+next execution step. Neither case grants approval, retries a write, runs a
+Host, or reports protected Objective acceptance. The two offline regression
+tests require fresh Windows/Linux CI; Host Live acceptance remains unverified.
