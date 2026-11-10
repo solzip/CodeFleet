@@ -1294,3 +1294,18 @@ dependency-blocked uncertain WorkItems alongside a second approval request.
 This only changes advisory recovery ordering and never replays writes, grants
 approval, establishes OS confinement, runs a native Codex Turn, or accepts an
 Objective. Fresh Windows/Linux CI is needed for this commit.
+
+## NEW_PROJECT continuation reconciliation precedence over Evidence defect (CI pending)
+
+The read-only Bootstrap action list already places unresolved Fileset effects
+ahead of unrelated approvals, but the single-step continuation previously
+overrode that ordering whenever another item had EVIDENCE_INVALID. The trusted
+Host handoff could therefore direct an operator to Evidence repair while an
+independent Fileset was MATERIALIZING or WAITING_HUMAN, including an effect
+whose dependencies later became blocked. Continuation now recommends
+RECONCILE first, preserving EVIDENCE_DEFECT priority when no uncertain effect
+remains. Two focused nonproduction regressions check the priority and assert
+that neither path grants execution nor automatic replay. This is advisory
+Recovery UX only, not actual Host Live proof, autonomous recovery,
+Protected Evidence or Objective acceptance. The new commit requires its own
+Windows/Linux CI result.

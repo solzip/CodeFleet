@@ -39,7 +39,7 @@ import { task, verifyTask } from '../src/product/tasks.mjs';
 import { hash } from '../src/alpha/contract.mjs';
 import { Store } from '../src/alpha/store.mjs';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { taskReport, bootstrapActions } from '../src/product/report.mjs';
+import { taskReport, bootstrapActions, bootstrapContinuation } from '../src/product/report.mjs';
 import { createCodexMvpFacade } from '../src/product/codex-mvp-facade.mjs';
 import { productCli } from '../src/product/cli.mjs';
 import { createFiles, modifyFiles, preflightFiles } from '../src/workflow/bootstrap-files.mjs';
@@ -1517,4 +1517,40 @@ test('NEW_PROJECT bootstrap also reconciles an already-started Fileset whose dep
  assert.equal(actions[0].kind,'RECONCILE');
  assert.deepEqual(actions[0].items,['uncertain']);
  assert.equal(actions[1].kind,'AWAIT_FILESET_APPROVAL');
+});
+
+test('NEW_PROJECT continuation requests uncertain Fileset reconciliation ahead of unrelated Evidence defect',()=>{
+ const items=[
+  {id:'uncertain',kind:'local-edit',state:'WAITING_HUMAN',waitingOn:['broken'],
+   fileset:{state:'WAITING_HUMAN'},capability:'SUPPORTED'},
+  {id:'broken',kind:'local-verification',state:'EVIDENCE_INVALID',
+   waitingOn:[],capability:'SUPPORTED'},
+  {id:'approval',kind:'local-edit',state:'PENDING_FILESET',waitingOn:[],
+   fileset:{state:'WAITING_APPROVAL'},capability:'SUPPORTED'}
+ ];
+ const view={items,drift:[]};
+ const actions=bootstrapActions(view);
+ assert.deepEqual(actions.slice(0,2).map(a=>a.kind),
+   ['RECONCILE','AWAIT_FILESET_APPROVAL']);
+ const continuation=bootstrapContinuation({revision:3,
+   bootstrap:{workflowHash:'fixture-workflow'}},view,actions);
+ assert.equal(continuation.status,'HUMAN_HANDOFF');
+ assert.deepEqual(continuation.next,{kind:'RECONCILE',itemId:'uncertain'});
+ assert.equal(continuation.executionGranted,false);
+ assert.equal(continuation.automaticReplay,false);
+});
+test('NEW_PROJECT continuation keeps Evidence defect as first handoff without uncertain writes',()=>{
+ const items=[
+  {id:'approval',kind:'local-edit',state:'PENDING_FILESET',waitingOn:[],
+   fileset:{state:'WAITING_APPROVAL'},capability:'SUPPORTED'},
+  {id:'broken',kind:'local-verification',state:'EVIDENCE_INVALID',
+   waitingOn:[],capability:'SUPPORTED'}
+ ];
+ const view={items,drift:[]};
+ const continuation=bootstrapContinuation({revision:3,
+   bootstrap:{workflowHash:'fixture-workflow'}},view,bootstrapActions(view));
+ assert.equal(continuation.status,'HUMAN_HANDOFF');
+ assert.deepEqual(continuation.next,{kind:'EVIDENCE_DEFECT',itemId:'broken'});
+ assert.equal(continuation.executionGranted,false);
+ assert.equal(continuation.automaticReplay,false);
 });

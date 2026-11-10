@@ -59,14 +59,16 @@ function localVerification(store, view) {
 }
 // One advisory next step for the existing Host/Operator loop. This neither
 // reserves work nor grants permission to replay a command or a trust hash.
-function bootstrapContinuation(current, view, actions) {
+export function bootstrapContinuation(current, view, actions) {
   const base = { mode: 'SINGLE_AGENT', authority: 'ADVISORY_ONLY', taskRevision: current.revision,
     workflowHash: current.bootstrap?.workflowHash ?? null, executionGranted: false,
     automaticReplay: false };
   if (!view) return { ...base, status: 'HUMAN_HANDOFF', reason: 'VALIDATED_WORKFLOW_REQUIRED', next: null };
   if (view.drift.length) return { ...base, status: 'HUMAN_HANDOFF', reason: 'FILES_CHANGED_OUTSIDE_CODEFLEET', next: null };
-  const defect = actions.find(a => a.kind === 'EVIDENCE_DEFECT');
-  const action = defect ?? actions[0];
+  // A partially applied Fileset needs inspection before unrelated Evidence review.
+  // Neither read-only handoff authorizes replay or grants execution.
+  const action = actions.find(a => a.kind === 'RECONCILE') ??
+    actions.find(a => a.kind === 'EVIDENCE_DEFECT') ?? actions[0];
   const itemId = action.items[0] ?? null;
   const next = { kind: action.kind, itemId };
   if (action.kind === 'REPAIR_REQUIRED') {
