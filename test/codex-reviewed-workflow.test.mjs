@@ -594,6 +594,14 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
   assert.equal(created.executionGranted,false);
   const before=await api.status(created.workflowId);
   assert.equal(before.objectiveComplete,false);
+  const pendingGoal=await productCli(['codex-goal-progress',f.request.sessionId],f.store.directory);
+  assert.equal(pendingGoal.exitCode,2);
+  assert.equal(pendingGoal.data.status,'WORKFLOW_IN_PROGRESS');
+  assert.equal(pendingGoal.data.workflowId,created.workflowId);
+  assert.equal(pendingGoal.data.workflow.workflowState,'WAITING_APPROVAL');
+  assert.equal(pendingGoal.data.continuation.status,'AWAIT_WORKFLOW_APPROVAL');
+  assert.equal(pendingGoal.data.continuation.automaticReplay,false);
+  assert.equal(pendingGoal.data.objectiveComplete,false);
   assert.equal(hostTurns.length,0);
   approveWorkflow(f.store,created.workflowId,{
     actor:'offline-fixture-reviewer',workflowHash:created.workflowHash,
@@ -613,10 +621,24 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
   const observed=await dispatchProduct(['delivered-status',created.workflowId],{store:f.store});
   assert.equal(observed.exitCode,0);
   assert.equal(observed.data.objectiveComplete,true);
+  const goalComplete=await productCli(['codex-goal-progress',f.request.sessionId],f.store.directory);
+  assert.equal(goalComplete.exitCode,0);
+  assert.equal(goalComplete.data.status,'OBJECTIVE_COMPLETE');
+  assert.equal(goalComplete.data.objectiveComplete,true);
+  assert.equal(goalComplete.data.workflowId,created.workflowId);
+  assert.equal(goalComplete.data.workflow.continuation.status,'OBJECTIVE_COMPLETE');
+  assert.equal(goalComplete.data.hostLiveAcceptance,'UNVERIFIED');
+  assert.equal(goalComplete.data.executionGranted,false);
   await writeFile(join(f.repo,'src/a.js'),'user drift after delivery');
   const drifted=await api.status(created.workflowId);
   assert.equal(drifted.objectiveComplete,false);
   assert.equal(drifted.targetDrift,true);
+  const goalDrift=await productCli(['codex-goal-progress',f.request.sessionId],f.store.directory);
+  assert.equal(goalDrift.exitCode,2);
+  assert.equal(goalDrift.data.objectiveComplete,false);
+  assert.equal(goalDrift.data.status,'WORKFLOW_IN_PROGRESS');
+  assert.equal(goalDrift.data.workflow.continuation.status,'DELIVERED_TARGET_DRIFT_REVIEW_REQUIRED');
+  assert.equal(goalDrift.data.continuation.automaticReplay,false);
 });
 
 test('public Codex Workflow execution is unavailable without authenticated Host admission',async t=>{
@@ -1551,5 +1573,78 @@ test('a rejected completed-Host receipt returns a no-replay Planning handoff',as
  assert.equal(result.data.costStatus,'UNKNOWN');
  assert.equal(turns,1);
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
+ assert.equal(countWorkflowAttempts(f.store),0);
+});
+
+test('Codex Goal progress starts from validated Planning and preserves existing Workflow admission',async t=>{
+ const f=await fixture(t);
+ const events=f.store.db.prepare('SELECT count(*) AS n FROM events').get().n;
+ const start=await productCli(['codex-goal-progress',f.request.sessionId],f.store.directory);
+ assert.equal(start.exitCode,2);
+ assert.equal(start.data.kind,'CODEFLEET_CODEX_GOAL_PROGRESS_V1');
+ assert.equal(start.data.status,'AWAIT_WORKFLOW_REVIEW');
+ assert.equal(start.data.planning.status,'SUBMITTED');
+ assert.equal(start.data.planning.validationStatus,'VALIDATED');
+ assert.equal(start.data.continuation.kind,'REVIEW_AND_PREPARE_WORKFLOW');
+ assert.equal(start.data.continuation.automaticReplay,false);
+ assert.equal(start.data.workflowId,null);
+ assert.equal(start.data.objectiveComplete,false);
+ assert.equal(start.data.executionGranted,false);
+ assert.equal(start.data.hostLiveAcceptance,'UNVERIFIED');
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM events').get().n,events);
+
+ const prepared=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+  authorizeReview:async()=>true
+ });
+ const before=f.store.events(prepared.workflowId).length;
+ const observed=await productCli(['codex-goal-progress',f.request.sessionId],f.store.directory);
+ assert.equal(observed.exitCode,2,observed.data?.error);
+ assert.equal(observed.data.status,'WORKFLOW_IN_PROGRESS');
+ assert.equal(observed.data.workflowId,prepared.workflowId);
+ assert.equal(observed.data.workflow.kind,'CODEFLEET_WORKFLOW_PROGRESS_V1');
+ assert.deepEqual(observed.data.workflow.dependencyReadyIds,['change']);
+ assert.equal(observed.data.continuation.status,'AWAIT_WORKFLOW_APPROVAL');
+ assert.equal(observed.data.continuation.automaticReplay,false);
+ assert.equal(observed.data.executionGranted,false);
+ assert.equal(observed.data.objectiveComplete,false);
+ assert.equal(f.store.events(prepared.workflowId).length,before);
+ assert.equal(countWorkflowAttempts(f.store),0);
+});
+
+test('Codex Goal progress blocks forged Workflow provenance and execution options without new effects',async t=>{
+ const f=await fixture(t);
+ const missing=await productCli(
+  ['codex-goal-progress','00000000-0000-4000-8000-000000000000'],f.store.directory);
+ assert.equal(missing.exitCode,2);
+ assert.equal(missing.data.status,'PLANNING_NOT_READY');
+ assert.equal(missing.data.objectiveComplete,false);
+ assert.equal(missing.data.continuation.automaticReplay,false);
+ for(const invalid of [
+  ['codex-goal-progress',f.request.sessionId,'--allow-model'],
+  ['codex-goal-progress',f.request.sessionId,'--hash','a'.repeat(64)],
+  ['codex-goal-progress',f.request.sessionId,'extra']
+ ]) {
+  const blocked=await productCli(invalid,f.store.directory);
+  assert.equal(blocked.exitCode,1);
+  assert.match(blocked.data.error,/no execution\/approval options/);
+ }
+ const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+  authorizeReview:async()=>true
+ });
+ const events=f.store.events(created.workflowId).length;
+ const tampered=f.store.get(created.workflowId);
+ tampered.sourceRef='e'.repeat(64);
+ f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
+  .run(JSON.stringify(tampered),created.workflowId);
+ const rejected=await productCli(['codex-goal-progress',f.request.sessionId],f.store.directory);
+ assert.equal(rejected.exitCode,2);
+ assert.equal(rejected.data.status,'BLOCKED');
+ assert.equal(rejected.data.workflowId,null);
+ assert.equal(rejected.data.objectiveComplete,false);
+ assert.equal(rejected.data.continuation.kind,'INSPECT_WORKFLOW_PROVENANCE');
+ assert.equal(rejected.data.continuation.automaticReplay,false);
+ assert.equal(rejected.data.executionGranted,false);
+ assert.equal(f.store.events(created.workflowId).length,events);
  assert.equal(countWorkflowAttempts(f.store),0);
 });

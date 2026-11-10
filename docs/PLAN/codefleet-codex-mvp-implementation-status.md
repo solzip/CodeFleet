@@ -1370,3 +1370,25 @@ Offline regressions cover a failed injected Host transport, invalid receipt,
 identical later read-only status and unchanged Workflow/Attempt counts.
 Native Codex Host Live and end-to-end Objective acceptance remain deferred;
 fresh Windows/Linux GitHub Actions CI is required before claiming PASS.
+
+## Read-only Goal-to-Objective progress via existing CLI (new CI required)
+
+The existing `codefleet-alpha objective` entry now supports
+`codex-goal-progress <planning-session-id>`. It joins the already persisted
+Codex Planning status to the deterministically promoted, independently
+reviewed `planning-<session-id>` Workflow and existing `workflowProgress`
+projection. A VALIDATED Planning proposal with no promoted Workflow reports
+`AWAIT_WORKFLOW_REVIEW` without creating one. A promoted Workflow must still
+pass originating Planning, immutable revision-1 graph, active revision and
+source artifact provenance checks before its WorkItems, repair handoff and
+delivered-tree Objective Judge can be shown. A missing or corrupt origin
+fails closed. Completion is taken solely from the reobserved delivered
+Objective; a successful Host Turn or candidate Workflow completion is not
+enough. The view opens Store read-only, rejects execution/approval flags,
+never invokes a Host or a second scheduler and never authorizes automatic
+replay. Offline tests cover Planning-only → pending approval, a synthetic
+delivered Objective COMPLETE → user target drift transition, forged Workflow
+provenance, and prohibited flags. This improves one-Goal operator UX but
+does not provide public Operator authentication, Host Live proof, Protected
+confinement, cost measurements or final Objective E2E acceptance.
+Fresh Windows/Linux CI is required for this commit.

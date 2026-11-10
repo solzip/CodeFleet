@@ -2,7 +2,8 @@
 // Turn may have been billed or may have applied unknown effects: never replay.
 import { hash } from '../alpha/contract.mjs';
 import { PLANNING_PROFILE, planningSkill } from '../hosts/planning.mjs';
-import { inspectReviewedCodexPlan } from './codex-reviewed-workflow.mjs';
+import { inspectReviewedCodexPlan, inspectReviewedCodexWorkflow } from './codex-reviewed-workflow.mjs';
+import { workflowProgress } from './report.mjs';
 
 const SESSION_ID = /^[a-f0-9-]{36}$/i;
 const STATES = new Set(['OPEN','DISPATCHED','RECONCILING','CANCELLED','SUBMITTED']);
@@ -88,5 +89,63 @@ export function inspectCodexPlanningStatus(store, sessionId) {
   } catch {
     // Never leak model output or promote a tampered result to reviewable.
     return blocked(base,'BLOCKED','Persisted Planning request/result integrity invalid');
+  }
+}
+
+
+// One Goal-level, non-executing observation across persisted Planning,
+// reviewed Workflow/DAG, delivery and the independent Objective verdict.
+// An existing Workflow must originate from this exact validated session.
+// Neither a model completion nor a Controller COMPLETED flag is sufficient
+// to report the actual delivered Objective as complete.
+export async function inspectCodexGoalProgress(store, sessionId) {
+  const planning = inspectCodexPlanningStatus(store, sessionId);
+  const base = { schemaVersion:1, kind:'CODEFLEET_CODEX_GOAL_PROGRESS_V1',
+    sessionId, authority:'READ_ONLY_ADVISORY', planning,
+    workflowId:null, workflow:null, objective:null,
+    objectiveComplete:false, executionGranted:false,
+    automaticReplay:false, protectedVerified:false,
+    hostLiveAcceptance:'UNVERIFIED' };
+  if (planning.status !== 'SUBMITTED' ||
+      planning.validationStatus !== 'VALIDATED')
+    return { ...base, status:'PLANNING_NOT_READY',
+      continuation:planning.continuation };
+  const workflowId='planning-'+sessionId;
+  // A validated Host plan does not create a Workflow, and a missing table is
+  // not permission to initialize the workflow Store while reading status.
+  const runsTable = store.db.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='runs'"
+  ).get();
+  if (!runsTable || !store.db.prepare(
+    'SELECT 1 FROM runs WHERE id=?'
+  ).get(workflowId))
+    return { ...base, status:'AWAIT_WORKFLOW_REVIEW',
+      continuation: { kind:'REVIEW_AND_PREPARE_WORKFLOW',
+        automaticReplay:false, executionGranted:false } };
+  // A forged or corrupted run ID must not look like progress for a real Goal.
+  const reviewed=inspectReviewedCodexWorkflow(store,workflowId);
+  if (reviewed.status !== 'REVIEW_REQUIRED' ||
+      reviewed.repositoryId !== planning.repositoryId ||
+      reviewed.sourceBaseline !== planning.sourceBaseline ||
+      reviewed.sourceContractHash === undefined)
+    return { ...base, status:'BLOCKED',
+      continuation:{kind:'INSPECT_WORKFLOW_PROVENANCE',
+        automaticReplay:false, executionGranted:false} };
+  try {
+    const workflow=await workflowProgress(store,workflowId);
+    if (workflow.workflowId !== workflowId ||
+        workflow.workflowHash !== reviewed.workflowHash ||
+        workflow.revision !== reviewed.revision)
+      throw Error('Workflow changed during Goal observation');
+    return { ...base, status:workflow.objectiveComplete
+      ? 'OBJECTIVE_COMPLETE' : 'WORKFLOW_IN_PROGRESS',
+      workflowId, workflow, objective:workflow.objective,
+      objectiveComplete:workflow.objectiveComplete === true,
+      continuation:workflow.continuation };
+  } catch {
+    // A failed delivered-tree observation is not a valid Objective verdict.
+    return { ...base, status:'BLOCKED',
+      continuation:{kind:'INSPECT_WORKFLOW_EVIDENCE',
+        automaticReplay:false, executionGranted:false} };
   }
 }
