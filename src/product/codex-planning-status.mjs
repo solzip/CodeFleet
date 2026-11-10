@@ -1,7 +1,7 @@
 // Read-only persisted Codex Planning lifecycle projection. A reserved Host
 // Turn may have been billed or may have applied unknown effects: never replay.
 import { hash } from '../alpha/contract.mjs';
-import { PLANNING_PROFILE, planningSkill } from '../hosts/planning.mjs';
+import { PLANNING_PROFILE, recognizedPlanningSkillHash } from '../hosts/planning.mjs';
 import { inspectReviewedCodexPlan, inspectReviewedCodexWorkflow } from './codex-reviewed-workflow.mjs';
 import { workflowProgress } from './report.mjs';
 
@@ -41,7 +41,7 @@ export function inspectCodexPlanningStatus(store, sessionId) {
         body.contextHash !== hash(body.context) ||
         body.profileHash !== hash(body.profile) ||
         body.profileHash !== hash(PLANNING_PROFILE) ||
-        body.skillHash !== hash(planningSkill('codex')) ||
+        !recognizedPlanningSkillHash('codex',body.skillHash,row.status === 'SUBMITTED') ||
         body.baseline !== body.context?.discovery?.base ||
         !Number.isFinite(body.expiresAt))
       throw Error('Planning request binding invalid');

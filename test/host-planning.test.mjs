@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { Store } from '../src/alpha/store.mjs';
 import { hash } from '../src/alpha/contract.mjs';
-import { createPlanning, submitPlanning, cancelPlanning, planningSkill, requirePlanningLive } from '../src/hosts/planning.mjs';
+import { createPlanning, submitPlanning, cancelPlanning, planningSkill, recognizedPlanningSkillHash, PREVIOUS_PLANNING_SKILL_HASH, requirePlanningLive } from '../src/hosts/planning.mjs';
 import { installHost, manageHost } from '../src/hosts/install.mjs';
 
 const objective = 'Fix subtraction using protected tests';
@@ -138,4 +138,57 @@ test('H6 Linux UID/chroot/seccomp: real prohibited access and child escape attem
     assert.equal(result.status, 'VALIDATED'); assert.equal(result.executable, false);
   } finally { s.store.close(); }
   console.log('H6 isolation observations: ' + JSON.stringify(e));
+});
+
+
+test('H6 multi-step Skill update allows prior SUBMITTED plans but never old pending Turn dispatch',()=>{
+ assert.match(PREVIOUS_PLANNING_SKILL_HASH,/^[a-f0-9]{64}$/);
+ assert.equal(recognizedPlanningSkillHash('codex',PREVIOUS_PLANNING_SKILL_HASH,true),true);
+ assert.equal(recognizedPlanningSkillHash('codex',PREVIOUS_PLANNING_SKILL_HASH,false),false);
+ assert.equal(recognizedPlanningSkillHash('claude',PREVIOUS_PLANNING_SKILL_HASH,true),true);
+ assert.equal(recognizedPlanningSkillHash('codex','f'.repeat(64),true),false);
+ assert.match(planningSkill('codex'),/workItems: 2\.\.5 objects/);
+});
+
+test('H6 trusted validator promotes bounded multi-item proposal without a Workflow or extra grant',async()=>{
+ const base=structuredClone(context);
+ base.files['src/second.js']={text:'export const double=x=>x;',kind:'source'};
+ base.files['test/second.test.js']={text:'assert.equal(double(3),6);',kind:'test'};
+ base.discovery.files.push(
+  {path:'src/second.js',kind:'source'},
+  {path:'test/second.test.js',kind:'test'}
+ );
+ const directory=await mkdtemp(path.join(tmpdir(),'cf-h6-multi-'));
+ const store=new Store(directory);
+ try{
+  const req=createPlanning(store,base,objective,{host:'codex',version:'fake',now:1000});
+  const p=proposal(req);
+  p.proposal.draft.files=['src/math.js','src/second.js'];
+  p.proposal.draft.tests=['test/math.test.js','test/second.test.js'];
+  p.proposal.draft.criteria=[
+   {description:'Protected subtraction tests pass',method:'protected-tests',tests:['test/math.test.js']},
+   {description:'Protected double tests pass',method:'protected-tests',tests:['test/second.test.js']}
+  ];
+  p.proposal.draft.workItems=[
+   {id:'fix',dependencies:[],priority:0,files:['src/math.js'],tests:['test/math.test.js'],
+    acceptanceCriteria:['Protected subtraction tests pass']},
+   {id:'followup',dependencies:['fix'],priority:1,files:['src/second.js'],tests:['test/second.test.js'],
+    acceptanceCriteria:['Protected double tests pass']}
+  ];
+  p.proposal.references.push(
+   {path:'src/second.js',line:1,quote:'export const double'},
+   {path:'test/second.test.js',line:1,quote:'assert.equal'}
+  );
+  const raw=JSON.stringify(p),view=submitPlanning(store,raw,current(req),{now:2000});
+  assert.equal(view.status,'VALIDATED');
+  assert.equal(view.workflowPreview.source.maxAttempts,2);
+  assert.deepEqual(view.workflowPreview.workflow.items.map(item=>item.id),['fix','followup']);
+  assert.deepEqual(view.workflowPreview.workflow.items[1].dependencies,['fix']);
+  assert.equal(view.workflowPreview.workflow.requiredVerification,true);
+  assert.equal(view.executable,false);
+  assert.equal(view.approved,false);
+  assert.equal(view.complete,false);
+  assert.equal(store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
+  assert.equal(submitPlanning(store,raw,current(req),{now:2000}).replay,true);
+ }finally{store.close();}
 });

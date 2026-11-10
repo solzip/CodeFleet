@@ -13,6 +13,15 @@ export const PLANNING_PROFILE = Object.freeze({
   requests: 1, toolRequests: 16, timeoutMs: 30000, outputBytes: 65536,
   platform: 'linux-x86_64', modelTransport: 'UNVERIFIED', authentication: 'UNVERIFIED',
 });
+// Existing submitted plans remain readable after an updated planning Skill.
+// Pre-dispatch sessions tied to the old policy are NOT dispatched with the
+// changed Skill: they must be reviewed and planned again instead.
+export const PREVIOUS_PLANNING_SKILL_HASH = 'e89e109d4a345ca22e0fe5623e364bf90cd3d99d7afc5b51b81e133d1b6ea154';
+export function recognizedPlanningSkillHash(host, skillHash, submitted = false) {
+  if (!['codex','claude'].includes(host)) return false;
+  return skillHash === hash(planningSkill(host)) ||
+    (submitted && skillHash === PREVIOUS_PLANNING_SKILL_HASH);
+}
 export function requirePlanningLive() {
   throw Error('BLOCKED: real Host tool confinement, authentication and model transport are unverified');
 }
@@ -39,10 +48,16 @@ object in the session response; the trusted collector submits it to CodeFleet.
 Do not invoke a validator CLI yourself or write a response file.
 
 Response: {sessionId,requestHash,proposal:{draft,references,inferences}}.
-draft has exactly schemaVersion:2, objective (unchanged original intent), base
+draft has schemaVersion:2, objective (unchanged original intent), base
 (request baseline), files (candidate sources), tests (protected tests), criteria
 ([{description,method:"protected-tests",tests:[...]}]), risks, unknowns, effects
 (["local-edit"] describes future work, not permission to edit now).
+For multi-step source changes, draft may ALSO include workItems: 2..5 objects
+with exactly {id,dependencies,priority,files,tests,acceptanceCriteria}.
+Each source file has one owner, all selected files and criteria are covered;
+tests and criteria must be within the declared scope. Dependencies must be
+acyclic and refer to declared items. Prefer omitting workItems for a single
+change. A multi-step plan has no inherited extra retries or approval rights.
 references: [{path,line,quote}]. inferences: bounded strings.
 Record uncertain requirements in unknowns and risks; do not invent executable
 criteria or claim tests ran. Unsupported targets become CAPABILITY_GAP.
@@ -97,7 +112,8 @@ export function submitPlanning(store, raw, current, { now = Date.now() } = {}) {
         hash(request.context) !== request.contextHash ||
         Object.keys(current).some(k => current[k] !== request[k]) ||
         request.profileHash !== hash(PLANNING_PROFILE) ||
-        request.skillHash !== hash(planningSkill(request.host))) throw Error('Stale or changed planning binding');
+        !recognizedPlanningSkillHash(request.host,request.skillHash,row.status === 'SUBMITTED'))
+      throw Error('Stale or changed planning binding');
     const responseHash = hash(response);
     if (row.status === 'SUBMITTED') {
       if (row.response !== responseHash) throw Error('Conflicting duplicate submission');
@@ -115,8 +131,12 @@ export function submitPlanning(store, raw, current, { now = Date.now() } = {}) {
     let workflowPreview = null;
     if (validation.status === 'VALIDATED') {
       const d = plan.draft;
-      workflowPreview = fromPlan(plan, 'planning-preview', [{ id: 'change', dependencies: [], priority: 0,
-        files: d.files, tests: d.tests, acceptanceCriteria: d.criteria.map(c => c.description) }]);
+      // Optional reviewed multi-WorkItem decomposition is validated against
+      // exact source ownership, protected tests and an acyclic DAG by
+      // validateDraft. No inferred WorkItem receives edit authority.
+      const items = d.workItems ?? [{ id: 'change', dependencies: [], priority: 0,
+        files: d.files, tests: d.tests, acceptanceCriteria: d.criteria.map(c => c.description) }];
+      workflowPreview = fromPlan(plan, 'planning-preview', items);
     }
     const result = { kind: 'HostPlanningResult', status: validation.status, plan,
       references: response.proposal.references, inferences: response.proposal.inferences,

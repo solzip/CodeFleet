@@ -1490,3 +1490,40 @@ NEW_PROJECT exercise is **not** evidence that natural-language Codex
 Planning can yet generate and authorize a multi-WorkItem source DAG. That
 capability needs a separately reviewed Contract/attempt-budget extension.
 Fresh Windows/Linux GitHub Actions CI is required for this change.
+
+## Explicit bounded multi-WorkItem Codex Planning DAG (new CI required)
+
+The prior semantic Codex Goal contract always compiled a VALIDATED planning
+draft into one `change` WorkItem with `maxAttempts:1`, preventing natural
+language plans from preserving independent source tasks and their dependencies.
+An optional planner-proposed `draft.workItems` field can now describe **2..5**
+WorkItems using the existing immutable Contract/DAG validator. Each item
+supplies exactly `id`, `dependencies`, `priority`, `files`, `tests` and
+`acceptanceCriteria`. The planner may not expand the discovered source or
+protected-test scope, assign one file to multiple items, omit a planned file
+or criterion, invent an acceptance method, duplicate IDs, or introduce a
+missing/cyclic dependency. Every criterion must be backed by a protected test
+selected for its WorkItem. A legacy draft without `workItems` still compiles
+to the unchanged single `change` node.
+
+A validated multi-step plan compiles `maxAttempts` equal to the number of
+WorkItems (up to five): **no unapproved retry or Repair capacity is added**.
+Unknown model cost remains explicitly unknown and needs the existing separate
+exact owner authorization before later turns. The originating planning
+artifact, per-WorkItem source ownership, DAG, mandatory integrated
+verification, and cost/attempt limits remain visible during Contract review;
+Workflow creation is unapproved until the existing authenticated execution
+admission and separate Host grants. A two-step A→B offline product CLI fixture
+tests dependency order, accepted A context in B, verifier checks, final
+integrated target Delivery, independent synthetic Local Objective Evidence,
+and immutable status without real/billable Codex.
+
+The Host Planning Skill and managed read-only planning prompt now describe
+optional explicit decomposition. This changes the Skill hash: previously
+SUBMITTED sessions remain readable under the exact former trusted Skill hash,
+but previously OPEN/DISPATCHED sessions cannot dispatch with new instructions
+and must be separately replanned. New fixture checks the historical hash
+boundary, immutable submission, and no implicit Workflow approval.
+This is not a real Codex Host Live run, protected verification, production
+Operator credential flow or final Objective E2E acceptance. Fresh Windows/Linux
+CI is required.

@@ -10,10 +10,12 @@ import { approveWorkflow, reviseWorkflow } from '../src/workflow/persistence.mjs
 import { createCodexMvpFacade } from '../src/product/codex-mvp-facade.mjs';
 import { git } from '../src/alpha/workspace.mjs';
 import { beginPlanning,submitPlanning } from '../src/hosts/planning.mjs';
+import { validateDraft } from '../src/intent/contract.mjs';
 import { prepareReviewedCodexWorkflow, inspectReviewedCodexPlan } from '../src/product/codex-reviewed-workflow.mjs';
 import { dispatchProduct, productCli } from '../src/product/cli.mjs';
 
 const goal='Repair arithmetic behavior in src/a.js with test/a.test.js and independently verify results.';
+const multiGoal='Repair arithmetic behavior in src/a.js and src/b.js with both protected regression tests and independently verify the result.';
 
 // Planning-only fixtures may not initialize the optional Workflow Attempt
 // schema. Absence of the table is zero Attempts, not an SQL error.
@@ -23,7 +25,7 @@ function countWorkflowAttempts(store) {
  ).get();
  return exists ? store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n : 0;
 }
-async function fixture(t) {
+async function fixture(t,{multi=false}={}) {
  const root=await mkdtemp(join(tmpdir(),'cf-plan-workflow-'));
  let store;
  t.after(async()=>{store?.close();await rm(root,{recursive:true,force:true});});
@@ -31,25 +33,42 @@ async function fixture(t) {
  await mkdir(join(repo,'src'),{recursive:true});await mkdir(join(repo,'test'));
  await writeFile(join(repo,'src/a.js'),'export function add(x,y){ return x+y; }\n');
  await writeFile(join(repo,'test/a.test.js'),'import test from "node:test";\n');
+ if(multi) {
+  await writeFile(join(repo,'src/b.js'),'export function subtract(x,y){ return x+y; }\n');
+  await writeFile(join(repo,'test/b.test.js'),'import test from "node:test";\n');
+ }
  for(const args of [['init'],['add','.'],
   ['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','baseline']]){
    const result=await git(repo,args);
    assert.equal(result.exitCode,0,result.stderr.toString());
  }
  store=new Store(join(root,'state'));
- const request=await beginPlanning(store,repo,goal,{host:'codex',version:'0.166.0'});
- const draft={schemaVersion:2,objective:goal,base:request.context.discovery.base,
-   files:['src/a.js'],tests:['test/a.test.js'],
-   criteria:[{description:'Arithmetic regression passes',method:'protected-tests',tests:['test/a.test.js']}],
-   risks:[],unknowns:[],effects:['local-edit']};
+ const originalGoal=multi?multiGoal:goal;
+ const request=await beginPlanning(store,repo,originalGoal,{host:'codex',version:'0.166.0'});
+ const draft={schemaVersion:2,objective:originalGoal,base:request.context.discovery.base,
+   files:multi?['src/a.js','src/b.js']:['src/a.js'],
+   tests:multi?['test/a.test.js','test/b.test.js']:['test/a.test.js'],
+   criteria:multi?[
+     {description:'A subtract regression passes',method:'protected-tests',tests:['test/a.test.js']},
+     {description:'B subtract regression passes',method:'protected-tests',tests:['test/b.test.js']}
+   ]:[{description:'Arithmetic regression passes',method:'protected-tests',tests:['test/a.test.js']}],
+   risks:[],unknowns:[],effects:['local-edit'],
+   ...(multi?{workItems:[
+     {id:'a',dependencies:[],priority:0,files:['src/a.js'],tests:['test/a.test.js'],acceptanceCriteria:['A subtract regression passes']},
+     {id:'b',dependencies:['a'],priority:1,files:['src/b.js'],tests:['test/b.test.js'],acceptanceCriteria:['B subtract regression passes']}
+   ]}:{})};
  const result=submitPlanning(store,JSON.stringify({sessionId:request.sessionId,
    requestHash:request.requestHash,proposal:{
      draft,references:[{path:'src/a.js',line:1,quote:'export function'},
-       {path:'test/a.test.js',line:1,quote:'import test'}],inferences:[]
+       {path:'test/a.test.js',line:1,quote:'import test'},
+       ...(multi?[
+         {path:'src/b.js',line:1,quote:'export function'},
+         {path:'test/b.test.js',line:1,quote:'import test'}
+       ]:[])],inferences:[]
    }}),{contextHash:request.contextHash,profileHash:request.profileHash,
      skillHash:request.skillHash});
  assert.equal(result.status,'VALIDATED');
- return {store,repo,request,result};
+ return {store,repo,request,result,originalGoal};
 }
 test('a validated Codex plan yields a pending approval Workflow, not execution',async t=>{
  const x=await fixture(t);
@@ -1900,4 +1919,188 @@ test('Goal execution alias preserves reviewed DAG, exact hash and independent Ho
  assert.equal(verifications,0);
  assert.equal(countWorkflowAttempts(f.store),0);
  assert.equal(f.store.events(created.workflowId).length,eventCount);
+});
+
+
+test('reviewed Codex multi-WorkItem Goal executes ordered A then B through authenticated CLI and delivered Objective',async t=>{
+ const f=await fixture(t,{multi:true});
+ const originalGoal=f.originalGoal,sessionId=f.request.sessionId;
+ assert.equal(originalGoal,multiGoal);
+ assert.equal(f.result.workflowPreview.source.maxAttempts,2,
+   'Two scoped WorkItems consume only two explicitly reviewed attempt slots');
+ assert.deepEqual(f.result.workflowPreview.workflow.items.map(item=>item.id),['a','b']);
+ assert.deepEqual(f.result.workflowPreview.workflow.items[1].dependencies,['a']);
+
+ const view=await productCli(['review-codex-plan',sessionId,'--repository',f.repo],f.store.directory);
+ assert.equal(view.exitCode,0,view.data?.error);
+ assert.equal(view.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+ assert.deepEqual(view.data.workItems.map(item=>item.id),['a','b']);
+ assert.deepEqual(view.data.workItems[1].dependencies,['a']);
+ assert.equal(view.data.executionLimits.maxAttempts,2);
+ assert.equal(view.data.executionLimits.attemptBudgetUsd,1);
+ const prepared=await productCli([
+  'prepare-codex-workflow',sessionId,'--repository',f.repo,
+  '--hash',view.data.workflowHash,'--source-hash',view.data.sourceContractHash
+ ],f.store.directory);
+ assert.equal(prepared.exitCode,0,prepared.data?.error);
+ assert.equal(prepared.data.executionGranted,false);
+ assert.equal(prepared.data.state,'WAITING_APPROVAL');
+ assert.equal(countWorkflowAttempts(f.store),0);
+ const waiting=await productCli(['codex-goal-progress',sessionId],f.store.directory);
+ assert.equal(waiting.exitCode,2);
+ assert.deepEqual(waiting.data.workflow.workItems.map(item=>item.id),['a','b']);
+ assert.deepEqual(waiting.data.workflow.dependencyReadyIds,['a']);
+ assert.equal(waiting.data.continuation.status,'AWAIT_WORKFLOW_APPROVAL');
+ approveWorkflow(f.store,prepared.data.workflowId,{
+  actor:'offline-exact-reviewer',workflowHash:prepared.data.workflowHash,
+  expiresAt:Date.now()+60_000
+ });
+
+ const hostTurns=[],verified=[],operatorGrants=[],managedGrants=[],costGrants=[];
+ const criteria=[{id:'C1',requiredAuthority:'LOCAL_EXECUTED'}];
+ const executed=await productCli([
+  'run-codex-goal',sessionId,'--hash',prepared.data.workflowHash
+ ],f.store.directory,{
+  createCodexAdmission:store=>({
+   facade:createCodexMvpFacade(store,{
+    executable:process.execPath,model:'OFFLINE_FAKE_ONLY',enableHostTurns:true,
+    authorizeWorkflow:async scope=>{
+     managedGrants.push(scope);
+     assert.equal(scope.workflowHash,prepared.data.workflowHash);
+     assert.deepEqual(scope.workItems.map(item=>item.id),['a','b']);
+     assert.deepEqual(scope.workItems[1].dependencies,['a']);
+     assert.equal(scope.executionMode,'HOST_READ_ONLY_PROPOSAL');
+     assert.equal(scope.protectedVerified,false);
+     return true;
+    },
+    transport:async request=>{
+     const prompt=JSON.parse(request.prompt),id=prompt.workItemId;
+     assert.ok(['a','b'].includes(id));
+     if(id==='b') assert.match(prompt.files['src/a.js'],/return x-y;/,
+       'B must receive accepted A rather than the stale baseline');
+     hostTurns.push(id);
+     return {threadId:'fake-thread-'+id,turnId:'fake-turn-'+id,
+      terminalStatus:'completed',authority:'PROVIDER_REPORTED_ONLY',
+      protectedVerified:false,executionMode:'HOST_READ_ONLY_PROPOSAL',
+      text:JSON.stringify({summary:'Synthetic scoped source edit',
+       edits:[{path:'src/'+id+'.js',
+         oldText:'return x+y;',newText:'return x-y;'}]})};
+    },
+    verificationBackend:{
+     prepare:async()=>{},
+     verify:async ({directory,tests})=>{
+      verified.push([...tests]);
+      const checks=await Promise.all(tests.map(async testPath=>{
+       const srcPath=testPath.replace(/^test\//,'src/').replace(/\.test\.js$/,'.js');
+       return (await readFile(join(directory,srcPath),'utf8')).includes('return x-y;');
+      }));
+      const passed=checks.filter(Boolean).length,failed=checks.length-passed;
+      return {authority:'HARNESS_EXECUTED',tests:checks.length,
+       passed,failed,skipped:0,todo:0,exitCode:failed?1:0,
+       interrupted:false,truncated:false,testNames:tests};
+     },
+     cleanup:async()=>{}
+    },
+    unknownCostBudget:{authorize:async scope=>{
+     costGrants.push(scope.unknownCostTurns);
+     return scope.unknownCostTurns<=2;
+    }},
+    destinationDelivery:{
+     approvedCriteria:criteria,
+     authorize:async scope=>{
+      assert.equal(scope.runId,prepared.data.workflowId);
+      assert.equal((await realpath(scope.destination)).toLowerCase(),
+        (await realpath(f.repo)).toLowerCase());
+      return true;
+     },
+     verify:async ({run,delivery,candidate})=>{
+      assert.equal(delivery.targetTreeHash,candidate.candidateHash);
+      for(const id of ['a','b'])
+       assert.match(await readFile(join(f.repo,'src',id+'.js'),'utf8'),/return x-y;/);
+      const observation={
+       kind:'OBJECTIVE_CRITERION_OBSERVATION_V1',
+       objectiveId:run.id,revision:run.revision,criterionId:'C1',
+       targetTreeHash:delivery.targetTreeHash,authority:'LOCAL_EXECUTED',
+       independentObserver:true,commandHash:'a'.repeat(64),
+       observationHash:'b'.repeat(64),complete:true,tests:2,passed:2,
+       failed:0,skipped:0,todo:0,exitCode:0,interrupted:false,
+       truncated:false,integrity:'MATCHED',
+       verificationBackend:'SYNTHETIC_TEST_ONLY',protection:'UNPROTECTED'
+      };
+      const evidence=f.store.artifact(observation);
+      return {criteria,evidenceRefs:{C1:evidence},
+       readVerifiedEvidence:ref=>f.store.readArtifact(ref)};
+     }
+    }
+   }),
+   authorizeOperator:async scope=>{
+    operatorGrants.push(scope);
+    assert.equal(scope.kind,'CODEFLEET_AUTHENTICATED_CODEX_ENTRY_V1');
+    assert.equal(scope.planningSessionId,sessionId);
+    assert.equal(scope.workflowHash,prepared.data.workflowHash);
+    assert.deepEqual(scope.workflowContract.items.map(item=>item.id),['a','b']);
+    assert.equal(scope.protectedVerified,false);
+    return true;
+   }
+  })
+ });
+ assert.equal(executed.exitCode,0,executed.data?.error);
+ assert.equal(executed.data.workflowState,'COMPLETED');
+ assert.equal(executed.data.objective.status,'COMPLETE',executed.data.objective?.reason);
+ assert.equal(executed.data.objective.protection,'UNPROTECTED');
+ assert.equal(executed.data.hostLiveAcceptance,'UNVERIFIED');
+ assert.equal(executed.data.protectedVerified,false);
+ assert.deepEqual(hostTurns,['a','b']);
+ assert.equal(operatorGrants.length,1);
+ assert.equal(managedGrants.length,1);
+ assert.ok(costGrants.length>=1,'Explicit UNKNOWN-cost approval must cover continued WorkItems');
+ assert.ok(verified.some(x=>x.includes('test/a.test.js')));
+ assert.ok(verified.some(x=>x.includes('test/b.test.js')));
+ assert.ok(verified.some(x=>x.length===2),'Final regression must cover both protected tests');
+ assert.equal(executed.data.progress.objectiveComplete,true);
+ assert.deepEqual(executed.data.progress.workItems.map(item=>[item.id,item.state]),
+  [['a','SUCCEEDED'],['b','SUCCEEDED']]);
+ assert.equal(executed.data.progress.continuation.status,'OBJECTIVE_COMPLETE');
+ assert.equal(executed.data.progress.continuation.automaticReplay,false);
+ const attempts=f.store.db.prepare(
+  'SELECT itemId,status FROM workflow_attempts WHERE runId=? ORDER BY rowid'
+ ).all(prepared.data.workflowId);
+ assert.deepEqual(attempts.map(r=>[r.itemId,r.status]),[
+  ['a','SUCCEEDED'],['b','SUCCEEDED'],['final','SUCCEEDED']
+ ]);
+ const events=f.store.events(prepared.data.workflowId);
+ const settledA=events.find(e=>e.type==='ATTEMPT_RECONCILED'&&e.body.itemId==='a');
+ const startedB=events.find(e=>e.type==='ATTEMPT_RESERVED'&&e.body.itemId==='b');
+ assert.ok(settledA && startedB && settledA.seq<startedB.seq);
+ const progress=await productCli(['codex-goal-progress',sessionId],f.store.directory);
+ assert.equal(progress.exitCode,0);
+ assert.equal(progress.data.objectiveComplete,true);
+});
+
+test('Codex multi-WorkItem draft rejects cyclic, overlapping or broadened scope before a Workflow',async t=>{
+ const f=await fixture(t,{multi:true});
+ const clean=f.result.plan.draft,discovery=f.result.plan.discovery;
+ assert.equal(validateDraft(clean,discovery,multiGoal).status,'VALIDATED');
+ const invalid=[
+  draft=>{draft.workItems[0].dependencies=['b'];},
+  draft=>{draft.workItems[1].dependencies=['not-planned'];},
+  draft=>{draft.workItems[1].files=['src/a.js'];},
+  draft=>{draft.workItems[1].files=['src/exfiltrate.js'];},
+  draft=>{draft.workItems[1].tests=['test/not-protected.test.js'];},
+  draft=>{draft.workItems[1].acceptanceCriteria=['No independent test'];},
+  draft=>{draft.workItems[1].acceptanceCriteria=[];},
+  draft=>{draft.workItems[1].id='a';},
+  draft=>{draft.workItems.push(...Array.from({length:4},(_,i)=>({
+   id:'extra'+i,dependencies:[],priority:0,files:['src/b.js'],
+   tests:['test/b.test.js'],acceptanceCriteria:['B subtract regression passes']
+  })));},
+  draft=>{draft.executionGranted=true;}
+ ];
+ for(const mutate of invalid){
+  const draft=structuredClone(clean);
+  mutate(draft);
+  assert.throws(()=>validateDraft(draft,discovery,multiGoal));
+ }
+ assert.equal(countWorkflowAttempts(f.store),0);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
 });

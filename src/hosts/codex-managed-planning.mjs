@@ -124,6 +124,10 @@ export async function planWithCodexManagedThread(store, repo, objective, {
     originalObjective:objective,context:request.context,
     instruction:'Return ONLY a JSON object with sessionId/requestHash and proposal {draft,references,inferences}. ' +
       'Every proposed file must be grounded in exact path/line/quote from the pinned source. ' +
+      'For a genuinely multi-step change, optionally include draft.workItems with 2..5 items, each exactly ' +
+      '{id,dependencies,priority,files,tests,acceptanceCriteria}. Use unique, nonoverlapping owned source files, ' +
+      'declared protected tests and criteria, a valid acyclic dependency DAG, and cover every draft file and criterion. ' +
+      'Omit workItems for one-step changes; there is no automatic extra attempt or execution grant. ' +
       'Preserve objective verbatim, mark unknown requirements unresolved. Do not use tools, edit, approve, run tests or claim complete.'
   });
   if (Buffer.byteLength(prompt) > 160000) {
