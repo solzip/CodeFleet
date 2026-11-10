@@ -281,3 +281,14 @@ for (const streamName of ['stdin','stdout','stderr']) {
     assert.equal(killCalls, 1, 'uncertain Host child must be terminated');
   });
 }
+
+test('unsupported Host notification never reflects untrusted method bytes', () => {
+  const secret = 'PRIVATE_HOST_NOTIFICATION_TOKEN_391';
+  const p = start(make());
+  assert.throws(() => p.accept({ method: 'untrusted/' + secret, params: {} }), error => {
+    assert.equal(error.effectStatus, 'UNVERIFIED');
+    assert.equal(error.message, 'Unsupported App Server notification; no replay');
+    assert.equal(error.message.includes(secret), false);
+    return true;
+  });
+});

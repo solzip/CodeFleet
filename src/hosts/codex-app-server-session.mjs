@@ -82,7 +82,7 @@ export function createCodexTurnProtocol({ cwd, model, prompt, outputSchema, work
         if (Object.hasOwn(message, 'id')) reject('Unexpected server request; never auto-approve');
         if (!NOTIFICATIONS.has(message.method) &&
             !(workspaceWrite && WORKSPACE_TOOL_NOTIFICATIONS.has(message.method)))
-          reject('Unsupported App Server notification: ' + String(message.method));
+          reject('Unsupported App Server notification; no replay');
         count(message.method);
         if (message.method === 'item/started' || message.method === 'item/completed') {
           if (!object(message.params) || !recordId(message.params.threadId) || !recordId(message.params.turnId)) reject('Unbound Host item notification');
