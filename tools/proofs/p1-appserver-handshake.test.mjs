@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,7 +22,10 @@ const sourceClient = fileURLToPath(new URL("./p1-appserver-handshake.mjs", impor
 const fakeServer = fileURLToPath(new URL("./p1-appserver-fake.mjs", import.meta.url));
 
 async function fixture(t) {
-  const root = await mkdtemp(join(tmpdir(), "codefleet-p1-fake-"));
+  // The Windows runner may expose TEMP through a short-path alias or junction.
+  // Use the actual canonical root for this disposable fake fixture; do not
+  // relax the real P1 client\'s link/Junction and identity checks.
+  const root = await realpath(await mkdtemp(join(tmpdir(), "codefleet-p1-fake-")));
   t.after(() => rm(root, { recursive: true, force: true }));
   const artifacts = join(root, "proof-artifacts");
   const clientDir = join(root, "proof-client");
