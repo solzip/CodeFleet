@@ -1902,6 +1902,11 @@ test('Goal execution alias preserves reviewed DAG, exact hash and independent Ho
   assert.equal(blocked.data.planningSessionId,sessionId);
   assert.match(blocked.data.error,/Exact managed Workflow execution grant denied/);
   assert.equal(blocked.data.progress.kind,'CODEFLEET_WORKFLOW_PROGRESS_V1');
+  assert.equal(blocked.data.goalProgressStatus,'OBSERVED');
+  assert.equal(blocked.data.goalProgress.status,'WORKFLOW_IN_PROGRESS');
+  assert.equal(blocked.data.goalProgress.workflowId,created.workflowId);
+  assert.equal(blocked.data.goalProgress.continuation.automaticReplay,false);
+  assert.equal(blocked.data.goalProgress.objectiveComplete,false);
   assert.equal(blocked.data.continuation.status,'AUTHENTICATED_HOST_ADMISSION_REQUIRED');
   assert.equal(blocked.data.continuation.automaticReplay,false);
   assert.equal(blocked.data.executionGranted,false);
@@ -2071,6 +2076,14 @@ test('reviewed Codex multi-WorkItem Goal executes ordered A then B through authe
  assert.ok(verified.some(x=>x.includes('test/b.test.js')));
  assert.ok(verified.some(x=>x.length===2),'Final regression must cover both protected tests');
  assert.equal(executed.data.progress.objectiveComplete,true);
+ assert.equal(executed.data.goalProgressStatus,'OBSERVED');
+ assert.equal(executed.data.goalProgress.kind,'CODEFLEET_CODEX_GOAL_PROGRESS_V1');
+ assert.equal(executed.data.goalProgress.status,'OBJECTIVE_COMPLETE');
+ assert.equal(executed.data.goalProgress.objectiveComplete,true);
+ assert.equal(executed.data.goalProgress.workflowId,prepared.data.workflowId);
+ assert.equal(executed.data.goalProgress.continuation.automaticReplay,false);
+ assert.deepEqual(executed.data.goalProgress.workflow.workItems.map(item=>[item.id,item.state]),
+  [['a','SUCCEEDED'],['b','SUCCEEDED']]);
  assert.deepEqual(executed.data.progress.workItems.map(item=>[item.id,item.state]),
   [['a','SUCCEEDED'],['b','SUCCEEDED']]);
  assert.equal(executed.data.progress.continuation.status,'OBJECTIVE_COMPLETE');

@@ -1538,3 +1538,18 @@ rather than automatic replay after interruption. This tests recovery visibility
 at the dependent WorkItem boundary; it does not simulate a native Codex process
 crash, certify Host Live, or accept a Protected Objective. Fresh Windows/Linux
 CI is required for this test-only revision.
+
+## Goal-ID managed execution returns current Goal-level continuation (new CI required)
+
+The trusted `run-codex-goal` / `resume-codex-goal` entry now includes a fresh
+read-only `codex-goal-progress` projection after delegated Controller execution,
+alongside the Workflow result and originating Planning session ID. The embedding
+can present the current Goal → reviewed Contract/DAG → WorkItems → delivered
+Objective handoff after a managed Host denial or settled execution without a
+second CLI invocation. No new authorization or replay is introduced. If the
+read-only observation fails, `goalProgressStatus: UNAVAILABLE` and
+`goalProgress: null` explicitly avoid an invented completed Objective.
+Synthetic regressions cover a rejected Host grant and a delivered two-WorkItem
+Goal. This is not native Codex Host Live, authenticated Operator credential
+integration, protected execution or independent final Objective acceptance.
+Fresh Windows/Linux CI is required.

@@ -464,7 +464,14 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
         action === 'resume-codex-goal' ? 'resume-codex-workflow' : 'run-codex-workflow',
         progress.workflowId, '--hash', o.hash
       ], {store,execution,plannerRegistry});
-      return { ...delegated, data: { ...delegated.data, planningSessionId:args[0] } };
+      // Report the same persisted Goal → reviewed DAG → delivered Objective
+      // handoff after delegated execution or a managed-Host denial. Never
+      // manufacture COMPLETE when the fresh read-only projection is unavailable.
+      const goalProgress = await inspectCodexGoalProgress(store,args[0]).catch(() => null);
+      return { ...delegated, data: {
+        ...delegated.data, planningSessionId:args[0],
+        goalProgress, goalProgressStatus:goalProgress ? 'OBSERVED' : 'UNAVAILABLE'
+      } };
     } catch (error) {
       // Pre-dispatch denials need the same persisted recovery handoff as
       // failures after the Controller starts. Do not grant or replay a Turn.
