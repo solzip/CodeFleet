@@ -484,8 +484,12 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
         progress.workflow?.workflowHash !== o.hash)
       throw Error('Codex Goal requires a current reviewed Workflow and exact hash; inspect codex-goal-progress');
     if (progress.objectiveComplete) {
+      // Preserve the Goal-level response shape for a settled, no-op resume.
+      // The already reobserved Objective is read-only: no new Host or Operator grant.
       return { exitCode:0, data: {
-        ...progress, executionSucceeded:false, executionGranted:false,
+        ...progress, planningSessionId:args[0],
+        goalProgress:progress, goalProgressStatus:'OBSERVED',
+        executionSucceeded:false, executionGranted:false,
         nextAction:'Delivered Objective already complete; no Host Turn started'
       } };
     }

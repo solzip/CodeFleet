@@ -1606,3 +1606,17 @@ missing/valid approval, zero new Attempts, and review omission on source drift.
 This is read-only visibility, not permission to execute or evidence of Codex
 Host Live, PROTECTED verification or Objective completion. This HEAD requires
 its own Windows/Linux CI before treating the new regressions as passing.
+
+## Delivered Goal run/resume no-op response parity (fresh CI required)
+
+After a previously delivered Goal has a currently independently observed
+`OBJECTIVE_COMPLETE` verdict, both trusted `run-codex-goal` and
+`resume-codex-goal` now return the same `planningSessionId`,
+`goalProgressStatus: OBSERVED`, and read-only `goalProgress` envelope as
+the delegated execution path. The no-op still reports
+`executionSucceeded: false` and `executionGranted: false`; it never
+repeats a Host Turn or reuses a prior Operator grant for a new effect.
+The two-WorkItem synthetic CLI fixture checks both aliases, unchanged
+attempt/event counts, exact current Goal progress, and no additional Turns.
+This is offline UX consistency, not a Host Live or Protected Objective proof.
+Fresh Windows/Linux CI is required for this change.

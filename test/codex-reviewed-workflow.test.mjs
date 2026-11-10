@@ -2184,6 +2184,33 @@ test('reviewed Codex multi-WorkItem Goal executes ordered A then B through authe
  assert.equal(afterDelivery.exitCode,0);
  assert.equal(afterDelivery.data.status,'OBJECTIVE_COMPLETE');
  assert.equal(afterDelivery.data.sourceFreshness,'NOT_RECHECKED_AFTER_DISPATCH');
+ // Already delivered Goals are read-only through both entrypoints and
+ // preserve the Goal progress response shape used by normal execution.
+ const beforeNoOpEvents=f.store.events(prepared.data.workflowId).length;
+ for(const action of ['run-codex-goal','resume-codex-goal']){
+  const noOp=await productCli([
+   action,sessionId,'--hash',prepared.data.workflowHash
+  ],f.store.directory,{createCodexAdmission:store=>({
+   facade:createCodexMvpFacade(store,{
+    executable:process.execPath,model:'OFFLINE_NOOP_ONLY'
+   }),
+   authorizeOperator:async()=>{throw Error('No new Operator review for settled Goal');}
+  })});
+  assert.equal(noOp.exitCode,0,noOp.data?.error);
+  assert.equal(noOp.data.status,'OBJECTIVE_COMPLETE');
+  assert.equal(noOp.data.planningSessionId,sessionId);
+  assert.equal(noOp.data.goalProgressStatus,'OBSERVED');
+  assert.equal(noOp.data.goalProgress.objectiveComplete,true);
+  assert.equal(noOp.data.goalProgress.continuation.automaticReplay,false);
+  assert.equal(noOp.data.executionSucceeded,false);
+  assert.equal(noOp.data.executionGranted,false);
+  assert.equal(noOp.data.hostLiveAcceptance,'UNVERIFIED');
+  const observed=await productCli(['codex-goal-progress',sessionId],f.store.directory);
+  assert.deepEqual(noOp.data.goalProgress,observed.data);
+ }
+ assert.deepEqual(hostTurns,['a','b']);
+ assert.equal(f.store.events(prepared.data.workflowId).length,beforeNoOpEvents);
+ assert.equal(countWorkflowAttempts(f.store),3);
 });
 
 test('Codex multi-WorkItem draft rejects cyclic, overlapping or broadened scope before a Workflow',async t=>{
