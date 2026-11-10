@@ -1684,3 +1684,20 @@ Goal paths and omission after promotion or source drift. The full repository
 checkout, Node 24 and Docker are unavailable in this runtime, so the
 new HEAD requires independent Windows/Linux CI before any offline PASS claim.
 Native Codex Host Live and final Objective E2E acceptance remain deferred.
+
+## Pending Workflow promotion immediately returns independent approval review (fresh CI required)
+
+The explicit `prepare-codex-workflow` result now includes the existing
+independent `review-codex-workflow --repository` projection for the newly
+persisted, still-unapproved Workflow. A developer receives the current-source
+Contract/DAG, approval state and separate authenticated Operator/Host handoff
+in the same response, including idempotent repeat preparation. When the
+post-promotion source observation is unavailable or stale, the projection
+is suppressed with `workflowReviewStatus: RECHECK_REQUIRED` instead of
+presenting a stale review as current. This adds no Workflow approval, grant,
+execution, WorkItem Attempt or Objective claim. The offline test compares the
+embedded review with the independent command, checks approval absence and
+idempotent no-dispatch behavior. Full local checkout, Node 24 and Docker
+remain unavailable in the current automation environment; the new HEAD
+requires its own Windows/Linux CI before calling the regression passed.
+Native Host Live and final Objective E2E acceptance remain deferred.

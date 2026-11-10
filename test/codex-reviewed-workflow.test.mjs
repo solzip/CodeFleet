@@ -296,11 +296,24 @@ test('public hash-confirmed Codex plan creates an idempotent pending Workflow wi
  assert.equal(first.data.approved,false);
  assert.equal(first.data.reviewAuthority,'EXPLICIT_LOCAL_HASH_CONFIRMATION_ONLY');
  assert.equal(first.data.hostLiveAcceptance,'UNVERIFIED');
+ // Promotion returns the same current-source Workflow review as the
+ // independent command without any approval or Host dispatch.
+ const currentReview=await productCli([
+  'review-codex-workflow',first.data.workflowId,'--repository',f.repo
+ ],f.store.directory);
+ assert.equal(currentReview.exitCode,0);
+ assert.equal(first.data.workflowReviewStatus,'CURRENT_SOURCE_REVIEWED');
+ assert.deepEqual(first.data.workflowReview,currentReview.data);
+ assert.equal(first.data.workflowReview.approvalState,'MISSING_OR_EXPIRED');
+ assert.equal(first.data.workflowReview.executionGranted,false);
+ assert.equal(first.data.workflowReview.authenticatedOperatorAvailable,false);
  assert.equal(f.store.get(first.data.workflowId).kind,'workflow');
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
  const repeated=await productCli(argv,f.store.directory);
  assert.equal(repeated.exitCode,0);
  assert.equal(repeated.data.workflowId,first.data.workflowId);
+ assert.equal(repeated.data.workflowReviewStatus,'CURRENT_SOURCE_REVIEWED');
+ assert.deepEqual(repeated.data.workflowReview,currentReview.data);
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,1);
 });
 

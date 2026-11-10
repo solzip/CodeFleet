@@ -502,10 +502,23 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       authorizeReview: async scope =>
         scope.workflowHash === o.hash && scope.sourceContractHash === o['source-hash']
     });
+    // Reuse the independent read-only reviewer immediately after Workflow
+    // promotion. A persisted Workflow is not approved or executable; if its
+    // source changed during this observation, expose a fresh-review handoff.
+    const review = await inspectReviewedCodexWorkflowAtSource(
+      store, data.workflowId, o.repository).catch(() => null);
+    const reviewCurrent = review?.status === 'REVIEW_REQUIRED' &&
+      review.sourceFreshness === 'PINNED_CLEAN_AT_REVIEW' &&
+      review.workflowHash === data.workflowHash &&
+      review.sourceContractHash === data.sourceContractHash;
     return { exitCode: 0, data: { ...data,
       reviewAuthority: 'EXPLICIT_LOCAL_HASH_CONFIRMATION_ONLY',
+      workflowReview: reviewCurrent ? review : null,
+      workflowReviewStatus: reviewCurrent ? 'CURRENT_SOURCE_REVIEWED' : 'RECHECK_REQUIRED',
       hostLiveAcceptance: 'UNVERIFIED',
-      nextAction: 'Separate Workflow approval and trusted managed-Host execution grant required'
+      nextAction: reviewCurrent
+        ? 'Inspect workflowReview and obtain separate Workflow approval, authenticated Operator admission and managed-Host grant'
+        : 'Recheck the original clean source and reviewed Workflow before any approval or execution'
     } };
   }
   if (action === 'run-codex-goal' || action === 'resume-codex-goal') {
