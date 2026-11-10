@@ -128,6 +128,22 @@ function reviewedGoalPrepareCommand(review, sessionId, repository) {
   };
 }
 
+// A structured suggestion for a reviewed, currently approved Workflow is
+// not an Operator identity, a managed Host grant, or a restart permission.
+function reviewedGoalRunCommand(review, sessionId, workflowId) {
+  if (review?.status !== 'REVIEW_REQUIRED' ||
+      review.sourceFreshness !== 'PINNED_CLEAN_AT_REVIEW' ||
+      review.approvalState !== 'CURRENT_WORKFLOW_APPROVAL_VALID' ||
+      review.workflowId !== workflowId ||
+      !/^[a-f0-9]{64}$/.test(review.workflowHash ?? '')) return null;
+  return {
+    argv: ['run-codex-goal', sessionId, '--hash', review.workflowHash],
+    trustedEmbeddingRequired: true, authenticatedOperatorRequired: true,
+    managedHostGrantRequired: true, executionGranted: false,
+    automaticReplay: false
+  };
+}
+
 function requireCodexGoalEntryArgs(args, o) {
   if (args.length !== 1 || !args[0]?.trim() ||
       Object.keys(o).length !== 1 || !path.isAbsolute(o.repository ?? ''))
@@ -441,11 +457,14 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     // Goal-level handoff. Reading hashes is not signing or approving them.
     const prepareCommand = data.status === 'AWAIT_WORKFLOW_REVIEW'
       ? reviewedGoalPrepareCommand(review, args[0], o.repository) : null;
+    const runCommand = data.status === 'WORKFLOW_IN_PROGRESS'
+      ? reviewedGoalRunCommand(review, args[0], data.workflowId) : null;
     return { exitCode:2, data:{
       ...data, sourceFreshness:'PINNED_CLEAN_AT_REVIEW',
       ...(data.status === 'AWAIT_WORKFLOW_REVIEW' ? { planReview:review } : {}),
       ...(data.status === 'WORKFLOW_IN_PROGRESS' ? { workflowReview:review } : {}),
-      ...(prepareCommand ? { prepareCommand } : {})
+      ...(prepareCommand ? { prepareCommand } : {}),
+      ...(runCommand ? { runCommand } : {})
     } };
   }
   if (action === 'codex-planning-status') {

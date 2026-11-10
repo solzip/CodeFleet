@@ -1701,3 +1701,19 @@ idempotent no-dispatch behavior. Full local checkout, Node 24 and Docker
 remain unavailable in the current automation environment; the new HEAD
 requires its own Windows/Linux CI before calling the regression passed.
 Native Host Live and final Objective E2E acceptance remain deferred.
+
+## Exact authenticated Goal run handoff after Workflow approval (new CI required)
+
+The read-only `codex-goal-progress <session-id> --repository ABSOLUTE_PATH`
+now offers a structured `runCommand.argv` with the exact reviewed Workflow
+hash only when the original repository is pinned and clean, a Workflow exists,
+and its current independent approval is valid **before first dispatch**.
+A validated Plan or unapproved Workflow exposes no run command; stale source,
+in-flight Attempts, recovery and completed Delivery also suppress the hint.
+The command is for a **trusted authenticated Host embedding**, not a plain
+unauthenticated CLI entry point: Operator admission, managed Host grant, Lease
+and budget remain enforced on actual dispatch. Regression checks cover
+unapproved, approved, stale and delivered views without extra Attempts.
+This is a read-only UX improvement, not Host Live or Objective acceptance.
+Local Node 24/full-checkout/Docker validation is unavailable here; this HEAD
+must receive separate Windows/Linux CI before claiming an offline PASS.

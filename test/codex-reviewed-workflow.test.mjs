@@ -1814,6 +1814,7 @@ test('Goal progress checks original repository readiness before dispatch without
    '--hash',review.data.workflowHash,'--source-hash',review.data.sourceContractHash],
   humanReviewRequired:true,approved:false,executionGranted:false
  });
+ assert.equal(planning.data.runCommand,undefined);
  assert.equal(planning.data.planReview.status,'REVIEW_REQUIRED');
  assert.equal(planning.data.planReview.approved,false);
  assert.equal(planning.data.planReview.executionGranted,false);
@@ -1828,6 +1829,7 @@ test('Goal progress checks original repository readiness before dispatch without
  assert.equal(clean.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
  assert.equal(clean.data.planReview,undefined);
  assert.equal(clean.data.prepareCommand,undefined);
+ assert.equal(clean.data.runCommand,undefined);
  assert.equal(clean.data.continuation.status,'AWAIT_WORKFLOW_APPROVAL');
  // The Goal-level pre-dispatch handoff must disclose the exact persisted
  // Workflow DAG, current approval state and the need for separate Host grants.
@@ -1847,6 +1849,12 @@ test('Goal progress checks original repository readiness before dispatch without
  assert.equal(approved.data.workflowReview.approvalState,'CURRENT_WORKFLOW_APPROVAL_VALID');
  assert.equal(approved.data.workflowReview.executionGranted,false);
  assert.equal(approved.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+ assert.deepEqual(approved.data.runCommand,{
+  argv:['run-codex-goal',id,'--hash',created.workflowHash],
+  trustedEmbeddingRequired:true,authenticatedOperatorRequired:true,
+  managedHostGrantRequired:true,executionGranted:false,
+  automaticReplay:false
+ });
  assert.equal(countWorkflowAttempts(f.store),0);
  const events=f.store.events(created.workflowId).length;
  const invalid=await productCli(['codex-goal-progress',id,'--repository','relative/repo'],f.store.directory);
@@ -1858,6 +1866,7 @@ test('Goal progress checks original repository readiness before dispatch without
  assert.equal(stale.data.status,'SOURCE_REVIEW_REQUIRED');
  assert.equal(stale.data.sourceFreshness,'STALE_OR_MISMATCHED');
  assert.equal(stale.data.workflowReview,undefined);
+ assert.equal(stale.data.runCommand,undefined);
  assert.equal(stale.data.workflowId,created.workflowId);
  assert.equal(stale.data.continuation.kind,'REVIEW_SOURCE_OR_REPLAN');
  assert.equal(stale.data.continuation.automaticReplay,false);
@@ -2239,6 +2248,7 @@ test('reviewed Codex multi-WorkItem Goal executes ordered A then B through authe
  assert.equal(afterDelivery.exitCode,0);
  assert.equal(afterDelivery.data.status,'OBJECTIVE_COMPLETE');
  assert.equal(afterDelivery.data.sourceFreshness,'NOT_RECHECKED_AFTER_DISPATCH');
+ assert.equal(afterDelivery.data.runCommand,undefined);
  // Already delivered Goals are read-only through both entrypoints and
  // preserve the Goal progress response shape used by normal execution.
  const beforeNoOpEvents=f.store.events(prepared.data.workflowId).length;
