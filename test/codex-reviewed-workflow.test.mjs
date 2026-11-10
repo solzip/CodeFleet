@@ -1774,12 +1774,24 @@ test('Goal progress checks original repository readiness before dispatch without
  assert.equal(planning.exitCode,2);
  assert.equal(planning.data.status,'AWAIT_WORKFLOW_REVIEW');
  assert.equal(planning.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+ // A single current-source Goal view now contains the identical exact
+ // Contract/DAG review available from the separate non-executing command.
+ const review=await productCli(['review-codex-plan',id,'--repository',f.repo],f.store.directory);
+ assert.equal(review.exitCode,0);
+ assert.deepEqual(planning.data.planReview,review.data);
+ assert.equal(planning.data.planReview.status,'REVIEW_REQUIRED');
+ assert.equal(planning.data.planReview.approved,false);
+ assert.equal(planning.data.planReview.executionGranted,false);
+ assert.match(planning.data.planReview.workflowHash,/^[a-f0-9]{64}$/);
+ assert.match(planning.data.planReview.sourceContractHash,/^[a-f0-9]{64}$/);
+ assert.deepEqual(planning.data.planReview.workItems.map(item=>item.id),['change']);
  const created=await prepareReviewedCodexWorkflow(f.store,f.repo,id,{
   authorizeReview:async()=>true
  });
  const clean=await productCli(cmd,f.store.directory);
  assert.equal(clean.data.status,'WORKFLOW_IN_PROGRESS');
  assert.equal(clean.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+ assert.equal(clean.data.planReview,undefined);
  assert.equal(clean.data.continuation.status,'AWAIT_WORKFLOW_APPROVAL');
  const events=f.store.events(created.workflowId).length;
  const invalid=await productCli(['codex-goal-progress',id,'--repository','relative/repo'],f.store.directory);
@@ -1796,6 +1808,19 @@ test('Goal progress checks original repository readiness before dispatch without
  assert.equal(stale.data.executionGranted,false);
  assert.equal(stale.data.objectiveComplete,false);
  assert.equal(f.store.events(created.workflowId).length,events);
+ assert.equal(countWorkflowAttempts(f.store),0);
+});
+
+test('Goal readiness suppresses exact Plan review when pre-Workflow source is stale',async t=>{
+ const f=await fixture(t),id=f.request.sessionId;
+ await writeFile(join(f.repo,'src/a.js'),'export function add(x,y){ return x-y; }\n');
+ const stale=await productCli(['codex-goal-progress',id,'--repository',f.repo],f.store.directory);
+ assert.equal(stale.exitCode,2);
+ assert.equal(stale.data.status,'SOURCE_REVIEW_REQUIRED');
+ assert.equal(stale.data.planReview,undefined);
+ assert.equal(stale.data.continuation.kind,'REVIEW_SOURCE_OR_REPLAN');
+ assert.equal(stale.data.executionGranted,false);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
  assert.equal(countWorkflowAttempts(f.store),0);
 });
 

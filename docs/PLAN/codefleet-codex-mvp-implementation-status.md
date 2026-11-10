@@ -1570,3 +1570,21 @@ Planning and pending Workflow, source drift, invalid relative paths, unchanged
 Store events/Attempts and completed Delivery. This grants no Operator/Host
 authority and does not prove Host Live or final Objective acceptance.
 New Windows/Linux CI is required for this revision.
+
+## Current-source Goal readiness includes exact Contract/DAG preview (fresh CI required)
+
+The read-only `codex-goal-progress <session-id> --repository ABSOLUTE_PATH`
+now includes `planReview` from the existing `review-codex-plan` validator
+when a validated Plan has no Workflow yet **and** its original repository,
+Git HEAD and clean source baseline have been reobserved. Developers can
+inspect the WorkItem DAG, mandatory final criterion, exact Workflow and
+source-contract hashes, execution limits and required verification in one
+Goal-level status call before explicitly preparing a pending Workflow.
+Without `--repository`, after Workflow creation, or when source drift is
+observed, this field is absent; the mismatched source requires review or
+replanning. The projection remains read-only and does not approve a plan,
+create a Workflow, authenticate an Operator, start Codex or grant a Lease.
+An offline regression compares the embedded review with the existing
+independent review command and checks stale-source omission and no new
+Attempts. This is not Host Live or final Objective acceptance. The new
+HEAD needs independent Windows/Linux CI.
