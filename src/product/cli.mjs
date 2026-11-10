@@ -459,10 +459,29 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
         nextAction:'Delivered Objective already complete; no Host Turn started'
       } };
     }
-    return dispatchProduct([
-      action === 'resume-codex-goal' ? 'resume-codex-workflow' : 'run-codex-workflow',
-      progress.workflowId, '--hash', o.hash
-    ], {store,execution,plannerRegistry});
+    try {
+      const delegated = await dispatchProduct([
+        action === 'resume-codex-goal' ? 'resume-codex-workflow' : 'run-codex-workflow',
+        progress.workflowId, '--hash', o.hash
+      ], {store,execution,plannerRegistry});
+      return { ...delegated, data: { ...delegated.data, planningSessionId:args[0] } };
+    } catch (error) {
+      // Pre-dispatch denials need the same persisted recovery handoff as
+      // failures after the Controller starts. Do not grant or replay a Turn.
+      const latest = await inspectCodexGoalProgress(store,args[0]).catch(() => null);
+      if (latest?.status !== 'WORKFLOW_IN_PROGRESS' ||
+          latest.workflowId !== progress.workflowId ||
+          latest.workflow?.workflowHash !== o.hash) throw error;
+      return { exitCode:1, data: {
+        schemaVersion:1, status:'CODEX_GOAL_EXECUTION_BLOCKED',
+        planningSessionId:args[0], workflowId:progress.workflowId,
+        error:error instanceof Error ? error.message : String(error),
+        goalProgress:latest, continuation:latest.continuation,
+        objectiveComplete:false, automaticReplay:false,
+        executionSucceeded:false, executionGranted:false,
+        hostLiveAcceptance:'UNVERIFIED', protectedVerified:false
+      } };
+    }
   }
   if (action === 'run-codex-workflow' || action === 'resume-codex-workflow') {
     // Only an authenticated Host embedding can provide this dependency.

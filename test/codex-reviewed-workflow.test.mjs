@@ -1750,13 +1750,42 @@ test('Goal execution alias preserves reviewed DAG, exact hash and independent Ho
  assert.equal(created.workflowHash,validHash);
  const beforeApproval=await productCli(entry,f.store.directory,{createCodexAdmission});
  assert.equal(beforeApproval.exitCode,1);
+ assert.equal(beforeApproval.data.status,'CODEX_GOAL_EXECUTION_BLOCKED');
+ assert.equal(beforeApproval.data.planningSessionId,sessionId);
+ assert.equal(beforeApproval.data.workflowId,created.workflowId);
  assert.match(beforeApproval.data.error,/Workflow approval absent/);
+ assert.equal(beforeApproval.data.continuation.status,'AWAIT_WORKFLOW_APPROVAL');
+ assert.equal(beforeApproval.data.continuation.automaticReplay,false);
+ assert.equal(beforeApproval.data.automaticReplay,false);
+ assert.deepEqual(beforeApproval.data.goalProgress,
+  (await productCli(['codex-goal-progress',sessionId],f.store.directory)).data);
  assert.equal(operatorReviews,0);
  approveWorkflow(f.store,created.workflowId,{
   actor:'offline-fixture-reviewer',workflowHash:validHash,
   expiresAt:Date.now()+60_000
  });
  const eventCount=f.store.events(created.workflowId).length;
+ // Reject the independent Operator grant before a Host Turn or Attempt.
+ const denied=await productCli(entry,f.store.directory,{createCodexAdmission:store=>({
+  facade:createCodexMvpFacade(store,{
+   executable:process.execPath,model:'OFFLINE_DENIED_OPERATOR',enableHostTurns:true,
+   authorizeWorkflow:async()=>{hostGrants++;return false;}
+  }),
+  authorizeOperator:async()=>false
+ })});
+ assert.equal(denied.exitCode,1);
+ assert.equal(denied.data.status,'CODEX_GOAL_EXECUTION_BLOCKED');
+ assert.match(denied.data.error,/Authenticated Codex Operator admission denied/);
+ assert.equal(denied.data.planningSessionId,sessionId);
+ assert.equal(denied.data.workflowId,created.workflowId);
+ assert.equal(denied.data.continuation.status,'AUTHENTICATED_HOST_ADMISSION_REQUIRED');
+ assert.equal(denied.data.continuation.automaticReplay,false);
+ assert.equal(denied.data.executionGranted,false);
+ assert.equal(denied.data.executionSucceeded,false);
+ assert.equal(denied.data.objectiveComplete,false);
+ assert.equal(hostGrants,0);
+ assert.equal(countWorkflowAttempts(f.store),0);
+ assert.equal(f.store.events(created.workflowId).length,eventCount);
  for(const action of ['run-codex-goal','resume-codex-goal']) {
   const blocked=await productCli([
    action,sessionId,'--hash',validHash
@@ -1764,6 +1793,7 @@ test('Goal execution alias preserves reviewed DAG, exact hash and independent Ho
   assert.equal(blocked.exitCode,1,blocked.data?.error);
   assert.equal(blocked.data.status,'CODEX_WORKFLOW_EXECUTION_BLOCKED');
   assert.equal(blocked.data.workflowId,created.workflowId);
+  assert.equal(blocked.data.planningSessionId,sessionId);
   assert.match(blocked.data.error,/Exact managed Workflow execution grant denied/);
   assert.equal(blocked.data.progress.kind,'CODEFLEET_WORKFLOW_PROGRESS_V1');
   assert.equal(blocked.data.continuation.status,'AUTHENTICATED_HOST_ADMISSION_REQUIRED');
