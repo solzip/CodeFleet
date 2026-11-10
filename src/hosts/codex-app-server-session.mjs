@@ -86,8 +86,10 @@ export function createCodexTurnProtocol({ cwd, model, prompt, outputSchema, work
         count(message.method);
         if (message.method === 'item/started' || message.method === 'item/completed') {
           if (!object(message.params) || !recordId(message.params.threadId) || !recordId(message.params.turnId)) reject('Unbound Host item notification');
-          if (threadId && message.params.threadId !== threadId) reject('Host item thread identity mismatch');
-          if (turnId && message.params.turnId !== turnId) reject('Host item Turn identity mismatch');
+          // An unbound agentMessage must not seed a later valid Turn's final receipt.
+          // Requiring both reserved IDs also fails closed on pre-response races.
+          if (!threadId || !turnId || message.params.threadId !== threadId ||
+              message.params.turnId !== turnId) reject('Host item thread/Turn identity mismatch');
           safeItem(message.params.item);
         }
         if (message.method === 'turn/completed') {
