@@ -19,6 +19,7 @@ import { inspectReviewedCodexPlan, inspectReviewedCodexPlanAtSource, inspectRevi
 import { readDeliveredObjectiveStatus } from './objective-status.mjs';
 import { isCodexMvpFacadeForStore } from './codex-mvp-facade.mjs';
 import { inspectCodexPlanningStatus, inspectCodexGoalProgress } from './codex-planning-status.mjs';
+import { presentCodexGoalExecution } from './codex-goal-result.mjs';
 import { CodexPlanningDispatchError } from '../hosts/codex-managed-planning.mjs';
 import { approval as requireWorkflowApproval } from '../workflow/persistence.mjs';
 import { validateWorkflow } from '../workflow/definition.mjs';
@@ -617,10 +618,7 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       // handoff after delegated execution or a managed-Host denial. Never
       // manufacture COMPLETE when the fresh read-only projection is unavailable.
       const goalProgress = await inspectCodexGoalProgress(store,args[0]).catch(() => null);
-      return { ...delegated, data: {
-        ...delegated.data, planningSessionId:args[0],
-        goalProgress, goalProgressStatus:goalProgress ? 'OBSERVED' : 'UNAVAILABLE'
-      } };
+      return presentCodexGoalExecution(delegated,args[0],goalProgress);
     } catch (error) {
       // Pre-dispatch denials need the same persisted recovery handoff as
       // failures after the Controller starts. Do not grant or replay a Turn.

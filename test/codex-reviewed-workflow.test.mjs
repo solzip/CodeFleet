@@ -15,6 +15,7 @@ import { beginPlanning,submitPlanning } from '../src/hosts/planning.mjs';
 import { validateDraft } from '../src/intent/contract.mjs';
 import { prepareReviewedCodexWorkflow, inspectReviewedCodexPlan } from '../src/product/codex-reviewed-workflow.mjs';
 import { dispatchProduct, productCli } from '../src/product/cli.mjs';
+import { presentCodexGoalExecution } from '../src/product/codex-goal-result.mjs';
 
 test('top-level help exposes current Codex Goal review path without implying execution',()=>{
  const entry=fileURLToPath(new URL('../src/alpha/cli.mjs',import.meta.url));
@@ -2476,4 +2477,33 @@ test('Codex Goal read-only continuation offers bounded resume only for an idle s
  assert.equal(f.store.events(prepared.workflowId).length,events);
  assert.equal(countWorkflowAttempts(f.store),attempts+1,
   'Read-only status and child report must not create an additional Attempt');
+});
+
+
+test('Goal success exit requires a fresh matching persisted Objective observation',()=>{
+ const sessionId='11111111-1111-4111-8111-111111111111';
+ const workflowId='planning-'+sessionId,workflowHash='a'.repeat(64);
+ const delegated={exitCode:0,data:{workflowId,objective:{status:'COMPLETE'},
+  progress:{workflowHash}}};
+ const complete={status:'OBJECTIVE_COMPLETE',objectiveComplete:true,
+  workflowId,workflow:{workflowHash}};
+ const passed=presentCodexGoalExecution(delegated,sessionId,complete);
+ assert.equal(passed.exitCode,0);
+ assert.equal(passed.data.goalProgressStatus,'OBSERVED');
+ for(const observation of [null,
+  {...complete,status:'WORKFLOW_IN_PROGRESS',objectiveComplete:false},
+  {...complete,workflowId:'planning-other'},
+  {...complete,workflow:{workflowHash:'b'.repeat(64)}}]){
+  const blocked=presentCodexGoalExecution(delegated,sessionId,observation);
+  assert.equal(blocked.exitCode,2);
+  assert.equal(blocked.data.status,'CODEX_GOAL_COMPLETION_UNVERIFIED');
+  assert.equal(blocked.data.objectiveComplete,false);
+  assert.equal(blocked.data.automaticReplay,false);
+  assert.equal(blocked.data.workflowExecution,delegated.data);
+  assert.equal(blocked.data.objective,undefined);
+ }
+ const denied=presentCodexGoalExecution({exitCode:1,data:{
+  status:'CODEX_WORKFLOW_EXECUTION_BLOCKED'}},sessionId,null);
+ assert.equal(denied.exitCode,1);
+ assert.equal(denied.data.status,'CODEX_WORKFLOW_EXECUTION_BLOCKED');
 });

@@ -1854,3 +1854,19 @@ inspection of the persisted synthetic state, not safe replay, a real
 mid-Turn crash, authenticated Operator binding, Codex Host Live, or final
 Objective E2E acceptance. Windows/Linux CI of the new commit must be
 checked before reporting offline PASS.
+
+## Post-dispatch Codex Goal completion re-observation (fresh CI required)
+
+The trusted `run-codex-goal`/`resume-codex-goal` path now returns a successful
+Goal-level CLI exit only when its separately reobserved persisted delivered
+Objective remains COMPLETE for the same Workflow ID and hash. Previously, a
+managed Workflow could return exit 0 while the second Goal projection was
+missing, incomplete or stale, and the CLI would still report success. The
+new `CODEX_GOAL_COMPLETION_UNVERIFIED` response exits 2, preserves the
+original Workflow result as diagnostic `workflowExecution`, and prohibits
+implicit replay. A pure regression checks successful, unavailable, incomplete
+and mismatched post-dispatch observations as well as blocked grant outcomes.
+The isolated Node 22 helper smoke test passed locally; full Node 24 repo tests
+and Docker were unavailable. This HEAD needs fresh Windows/Linux CI before an
+offline regression PASS claim. The change does not authenticate the Operator,
+provide a live Host binding, or establish final Objective E2E acceptance.
