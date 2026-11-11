@@ -74,7 +74,8 @@ test('installed Codex Skill resumes reviewed Goal -> pending Workflow without gr
   const entry = list.data.sessions.find(x => x.sessionId === request.sessionId);
   assert.equal(entry?.goalStatus, 'AWAIT_WORKFLOW_REVIEW');
   assert.equal(entry?.objectiveComplete, false);
-  assert.equal(entry?.executionGranted, false);
+  assert.equal(list.data.executionGranted, false);
+  assert.equal(entry?.progressCommand?.executionGranted, false);
 
   const progress = invoke(['codex-goal-progress', request.sessionId,
     '--repository', repo]);
@@ -100,7 +101,9 @@ test('installed Codex Skill resumes reviewed Goal -> pending Workflow without gr
   const blocked = invoke(['run-codex-goal', request.sessionId,
     '--hash', reviewed.data.workflowHash]);
   assert.equal(blocked.exitCode, 1);
-  assert.match(blocked.data.error, /AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE/);
+  assert.equal(blocked.data.status, 'CODEX_GOAL_EXECUTION_NOT_READY');
+  assert.match(blocked.data.error, /no current reviewed Workflow/);
+  assert.equal(blocked.data.executionGranted, false);
   store = new Store(state, { readOnly: true });
   assert.deepEqual(store.db.prepare(
     'SELECT body,digest,status,resultHash FROM host_planning WHERE id=?'
