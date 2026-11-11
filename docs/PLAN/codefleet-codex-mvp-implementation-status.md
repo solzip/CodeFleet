@@ -1797,3 +1797,20 @@ asserts the actual top-level help output. This is developer entry-point UX,
 not Operator binding, Host Live, or Objective E2E acceptance. Local Node 24,
 full repository checkout and Docker are unavailable; separate Windows/Linux
 CI for this new HEAD remains required before reporting test PASS.
+
+## Read-only NEW_PROJECT Bootstrap continuation from ordinary CLI (CI required)
+
+The public `codefleet-alpha objective codex-bootstrap-progress <task-id>` now
+opens an existing Store read-only and returns the current persisted NEW_PROJECT
+`TaskReport`, next permitted Fileset/DAG/Repair/Local verification handoff,
+and explicit local-vs-Objective completion separation. It does not initialize
+Task tables, request an Operator or Host grant, run a model, apply Filesets,
+replay a failed verification or promote Local evidence to Protected/Objective
+acceptance. The existing trusted `advance-codex-bootstrap` still owns every
+separately authorized effect. An offline regression inspects both a prepared
+Bootstrap and a Fileset-materialized Bootstrap through a separate read-only
+CLI Store, rejects execution/approval options, and checks persisted Task bytes
+and event counts remain unchanged. This is persistence/recovery UX, not actual
+Codex Host Live or independent Objective E2E acceptance. Full local Node 24,
+checkout and Docker are unavailable here; Windows/Linux CI for this exact
+commit is required before claiming the tests pass.

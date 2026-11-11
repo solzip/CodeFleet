@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCodexMvpFacade } from '../src/product/codex-mvp-facade.mjs';
+import { productCli } from '../src/product/cli.mjs';
+import { taskReport } from '../src/product/report.mjs';
 import { hash } from '../src/alpha/contract.mjs';
 import { POLICY, definition } from '../src/workflow/definition.mjs';
 import { built, request, prepared, propose, approve } from './fixtures/bootstrap-reservation.mjs';
@@ -8,6 +10,40 @@ import { task } from '../src/product/tasks.mjs';
 import { rm, readFile, realpath, mkdtemp, symlink, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+
+test('NEW_PROJECT continuation is independently observable from a read-only CLI after restart',async t=>{
+ for (const make of [prepared,built]) {
+  const f=await make({passing:true});
+  t.after(async()=>{f.store.close();await rm(f.root,{recursive:true,force:true});});
+  const before=await taskReport(f.store,f.id);
+  const persisted=f.store.db.prepare('SELECT body FROM product_tasks WHERE id=?').get(f.id).body;
+  const events=f.store.events(f.id).length;
+  const result=await productCli(['codex-bootstrap-progress',f.id],f.state);
+  assert.equal(result.exitCode,before.acceptance.complete?0:2);
+  assert.equal(result.data.kind,'CODEFLEET_CODEX_BOOTSTRAP_PROGRESS_V1');
+  assert.equal(result.data.taskId,f.id);
+  assert.equal(result.data.progress.workflowHash,before.workflowHash);
+  assert.equal(result.data.progress.contractKind,'NEW_PROJECT');
+  assert.deepEqual(result.data.continuation,before.continuation);
+  assert.equal(result.data.localComplete,before.acceptance.complete===true);
+  assert.equal(result.data.objectiveComplete,false);
+  assert.equal(result.data.executionGranted,false);
+  assert.equal(result.data.automaticReplay,false);
+  assert.equal(result.data.protectedVerified,false);
+  assert.equal(result.data.hostLiveAcceptance,'UNVERIFIED');
+  for(const invalid of [
+   ['codex-bootstrap-progress',f.id,'--allow-model'],
+   ['codex-bootstrap-progress',f.id,'--trust','unreviewed'],
+   ['codex-bootstrap-progress',f.id,'unexpected']
+  ]) {
+   const denied=await productCli(invalid,f.state);
+   assert.equal(denied.exitCode,1);
+   assert.equal(denied.data.status,'BLOCKED_OR_UNSUPPORTED');
+  }
+  assert.equal(f.store.db.prepare('SELECT body FROM product_tasks WHERE id=?').get(f.id).body,persisted);
+  assert.equal(f.store.events(f.id).length,events);
+ }
+});
 
 const backend = { prepare: async()=>{}, verify: async()=>{}, cleanup: async()=>{} };
 function fixture() {
