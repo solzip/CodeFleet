@@ -111,6 +111,30 @@ for(const nativeHost of ['codex','claude']) test('packaged '+nativeHost+' Skill 
     assert.ok(instructions.includes(phrase),'Installed Host goal guidance missing: '+phrase);
   assert.match(instructions,new RegExp('host '+nativeHost+' plan "goal" REPOSITORY'));
   assert.equal((await manageHost(canonical,nativeHost,'status')).status,'ENABLED');
+  if(nativeHost==='codex'){
+    // The actual npm tarball must ship the MCP server and speak stdio JSON-RPC.
+    const mcp=path.join(skill,'runtime','hosts','codex-mcp.mjs');
+    assert.ok((await lstat(mcp)).isFile());
+    const reqs=[
+      {jsonrpc:'2.0',id:1,method:'initialize',
+        params:{protocolVersion:'2025-06-18',
+          clientInfo:{name:'codex-package-probe',version:'1'},capabilities:{}}},
+      {jsonrpc:'2.0',method:'notifications/initialized'},
+      {jsonrpc:'2.0',id:2,method:'tools/list'}
+    ];
+    const probe=spawnSync(process.execPath,
+      [mcp,'--state',path.join(root,'mcp-inspection-state'),
+        '--repository',canonical],{
+        input:reqs.map(q=>JSON.stringify(q)).join('\n')+'\n',
+        encoding:'utf8',shell:false,windowsHide:true,timeout:10000
+      });
+    assert.equal(probe.status,0,probe.stderr);
+    const replies=probe.stdout.trim().split('\n').map(JSON.parse);
+    assert.deepEqual(replies.map(q=>q.id),[1,2]);
+    assert.equal(replies[0].result.serverInfo.name,'codefleet-codex');
+    assert.ok(replies[1].result.tools.some(t=>t.name==='codefleet_goal_start'));
+    assert.ok(!replies[1].result.tools.some(t=>t.name==='codefleet_execute'));
+  }
   const exe=path.join(skill,'runtime','alpha','cli.mjs');
   assert.ok((await lstat(exe)).isFile());
   assert.ok((await lstat(path.join(skill,'runtime','product',

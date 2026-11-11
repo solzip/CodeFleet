@@ -24,6 +24,8 @@ jobs:
       - name: P1 fake-process protocol regression (no real Codex)
         run: npm run test:p1-proof-offline
       - run: npm run test:codex-mvp
+      - name: Codex MCP proposal and scope boundary (no model process)
+        run: npm run test:codex-mcp
       - name: Installed Host Goal-to-Local-completion acceptance (no model or Docker)
         run: npm run test:installed-goal-loop
       - name: Todo + Calendar functional fixture (real Node tests; no Host)
@@ -67,6 +69,8 @@ jobs:
       - name: P1 fake-process protocol regression (no real Codex)
         run: npm run test:p1-proof-offline
       - run: npm run test:codex-mvp
+      - name: Codex MCP proposal and scope boundary (no model process)
+        run: npm run test:codex-mcp
       - name: Installed Host Goal-to-Local-completion acceptance (no model or Docker)
         run: npm run test:installed-goal-loop
       - name: Todo + Calendar functional fixture (real Node tests; no Host)

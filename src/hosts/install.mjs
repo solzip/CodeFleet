@@ -37,6 +37,23 @@ description: Plan, review and independently verify scoped development work throu
 
 # CodeFleet
 
+${host === 'codex' ? `
+## Codex direct tool bridge (optional, current model session)
+
+If the user separately configured a CodeFleet MCP server bound to this
+repository and an explicit State directory OUTSIDE the repository, prefer
+its codefleet_goal_start, codefleet_goal_status, codefleet_draft_submit,
+codefleet_goal_prepare and codefleet_fileset_propose tools. These let this
+Codex model advance the existing CodeFleet Task without writing intermediary
+JSON files or starting a second Codex model process. Follow the Goal loop
+below and read goal_status after every accepted proposal.
+No MCP tool approves, executes, edits source, bills, runs tests or certifies
+completion. Do not invent such a tool or call other shell operations to
+circumvent the missing authority. Exact owner-approved Local reviews remain
+separate CLI actions; protected deployment/Owner identity is not provided.
+If MCP is not configured, use the normal installed CLI below unchanged.
+` : ''}
+
 ## Goal-to-verified-result loop (default in the current Host session)
 
 Your job is to advance ONE user Objective to the highest actually verified

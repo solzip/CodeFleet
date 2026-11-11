@@ -12,6 +12,44 @@ CodeFleet's default integration direction is Host-Native. Use the AI in your exi
 
 H4 adds the [Linux IPC client and restricted Harness connection](../implementation/host-ipc.md). Installed Skills now use that versioned client for provisioned fixed-scope runs. The legacy commands below remain blocked preparation/protocol examples. Actual human input, live Host confinement and arbitrary new scope activation remain BLOCKED. H3 assignment and authorization history is preserved.
 
+## Codex MCP direct proposals (optional, without nested model calls)
+
+Codex CLI supports local stdio MCP servers. For an explicitly selected
+existing Git repository, install the normal CodeFleet Skill and **separately**
+register the installed CodeFleet server in your trusted Codex environment:
+
+```text
+codex mcp add codefleet -- node ABS_PROJECT/.agents/skills/codefleet/runtime/hosts/codex-mcp.mjs --state ABS_EXTERNAL_STATE --repository ABS_PROJECT --acceptance LOCAL_ONLY
+codex mcp list
+```
+
+Replace the placeholders with absolute OS paths. `LOCAL_ONLY` is an explicit
+user-controlled **creation-time acceptance policy**, not an execution or
+permission grant. Omit `--acceptance LOCAL_ONLY` to preserve the default
+`PROTECTED_REQUIRED` policy. Do not have Codex silently choose a weaker
+acceptance profile. Codex config changes are **manual**; installing the Skill
+does not modify Codex's global MCP configuration. Use the existing Codex
+session's `/mcp` or tool list after reloading as needed.
+
+The server exposes `codefleet_goal_start`, `codefleet_goal_status`,
+`codefleet_draft_submit`, `codefleet_goal_prepare`, and
+`codefleet_fileset_propose`. The model can submit its own structured
+Draft/Fileset proposals and inspect durable Task state without launching a
+second Codex model process or writing intermediate JSON files. All fileset
+proposals remain **unapplied** until independently reviewed through the
+existing `objective local-files-review` / `local-files-accept` procedure;
+tests likewise require separate exact `local-review` / `local-accept`.
+The server has **no** approve, execution, testing, direct model invocation,
+provider credential, deployment, or public Operator grant tool. Its project
+root and external State location are fixed at startup, not chosen by MCP
+request arguments. An MCP process under the same OS user is **not** independent
+Owner authentication or OS sandbox confinement.
+
+The bundled CI exercise uses synthetic model-authored proposal JSON and
+real CodeFleet Store/contract handling. It does not demonstrate a real Codex
+model Turn or authorized unattended Host Live execution. The ordinary
+supervised Local path remains available if MCP is not configured.
+
 ## Install and manage
 
 Use a trusted CodeFleet checkout with Node 24.14.1 or newer. No npm install or API key is required. From that checkout:
