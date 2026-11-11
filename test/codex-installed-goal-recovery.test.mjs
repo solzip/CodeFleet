@@ -106,8 +106,8 @@ test('installed Codex Skill resumes reviewed Goal -> pending Workflow without gr
     'SELECT body,digest,status,resultHash FROM host_planning WHERE id=?'
   ).get(request.sessionId), originalRow);
   assert.equal(store.db.prepare(
-    "SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name='runs'"
-  ).get().n, 0, 'Read-only discovery cannot initialize a Workflow');
+    'SELECT count(*) AS n FROM runs'
+  ).get().n, 0, 'Read-only discovery cannot create a Workflow');
   store.close();
   store = null;
 
