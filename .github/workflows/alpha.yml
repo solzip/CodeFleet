@@ -24,6 +24,8 @@ jobs:
       - name: P1 fake-process protocol regression (no real Codex)
         run: npm run test:p1-proof-offline
       - run: npm run test:codex-mvp
+      - name: Todo + Calendar functional fixture (real Node tests; no Host)
+        run: npm run test:todo-fixture
       - run: npm run test:legacy
       - run: npm run test:host-core
       - name: Windows Host installation and offline exchange
@@ -63,6 +65,8 @@ jobs:
       - name: P1 fake-process protocol regression (no real Codex)
         run: npm run test:p1-proof-offline
       - run: npm run test:codex-mvp
+      - name: Todo + Calendar functional fixture (real Node tests; no Host)
+        run: npm run test:todo-fixture
       - name: Prepare real Linux Docker and immutable verification images
         run: node scripts/prepare-alpha-ci.mjs "$GITHUB_ENV"
       - name: Prepare Git-only directory for Docker-free PATH fixture
@@ -70,6 +74,8 @@ jobs:
           mkdir "$RUNNER_TEMP/codefleet-git-only"
           ln -s "$(command -v git)" "$RUNNER_TEMP/codefleet-git-only/git"
           echo "$RUNNER_TEMP/codefleet-git-only" >> "$GITHUB_PATH"
+      - name: Todo + Calendar CodeFleet vertical (real protected Docker tests; synthetic Host only)
+        run: npm run test:codex-todo-vertical
       # Legacy remains mandatory on Windows, its existing supported CI platform.
       # Do not filter the Alpha suite: all protected tests must actually run.
       # Fixed-UID probes share kernel resource accounting. H6 runs first,
