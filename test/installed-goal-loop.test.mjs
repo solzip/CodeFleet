@@ -73,8 +73,8 @@ function git(repo,args){
   assert.equal(r.status,0,r.stderr);
   return r.stdout.trim();
 }
-test('installed Codex Skill advances one Objective to Local complete and detects drift',async t=>{
-  const root=await mkdtemp(path.join(tmpdir(),'cf-installed-goal-'));
+for(const nativeHost of ['codex','claude']) test('packaged '+nativeHost+' Skill advances one Goal to Local complete and detects drift',async t=>{
+  const root=await mkdtemp(path.join(tmpdir(),'cf-installed-goal-'+nativeHost+'-'));
   t.after(()=>rm(root,{recursive:true,force:true}));
   const repo=path.join(root,'project'),state=path.join(root,'state');
   await mkdir(path.join(repo,'src'),{recursive:true});
@@ -102,20 +102,21 @@ test('installed Codex Skill advances one Objective to Local complete and detects
   const base=git(repo,['rev-parse','HEAD']);
   const canonical=await realpath(repo);
   const {installHost,manageHost}=await packagedRuntime(root);
-  assert.equal((await installHost(canonical,'codex')).status,'INSTALLED_OFFLINE');
-  const skill=path.join(canonical,'.agents','skills','codefleet');
+  assert.equal((await installHost(canonical,nativeHost)).status,'INSTALLED_OFFLINE');
+  const skill=path.join(canonical,nativeHost==='codex'?'.agents':'.claude','skills','codefleet');
   const instructions=await readFile(path.join(skill,'SKILL.md'),'utf8');
   for(const phrase of ['Goal-to-verified-result loop','ONE user Objective',
     'continuation/nextActions','local-files-review/accept',
     'local-review/accept','COMPLETE_LOCAL','Do NOT bypass it'])
     assert.ok(instructions.includes(phrase),'Installed Host goal guidance missing: '+phrase);
-  assert.equal((await manageHost(canonical,'codex','status')).status,'ENABLED');
+  assert.match(instructions,new RegExp('host '+nativeHost+' plan "goal" REPOSITORY'));
+  assert.equal((await manageHost(canonical,nativeHost,'status')).status,'ENABLED');
   const exe=path.join(skill,'runtime','alpha','cli.mjs');
   assert.ok((await lstat(exe)).isFile());
   assert.ok((await lstat(path.join(skill,'runtime','product',
     'codex-mvp-facade.mjs'))).isFile());
 
-  const host=(args,allowed)=>cli(exe,state,'host',['codex',...args],allowed);
+  const host=(args,allowed)=>cli(exe,state,'host',[nativeHost,...args],allowed);
   const objective=(args,allowed)=>cli(exe,state,'objective',args,allowed);
   const planned=host(['plan','Implement Todo and Calendar behavior with two Node feature tests',
     canonical,'--local-existing','--acceptance','LOCAL_ONLY',
@@ -200,16 +201,4 @@ test('installed Codex Skill advances one Objective to Local complete and detects
   assert.equal(drift.acceptance.complete,false);
   assert.ok(['LOCAL_ACCEPTANCE_UNSATISFIED','CURRENT_CANDIDATE_CHANGED'].includes(
     drift.acceptance.reason),'A post-acceptance source change must invalidate the approved Local outcome');
-});
-test('installed Claude Skill uses the same bounded Goal loop',async t=>{
-  const repo=await mkdtemp(path.join(tmpdir(),'cf-installed-claude-'));
-  t.after(()=>rm(repo,{recursive:true,force:true}));
-  const {installHost}=await packagedRuntime(repo);
-  await installHost(repo,'claude');
-  const skill=path.join(repo,'.claude','skills','codefleet');
-  const text=await readFile(path.join(skill,'SKILL.md'),'utf8');
-  assert.match(text,/host claude plan "goal" REPOSITORY/);
-  assert.match(text,/Goal-to-verified-result loop/);
-  assert.match(text,/COMPLETE_LOCAL/);
-  assert.ok((await lstat(path.join(skill,'runtime','product','report.mjs'))).isFile());
 });
