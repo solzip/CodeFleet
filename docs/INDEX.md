@@ -24,9 +24,15 @@ CodeFleet은 기존 Codex CLI·Claude Code의 모델·인증·세션을 사용�
 
 `docs/audits/`·`docs/runs/`·`docs/archive/`의 전 문서를 시간 역순으로 나열한다. 규약은 `docs/CONVENTIONS.md`, 결함 등재 현황은 `docs/REGISTER.md`.
 
-작성 기준: 2026-10-28. 전수 142개 문서 (감사 41 · 실행 94 · 아카이브 7). <!-- fact: docs-indexed = 142 --> <!-- fact: docs-on-disk = 142 -->
+작성 기준: 2026-11-11. 전수 143개 문서 (감사 41 · 실행 95 · 아카이브 7). <!-- fact: docs-indexed = 143 --> <!-- fact: docs-on-disk = 143 -->
 
 현재 공개 사용 제품 계획은 [제품 완성 문서](product-completion/README.md)에 있다. 기존 아카이브의 실측과 새 제품 계획을 구분하며, 구현 상태는 새 진행 현황에서 관리한다.
+
+## 2026-11-11
+
+| Date | Document | Type | Result | Follow-up |
+| --- | --- | --- | --- | --- |
+| 2026-11-11 | `runs/2026-11-11/codex-goal-skill-handoff.md` | Codex Host Skill navigation | Persisted Goal, Workflow review and NEW_PROJECT read-only handoff added to the generated Skill | Windows/Linux CI and independent managed Host acceptance remain open |
 
 ## 2026-10-28
 

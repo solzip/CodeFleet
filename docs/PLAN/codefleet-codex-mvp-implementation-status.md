@@ -1928,3 +1928,20 @@ the read-only command creates no events or Attempts. This repairs persistence
 and recovery UX only: it does not reconcile unknown Host effects, authenticate
 an Operator, prove Codex Host Live, or accept a delivered Objective. The new
 commit requires its own Windows/Linux CI before any offline PASS claim.
+
+## Installed Codex Host Skill exposes persisted Goal and Bootstrap handoff (new CI required)
+
+The generated `codefleet` Skill for Codex now includes a runnable read-only
+navigation path from `codex-goals` to a source-checked Goal/Contract/DAG review,
+pending Workflow preparation requiring explicit user confirmation, and separate
+`codex-bootstrap-progress` for NEW_PROJECT tasks. It explains that the existing
+staged `host codex plan` Task ID differs from a managed Planning session ID,
+that incomplete read-only Goal inspections may exit nonzero, and that local
+Bootstrap success is not delivered Objective completion. The installed Skill
+does not provision `createCodexAdmission`, authenticate an Operator or grant
+managed Host/cost authority. Existing installations are not replaced because
+the installer deliberately refuses to overwrite them; this applies to newly
+installed Skills only. An installed-Skill regression checks the included
+commands and absence from Claude's Skill. Local Node 24 full checkout/Docker are
+unavailable; this new HEAD requires Windows/Linux CI. Codex Host Live and
+independent delivered Objective E2E acceptance remain unverified.

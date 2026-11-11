@@ -75,6 +75,21 @@ for (const host of ['codex', 'claude']) {
     assert.match(text, /runtime\/hosts\/ipc-client.mjs/);
     assert.match(await readFile(path.join(skill, 'runtime/hosts/ipc-client.mjs'), 'utf8'), /hostRequest/);
     assert.match(text, /name: codefleet/); assert.match(text, /operator/);
+    if (host === 'codex') {
+      // Check the actual packaged Host Skill: normal users can discover
+      // persisted Goal/Bootstrap handoffs but cannot infer execution authority.
+      for (const command of [
+        'objective codex-goals [--offset N]',
+        'codex-goal-progress SESSION_ID --repository ABSOLUTE_PATH',
+        'objective review-codex-plan',
+        'prepare-codex-workflow SESSION_ID --repository ABSOLUTE_PATH',
+        'objective review-codex-workflow',
+        'objective codex-bootstrap-progress TASK_ID',
+        'trusted createCodexAdmission',
+      ]) assert.ok(text.includes(command), 'Codex Skill must explain ' + command);
+      assert.match(text, /Preparing persists an\s+UNAPPROVED Workflow only/);
+      assert.match(text, /Never invoke plan-codex-goal, run-codex-goal, resume-codex-goal or/);
+    } else assert.doesNotMatch(text, /objective codex-goals \[--offset N\]/);
     const run = await command(process.execPath, [path.join(skill, 'runtime/alpha/cli.mjs'), '--state', path.join(root, 'state'), 'host', host, 'capabilities']);
     assert.equal(run.exitCode, 0, run.stderr.toString()); assert.equal(JSON.parse(run.stdout).liveValidation, 'NOT_RUN');
     await assert.rejects(installHost(root, host), /EEXIST/);
