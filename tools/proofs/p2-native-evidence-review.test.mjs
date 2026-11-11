@@ -68,7 +68,7 @@ test('separate structural reviewer checks synthetic native-bound evidence withou
   const {opts,result}=await setup(t);
   assert.equal(result.passed,true);
   const review=await reviewP2NativeEvidence(opts);
-  assert.equal(review.status,'P2_NATIVE_EVIDENCE_STRUCTURALLY_CONSISTENT_OWNER_REVIEW_REQUIRED');
+  assert.equal(review.status,'P2_SYNTHETIC_EVIDENCE_STRUCTURALLY_CONSISTENT_NOT_LIVE');
   assert.equal(review.observedSuccess,true);
   assert.equal(review.resultSha256,result.resultSha256);
   assert.equal(review.transcriptSha256,result.traceSha256);
@@ -144,4 +144,25 @@ test('standalone reviewer CLI is library only; no --execute or approve flag',asy
   assert.equal(blocked.status,2);
   assert.equal(JSON.parse(blocked.stdout).p2Accepted,false);
   await assert.rejects(reviewerMain(['--approve']),/library-only/);
+});
+
+test('reviewer refuses forged native process launch flag in synthetic proof',async t=>{
+  const {opts,fixtureRoot}=await setup(t);
+  const path=join(fixtureRoot,P2_NATIVE_ARTIFACTS,P2_NATIVE_RESULT);
+  const result=JSON.parse(await readFile(path,'utf8'));
+  result.nativeLaunchAttempted=true;
+  await writeFile(path,JSON.stringify(result,null,2)+'\n');
+  await assert.rejects(reviewP2NativeEvidence(opts),
+    /synthetic-only reviewer rejects all native execution claims/);
+});
+test('reviewer refuses promoting synthetic model result to native',async t=>{
+  const {opts,fixtureRoot}=await setup(t);
+  const path=join(fixtureRoot,P2_NATIVE_ARTIFACTS,P2_NATIVE_RESULT);
+  const result=JSON.parse(await readFile(path,'utf8'));
+  result.syntheticTestAdapter=false;
+  result.nativeCodexStarted=true;
+  result.modelTurnsActuallyRun='UNKNOWN';
+  await writeFile(path,JSON.stringify(result,null,2)+'\n');
+  await assert.rejects(reviewP2NativeEvidence(opts),
+    /synthetic-only reviewer rejects all native execution claims/);
 });

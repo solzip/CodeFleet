@@ -71,7 +71,7 @@ async function runFake(f,scenario='success',counter){
   return main(f.args,grantEnv,{spawnImpl:fakeSpawner(scenario,counter)});
 }
 function failResult(result){
-  assert.equal(result.status,'P2_NATIVE_TURN_FAILED');
+  assert.equal(result.status,'P2_SYNTHETIC_TURN_FAILED');
   assert.equal(result.passed,false);
   assert.equal(result.p2Accepted,false);
   assert.equal(result.hostLiveVerified,false);
@@ -114,7 +114,7 @@ test('exact mocked native path executes one bounded read-only Turn and stores mi
   const counter={calls:0};
   const result=await runFake(f,'success',counter);
   assert.equal(counter.calls,1);
-  assert.equal(result.status,'P2_NATIVE_TURN_OBSERVED_PENDING_INDEPENDENT_REVIEW');
+  assert.equal(result.status,'P2_SYNTHETIC_TURN_OBSERVED_NOT_LIVE');
   assert.equal(result.passed,true);
   assert.equal(result.outboundTurnStartCount,1);
   assert.equal(result.termination.confirmed,true);
@@ -263,4 +263,33 @@ test('unexpected execute CLI arguments never trigger a native process',()=>{
     assert.equal(denied.status,2);
     assert.equal(JSON.parse(denied.stdout).p2Accepted,false);
   }
+});
+
+test('fully bound --execute CLI with both static acknowledgements still blocks native process',async t=>{
+  const f=await setup(t);
+  const cmd=spawnSync(process.execPath,[executableFile,...f.args],{
+    encoding:'utf8',shell:false,timeout:10000,
+    env:{...process.env,...grantEnv}
+  });
+  assert.equal(cmd.status,2,cmd.stderr);
+  assert.equal(JSON.parse(cmd.stdout).p2Accepted,false);
+  assert.deepEqual((await readdir(f.fixtureRoot)).sort(),
+    [P2_NATIVE_MANIFEST,P2_NATIVE_ARTIFACTS].sort());
+  assert.deepEqual(await readdir(join(f.fixtureRoot,P2_NATIVE_ARTIFACTS)),[]);
+});
+test('normal library invocation cannot run native Turn despite both acknowledgements',async t=>{
+  const f=await setup(t);
+  await assert.rejects(main(f.args,grantEnv),/P2_NATIVE_LIVE_BLOCKED/);
+  assert.deepEqual((await readdir(f.fixtureRoot)).sort(),
+    [P2_NATIVE_MANIFEST,P2_NATIVE_ARTIFACTS].sort());
+});
+test('test adapter refuses unmarked executable bytes before any process launch',async t=>{
+  const f=await setup(t);
+  await writeFile(f.executable,'UNMARKED_NATIVE_LIKE_EXECUTABLE');
+  const counts={calls:0};
+  await assert.rejects(main(f.args,grantEnv,{spawnImpl:fakeSpawner('success',counts)}),
+    /synthetic adapter refuses non-test executable/);
+  assert.equal(counts.calls,0);
+  assert.deepEqual((await readdir(f.fixtureRoot)).sort(),
+    [P2_NATIVE_MANIFEST,P2_NATIVE_ARTIFACTS].sort());
 });

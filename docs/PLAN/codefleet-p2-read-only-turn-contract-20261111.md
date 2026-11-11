@@ -332,3 +332,26 @@ or its Draft PR; independent P1 owner adjudication and a separate signed
 off owner decision about model, unknown cost exposure, identity,
 private fixture, OS sandbox and exact one-shot run are required.
 **Never copy the CI simulation approval environment into the owner's PC.**
+
+## 13. Follow-up: fail-closed native process dispatch
+
+Two fixed environment acknowledgement strings and pinned SHA identities are
+insufficient to independently authenticate the Owner or enforce a model
+spending limit. Before this change, both strings could enter a real native
+spawn path. This was NOT a granted P2 Live execution authority.
+
+The public `--execute` path now always blocks before any reservation or native
+process, including when all hashes, model and both static acknowledgements are
+supplied. The default production native spawn fallback has been removed.
+The bounded transport is exercised only through an injected synthetic test
+adapter after exact checks of the fixed fake-executable fixture bytes. Its
+success result is `P2_SYNTHETIC_TURN_OBSERVED_NOT_LIVE`; the separate reviewer
+rejects claims of native process/model execution and never certifies P2 Live.
+An injected adapter is only a testing seam, not a robust security boundary
+against arbitrary code running with the same OS account permissions.
+
+Before restoring live dispatch, require independently authenticated Owner
+one-Turn authority, actual Windows executable signer/provenance and OS process
+permission review, separately accepted unknown cost exposure, sandbox and
+tool-network enforcement, one-shot no-replay and independently reviewed actual
+process/effect Evidence. This Draft change performs zero real Codex Turns.

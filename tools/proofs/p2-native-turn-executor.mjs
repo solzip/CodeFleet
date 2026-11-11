@@ -1,9 +1,8 @@
 #!/usr/bin/env node
-// Owner-gated, bounded ONE native Codex App Server P2 candidate.
-// This source can be reviewed/tested with a fake child. It has no auto-run,
-// no login changes, no retries, no public Operator admission and no cost cap.
-// The two CLI acknowledgements do NOT authenticate an owner independently.
-import { spawn } from 'node:child_process';
+// P2 one-Turn protocol/lifecycle candidate: SYNTHETIC TESTS ONLY.
+// Public --execute must not spawn native Codex: static environment strings
+// are not independent Owner authentication or a bounded spending grant.
+// No login changes, retries, public Operator admission or live cost grant.
 import { createHash } from 'node:crypto';
 import { StringDecoder } from 'node:string_decoder';
 import { lstat, open, readFile, readdir } from 'node:fs/promises';
@@ -27,6 +26,11 @@ const PROTOCOL=fileURLToPath(new URL('./p2-readonly-offline.mjs',import.meta.url
 const HASH=/^[A-F0-9]{64}$/;
 const MAX_TRACE=16384,MAX_RESULT=8192,MAX_MARKER=2048;
 const PERMIT=Symbol('p2-private-owner-ack');
+// Fixed synthetic fixture sentinels, not a genuine native Codex executable.
+const SYNTHETIC_ONLY_EXECUTABLES=new Set([
+  'THIS_IS_A_FAKE_CODEX_EXE_FOR_NO_LIVE_TESTS',
+  'FAKE_EXECUTABLE_REVIEW_ONLY'
+]);
 const digest=value=>createHash('sha256').update(value).digest('hex').toUpperCase();
 const safeMethod=method=>typeof method==='string'&&
   /^[A-Za-z0-9/_-]{1,80}$/.test(method) ? method:'REDACTED_METHOD';
@@ -88,6 +92,14 @@ async function strictRead(path,max){
     deny('P2 Evidence bytes invalid');
   return contents;
 }
+// The library's injected test seam is not an authenticated execution right.
+async function requireSyntheticOnly(options,deps){
+  if(typeof deps?.spawnImpl!=='function')
+    deny('P2_NATIVE_LIVE_BLOCKED: static acknowledgements do not authorize a native model Turn');
+  const bytes=await strictRead(options.executable,128);
+  if(!SYNTHETIC_ONLY_EXECUTABLES.has(bytes.toString('utf8')))
+    deny('P2 synthetic adapter refuses non-test executable bytes');
+}
 const sameFiles=(observed,expected)=>
   observed.slice().sort().join('|')===expected.slice().sort().join('|');
 function checkedPermit(options,env){
@@ -134,8 +146,8 @@ async function boundedChild(options,scope,deps={}){
        await sha256File(PROTOCOL)!==options.expectedProtocolSha256||
        await sha256File(SELF)!==options.expectedExecutorSha256)
       deny('P2 identity changed after one-shot reservation');
-    nativeLaunchAttempted=true;
-    const spawnImpl=deps.spawnImpl??spawn;
+    // Only synthetic injection. Native spawn has no production fallback.
+    const spawnImpl=deps.spawnImpl;
     child=spawnImpl(executable,
       ['app-server','--listen','stdio://','--strict-config'],{
       cwd:root,shell:false,windowsHide:true,stdio:['pipe','pipe','pipe'],
@@ -192,10 +204,10 @@ async function boundedChild(options,scope,deps={}){
   const traceBytes=Buffer.from(trace.map(x=>JSON.stringify(x)).join('\n')+'\n');
   if(traceBytes.length>MAX_TRACE)
     deny('P2 native trace too large; launch reservation remains occupied');
-  const simulated=deps.spawnImpl!==undefined;
+  const simulated=true;
   const record={
     status:passed?
-      'P2_NATIVE_TURN_OBSERVED_PENDING_INDEPENDENT_REVIEW':'P2_NATIVE_TURN_FAILED',
+      'P2_SYNTHETIC_TURN_OBSERVED_NOT_LIVE':'P2_SYNTHETIC_TURN_FAILED',
     passed,protocolVersion:'rust-v0.167.0',model,
     outboundTurnStartCount:turnSubmitted,
     stdoutBytes,stderrBytes,
@@ -212,8 +224,8 @@ async function boundedChild(options,scope,deps={}){
     costStatus:'UNKNOWN',readOnlyRequested:true,readOnlyEnforced:false,
     appServerExecutionAuthenticated:false,
     nativeLaunchAttempted,syntheticTestAdapter:simulated,
-    nativeCodexStarted:!simulated&&spawnObserved,
-    modelTurnsActuallyRun:simulated?0:'UNKNOWN',
+    nativeCodexStarted:false,
+    modelTurnsActuallyRun:0,
     p2Accepted:false,hostLiveVerified:false,replayAllowed:false,
     ownerReviewRequired:true,
     error:errorCode? 'P2_FAILED_OR_UNVERIFIED_REVIEW_REQUIRED':null
@@ -274,6 +286,7 @@ export async function main(argv=process.argv.slice(2),env=process.env,deps={}){
   };
   // Abort before any files are written or native processes are spawned.
   const permit=checkedPermit(options,env);
+  await requireSyntheticOnly(options,deps);
   return executeP2NativeOnce(options,permit,deps);
 }
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){

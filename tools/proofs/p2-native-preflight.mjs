@@ -38,6 +38,13 @@ const approvedHash=(h,label)=>{
   if(typeof h!=='string'||!SHA.test(h))deny('P2 requires an exact reviewed '+label+' SHA-256');
   return h;
 };
+// Verify the exact bytes later parsed, not a separate earlier file read.
+export function assertReviewedManifestBytes(bytes,reviewedSha256){
+  const reviewed=approvedHash(reviewedSha256,'P2 manifest');
+  if(!Buffer.isBuffer(bytes)||bytes.length<1||bytes.length>MAX_MANIFEST||
+      hash(bytes)!==reviewed)
+    deny('P2 source/runtime/Fixture hash mismatch');
+}
 async function noLinkedAncestors(path){
   let segment=resolve(path);
   for(;;){
@@ -120,12 +127,12 @@ export async function inspectP2NativeCandidate({
   const clientPath=await reviewedRegular(CLIENT,MAX_CLIENT);
   const protocolPath=await reviewedRegular(PROTOCOL,MAX_CLIENT);
   const observed=await Promise.all([
-    sha256File(codex),sha256File(clientPath),sha256File(protocolPath),
-    sha256File(manifestPath)
+    sha256File(codex),sha256File(clientPath),sha256File(protocolPath)
   ]);
   for(let i=0;i<observed.length;i++)
     if(observed[i]!==hashes[i])deny('P2 source/runtime/Fixture hash mismatch');
   const bytes=await readFile(manifestPath);
+  assertReviewedManifestBytes(bytes,hashes[3]);
   let manifest;
   try{manifest=JSON.parse(bytes.toString('utf8'))}
   catch{deny('P2 candidate Manifest JSON invalid')}

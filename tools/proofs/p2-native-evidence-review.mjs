@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Separate, read-only structural review of a P2 native candidate evidence set.
+// Separate, read-only structural review of synthetic P2 evidence only.
 // It does not authenticate OS process provenance, owner identity, sandbox
 // enforcement, provider billing, or actual Objective completion.
 import { createHash } from 'node:crypto';
@@ -136,19 +136,17 @@ export async function reviewP2NativeEvidence({
     result.appServerExecutionAuthenticated!==false||
     result.p2Accepted!==false||result.hostLiveVerified!==false||
     result.replayAllowed!==false||result.ownerReviewRequired!==true||
-    !['P2_NATIVE_TURN_OBSERVED_PENDING_INDEPENDENT_REVIEW',
-      'P2_NATIVE_TURN_FAILED'].includes(result.status)||
-    result.passed!==(result.status==='P2_NATIVE_TURN_OBSERVED_PENDING_INDEPENDENT_REVIEW')||
+    !['P2_SYNTHETIC_TURN_OBSERVED_NOT_LIVE',
+      'P2_SYNTHETIC_TURN_FAILED'].includes(result.status)||
+    result.passed!==(result.status==='P2_SYNTHETIC_TURN_OBSERVED_NOT_LIVE')||
     !result.termination||typeof result.termination!=='object'||
     !Number.isInteger(result.outboundTurnStartCount)||
     result.outboundTurnStartCount<0||result.outboundTurnStartCount>1||
     typeof result.syntheticTestAdapter!=='boolean')
     deny('P2 native candidate Result has unsupported claims or mismatch');
-  if(result.syntheticTestAdapter&&(
-     result.nativeCodexStarted!==false||result.modelTurnsActuallyRun!==0))
-    deny('P2 synthetic adapter cannot prove native execution');
-  if(!result.syntheticTestAdapter&&result.modelTurnsActuallyRun!=='UNKNOWN')
-    deny('P2 Host Turn execution effect state must remain UNKNOWN');
+  if(result.syntheticTestAdapter!==true||result.nativeLaunchAttempted!==false||
+     result.nativeCodexStarted!==false||result.modelTurnsActuallyRun!==0)
+    deny('P2 synthetic-only reviewer rejects all native execution claims');
   if(!resultBytes.equals(Buffer.from(JSON.stringify(result,null,2)+'\n')))
     deny('P2 result bytes not canonical');
   let events;
@@ -190,7 +188,7 @@ export async function reviewP2NativeEvidence({
       deny('P2 native success not supported by redacted evidence');
   }
   return Object.freeze({
-    status:'P2_NATIVE_EVIDENCE_STRUCTURALLY_CONSISTENT_OWNER_REVIEW_REQUIRED',
+    status:'P2_SYNTHETIC_EVIDENCE_STRUCTURALLY_CONSISTENT_NOT_LIVE',
     observedSuccess:result.passed,
     transcriptSha256:hash(traceBytes),resultSha256:hash(resultBytes),
     reservationSha256:hash(markerBytes),
