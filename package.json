@@ -43,7 +43,7 @@
     "coverage:uncovered": "node ./scripts/check-rule-coverage.mjs --list-uncovered",
     "test:codex-mvp": "node --test test/codex-app-server-session.test.mjs test/codex-managed-host-execution.test.mjs test/codex-managed-planning.test.mjs test/workflow-predecessor-context.test.mjs test/alpha-context-path-boundary.test.mjs test/controlled-delivery.test.mjs test/objective-judge.test.mjs test/development-baseline.test.mjs test/repair-generations.test.mjs test/codex-bootstrap-files.test.mjs test/destination-evidence.test.mjs test/codex-workspace-execution.test.mjs test/objective-status.test.mjs test/objective-status-cli.test.mjs test/codex-mvp-facade.test.mjs test/codex-mvp-joined-fixture.test.mjs test/codex-reviewed-workflow.test.mjs",
     "test:p1-proof-offline": "node --test tools/proofs/p1-appserver-handshake.test.mjs tools/proofs/p1-r2-preflight.test.mjs tools/proofs/p1-r2-evidence-review.test.mjs tools/proofs/p1-r3-source-packet.test.mjs tools/proofs/p1-r3-native-inspect.test.mjs tools/proofs/p1-r3-fixture-prepare.test.mjs",
-    "test:p2-proof-offline": "node --test tools/proofs/p2-readonly-offline.test.mjs"
+    "test:p2-proof-offline": "node --test tools/proofs/p2-readonly-offline.test.mjs tools/proofs/p2-one-shot-offline-intent.test.mjs"
   },
   "engines": {
     "node": ">=24.14.1"

@@ -170,3 +170,38 @@ Evidence and independently observed effects **before** any P2 owner grant.
 
 Status remains P2_OFFLINE_PROTOCOL_CANDIDATE / P2_LIVE_NOT_AUTHORIZED /
 OWNER_COST_APPROVAL_NOT_GRANTED / MODEL_NOT_SELECTED.
+
+## 9. Experimental durable no-replay intent (offline-only, Draft PR #27)
+
+The pure one-Turn protocol validation alone does not demonstrate a durable
+reservation before an actual process could launch. Draft PR #27 adds an
+internal-only synthetic one-shot journal in
+tools/proofs/p2-one-shot-offline-intent.mjs.
+
+It accepts **only an already-existing, isolated synthetic test root** named
+codefleet-p2-*, a fake or owner-reviewed absolute executable with an exact
+SHA-256, a reviewed P2 protocol source SHA-256, bounded model ID and
+timeout <=90000ms. It rejects a nonempty root, alias/symlink roots, bad
+hashes and changed content. After every precondition, it exclusively
+creates p2-offline-intent.json with wx/0600 and fsync, then reobserves
+the stored content and the pinned identities. A competing or repeated
+reservation fails without overwriting the original. A partial/corrupt
+intent also remains occupied and **is never auto-deleted or replayed**.
+
+The journal always records executionAuthorized=false,
+ownerApproval=NOT_GRANTED, replayAllowed=false,
+unknownSubscriptionCost=true and hostLiveVerified=false.
+The diagnostic command-line entrypoint accepts **no arguments** and
+cannot create a file, spawn Codex, grant a model or authorize execution.
+This code exists only for disposable offline tests of a future one-shot
+fencing primitive; it is **not** a production authenticated reservation
+broker, protected filesystem boundary, executable P2 proof client,
+billable-cost authorization or proof of the absence of external effects.
+Local checksums are not authenticated signatures.
+
+The P2 offline CI test script runs both the pure protocol and the one-shot
+journal's synthetic contention, replay, tamper, partial-failure and
+bad-identity tests on Windows and Linux. Future live P2 needs an
+independent actual source/process/grant admission design and OS-specific
+permission checks before the first real Turn. No live authority or cost
+exposure is implied by this test-only journal.
