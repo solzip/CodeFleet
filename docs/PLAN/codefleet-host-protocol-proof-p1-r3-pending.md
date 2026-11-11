@@ -135,3 +135,43 @@ process identity and P1 R3 Live execution remain unverified. Do not promote
 these observations to an approval or a Host Live acceptance decision.
 
 No main merge or P1 R3 execution is authorized by this addition.
+
+## Optional new R3 Fixture preparation — separately authorized local write
+
+The pending R3 proof needs a **new private Fixture**, rather than overwriting
+the historical P1 R2 directory. Draft PR #24 provides a bounded preparation
+tool with exact file bytes from the reviewed R3 source packet. It may be used
+**only after the owner has separately approved creation of one empty,
+previously nonexistent local Fixture root and reviewed the actual native
+Codex executable SHA-256, exact absolute target and source commit**.
+
+Only after that specific preparation approval, from the reviewed PR #24
+checkout, run with the **independently reviewed executable SHA-256**:
+
+~~~powershell
+node tools/proofs/p1-r3-fixture-prepare.mjs --write-new-fixture --codex-exe "<NATIVE_CODEX_EXE_ABSOLUTE_PATH>" --fixture "<BRAND_NEW_PRIVATE_R3_FIXTURE_ABSOLUTE_PATH>" --expected-codex-sha256 "<INDEPENDENTLY_REVIEWED_NATIVE_CODEX_SHA256>"
+~~~
+
+The --write-new-fixture flag is an operator's explicit opt-in to create
+files, **not** a proof that owner approval occurred. This command creates
+only the new Fixture root and its proof-client/ and proof-artifacts/
+subdirectories, plus exactly the copied source client, input.txt and
+fixture-manifest.json under the new root. It never spawns Codex, runs a
+model, makes credentials, grants execution, or writes the existing R2
+Fixture. The target **must not exist**, and any linked/Junction ancestor
+or native executable digest mismatch is rejected before writing.
+
+The tool independently revalidates all written R3 bytes and returns
+P1_R3_FIXTURE_BYTES_PREPARED_OWNER_REVIEW_REQUIRED with all four hashes
+and executionAuthorized=false, hostLiveVerified=false,
+ownerApproval=NOT_ATTESTED_BY_SCRIPT. On any error after creating the
+new root, it **does not automatically clean up or retry**; owner review
+of the partial directory is required. Never change the target or hash
+to force a second attempt.
+
+After preparation, use the existing read-only p1-r3-native-inspect.mjs
+with --fixture to obtain a separate observation of the exact structure.
+Neither preparation nor read-only inspection constitutes the **second,
+separate P1 R3 Live execution approval**. Until that approval and an
+independent local runtime/permission review, P1 R3 remains NOT_RUN and
+HOST_PROTOCOL_UNVERIFIED.
