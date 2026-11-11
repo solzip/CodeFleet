@@ -8,6 +8,8 @@ import { pathToFileURL } from 'node:url';
 const MAX_LINE=256*1024,MAX_STDOUT=1024*1024,MAX_EVENTS=128,MAX_OUTPUT=4096;
 const MAX_PROMPT=1024;
 const SIMPLE_ID=/^[A-Za-z0-9_-]{1,128}$/;
+// Model IDs such as gpt-6.1-sol legitimately contain dots; RPC IDs remain stricter.
+const MODEL_ID=/^[A-Za-z0-9_.-]{1,128}$/;
 const ALLOWED_METADATA=new Set([
   'account/updated','account/rateLimits/updated','remoteControl/status/changed'
 ]);
@@ -35,7 +37,7 @@ const exactOutput=text=>{
 };
 const copy=value=>structuredClone(value);
 export function createP2ReadOnlyProtocol({cwd,model}={}){
-  if(typeof cwd!=='string'||!isAbsolute(cwd)||cwd.length>4096||!id(model)||
+  if(typeof cwd!=='string'||!isAbsolute(cwd)||cwd.length>4096||!MODEL_ID.test(model)||
       Buffer.byteLength(P2_FIXED_INPUT,'utf8')>MAX_PROMPT)
     fail('Exact absolute synthetic root and bounded model ID required');
   let phase='WAIT_INITIALIZE',threadId=null,turnId=null,notes=new Map(),turnStarted=false;

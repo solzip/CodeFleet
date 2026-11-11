@@ -213,3 +213,11 @@ test('missing or malformed contract inputs never create outbound frames',()=>{
   for(const args of [{cwd:'relative',model}, {cwd,model:''}, {cwd,model:'x'.repeat(129)}])
     failure(()=>createP2ReadOnlyProtocol(args),/Exact absolute synthetic root/);
 });
+
+test('real observed Codex default model ID with dots remains bounded and valid',()=>{
+  const p=createP2ReadOnlyProtocol({cwd,model:'gpt-6.1-sol'});
+  const m=p.accept({id:1,result:{}});
+  assert.equal(m[1].params.model,'gpt-6.1-sol');
+  failure(()=>createP2ReadOnlyProtocol({cwd,model:'gpt/6.1-sol'}),
+    /Exact absolute synthetic root and bounded model ID/);
+});

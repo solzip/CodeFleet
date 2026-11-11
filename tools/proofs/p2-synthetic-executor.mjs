@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process';
 import { open, readFile, readdir, lstat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { StringDecoder } from 'node:string_decoder';
 import { createP2ReadOnlyProtocol, createP2OfflineJsonlReader } from './p2-readonly-offline.mjs';
 import { P2_INTENT_FILE, readP2OfflineIntent } from './p2-one-shot-offline-intent.mjs';
 import { sha256File } from './p1-appserver-handshake.mjs';
@@ -88,12 +89,16 @@ export async function runP2SyntheticTransport({root,model,scenario='success',tim
     executionAuthorized:false,replayAllowed:false
   };
   if(!checkMarker(marker,intent))deny('P2 synthetic process marker invalid');
+  // Validate the protocol before reserving this one synthetic execution.
+  const protocol=createP2ReadOnlyProtocol({cwd:root,model});
+  const parser=createP2OfflineJsonlReader(protocol);
   // No process may be created until the exclusive launch reservation is synced.
   await fsyncExclusive(join(root,P2_SYNTHETIC_MARKER),
     Buffer.from(JSON.stringify(marker)+'\n','utf8'));
-  const protocol=createP2ReadOnlyProtocol({cwd:root,model});
-  const parser=createP2OfflineJsonlReader(protocol);
-  const trace=[];
+  // A marker is present even if a child fails to start. Keep Evidence nonempty.
+  const trace=[{direction:'internal',kind:'launch-reserved'}];
+  const traceDecoder=new StringDecoder('utf8');
+  let tracePending='';
   let stdoutBytes=0,stderrBytes=0,failure=null,closed=false,exitCode=null,signal=null;
   let child,deadline,hardStop,finish;
   const ended=new Promise(resolveClose=>{finish=resolveClose});
@@ -126,12 +131,16 @@ export async function runP2SyntheticTransport({root,model,scenario='success',tim
       try{
         // Trace only response IDs and method names. Never persist payloads.
         // The parser itself independently imposes 1 MiB/128 frame limits.
-        const responses=chunk.toString('utf8').split(/\r?\n/)
-          .filter(Boolean);
+        const responses=(tracePending+traceDecoder.write(chunk)).split(/\r?\n/);
+        tracePending=responses.pop()??'';
         for(const line of responses){
-          try{const message=JSON.parse(line);
-            trace.push(noSecretMeta('in',message));}
-          catch{trace.push({direction:'in',kind:'unparseable'})}
+          if(!line)continue;
+          try{
+            const message=JSON.parse(line);
+            if(message&&typeof message==='object'&&!Array.isArray(message))
+              trace.push(noSecretMeta('in',message));
+            else trace.push({direction:'in',kind:'invalid-json-type'});
+          }catch{trace.push({direction:'in',kind:'unparseable'})}
         }
         for(const response of parser.push(chunk))write(response);
         if(protocol.completed&&!child.stdin.writableEnded)child.stdin.end();
@@ -148,6 +157,8 @@ export async function runP2SyntheticTransport({root,model,scenario='success',tim
       finish();
     },timeoutMs+2500);
     await ended;
+    tracePending+=traceDecoder.end();
+    if(tracePending.trim())trace.push({direction:'in',kind:'unterminated'});
     if(!closed&&!failure)failure='P2 synthetic process close unconfirmed';
     if(!failure){
       try{parser.close({exitCode,signal})}
