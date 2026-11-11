@@ -257,3 +257,34 @@ live P2 readiness certificate. A real P2 Live runner still requires
 a new reviewed implementation and exact owner-approved one-Turn
 model/cost/Host/fileroot/provenance authorization. The preexisting
 P1 R3 Evidence and initial failed P1 attempt are untouched.
+
+## 11. Native Codex identity preflight (read-only; Draft PR #29)
+
+The P1 R3 native Codex Windows candidate was reported as @openai/codex 0.167.0
+with SHA-256 EDFDD48F8B458AF0906E507B4CB05217B326C3D6E515E9F024E05E3B8D650F70.
+The owner-observed model/list named gpt-6.1-sol as the default model.
+These are candidate observations, not independent process provenance or a cost grant.
+
+tools/proofs/p2-native-preflight.mjs implements a non-launching, read-only
+--inspect command for a *separately authorized and already-existing* private
+CodeFleet-P2-Live-* Fixture that contains only p2-native-manifest.json and
+an empty proof-artifacts directory. It binds exact SHA-256 identities of the
+Codex native executable, candidate preflight source, P2 protocol source and
+manifest. It validates model/timeout/ephemeral/never/read-only/no-tool-network
+candidate fields and refuses symlinks/Junctions, extra files or occupied
+Evidence. Its canonical Manifest cannot self-promote approval or cost rights.
+
+Result: P2_NATIVE_CANDIDATE_FILES_OBSERVED_NOT_AUTHORIZED.
+Execution, native child process spawn, file writes, owner authorization,
+AuthentiCode certification, OS sandbox certification and metered cost caps
+remain impossible to conclude from this preflight. It always returns
+executionAuthorized=false, ownerApproval=NOT_GRANTED, nativeCodexStarted=false,
+modelTurnsActuallyRun=0, authenticodeVerified=false, costCapEnforced=false,
+osSandboxEnforcementVerified=false, hostLiveVerified=false, replayAllowed=false.
+
+The CLI accepts exact --inspect + six path/hash args only. No --execute,
+fixture creation or owner grant command is implemented. The root must be
+prepared and exact hashes independently reviewed in a later, distinct scope.
+CI runs synthetic fake-codex.exe checks on Windows and Linux; no actual Codex.
+A separate real native P2 runner and final owner model/cost/permissions grant
+are still required.
