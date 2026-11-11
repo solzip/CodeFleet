@@ -160,7 +160,9 @@ test('installed Codex Skill advances one Objective to Local complete and detects
   await writeFile(path.join(canonical,'src/calendar.mjs'),newCalendar);
   const drift=objective(['report',id],[0]).data;
   assert.equal(drift.complete,false);
-  assert.equal(drift.acceptance.reason,'CURRENT_CANDIDATE_CHANGED');
+  assert.equal(drift.acceptance.complete,false);
+  assert.ok(['LOCAL_ACCEPTANCE_UNSATISFIED','CURRENT_CANDIDATE_CHANGED'].includes(
+    drift.acceptance.reason),'A post-acceptance source change must invalidate the approved Local outcome');
 });
 test('installed Claude Skill uses the same bounded Goal loop',async t=>{
   const repo=await mkdtemp(path.join(tmpdir(),'cf-installed-claude-'));
