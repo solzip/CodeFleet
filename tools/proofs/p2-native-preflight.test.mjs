@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdir,mkdtemp,readFile,readdir,realpath,rm,symlink,writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,7 +10,7 @@ import { sha256File } from './p1-appserver-handshake.mjs';
 import { P2_FIXED_INPUT,P2_OUTPUT_SCHEMA } from './p2-readonly-offline.mjs';
 import {
   createP2NativeManifest,inspectP2NativeCandidate,main,
-  P2_NATIVE_MANIFEST,P2_NATIVE_ARTIFACTS
+  assertReviewedManifestBytes,P2_NATIVE_MANIFEST,P2_NATIVE_ARTIFACTS
 } from './p2-native-preflight.mjs';
 
 const client=fileURLToPath(new URL('./p2-native-preflight.mjs',import.meta.url));
@@ -209,4 +210,24 @@ test('preflight does not expose prompt content or credential payloads',async t=>
   assert.equal(text.includes(P2_FIXED_INPUT),false);
   assert.equal(text.includes(JSON.stringify(P2_OUTPUT_SCHEMA)),false);
   assert.equal(text.includes(f.parent),false);
+});
+
+test('reviewed Manifest hash binds the exact bytes passed to parsing',async t=>{
+  const f=await fixture(t);
+  const reviewed=await readFile(f.manifestPath);
+  assert.doesNotThrow(()=>assertReviewedManifestBytes(reviewed,f.expectedManifestSha256));
+  // A different canonical candidate is valid under its own SHA, but not
+  // under a SHA approved for the previously read bytes.
+  const altered=JSON.parse(reviewed.toString('utf8'));
+  altered.model='gpt-6.1-other';
+  const changed=Buffer.from(JSON.stringify(altered)+'\n','utf8');
+  assert.throws(()=>assertReviewedManifestBytes(changed,f.expectedManifestSha256),
+    /hash mismatch/);
+  const newSha=createHash('sha256').update(changed).digest('hex').toUpperCase();
+  assert.doesNotThrow(()=>assertReviewedManifestBytes(changed,newSha));
+});
+test('reviewed Manifest byte guard rejects oversized or empty contents',()=>{
+  const expected='A'.repeat(64);
+  for(const bytes of [Buffer.alloc(0),Buffer.alloc(8193)])
+    assert.throws(()=>assertReviewedManifestBytes(bytes,expected),/hash mismatch/);
 });
