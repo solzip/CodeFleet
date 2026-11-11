@@ -121,11 +121,27 @@ export async function listCodexGoalSessions(store, { offset = 0 } = {}) {
      ORDER BY rowid DESC LIMIT 21 OFFSET ?`
   ).all(offset);
   const sessions = [];
+  let unreadableCount = 0;
   // Reuse the same independent, fail-closed Goal projection as the detail
   // command. Do not infer completion from a Planning or Workflow flag.
   // Keep this bounded and sequential to avoid unbounded disk/tree reads.
   for (const row of rows.slice(0, 20)) {
-    const progress = await inspectCodexGoalProgress(store, row.id);
+    let progress;
+    try {
+      progress = await inspectCodexGoalProgress(store, row.id);
+    } catch {
+      // A malformed persisted session must not hide other recoverable Goals.
+      // Never infer its Objective result or provide an unusable resume command.
+      unreadableCount++;
+      sessions.push({ sessionId: row.id, planningStatus: 'BLOCKED',
+        validationStatus: null, continuationKind: 'INSPECT_PERSISTED_GOAL',
+        goalStatus: 'BLOCKED', workflowId: null,
+        workflowContinuationStatus: null, recoveryHandoffKind: null,
+        objectiveComplete: false, sourceFreshness: 'NOT_RECHECKED',
+        progressCommand: null, reason: 'PERSISTED_GOAL_UNREADABLE',
+        executionGranted: false, automaticReplay: false });
+      continue;
+    }
     const observed = progress.planning;
     sessions.push({ sessionId: row.id, planningStatus: observed.status,
       validationStatus: observed.validationStatus ?? null,
@@ -139,8 +155,9 @@ export async function listCodexGoalSessions(store, { offset = 0 } = {}) {
       progressCommand: { argv: ['codex-goal-progress', row.id],
         readOnly: true, executionGranted: false, automaticReplay: false } });
   }
-  return { ...base, status: sessions.length ? 'AVAILABLE' : 'EMPTY',
-    sessions, nextOffset: rows.length > 20 ? offset + 20 : null };
+  return { ...base, status: unreadableCount ? 'PARTIAL_BLOCKED'
+    : sessions.length ? 'AVAILABLE' : 'EMPTY',
+    unreadableCount, sessions, nextOffset: rows.length > 20 ? offset + 20 : null };
 }
 
 // One Goal-level, non-executing observation across persisted Planning,

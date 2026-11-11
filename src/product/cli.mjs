@@ -269,7 +269,8 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     if (args.length || Object.keys(o).some(key => key !== 'offset') ||
         (o.offset !== undefined && !/^(0|[1-9]\d{0,5})$/.test(o.offset)))
       throw Error('codex-goals accepts no Goal ID and optional --offset 0..999999 only; no execution flags');
-    return { exitCode: 0, data: await listCodexGoalSessions(store, { offset: Number(o.offset ?? 0) }) };
+    const data = await listCodexGoalSessions(store, { offset: Number(o.offset ?? 0) });
+    return { exitCode: data.status === 'PARTIAL_BLOCKED' ? 2 : 0, data };
   }
   if (action === 'plan-codex-goal') {
     requireCodexGoalEntryArgs(args, o);

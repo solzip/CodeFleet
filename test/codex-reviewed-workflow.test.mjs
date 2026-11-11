@@ -465,6 +465,46 @@ test('read-only Codex Goal discovery survives process restart and supports bound
  assert.equal(countWorkflowAttempts(f.store),0);
 });
 
+test('one unreadable persisted Codex Goal does not hide healthy sessions after restart',async t=>{
+ const f=await fixture(t), healthyId=f.request.sessionId;
+ const corrupt=await beginPlanning(f.store,f.repo,f.originalGoal,{host:'codex',version:'0.166.0'});
+ // Simulate an invalid legacy/corrupt primary key without changing the
+ // stored Codex request. The index must not abort before the valid Goal.
+ f.store.db.prepare('UPDATE host_planning SET id=? WHERE id=?')
+   .run('invalid-session-id',corrupt.sessionId);
+ const beforeEvents=f.store.db.prepare('SELECT count(*) AS n FROM events').get().n;
+ const beforeRows=f.store.db.prepare('SELECT count(*) AS n FROM host_planning').get().n;
+ const result=await productCli(['codex-goals'],f.store.directory);
+ assert.equal(result.exitCode,2);
+ assert.equal(result.data.status,'PARTIAL_BLOCKED');
+ assert.equal(result.data.unreadableCount,1);
+ assert.deepEqual(result.data.sessions.map(s=>s.sessionId),['invalid-session-id',healthyId]);
+ const blocked=result.data.sessions[0];
+ assert.equal(blocked.goalStatus,'BLOCKED');
+ assert.equal(blocked.planningStatus,'BLOCKED');
+ assert.equal(blocked.reason,'PERSISTED_GOAL_UNREADABLE');
+ assert.equal(blocked.continuationKind,'INSPECT_PERSISTED_GOAL');
+ assert.equal(blocked.objectiveComplete,false);
+ assert.equal(blocked.progressCommand,null);
+ assert.equal(blocked.executionGranted,false);
+ assert.equal(blocked.automaticReplay,false);
+ assert.equal(result.data.sessions[1].goalStatus,'AWAIT_WORKFLOW_REVIEW');
+ assert.deepEqual(result.data.sessions[1].progressCommand.argv,['codex-goal-progress',healthyId]);
+ const entry=fileURLToPath(new URL('../src/alpha/cli.mjs',import.meta.url));
+ const proc=spawnSync(process.execPath,[entry,'--state',f.store.directory,'objective','codex-goals'],{
+   encoding:'utf8',timeout:20000
+ });
+ assert.equal(proc.status,2,proc.stderr || proc.error?.message);
+ assert.deepEqual(JSON.parse(proc.stdout),result.data);
+ const older=await productCli(['codex-goals','--offset','1'],f.store.directory);
+ assert.equal(older.exitCode,0,older.data?.error);
+ assert.equal(older.data.unreadableCount,0);
+ assert.deepEqual(older.data.sessions.map(s=>s.sessionId),[healthyId]);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM host_planning').get().n,beforeRows);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM events').get().n,beforeEvents);
+ assert.equal(countWorkflowAttempts(f.store),0);
+});
+
 test('Codex Goal index shows Workflow approval state after process restart without advancing',async t=>{
   const f=await fixture(t);
   const before=await productCli(['codex-goals'],f.store.directory);

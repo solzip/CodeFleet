@@ -1913,3 +1913,18 @@ This is a regression of delivered-tree status visibility across CLI restarts,
 not a Codex Host Live run, OS-authenticated Operator grant, protected verification
 or final Objective E2E acceptance. The changed HEAD requires its own Windows
 and Linux GitHub Actions results before claiming the new assertions passed.
+
+## Read-only Codex Goal discovery survives one unreadable session (fresh CI required)
+
+When the persisted Codex Goal list contains a malformed session identifier or
+an individual Goal projection throws, the bounded index now preserves the other
+recoverable sessions instead of aborting the entire CLI discovery. The affected
+row is marked `BLOCKED / PERSISTED_GOAL_UNREADABLE`, with no progress or resume
+command; the index returns `PARTIAL_BLOCKED` and CLI exit code 2 so users cannot
+mistake partial discovery for a clean result. A regression fixture corrupts one
+Planning identifier and verifies that another submitted Goal remains discoverable
+after a separate CLI process restart, that pagination remains stable, and that
+the read-only command creates no events or Attempts. This repairs persistence
+and recovery UX only: it does not reconcile unknown Host effects, authenticate
+an Operator, prove Codex Host Live, or accept a delivered Objective. The new
+commit requires its own Windows/Linux CI before any offline PASS claim.
