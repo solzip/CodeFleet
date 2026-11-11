@@ -288,3 +288,47 @@ prepared and exact hashes independently reviewed in a later, distinct scope.
 CI runs synthetic fake-codex.exe checks on Windows and Linux; no actual Codex.
 A separate real native P2 runner and final owner model/cost/permissions grant
 are still required.
+
+## 12. Owner-acknowledged native one-Turn candidate and separate reviewer (Draft PR #30)
+
+The candidate native P2 runner source is tools/proofs/p2-native-turn-executor.mjs.
+It has an ordinary dry-run default. Its manual --execute path requires
+*both* the unique P2 one-Turn acknowledgement and the independent explicit
+acceptance of UNKNOWN subscription/billing risk. It rechecks the already
+reviewed native Windows codex.exe, P2 protocol, read-only preflight,
+canonical private Fixture and *its own exact executor SHA-256* before
+an exclusive synced launch marker is created. Only after that marker,
+the runner can call native codex.exe with the fixed app-server stdio
+and strict-config argv. No retries, no automatic model selection,
+at most one ephemeral Thread and one sandboxed read-only Turn are requested.
+
+The existing strict P2 protocol state machine rejects unexpected
+notifications/approval requests, tools, unbound events, duplicate Turns,
+bad JSONL and unexpected output. The runner drains stdout/stderr and
+process-close with a 90s maximum Turn deadline and a bounded extra
+shutdown interval. A failure/timeout leaves the one-shot marker occupied;
+it must never auto-replay or delete the private Fixture.
+
+It persists only a minimal redacted method/response-ID trace and one
+small result, both exclusive-create. No raw model final text, account
+credentials, Host stderr or private input are stored. The separate
+read-only tools/proofs/p2-native-evidence-review.mjs validates actual
+local file hashes, fixed-method trace, unique Turn dispatch, result
+consistency, and that no unsupported owner/Host/cost claims are made.
+
+**Critical limitations:** A CLI acknowledgement is NOT a cryptographic
+owner identity proof, a provider spending cap or an OS sandbox attestation.
+The runner explicitly returns ownerIdentityIndependentlyAuthenticated=false,
+readOnlyEnforced=false, appServerExecutionAuthenticated=false,
+costCapEnforced=false, costStatus=UNKNOWN, p2Accepted=false,
+hostLiveVerified=false and replayAllowed=false even when its
+protocol-level Turn completes cleanly. Native Codex 0.167.0 remains
+unrun in this development step. All CI child-process tests replace the
+native executable via a fake Node App Server injection and report
+syntheticTestAdapter=true / nativeCodexStarted=false.
+
+NO actual P2 Live command or billable Turn is approved by this document
+or its Draft PR; independent P1 owner adjudication and a separate signed
+off owner decision about model, unknown cost exposure, identity,
+private fixture, OS sandbox and exact one-shot run are required.
+**Never copy the CI simulation approval environment into the owner's PC.**
