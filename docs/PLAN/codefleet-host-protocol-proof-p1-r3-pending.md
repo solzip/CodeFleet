@@ -96,3 +96,42 @@ executionAuthorized=false / hostLiveVerified=false. Use these calculated
 identities only as inputs to a **subsequent** separately approved private
 Fixture preparation and local owner audit. Do not treat a newly printed
 manifest hash as approval of any real manifest on disk.
+
+## R3 native file read-only observation (future owner Windows task)
+
+The source packet above cannot see the actual installed Windows executable.
+Draft PR #23 adds a separate **read-only native file inspection** tool. It
+has two modes, both strictly non-executing and without owner grants.
+
+First, from the reviewed PR #23 checkout, inspect only the native file,
+**before** any Fixture preparation:
+
+~~~powershell
+node tools/proofs/p1-r3-native-inspect.mjs --codex-exe "<NATIVE_CODEX_EXE_ABSOLUTE_PATH>"
+~~~
+
+This reports P1_R3_NATIVE_FILE_OBSERVED_FIXTURE_NOT_CHECKED and a file SHA-256
+to bind to a *future owner review*. The tool does not launch the executable,
+query its version or authenticate that the bytes really represent a native
+Codex distribution. A fake executable may also have a SHA-256.
+
+Only **after a separately approved private R3 Fixture preparation** (the
+code here does not create one), the owner can inspect its strict layout and
+copied client, input and Manifest bytes:
+
+~~~powershell
+node tools/proofs/p1-r3-native-inspect.mjs --codex-exe "<NATIVE_CODEX_EXE_ABSOLUTE_PATH>" --fixture "<NEW_R3_FIXTURE_ABSOLUTE_PATH>"
+~~~
+
+A structural match returns P1_R3_FILES_OBSERVED_OWNER_REVIEW_REQUIRED.
+The tool rejects the old R2 client copy, changed R3 candidate bytes, extra
+root entries, an occupied Evidence directory, unapproved link/Junction
+aliases and unsupported flags such as --execute / --prepare.
+
+Both modes always say **executionAuthorized=false**, **hostLiveVerified=false**
+and **ownerApproval=NOT_GRANTED**. The actual owner's approval, native
+binary provenance/version, ACLs, new Fixture preparation authorization,
+process identity and P1 R3 Live execution remain unverified. Do not promote
+these observations to an approval or a Host Live acceptance decision.
+
+No main merge or P1 R3 execution is authorized by this addition.
