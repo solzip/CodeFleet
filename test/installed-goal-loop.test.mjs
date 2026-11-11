@@ -1,4 +1,5 @@
-// Installed product acceptance. One disposable existing Git Objective goes
+// Packaged-product acceptance. The npm tarball's installed runtime, not the
+// source checkout, performs one disposable existing Git Objective. It goes
 // through the installed Codex Skill runtime, two dependent supervised edits,
 // real Node tests, persistence/recovery and current-tree COMPLETE_LOCAL.
 // No native Codex, model, external repo, network or protected trust claim.
@@ -9,7 +10,42 @@ import {createHash} from 'node:crypto';
 import {mkdtemp,mkdir,readFile,writeFile,lstat,realpath,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {installHost,manageHost} from '../src/hosts/install.mjs';
+import {pathToFileURL} from 'node:url';
+
+// Exercise what actually ships to a user: pack and install the release
+// candidate into a disposable tools directory before installing either Skill.
+// Neither installed code nor its runtime may import the source checkout.
+async function packagedRuntime(root){
+  const npm=process.env.npm_execpath;
+  assert.ok(npm,'Packaged acceptance must run through npm with npm_execpath');
+  const cache=path.join(root,'npm-cache');
+  const packed=proc(process.execPath,
+    [npm,'pack','--ignore-scripts','--json','--pack-destination',root],
+    process.cwd());
+  assert.equal(packed.status,0,packed.stderr+'\n'+packed.stdout);
+  const manifest=JSON.parse(packed.stdout);
+  assert.equal(manifest.length,1);
+  assert.ok(manifest[0].filename.endsWith('.tgz'));
+  assert.ok(manifest[0].files.some(f=>f.path==='scripts/host-install.mjs'));
+  assert.ok(manifest[0].files.some(f=>f.path==='src/product/codex-mvp-facade.mjs'));
+  assert.ok(manifest[0].files.every(f=>
+    !/^(test|\.git|\.codefleet|node_modules)\//.test(f.path)),
+    'Private fixtures and State must not ship');
+  const installed=path.join(root,'installed-package');
+  await mkdir(installed);
+  const result=proc(process.execPath,
+    [npm,'install','--offline','--ignore-scripts','--no-audit','--no-fund',
+      '--cache',cache,path.join(root,manifest[0].filename)],
+    installed);
+  assert.equal(result.status,0,result.stderr+'\n'+result.stdout);
+  const packageRoot=path.join(installed,'node_modules','codefleet');
+  assert.ok((await lstat(path.join(packageRoot,'src','product',
+    'codex-mvp-facade.mjs'))).isFile());
+  const importer=pathToFileURL(path.join(packageRoot,'src','hosts','install.mjs')).href;
+  const {installHost,manageHost}=await import(importer);
+  return {installHost,manageHost,packageRoot};
+}
+
 
 const sha=text=>createHash('sha256').update(text).digest('hex');
 const beforeTodo="export function createTodo(){throw Error('TODO_PENDING');}\n";
@@ -65,6 +101,7 @@ test('installed Codex Skill advances one Objective to Local complete and detects
     'commit','-m','baseline']);
   const base=git(repo,['rev-parse','HEAD']);
   const canonical=await realpath(repo);
+  const {installHost,manageHost}=await packagedRuntime(root);
   assert.equal((await installHost(canonical,'codex')).status,'INSTALLED_OFFLINE');
   const skill=path.join(canonical,'.agents','skills','codefleet');
   const instructions=await readFile(path.join(skill,'SKILL.md'),'utf8');
@@ -167,6 +204,7 @@ test('installed Codex Skill advances one Objective to Local complete and detects
 test('installed Claude Skill uses the same bounded Goal loop',async t=>{
   const repo=await mkdtemp(path.join(tmpdir(),'cf-installed-claude-'));
   t.after(()=>rm(repo,{recursive:true,force:true}));
+  const {installHost}=await packagedRuntime(repo);
   await installHost(repo,'claude');
   const skill=path.join(repo,'.claude','skills','codefleet');
   const text=await readFile(path.join(skill,'SKILL.md'),'utf8');
