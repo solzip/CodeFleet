@@ -1945,3 +1945,18 @@ installed Skills only. An installed-Skill regression checks the included
 commands and absence from Claude's Skill. Local Node 24 full checkout/Docker are
 unavailable; this new HEAD requires Windows/Linux CI. Codex Host Live and
 independent delivered Objective E2E acceptance remain unverified.
+
+## Installed Skill CLI replay across process restart (new CI required)
+
+A new integration regression installs the actual Codex Skill runtime, seeds a
+synthetic validated Host Planning session in an isolated Git fixture, closes the
+Store and invokes independent installed CLI processes for `codex-goals`,
+`codex-goal-progress --repository` and `review-codex-plan`. It checks exact
+pinned hashes, review-only commands and preserved Planning records. A second
+CLI process prepares the exact reviewed Workflow; the persisted outcome must
+remain `WAITING_APPROVAL` with zero Workflow approvals and Attempts. Both
+preparation and recovery must deny plain-CLI `run-codex-goal` without trusted
+Operator admission, and the original source bytes must remain unchanged.
+This is packaged offline user-path coverage, not an authenticated Operator
+connection, Codex Host Live execution, or Objective E2E acceptance. Windows/
+Linux CI for this HEAD is required before reporting test PASS.
