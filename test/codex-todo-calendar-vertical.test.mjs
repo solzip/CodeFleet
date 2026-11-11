@@ -44,7 +44,7 @@ async function createProject(t) {
     const result=await git(repo,args);
     assert.equal(result.exitCode,0,String(result.stderr));
   }
-  const baseline=(await git(repo,['rev-parse','HEAD'])).stdout.trim();
+  const baseline=String((await git(repo,['rev-parse','HEAD'])).stdout).trim();
   store=new Store(join(root,'state'));
   const contract={
     schemaVersion:1,
