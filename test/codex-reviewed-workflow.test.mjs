@@ -2403,6 +2403,20 @@ test('Codex Goal read-only continuation offers bounded resume only for an idle s
   requiredNextAction:'INSPECT_PERSISTED_EFFECTS_AND_LEASE',
   executionGranted:false,automaticReplay:false
  });
+ // A separate CLI process must observe the persisted uncertain B and direct
+ // its operator to inspect the existing effect, not silently dispatch B again.
+ const cliEntry=fileURLToPath(new URL('../src/alpha/cli.mjs',import.meta.url));
+ const restarted=spawnSync(process.execPath,[
+  cliEntry,'--state',f.store.directory,'objective',...argv
+ ],{encoding:'utf8',timeout:20000});
+ assert.equal(restarted.status,2,restarted.stderr || restarted.error?.message);
+ const restartedProgress=JSON.parse(restarted.stdout);
+ assert.equal(restartedProgress.continuation.status,'RECONCILE_REQUIRED');
+ assert.equal(restartedProgress.resumeCommand,undefined);
+ assert.equal(restartedProgress.recoveryHandoff.attempts[0].childId,b.id);
+ assert.equal(restartedProgress.recoveryHandoff.automaticReplay,false);
+ assert.equal(f.store.events(prepared.workflowId).length,events);
+ assert.equal(countWorkflowAttempts(f.store),attempts+1);
  // Resolve the synthetic uncertain B as a terminal failure. A retry must
  // remain separately reviewed bounded Repair, not a resumed Host Turn.
  b.state='FAILED';
@@ -2443,6 +2457,22 @@ test('Codex Goal read-only continuation offers bounded resume only for an idle s
  assert.equal(childReport.data.runId,b.id);
  assert.equal(childReport.data.reason,b.reason);
  assert.equal(childReport.data.verification.status,'NOT_RUN');
+ // A second process must preserve the failed-child handoff and report without
+ // granting Repair, replaying the child or changing its terminal evidence.
+ const restartedFailed=spawnSync(process.execPath,[
+  cliEntry,'--state',f.store.directory,'objective',...argv
+ ],{encoding:'utf8',timeout:20000});
+ assert.equal(restartedFailed.status,2,restartedFailed.stderr || restartedFailed.error?.message);
+ const failedProgress=JSON.parse(restartedFailed.stdout);
+ assert.equal(failedProgress.continuation.status,'REPAIR_REVIEW_REQUIRED');
+ assert.equal(failedProgress.resumeCommand,undefined);
+ assert.equal(failedProgress.recoveryHandoff.attempts[0].childId,b.id);
+ assert.equal(failedProgress.recoveryHandoff.attempts[0].status,'FAILED');
+ const restartedReport=spawnSync(process.execPath,[
+  cliEntry,'--state',f.store.directory,'objective','report',b.id
+ ],{encoding:'utf8',timeout:20000});
+ assert.equal(restartedReport.status,0,restartedReport.stderr || restartedReport.error?.message);
+ assert.equal(JSON.parse(restartedReport.stdout).reason,b.reason);
  assert.equal(f.store.events(prepared.workflowId).length,events);
  assert.equal(countWorkflowAttempts(f.store),attempts+1,
   'Read-only status and child report must not create an additional Attempt');

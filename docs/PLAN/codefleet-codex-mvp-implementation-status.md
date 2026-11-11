@@ -1841,3 +1841,16 @@ invalidates current Objective completion. This covers durable read-only
 re-observation after completion, **not** mid-Turn crash recovery, a real
 Codex Host session, protected verification, or independent Objective E2E
 acceptance. The new HEAD needs its own Windows/Linux CI.
+
+## Separate CLI process recovery of pending and failed WorkItem (CI required)
+
+The existing read-only Codex Goal continuation regression now launches the
+actual `codefleet-alpha --state ... objective codex-goal-progress` command
+in a separate Node process at both a persisted B `STARTED`/uncertain
+checkpoint and a B `FAILED` human handoff. It checks no automatic resume
+or new Attempt/event, preserved child identity, and the separate-process
+`report <child-id>` failure diagnostic. This verifies process-boundary
+inspection of the persisted synthetic state, not safe replay, a real
+mid-Turn crash, authenticated Operator binding, Codex Host Live, or final
+Objective E2E acceptance. Windows/Linux CI of the new commit must be
+checked before reporting offline PASS.
