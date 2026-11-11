@@ -18,7 +18,7 @@ import { repairProposalRequest } from './repair.mjs';
 import { inspectReviewedCodexPlan, inspectReviewedCodexPlanAtSource, inspectReviewedCodexWorkflow, inspectReviewedCodexWorkflowAtSource, prepareReviewedCodexWorkflow } from './codex-reviewed-workflow.mjs';
 import { readDeliveredObjectiveStatus } from './objective-status.mjs';
 import { isCodexMvpFacadeForStore } from './codex-mvp-facade.mjs';
-import { inspectCodexPlanningStatus, inspectCodexGoalProgress } from './codex-planning-status.mjs';
+import { inspectCodexPlanningStatus, inspectCodexGoalProgress, listCodexGoalSessions } from './codex-planning-status.mjs';
 import { presentCodexGoalExecution } from './codex-goal-result.mjs';
 import { CodexPlanningDispatchError } from '../hosts/codex-managed-planning.mjs';
 import { approval as requireWorkflowApproval } from '../workflow/persistence.mjs';
@@ -36,6 +36,7 @@ codefleet-alpha objective run|resume <task-id> --allow-model
 codefleet-alpha objective status [task-id] | report <task-or-run-id>
 codefleet-alpha objective delivered-status <workflow-id> (read-only delivered-tree Objective acceptance; never starts Host or writes State)
 codefleet-alpha objective workflow-progress <workflow-id> (read-only DAG/Repair progress and current delivered Objective; never grants execution)
+codefleet-alpha objective codex-goals [--offset 0..999999] (read-only persisted Codex Goal discovery after restart; inspect each Goal separately; no Host/Operator grant)
 codefleet-alpha objective codex-planning-status <planning-session-id> [--repository ABSOLUTE_PATH] (read-only Host Planning lifecycle; optional current-source check for validated results, no-replay recovery)
 codefleet-alpha objective codex-goal-progress <planning-session-id> [--repository ABSOLUTE_PATH] (read-only Goal→Planning→Workflow/DAG→delivered Objective; with --repository, expose exact current-source Plan review or pending Workflow approval/Contract review before dispatch; no-replay continuation)
 codefleet-alpha objective codex-bootstrap-progress <task-id> (read-only persisted NEW_PROJECT Fileset/DAG/Repair/Local verification handoff; never grants execution)\ncodefleet-alpha objective review-codex-plan <planning-session-id> [--repository ABSOLUTE_PATH] (read-only pinned Contract/DAG review; optional clean Git checkout check, never grants execution)
@@ -100,7 +101,7 @@ No command enables an unverified Provider or performs remote delivery.`;
 function parse(values) {
   const positional = [], options = {};
   const flags = new Set(['allow-model', 'json', 'acknowledge-unisolated', 'local-existing']);
-  const allowed = new Set(['repair-item', 'verification-request', 'acceptance', 'files', 'tests', 'criterion', 'item', 'parallel', 'attempts', 'timeout', 'budget', 'hash', 'actor', 'planner', 'codex-executable', 'claude-executable', 'unknown', 'scope', 'revision', 'trust', 'decision', 'request-id', 'expires', 'repository', 'source-hash']);
+  const allowed = new Set(['repair-item', 'verification-request', 'acceptance', 'files', 'tests', 'criterion', 'item', 'parallel', 'attempts', 'timeout', 'budget', 'hash', 'actor', 'planner', 'codex-executable', 'claude-executable', 'unknown', 'scope', 'revision', 'trust', 'decision', 'request-id', 'expires', 'repository', 'source-hash', 'offset']);
   for (let i = 0; i < values.length; i++) {
     const value = values[i];
     if (!value.startsWith('--')) { positional.push(value); continue; }
@@ -264,6 +265,12 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
   const { positional: args, options: o } = parse(rest);
   if (o.repository !== undefined && !['plan-codex-goal', 'codex-planning-status', 'codex-goal-progress', 'review-codex-plan', 'review-codex-workflow', 'prepare-codex-workflow'].includes(action))
     throw Error('--repository is only valid for Codex planning/Workflow review or pending Workflow creation');
+  if (action === 'codex-goals') {
+    if (args.length || Object.keys(o).some(key => key !== 'offset') ||
+        (o.offset !== undefined && !/^(0|[1-9]\d{0,5})$/.test(o.offset)))
+      throw Error('codex-goals accepts no Goal ID and optional --offset 0..999999 only; no execution flags');
+    return { exitCode: 0, data: listCodexGoalSessions(store, { offset: Number(o.offset ?? 0) }) };
+  }
   if (action === 'plan-codex-goal') {
     requireCodexGoalEntryArgs(args, o);
     const binding = execution?.codexAdmission;
@@ -1048,7 +1055,7 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
             ? positional[2] : options['verification-request']));
     }
     if (!argv[0] || ['help', '--help'].includes(argv[0])) return await dispatchProduct(argv);
-    store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request', 'delivered-status', 'workflow-progress', 'codex-planning-status', 'codex-goal-progress', 'codex-bootstrap-progress', 'review-codex-plan', 'review-codex-workflow'].includes(argv[0]) });
+    store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request', 'delivered-status', 'workflow-progress', 'codex-planning-status', 'codex-goal-progress', 'codex-goals', 'codex-bootstrap-progress', 'review-codex-plan', 'review-codex-workflow'].includes(argv[0]) });
     if (codexTrusted) {
       const codexAdmission = await createCodexAdmission(store);
       // dispatchProduct still checks authentic facade identity, current Store

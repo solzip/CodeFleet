@@ -1870,3 +1870,18 @@ The isolated Node 22 helper smoke test passed locally; full Node 24 repo tests
 and Docker were unavailable. This HEAD needs fresh Windows/Linux CI before an
 offline regression PASS claim. The change does not authenticate the Operator,
 provide a live Host binding, or establish final Objective E2E acceptance.
+
+## Persisted Codex Goal session discovery across CLI restarts (new CI required)
+
+The ordinary read-only `objective codex-goals [--offset N]` entry now lists up to 20
+persisted Codex Planning session IDs per page in newest-first order, with each
+session's independently inspected Planning status and exact read-only
+`codex-goal-progress` argv. This addresses losing the Planning session ID after
+restarting the Host/CLI; the index intentionally does not expose raw Goal/model
+output, reconstruct authorization, recheck repository freshness, start Turns or
+claim Objective completion. Malformed/execution flags are rejected, legacy
+Stores are not migrated, and separate-process/pagination/no-mutation offline
+regressions are authored. Full Node 24/local Docker validation is unavailable;
+check fresh Windows/Linux CI for this commit before claiming offline PASS.
+The authenticated Operator/managed Codex Host execution binding, actual Host
+Live and final independent Objective E2E acceptance remain incomplete.

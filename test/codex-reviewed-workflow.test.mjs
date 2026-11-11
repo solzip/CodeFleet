@@ -24,6 +24,7 @@ test('top-level help exposes current Codex Goal review path without implying exe
  });
  assert.equal(result.status,0,result.stderr || result.error?.message);
  assert.match(result.stdout,/codefleet-alpha objective help/);
+ assert.match(result.stdout,/objective codex-goals/);
  assert.match(result.stdout,/objective codex-goal-progress <planning-session-id> --repository ABSOLUTE_PATH/);
  assert.match(result.stdout,/objective codex-bootstrap-progress <task-id>/);
  assert.match(result.stdout,/objective review-codex-plan <planning-session-id> --repository ABSOLUTE_PATH/);
@@ -420,6 +421,63 @@ test('a read-only Store without Host planning records reports UNAVAILABLE withou
   assert.equal(checked.db.prepare("SELECT 1 FROM sqlite_master WHERE name='host_planning'").get(),undefined);
   assert.equal(checked.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
  }finally{ checked.close(); }
+});
+
+
+test('read-only Codex Goal discovery survives process restart and supports bounded pagination',async t=>{
+ const f=await fixture(t), first=f.request.sessionId;
+ const second=await beginPlanning(f.store,f.repo,f.originalGoal,{host:'codex',version:'0.166.0'});
+ const beforeEvents=f.store.db.prepare('SELECT count(*) AS n FROM events').get().n;
+ const beforeRows=f.store.db.prepare('SELECT count(*) AS n FROM host_planning').get().n;
+ const result=await productCli(['codex-goals'],f.store.directory);
+ assert.equal(result.exitCode,0,result.data?.error);
+ assert.equal(result.data.kind,'CODEFLEET_CODEX_GOAL_INDEX_V1');
+ assert.equal(result.data.authority,'READ_ONLY_PERSISTED_INDEX');
+ assert.deepEqual(result.data.sessions.map(x=>x.sessionId),[second.sessionId,first]);
+ assert.equal(result.data.sessions[0].planningStatus,'OPEN');
+ assert.equal(result.data.sessions[1].validationStatus,'VALIDATED');
+ assert.equal(result.data.sessions[1].continuationKind,'REVIEW_CONTRACT_AT_CURRENT_SOURCE');
+ assert.deepEqual(result.data.sessions[1].progressCommand.argv,['codex-goal-progress',first]);
+ assert.equal(result.data.sessions[1].progressCommand.executionGranted,false);
+ assert.equal(result.data.nextOffset,null);
+ assert.equal(result.data.executionGranted,false);
+ assert.equal(result.data.automaticReplay,false);
+ const older=await productCli(['codex-goals','--offset','1'],f.store.directory);
+ assert.equal(older.exitCode,0,older.data?.error);
+ assert.deepEqual(older.data.sessions.map(x=>x.sessionId),[first]);
+ const entry=fileURLToPath(new URL('../src/alpha/cli.mjs',import.meta.url));
+ const proc=spawnSync(process.execPath,[entry,'--state',f.store.directory,'objective','codex-goals'],{
+  encoding:'utf8',timeout:20000
+ });
+ assert.equal(proc.status,0,proc.stderr || proc.error?.message);
+ const reopened=JSON.parse(proc.stdout);
+ assert.deepEqual(reopened.sessions.map(x=>x.sessionId),[second.sessionId,first]);
+ for(const argv of [
+  ['codex-goals','--allow-model'],['codex-goals','--repository',f.repo],
+  ['codex-goals','--offset','-1'],['codex-goals','--offset','1000000'],
+  ['codex-goals','unexpected-session-id']
+ ]) {
+  const denied=await productCli(argv,f.store.directory);
+  assert.equal(denied.exitCode,1,argv.join(' '));
+ }
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM host_planning').get().n,beforeRows);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM events').get().n,beforeEvents);
+ assert.equal(countWorkflowAttempts(f.store),0);
+});
+
+test('legacy read-only Codex Goal discovery does not create a Planning table',async t=>{
+ const directory=await mkdtemp(join(tmpdir(),'codefleet-codex-goals-empty-'));
+ const store=new Store(directory);store.close();
+ t.after(async()=>rm(directory,{recursive:true,force:true}));
+ const result=await productCli(['codex-goals'],directory);
+ assert.equal(result.exitCode,0,result.data?.error);
+ assert.equal(result.data.status,'EMPTY');
+ assert.deepEqual(result.data.sessions,[]);
+ assert.equal(result.data.nextOffset,null);
+ const checked=new Store(directory,{readOnly:true});
+ try {
+  assert.equal(checked.db.prepare("SELECT name FROM sqlite_master WHERE name='host_planning'").get(),undefined);
+ }finally{checked.close();}
 });
 
 // A hybrid DAG can carry role assignment and resource-lock constraints. Those

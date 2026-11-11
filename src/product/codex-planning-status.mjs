@@ -93,6 +93,45 @@ export function inspectCodexPlanningStatus(store, sessionId) {
 }
 
 
+
+/**
+ * List persisted Codex Planning session identifiers after a CLI/Host restart.
+ * This is a bounded, read-only index: status is rechecked for each entry, and
+ * an index entry never implies a usable approval, current source or Objective.
+ * The full persisted Goal must be inspected through codex-goal-progress.
+ */
+export function listCodexGoalSessions(store, { offset = 0 } = {}) {
+  if (!store?.db || typeof store.db.prepare !== 'function' ||
+      !Number.isSafeInteger(offset) || offset < 0 || offset > 999999)
+    throw Error('Codex Goal discovery requires an existing Store and bounded offset');
+  const base = { schemaVersion: 1, kind: 'CODEFLEET_CODEX_GOAL_INDEX_V1',
+    authority: 'READ_ONLY_PERSISTED_INDEX', offset, limit: 20,
+    executionGranted: false, automaticReplay: false,
+    hostLiveAcceptance: 'UNVERIFIED', protectedVerified: false };
+  if (!store.db.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='host_planning'"
+  ).get()) return { ...base, status: 'EMPTY', sessions: [], nextOffset: null };
+  // beginPlanning stores compact JSON including a pinned Host identifier.
+  // Inspect each candidate independently; this index never trusts its body.
+  // The extra row detects more records without loading unlimited Goal history.
+  const rows = store.db.prepare(
+    `SELECT id FROM host_planning
+     WHERE instr(body, '"host":"codex"') > 0
+     ORDER BY rowid DESC LIMIT 21 OFFSET ?`
+  ).all(offset);
+  const sessions = rows.slice(0, 20).map(row => {
+    const observed = inspectCodexPlanningStatus(store, row.id);
+    return { sessionId: row.id, planningStatus: observed.status,
+      validationStatus: observed.validationStatus ?? null,
+      continuationKind: observed.continuation?.kind ?? null,
+      sourceFreshness: 'NOT_RECHECKED',
+      progressCommand: { argv: ['codex-goal-progress', row.id],
+        readOnly: true, executionGranted: false, automaticReplay: false } };
+  });
+  return { ...base, status: sessions.length ? 'AVAILABLE' : 'EMPTY',
+    sessions, nextOffset: rows.length > 20 ? offset + 20 : null };
+}
+
 // One Goal-level, non-executing observation across persisted Planning,
 // reviewed Workflow/DAG, delivery and the independent Objective verdict.
 // An existing Workflow must originate from this exact validated session.
