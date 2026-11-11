@@ -1885,3 +1885,18 @@ regressions are authored. Full Node 24/local Docker validation is unavailable;
 check fresh Windows/Linux CI for this commit before claiming offline PASS.
 The authenticated Operator/managed Codex Host execution binding, actual Host
 Live and final independent Objective E2E acceptance remain incomplete.
+
+## Read-only Goal index includes persisted Workflow handoff (fresh CI required)
+
+The bounded `objective codex-goals` list now reuses the existing read-only
+`inspectCodexGoalProgress` projection for each of at most 20 persisted Codex
+sessions. Developers returning after a CLI restart can distinguish unprepared
+Plans from a reviewed Workflow awaiting approval and see its ID, continuation
+status, possible recovery handoff and independently reobserved Objective
+completion without manually opening every Goal. The index never supplies an
+approval, Host grant, source-freshness proof or automatic resume; the detailed
+`codex-goal-progress` review remains required. The new regression covers a
+separate CLI process, the pending-approval Workflow state and no new
+Attempt/event. Node 24/full local tests and Docker are unavailable; fresh
+Windows/Linux CI is required for this HEAD. Real Codex Host Live and final
+independent Objective E2E remain unverified.

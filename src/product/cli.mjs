@@ -36,7 +36,7 @@ codefleet-alpha objective run|resume <task-id> --allow-model
 codefleet-alpha objective status [task-id] | report <task-or-run-id>
 codefleet-alpha objective delivered-status <workflow-id> (read-only delivered-tree Objective acceptance; never starts Host or writes State)
 codefleet-alpha objective workflow-progress <workflow-id> (read-only DAG/Repair progress and current delivered Objective; never grants execution)
-codefleet-alpha objective codex-goals [--offset 0..999999] (read-only persisted Codex Goal discovery after restart; inspect each Goal separately; no Host/Operator grant)
+codefleet-alpha objective codex-goals [--offset 0..999999] (read-only persisted Goal/Workflow/Objective status after restart; inspect each Goal separately; no Host/Operator grant)
 codefleet-alpha objective codex-planning-status <planning-session-id> [--repository ABSOLUTE_PATH] (read-only Host Planning lifecycle; optional current-source check for validated results, no-replay recovery)
 codefleet-alpha objective codex-goal-progress <planning-session-id> [--repository ABSOLUTE_PATH] (read-only Goal→Planning→Workflow/DAG→delivered Objective; with --repository, expose exact current-source Plan review or pending Workflow approval/Contract review before dispatch; no-replay continuation)
 codefleet-alpha objective codex-bootstrap-progress <task-id> (read-only persisted NEW_PROJECT Fileset/DAG/Repair/Local verification handoff; never grants execution)\ncodefleet-alpha objective review-codex-plan <planning-session-id> [--repository ABSOLUTE_PATH] (read-only pinned Contract/DAG review; optional clean Git checkout check, never grants execution)
@@ -269,7 +269,7 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     if (args.length || Object.keys(o).some(key => key !== 'offset') ||
         (o.offset !== undefined && !/^(0|[1-9]\d{0,5})$/.test(o.offset)))
       throw Error('codex-goals accepts no Goal ID and optional --offset 0..999999 only; no execution flags');
-    return { exitCode: 0, data: listCodexGoalSessions(store, { offset: Number(o.offset ?? 0) }) };
+    return { exitCode: 0, data: await listCodexGoalSessions(store, { offset: Number(o.offset ?? 0) }) };
   }
   if (action === 'plan-codex-goal') {
     requireCodexGoalEntryArgs(args, o);

@@ -96,11 +96,12 @@ export function inspectCodexPlanningStatus(store, sessionId) {
 
 /**
  * List persisted Codex Planning session identifiers after a CLI/Host restart.
- * This is a bounded, read-only index: status is rechecked for each entry, and
- * an index entry never implies a usable approval, current source or Objective.
- * The full persisted Goal must be inspected through codex-goal-progress.
+* This is a bounded, read-only index: current Goal/Workflow status is
+ * re-observed from persisted state and delivered-tree Evidence where present.
+ * An index entry never implies a usable approval or fresh source checkout.
+ * Inspect the full Goal through codex-goal-progress before any next action.
  */
-export function listCodexGoalSessions(store, { offset = 0 } = {}) {
+export async function listCodexGoalSessions(store, { offset = 0 } = {}) {
   if (!store?.db || typeof store.db.prepare !== 'function' ||
       !Number.isSafeInteger(offset) || offset < 0 || offset > 999999)
     throw Error('Codex Goal discovery requires an existing Store and bounded offset');
@@ -119,15 +120,25 @@ export function listCodexGoalSessions(store, { offset = 0 } = {}) {
      WHERE instr(body, '"host":"codex"') > 0
      ORDER BY rowid DESC LIMIT 21 OFFSET ?`
   ).all(offset);
-  const sessions = rows.slice(0, 20).map(row => {
-    const observed = inspectCodexPlanningStatus(store, row.id);
-    return { sessionId: row.id, planningStatus: observed.status,
+  const sessions = [];
+  // Reuse the same independent, fail-closed Goal projection as the detail
+  // command. Do not infer completion from a Planning or Workflow flag.
+  // Keep this bounded and sequential to avoid unbounded disk/tree reads.
+  for (const row of rows.slice(0, 20)) {
+    const progress = await inspectCodexGoalProgress(store, row.id);
+    const observed = progress.planning;
+    sessions.push({ sessionId: row.id, planningStatus: observed.status,
       validationStatus: observed.validationStatus ?? null,
       continuationKind: observed.continuation?.kind ?? null,
+      goalStatus: progress.status,
+      workflowId: progress.workflowId,
+      workflowContinuationStatus: progress.workflow?.continuation?.status ?? null,
+      recoveryHandoffKind: progress.recoveryHandoff?.kind ?? null,
+      objectiveComplete: progress.objectiveComplete === true,
       sourceFreshness: 'NOT_RECHECKED',
       progressCommand: { argv: ['codex-goal-progress', row.id],
-        readOnly: true, executionGranted: false, automaticReplay: false } };
-  });
+        readOnly: true, executionGranted: false, automaticReplay: false } });
+  }
   return { ...base, status: sessions.length ? 'AVAILABLE' : 'EMPTY',
     sessions, nextOffset: rows.length > 20 ? offset + 20 : null };
 }

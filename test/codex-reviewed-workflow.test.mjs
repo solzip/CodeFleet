@@ -465,6 +465,42 @@ test('read-only Codex Goal discovery survives process restart and supports bound
  assert.equal(countWorkflowAttempts(f.store),0);
 });
 
+test('Codex Goal index shows Workflow approval state after process restart without advancing',async t=>{
+  const f=await fixture(t);
+  const before=await productCli(['codex-goals'],f.store.directory);
+  assert.equal(before.exitCode,0,before.data?.error);
+  assert.equal(before.data.sessions[0].goalStatus,'AWAIT_WORKFLOW_REVIEW');
+  assert.equal(before.data.sessions[0].workflowId,null);
+  assert.equal(before.data.sessions[0].objectiveComplete,false);
+
+  const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+    authorizeReview:async()=>true
+  });
+  const attempts=countWorkflowAttempts(f.store);
+  const events=f.store.db.prepare('SELECT count(*) AS n FROM events').get().n;
+  const list=await productCli(['codex-goals'],f.store.directory);
+  assert.equal(list.exitCode,0,list.data?.error);
+  assert.equal(list.data.sessions.length,1);
+  const entry=list.data.sessions[0];
+  assert.equal(entry.goalStatus,'WORKFLOW_IN_PROGRESS');
+  assert.equal(entry.workflowId,created.workflowId);
+  assert.equal(entry.workflowContinuationStatus,'AWAIT_WORKFLOW_APPROVAL');
+  assert.equal(entry.recoveryHandoffKind,null);
+  assert.equal(entry.objectiveComplete,false);
+  assert.equal(entry.sourceFreshness,'NOT_RECHECKED');
+  assert.equal(entry.progressCommand.readOnly,true);
+  assert.equal(entry.progressCommand.executionGranted,false);
+
+  const cli=fileURLToPath(new URL('../src/alpha/cli.mjs',import.meta.url));
+  const proc=spawnSync(process.execPath,[cli,'--state',f.store.directory,'objective','codex-goals'],{
+    encoding:'utf8',timeout:20000
+  });
+  assert.equal(proc.status,0,proc.stderr || proc.error?.message);
+  assert.deepEqual(JSON.parse(proc.stdout).sessions,list.data.sessions);
+  assert.equal(countWorkflowAttempts(f.store),attempts);
+  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM events').get().n,events);
+});
+
 test('legacy read-only Codex Goal discovery does not create a Planning table',async t=>{
  const directory=await mkdtemp(join(tmpdir(),'codefleet-codex-goals-empty-'));
  const store=new Store(directory);store.close();
