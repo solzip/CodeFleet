@@ -364,3 +364,32 @@ only selected PATH/SystemRoot and temporary directory variables required for
 cross-platform process setup. Regression tests verify the actual spawn options.
 This is synthetic test hygiene, NOT native process, billing, filesystem,
 network or sandbox isolation proof.
+
+## 14. Offline signed-scope review using existing H2 Operator verifier (Draft PR #31)
+
+The read-only `tools/proofs/p2-signed-scope-preflight.mjs` reuses
+`src/hosts/operator.mjs`'s Ed25519 `operatorDecisionVerifier`,
+`canonical` and `digest`. It does not create another trust authority,
+database or signature scheme. The **independently supplied** expected P2
+scope binds a request ID/nonce, exact repository revision, private Fixture
+path, model, executable/preflight/protocol/executor/Manifest SHA-256 values,
+one ephemeral read-only Turn, never approval, no tool network and explicit
+acceptance of UNKNOWN billing exposure. Signed decisions must be exact
+`APPROVE`, single-use in shape and expiring within 15 minutes.
+
+A positive result means **signature and scope integrity only**:
+`P2_SIGNED_SCOPE_INTEGRITY_MATCHED_NOT_AUTHORIZED`.
+It never provides a native `--execute` path, signed-grant writer,
+key enrollment, durable reservation, authenticated human identity,
+OS confinement evidence, verified clock or a provider spending cap.
+The trust keys, expected scope and clock in this offline library must
+come from an external trusted source, **not** from an Agent's JSON.
+Even a valid signed decision can be replayed against this stateless
+checker; an actual external trusted Operator and durable one-shot ledger
+are still mandatory. The existing `requireProductionHostIsolation()`
+continues to block public Host execution.
+
+Offline regression uses ephemeral in-memory Ed25519 keys and checks wrong
+signer, tampering, revision/model/file scope drift, expiry, forbidden policy
+and extra fields, repeated checks and blocked sign/approve/execute flags.
+No real Codex process, private owner Fixture, paid Turn or `main` merge.
