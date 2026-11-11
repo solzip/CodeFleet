@@ -205,3 +205,55 @@ bad-identity tests on Windows and Linux. Future live P2 needs an
 independent actual source/process/grant admission design and OS-specific
 permission checks before the first real Turn. No live authority or cost
 exposure is implied by this test-only journal.
+
+
+## 10. Synthetic child-process transport and redacted Evidence (Draft PR #28)
+
+The offline-only P2 protocol and durable-intent prototype are now
+exercised through a **real Node child process running only the fixed
+in-repository fake App Server**, not a native Codex process, user model
+Turn or billing endpoint.
+
+- Synthetic runner source: tools/proofs/p2-synthetic-executor.mjs
+- Fixed fake process: tools/proofs/p2-synthetic-appserver.mjs
+- Synthetic negative/evidence tests: tools/proofs/p2-synthetic-executor.test.mjs
+- Future real Codex execution: intentionally unavailable; no
+  executable-path argument, --execute flag, cost approval, external
+  auth, non-synthetic Host path or Objective grant exists.
+
+The synthetic runner first rechecks an existing pristine synthetic
+p2-offline-intent.json (with its reviewed P2 protocol SHA and proposed
+model), then writes a **new exclusive-created, fsynced**
+p2-synthetic-launch-reservation.json BEFORE the fake child can spawn.
+Repeated/concurrent calls or occupied/partial evidence roots fail
+closed without overwrites, cleanup or retries.
+
+The fixed child receives exactly the bounded initialize/thread/start/
+turn/start sequence from the existing protocol state machine. Its
+stdout is processed by the existing bounded P2 JSONL parser. This
+offline harness rejects Host tool notifications, server approval
+requests, unexpected 0.167.0 notifications, escalated sandbox policy,
+wrong Turn ID, duplicate completions, incorrect output schema, stderr,
+incomplete JSONL, nonzero exits and process deadlines. No other Host
+process is a permitted target.
+
+It writes only a synthetic launch marker, a **minimal redacted method
+and response-ID trace**, and a result file. All Evidence is written
+exclusive-create; the local read-only synthetic reviewer validates the
+trace SHA-256, original offline intent binding, marker and result
+consistency. Method names are allowlisted/truncated, and fake account
+metadata payloads or model content are not recorded in the trace.
+Both passed and failed records MUST retain:
+
+- simulationOnly: true
+- nativeCodexStarted: false / modelTurnsActuallyRun: 0
+- ownerApproval: NOT_GRANTED / executionAuthorized: false
+- hostLiveVerified: false / appServerExecutionAuthenticated: false
+- usageStatus: UNKNOWN / replayAllowed: false
+
+This is **not** a native Host runtime proof, an authenticated owner
+grant, sandbox enforcement attestation, cost-limit enforcement or a
+live P2 readiness certificate. A real P2 Live runner still requires
+a new reviewed implementation and exact owner-approved one-Turn
+model/cost/Host/fileroot/provenance authorization. The preexisting
+P1 R3 Evidence and initial failed P1 attempt are untouched.
