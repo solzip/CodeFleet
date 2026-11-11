@@ -355,3 +355,12 @@ one-Turn authority, actual Windows executable signer/provenance and OS process
 permission review, separately accepted unknown cost exposure, sandbox and
 tool-network enforcement, one-shot no-replay and independently reviewed actual
 process/effect Evidence. This Draft change performs zero real Codex Turns.
+
+### Synthetic process environment restriction
+
+The injected fake App Server no longer inherits Host account credentials,
+authorization strings, secrets or NODE_OPTIONS. Its child environment includes
+only selected PATH/SystemRoot and temporary directory variables required for
+cross-platform process setup. Regression tests verify the actual spawn options.
+This is synthetic test hygiene, NOT native process, billing, filesystem,
+network or sandbox isolation proof.

@@ -293,3 +293,20 @@ test('test adapter refuses unmarked executable bytes before any process launch',
   assert.deepEqual((await readdir(f.fixtureRoot)).sort(),
     [P2_NATIVE_MANIFEST,P2_NATIVE_ARTIFACTS].sort());
 });
+
+test('synthetic child receives minimal OS environment with no inherited Host credentials',async t=>{
+  const f=await setup(t);
+  let actualEnv=null;
+  const r=await main(f.args,grantEnv,{spawnImpl:(file,args,options)=>{
+    actualEnv=options.env;
+    return fakeSpawner('success')(file,args,options);
+  }});
+  assert.equal(r.passed,true);
+  assert.ok(actualEnv&&typeof actualEnv==='object');
+  const allowed=new Set(['SystemRoot','WINDIR','PATH','Path','TEMP','TMP','TMPDIR']);
+  assert.ok(Object.keys(actualEnv).every(k=>allowed.has(k)));
+  assert.equal(actualEnv[P2_LIVE_ACK_ENV],undefined);
+  assert.equal(actualEnv[P2_COST_ACK_ENV],undefined);
+  assert.equal(actualEnv.NODE_OPTIONS,undefined);
+  assert.equal(Object.keys(actualEnv).some(k=>/TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL|AUTH/i.test(k)),false);
+});

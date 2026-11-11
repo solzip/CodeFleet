@@ -31,6 +31,16 @@ const SYNTHETIC_ONLY_EXECUTABLES=new Set([
   'THIS_IS_A_FAKE_CODEX_EXE_FOR_NO_LIVE_TESTS',
   'FAKE_EXECUTABLE_REVIEW_ONLY'
 ]);
+// The fake child requires no provider account auth or inherited Node options.
+const SYNTHETIC_ENV_ALLOWLIST=[
+  'SystemRoot','WINDIR','PATH','Path','TEMP','TMP','TMPDIR'
+];
+function syntheticChildEnv(){
+  const env={};
+  for(const key of SYNTHETIC_ENV_ALLOWLIST)
+    if(Object.hasOwn(process.env,key))env[key]=process.env[key];
+  return env;
+}
 const digest=value=>createHash('sha256').update(value).digest('hex').toUpperCase();
 const safeMethod=method=>typeof method==='string'&&
   /^[A-Za-z0-9/_-]{1,80}$/.test(method) ? method:'REDACTED_METHOD';
@@ -151,9 +161,8 @@ async function boundedChild(options,scope,deps={}){
     child=spawnImpl(executable,
       ['app-server','--listen','stdio://','--strict-config'],{
       cwd:root,shell:false,windowsHide:true,stdio:['pipe','pipe','pipe'],
-      // The native Host needs inherited user auth for provider network.
-      // This does NOT enable network from sandboxed tools.
-      env:{...process.env}
+      // Synthetic-only: no inherited Host credentials or NODE_OPTIONS.
+      env:syntheticChildEnv()
     });
     child.once('spawn',()=>{spawnObserved=true});
     child.once('error',()=>fail('NATIVE_PROCESS_ERROR'));
