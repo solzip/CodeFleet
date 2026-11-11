@@ -175,27 +175,27 @@ async function invokeTool(config,name,value){
         localExisting:true,acceptanceMode:ctx.acceptance,
         maxAttempts:3,timeoutSeconds:300,attemptBudgetUsd:1
       });
-      return show(store,record.id));
+      return show(store,record.id);
     });
   const readOnly=name==='codefleet_goal_status';
   return useStore(config,readOnly,async(store,ctx)=>{
     await scoped(store,ctx,value.taskId);
     if(name==='codefleet_goal_status')
-      return show(store,value.taskId));
+      return show(store,value.taskId);
     if(name==='codefleet_draft_submit'){
       await submitTaskDraft(store,value.taskId,{
         revision:value.revision,proposal:value.proposal});
-      return show(store,value.taskId));
+      return show(store,value.taskId);
     }
     if(name==='codefleet_goal_prepare'){
       const prepared=await prepareTask(store,value.taskId);
-      return {...show(store,value.taskId)),
+      return {...(await show(store,value.taskId)),
         prepared:true,workflowApproved:false,executionGranted:false,
         preparedTaskRevision:prepared.revision};
     }
     const proposal=await submitBootstrapFiles(store,value.taskId,{
       revision:value.revision,itemId:value.itemId,files:value.files});
-    return {...show(store,value.taskId)),
+    return {...(await show(store,value.taskId)),
       approvalRequest:proposal.approvalRequest??null,
       applicationPerformed:false,executionGranted:false};
   });
