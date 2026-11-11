@@ -56,7 +56,12 @@ async function initial(t) {
   assert.equal(pending.objective.status,'INCOMPLETE');
   approveWorkflow(store,workflow.id,{actor:'synthetic-local-reviewer',workflowHash:workflow.contractHash,
     expiresAt:Date.now()+60000});
-  return {root,repo,store,workflow};
+  return {root,repo,store,workflow,
+    reopenStore:()=>{
+      activeStore?.close();
+      activeStore=new Store(stateDir);
+      return activeStore;
+    }};
 }
 
 test('joined synthetic two-WorkItem Objective: A persisted before B, local delivery and current-tree Judge',async t=>{
@@ -182,6 +187,23 @@ test('joined synthetic two-WorkItem Objective: A persisted before B, local deliv
   const acceptedA=events.find(e=>e.type==='ATTEMPT_RECONCILED'&&e.body.itemId==='a');
   const reservedB=events.find(e=>e.type==='ATTEMPT_RESERVED'&&e.body.itemId==='b');
   assert.ok(acceptedA && reservedB && acceptedA.seq < reservedB.seq);
+  // A fresh Store instance must recover accepted A/B, final Objective Evidence
+  // and delivery from persisted rows, without rerunning a fake Host Turn.
+  const priorAttempts=attempts(f.store,f.workflow.id)
+    .map(row=>[row.itemId,row.status,row.childId]);
+  const priorEventCount=f.store.events(f.workflow.id).length;
+  const priorTurnCount=hostTurns.length;
+  f.store=f.reopenStore();
+  assert.deepEqual(attempts(f.store,f.workflow.id)
+    .map(row=>[row.itemId,row.status,row.childId]),priorAttempts);
+  assert.equal(f.store.events(f.workflow.id).length,priorEventCount);
+  const recoveredProgress=await dispatchProduct(['workflow-progress',f.workflow.id],{store:f.store});
+  assert.equal(recoveredProgress.exitCode,0);
+  assert.equal(recoveredProgress.data.objectiveComplete,true);
+  assert.deepEqual(recoveredProgress.data.workItems.map(item=>[item.id,item.state]),
+    [['a','SUCCEEDED'],['b','SUCCEEDED']]);
+  assert.equal(hostTurns.length,priorTurnCount);
+  assert.equal(f.store.events(f.workflow.id).length,priorEventCount);
   const result=await readDeliveredObjectiveStatus(f.store,f.workflow.id);
   assert.equal(result.status,'COMPLETE',result.reason);
   assert.equal(result.protection,'UNPROTECTED');

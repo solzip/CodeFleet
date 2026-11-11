@@ -1829,3 +1829,15 @@ completion. Existing read-only Store and one-step Controller boundaries
 remain unchanged. Negative and synthetic continuation tests are added.
 Windows/Linux CI for the new HEAD must pass before claiming offline success;
 actual Codex Host Live and independent delivered Objective E2E remain unverified.
+
+## Reopened Store synthetic Goal delivery check (fresh CI required)
+
+The existing two-dependent-WorkItem synthetic managed Host fixture now closes
+and reopens the real SQLite Store after A→B and final local delivery. It checks
+that immutable Attempt identities, persisted event counts, independently
+observed delivered-Objective status, and WorkItem outcomes survive the Store
+reopen without an additional Host Turn, before confirming source drift still
+invalidates current Objective completion. This covers durable read-only
+re-observation after completion, **not** mid-Turn crash recovery, a real
+Codex Host session, protected verification, or independent Objective E2E
+acceptance. The new HEAD needs its own Windows/Linux CI.
