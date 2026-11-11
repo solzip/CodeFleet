@@ -24,6 +24,8 @@ jobs:
       - name: P1 fake-process protocol regression (no real Codex)
         run: npm run test:p1-proof-offline
       - run: npm run test:codex-mvp
+      - name: Installed Host Goal-to-Local-completion acceptance (no model or Docker)
+        run: npm run test:installed-goal-loop
       - name: Todo + Calendar functional fixture (real Node tests; no Host)
         run: npm run test:todo-fixture
       - run: npm run test:legacy
@@ -65,6 +67,8 @@ jobs:
       - name: P1 fake-process protocol regression (no real Codex)
         run: npm run test:p1-proof-offline
       - run: npm run test:codex-mvp
+      - name: Installed Host Goal-to-Local-completion acceptance (no model or Docker)
+        run: npm run test:installed-goal-loop
       - name: Todo + Calendar functional fixture (real Node tests; no Host)
         run: npm run test:todo-fixture
       - name: Prepare real Linux Docker and immutable verification images

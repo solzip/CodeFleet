@@ -22,7 +22,7 @@
   "scripts": {
     "codefleet": "node ./src/cli.ts",
     "pretest": "node ./scripts/reset-rule-coverage.mjs",
-    "test": "npm run test:codex-mvp && npm run test:legacy && npm run test:alpha && npm run test:host-core",
+    "test": "npm run test:installed-goal-loop && npm run test:codex-mvp && npm run test:legacy && npm run test:alpha && npm run test:host-core",
     "test:legacy": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=.rule-coverage/test-summary.tap test/*.ts",
     "test:alpha": "node --test test/alpha.test.mjs test/alpha-java.test.mjs test/providers.test.mjs test/intent.test.mjs test/workflow.test.mjs test/hybrid.test.mjs test/product.test.mjs test/model-api.test.mjs test/model-transport.test.mjs test/host.test.mjs test/operator.test.mjs test/operator-runtime.test.mjs test/host-ipc.test.mjs test/host-planning.test.mjs test/bootstrap.test.mjs test/bootstrap-verify.test.mjs test/bootstrap-process.test.mjs test/bootstrap-reservations.test.mjs test/continuation.test.mjs test/repair-loop.test.mjs test/bootstrap-operator.test.mjs test/time-safety.test.mjs test/native-local.test.mjs",
     "test:host-core": "node --test test/host-core.test.mjs test/verification-backends.test.mjs test/development-loop.test.mjs test/recovery.test.mjs test/local-acceptance.test.mjs test/environment-recovery.test.mjs test/host-proposal-events.test.mjs test/work-log.test.mjs",
@@ -43,6 +43,7 @@
     "coverage:uncovered": "node ./scripts/check-rule-coverage.mjs --list-uncovered",
     "test:codex-mvp": "node --test test/codex-app-server-session.test.mjs test/codex-managed-host-execution.test.mjs test/codex-managed-planning.test.mjs test/workflow-predecessor-context.test.mjs test/alpha-context-path-boundary.test.mjs test/controlled-delivery.test.mjs test/objective-judge.test.mjs test/development-baseline.test.mjs test/repair-generations.test.mjs test/codex-bootstrap-files.test.mjs test/destination-evidence.test.mjs test/codex-workspace-execution.test.mjs test/objective-status.test.mjs test/objective-status-cli.test.mjs test/codex-mvp-facade.test.mjs test/codex-mvp-joined-fixture.test.mjs test/codex-reviewed-workflow.test.mjs",
     "test:p1-proof-offline": "node --test tools/proofs/p1-appserver-handshake.test.mjs tools/proofs/p1-r2-preflight.test.mjs",
+    "test:installed-goal-loop": "node --test test/installed-goal-loop.test.mjs",
     "test:todo-fixture": "node --test --test-reporter=tap test/fixtures/todo-calendar-vertical/test/todo.test.js test/fixtures/todo-calendar-vertical/test/calendar.test.js",
     "test:codex-todo-vertical": "node --test test/codex-todo-calendar-vertical.test.mjs"
   },

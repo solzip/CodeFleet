@@ -37,6 +37,57 @@ description: Plan, review and independently verify scoped development work throu
 
 # CodeFleet
 
+## Goal-to-verified-result loop (default in the current Host session)
+
+Your job is to advance ONE user Objective to the highest actually verified
+outcome, not stop after creating a plan, proposal, fileset or test command.
+Use the existing authenticated ${host} session for model reasoning; do not
+start another Codex/Claude process or direct model API. Never use a model
+reply, status label or pasted success text as independent Evidence.
+
+1. Identify REPOSITORY, an explicit STATE directory outside REPOSITORY,
+   scope and acceptance requirements. Ask only for missing choices. Create
+   one Task with host ${host} plan "goal" REPOSITORY. For EXISTING_LOCAL
+   explicitly add --local-existing --acceptance LOCAL_ONLY only if the user
+   chose that trust level; for NEW_PROJECT use its separate Bootstrap contract.
+   Preserve the returned TASK_ID, exact base and Task revision.
+2. Invoke host ${host} status TASK_ID or objective report TASK_ID after
+   EVERY meaningful action. Read its continuation/nextActions and current
+   approvals, rather than using a memorized sequence of commands. Continue
+   automatically through read-only discovery, bounded proposal generation,
+   eligible DAG dependencies and post-effect status inspection.
+3. When the next step needs a Host proposal, use THIS model/session to produce
+   the exact structured Draft or scoped Fileset against the current source.
+   Submit using host ${host} draft/files; never fabricate a provider receipt.
+   After each accepted predecessor, refresh status and bind the next proposal
+   to the new current revision and accepted source.
+4. When the next step needs files, source writes, test commands, revisions or
+   billable model calls, FIRST show the exact current review scope, changed
+   bytes/argv, uncertainty and cost to the user. Pause for explicit permission
+   where the contract requires it; do not self-approve, synthesize an actor
+   identity, or treat this Skill or a previous grant as an authorization.
+   Use only the existing reviewed one-use objective local-files-review/accept
+   and local-review/accept paths in the supervised LOCAL_ONLY profile.
+5. Following every authorized local action, re-read persistent state and
+   current target bytes. A LOCAL_FAILED verification may lead to ONE reviewed
+   failed-Evidence-bound repair proposal within the existing budget. If no
+   progress, budget exhausted, ambiguous effects, changed approval/revision,
+   unavailable Host capability or cancelled work: STOP with the concrete
+   blocked reason. Do not replay a reservation, reset state or weaken tests.
+6. Stop as successful ONLY when objective report TASK_ID has current-tree
+   acceptance.complete=true / COMPLETE_LOCAL (explicitly UNPROTECTED), or
+   separate real PROTECTED Evidence and an independently verified Judge
+   satisfy a protected contract. A WorkItem success, proposal, fake Host
+   reply, Candidate artifact or green isolated test is NOT Objective completion.
+   Never equate synthetic CI tests with an actual ${host} model Turn.
+
+For an already persisted Codex Planning/Workflow, start with the read-only
+objective codex-goal-progress SESSION_ID or workflow-progress WORKFLOW_ID,
+then use the existing exact reviewed Workflow/Operator path. The plain CLI
+run-codex-goal is blocked without a genuine authenticated Host admission.
+Do NOT bypass it by importing internal facades or passing fake callbacks.
+A pause for necessary owner approval is not a completed Objective.
+
 Default Host-Native preparation (no Docker, WSL, separate OS account or API key):
 resolve CLI to runtime/alpha/cli.mjs relative to this Skill. Run node CLI --state
 STATE host ${host} plan "goal" REPOSITORY, then status TASK_ID. STATE is a local
