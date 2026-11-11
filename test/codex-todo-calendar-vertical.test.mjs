@@ -26,7 +26,7 @@ const markers=['/* CODEFLEET_TODO_PENDING */','/* CODEFLEET_CALENDAR_PENDING */'
 const criteria=[{id:'TodoCalendarLocal',requiredAuthority:'LOCAL_EXECUTED',
   description:'Ten actual Todo CRUD and month/week Calendar tests pass on delivered source'}];
 
-async function createProject(t) {
+async function createProject(t,{maxAttempts=3}={}) {
   const root=await mkdtemp(join(tmpdir(),'cf-todo-calendar-vertical-'));
   const repo=join(root,'repository');
   let store;
@@ -49,7 +49,7 @@ async function createProject(t) {
   const contract={
     schemaVersion:1,
     goal:'Build Todo creation, editing, completion, deletion and shared monthly and weekly calendar projections.',
-    files,context:files,tests,maxAttempts:3,timeoutSeconds:240,
+    files,context:files,tests,maxAttempts,timeoutSeconds:240,
     attemptBudgetUsd:1,delivery:{mode:'local'}
   };
   const graph=definition(contract,{workflowId:'todoCalendarVertical',base:baseline,items:[
@@ -172,4 +172,152 @@ test('Todo+Calendar: actual Docker verification, Local delivery and Objective co
   assert.equal(drift.targetDrift,true);
   const changed=await dispatchProduct(['report',f.workflow.id],{store:f.store});
   assert.equal(changed.data.objectiveComplete,false);
+});
+
+
+test('Todo+Calendar: failed protected Calendar check triggers one scoped Repair, re-verifies, and completes Local Objective',async t=>{
+  const f=await createProject(t,{maxAttempts:4});
+  const implemented=await Promise.all(files.map(p=>readFile(join(fixture,p),'utf8')));
+  const turns=[],repairGrants=[],costReviews=[],criterionGrants=[];
+  // Deliberately invalid Calendar behavior. The first Calendar candidate is
+  // syntactically valid but fails the actual protected Node feature tests.
+  const brokenCalendar="'use strict';\nmodule.exports={monthEvents:()=>[],weekEvents:()=>[]};\n";
+  let calendarAttempt=0;
+  const transport=async request=>{
+    const prompt=JSON.parse(request.prompt);
+    assert.ok(['todo','calendar'].includes(prompt.workItemId));
+    if(prompt.workItemId==='calendar')
+      assert.match(prompt.files['src/todo.js'],/function createTodo/);
+    const index=prompt.workItemId==='todo'?0:1;
+    if(index===1)calendarAttempt++;
+    turns.push(prompt.workItemId);
+    if(index===1&&calendarAttempt===2){
+      assert.equal(prompt.feedback?.repairGeneration,2);
+      assert.ok(prompt.feedback.failed>0,
+        'Repair must receive actual failed test Evidence');
+      assert.equal(prompt.feedback.authority,'HARNESS_EXECUTED');
+      assert.equal(prompt.feedback.verificationBackend,'container');
+      assert.equal(prompt.feedback.previousProposal?.summary,
+        'Purposely invalid Calendar logic for real failure detection');
+    }
+    const replacement=index===1&&calendarAttempt===1
+      ? brokenCalendar : implemented[index];
+    return {
+      threadId:'synthetic-thread-'+turns.length,
+      turnId:'synthetic-turn-'+turns.length,
+      terminalStatus:'completed',authority:'PROVIDER_REPORTED_ONLY',
+      protectedVerified:false,executionMode:'HOST_READ_ONLY_PROPOSAL',
+      text:JSON.stringify({
+        summary:index===1&&calendarAttempt===1
+          ? 'Purposely invalid Calendar logic for real failure detection'
+          : 'Synthetic scoped implementation based on prior test feedback',
+        edits:[{path:files[index],oldText:markers[index]+'\n',
+          newText:replacement}]
+      })
+    };
+  };
+  const destination=createLocalDestinationVerifier(f.store,{
+    criteria,commandSpecs:{TodoCalendarLocal:{
+      executable:process.execPath,args:['--test','--test-reporter=tap',...tests],
+      directory:f.repo,timeoutMs:60000
+    }},
+    obtainGrant:async scope=>{
+      assert.equal(scope.criterionId,'TodoCalendarLocal');
+      assert.equal(scope.protection,'UNPROTECTED');
+      criterionGrants.push(scope);
+      return true;
+    }
+  });
+  const facade=createCodexMvpFacade(f.store,{
+    executable:process.execPath,model:'SYNTHETIC_HOST_NOT_CODEX',
+    enableHostTurns:true,transport,verificationBackend:containerBackend(),
+    authorizeWorkflow:async scope=>{
+      assert.equal(scope.workflowHash,f.workflow.contractHash);
+      assert.deepEqual(scope.workItems.map(item=>item.id),['todo','calendar']);
+      assert.equal(scope.repair.authorization,'EXACT_FAILURE_GRANT_REQUIRED');
+      assert.equal(scope.repair.maxGenerations,2);
+      return true;
+    },
+    repairPolicy:{
+      enableStorage:true,maxGenerations:2,
+      authorize:async scope=>{
+        assert.equal(scope.runId,f.workflow.id);
+        assert.equal(scope.itemId,'calendar');
+        assert.equal(scope.nextGeneration,2);
+        assert.ok(scope.failureEvidenceRef);
+        assert.ok(scope.remainingAttemptBudget>=1);
+        repairGrants.push(scope);
+        return true; // Explicit, bounded, fixture-only Repair authorization.
+      }
+    },
+    unknownCostBudget:{authorize:async scope=>{
+      costReviews.push(scope);
+      return scope.unknownCostTurns<=3 &&
+        scope.maxWorkItemAttempts===4;
+    }},
+    destinationDelivery:{
+      approvedCriteria:destination.approvedCriteria,
+      authorize:async scope=>{
+        assert.equal(scope.workflowHash,f.workflow.contractHash);
+        assert.deepEqual(scope.objectiveCriteria,criteria);
+        return true;
+      },
+      verify:request=>destination.verify(request)
+    }
+  });
+  // This is ONE CodeFleet Objective call: no manual re-entry between a failed
+  // actual test and the independently re-verified repaired Candidate.
+  const outcome=await facade.runExistingWorkflow(f.workflow.id);
+  assert.equal(outcome.workflowState,'COMPLETED',outcome.objective.reason);
+  assert.equal(outcome.objective.status,'COMPLETE',outcome.objective.reason);
+  assert.equal(outcome.hostLiveAcceptance,'UNVERIFIED');
+  assert.equal(outcome.protectedVerified,false);
+  assert.deepEqual(turns,['todo','calendar','calendar']);
+  assert.equal(calendarAttempt,2);
+  assert.equal(repairGrants.length,1);
+  assert.equal(criterionGrants.length,1);
+  assert.ok(costReviews.length>=1);
+  assert.ok(costReviews.every(x=>x.unknownCostTurns<=3));
+  const history=attempts(f.store,f.workflow.id);
+  const calendarHistory=history.filter(x=>x.itemId==='calendar')
+    .sort((a,b)=>a.generation-b.generation);
+  assert.deepEqual(calendarHistory.map(x=>[x.generation,x.status]),
+    [[1,'FAILED'],[2,'SUCCEEDED']]);
+  assert.equal(history.filter(x=>x.itemId==='todo'&&x.status==='SUCCEEDED').length,1);
+  assert.equal(history.filter(x=>x.itemId==='final'&&x.status==='SUCCEEDED').length,1);
+  const original=f.store.get(calendarHistory[0].childId);
+  const repaired=f.store.get(calendarHistory[1].childId);
+  assert.equal(repaired.repairOfChildId,original.id);
+  assert.equal(repaired.repairEvidenceRef,original.lastEvidenceHash);
+  const failing=f.store.readArtifact(original.lastEvidenceHash);
+  assert.equal(failing.authority,'HARNESS_EXECUTED');
+  assert.equal(failing.verificationBackend,'container');
+  assert.ok(failing.failed>0);
+  assert.ok(failing.tests>=5);
+  assert.equal(failing.requiredGateResults.protectedVerification,'SATISFIED');
+  const passing=f.store.readArtifact(repaired.evidenceHash);
+  assert.equal(passing.authority,'HARNESS_EXECUTED');
+  assert.equal(passing.verificationBackend,'container');
+  assert.equal(passing.failed,0);
+  assert.ok(passing.tests>=5);
+  const events=f.store.events(f.workflow.id);
+  const failed=events.find(e=>e.type==='ATTEMPT_RECONCILED'&&
+    e.body.itemId==='calendar'&&e.body.status==='FAILED');
+  const reserved=events.find(e=>e.type==='REPAIR_ATTEMPT_RESERVED'&&
+    e.body.itemId==='calendar'&&e.body.generation===2);
+  assert.ok(failed&&reserved&&failed.seq<reserved.seq);
+  for(let i=0;i<files.length;i++)
+    assert.equal(await readFile(join(f.repo,files[i]),'utf8'),implemented[i]);
+  const objective=await readDeliveredObjectiveStatus(f.store,f.workflow.id);
+  assert.equal(objective.status,'COMPLETE');
+  assert.equal(objective.objectiveComplete,true);
+  assert.equal(objective.protection,'UNPROTECTED');
+  const publicStatus=await dispatchProduct(['report',f.workflow.id],{store:f.store});
+  assert.equal(publicStatus.exitCode,0);
+  assert.equal(publicStatus.data.objectiveComplete,true);
+  // Completion is always attached to the actually delivered bytes.
+  await writeFile(join(f.repo,'src/calendar.js'),brokenCalendar);
+  const drift=await readDeliveredObjectiveStatus(f.store,f.workflow.id);
+  assert.equal(drift.objectiveComplete,false);
+  assert.equal(drift.targetDrift,true);
 });
