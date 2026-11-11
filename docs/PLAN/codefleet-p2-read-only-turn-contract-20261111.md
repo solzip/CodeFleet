@@ -141,3 +141,32 @@ and Multi-Agent coverage.
 
 No CodeFleet source-edit, deployment, main merge or automated model
 execution is authorized by this document.
+
+## 8. Offline protocol candidate implementation (Draft PR #26)
+
+An offline-only, **non-executing** protocol state machine is proposed in
+tools/proofs/p2-readonly-offline.mjs. It binds the expected Codex 0.167.0
+initialize response to exactly one ephemeral read-only thread/start, checks
+the effective returned Thread policy, emits exactly one read-only turn/start
+with networkAccess=false / approvalPolicy=never, and requires a full
+completed Turn with one final agentMessage that matches a fixed JSON schema.
+
+The offline JSONL parser rejects duplicate/mismatched RPC responses,
+unexpected server requests, unapproved notifications including the new
+thread/section/changed event, tools of every kind, partial trailing bytes,
+malformed frames, oversized lines/output, abnormal close and multiple
+completion. It records no raw model output or account metadata in its
+bounded synthetic receipt. Its CLI does **not** expose --execute, --model,
+--grant, a native executable path, or any process spawn.
+
+The fake-protocol regression is integrated as an explicit
+npm run test:p2-proof-offline step on Windows and Linux. This is a design
+and offline validation advance **only**, not an actual Codex model Turn.
+The requested Host sandbox and the model's natural-language instruction
+are not independent OS isolation or an enforceable cost cap. A real P2
+Live client must separately implement durable one-shot reservation,
+approved identity/policy/cost fencing, bounded process shutdown, redacted
+Evidence and independently observed effects **before** any P2 owner grant.
+
+Status remains P2_OFFLINE_PROTOCOL_CANDIDATE / P2_LIVE_NOT_AUTHORIZED /
+OWNER_COST_APPROVAL_NOT_GRANTED / MODEL_NOT_SELECTED.

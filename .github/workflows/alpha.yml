@@ -23,6 +23,8 @@ jobs:
       - run: npm run pretest
       - name: P1 fake-process protocol regression (no real Codex)
         run: npm run test:p1-proof-offline
+      - name: P2 fake-protocol regression (no native Codex, no model Turn)
+        run: npm run test:p2-proof-offline
       - run: npm run test:codex-mvp
       - run: npm run test:legacy
       - run: npm run test:host-core
@@ -62,6 +64,8 @@ jobs:
           java-version: '21'
       - name: P1 fake-process protocol regression (no real Codex)
         run: npm run test:p1-proof-offline
+      - name: P2 fake-protocol regression (no native Codex, no model Turn)
+        run: npm run test:p2-proof-offline
       - run: npm run test:codex-mvp
       - name: Prepare real Linux Docker and immutable verification images
         run: node scripts/prepare-alpha-ci.mjs "$GITHUB_ENV"
