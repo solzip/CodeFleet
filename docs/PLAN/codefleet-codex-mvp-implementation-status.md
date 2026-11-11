@@ -1814,3 +1814,18 @@ and event counts remain unchanged. This is persistence/recovery UX, not actual
 Codex Host Live or independent Objective E2E acceptance. Full local Node 24,
 checkout and Docker are unavailable here; Windows/Linux CI for this exact
 commit is required before claiming the tests pass.
+
+## NEW_PROJECT recovery handoff command discovery (new CI required)
+
+The top-level alpha help now exposes the read-only `codex-bootstrap-progress`
+entry. Its persisted status response additionally presents exact `advance-codex-bootstrap`
+argv hints for a currently ready Fileset proposal, independently reviewed
+materialization, or each eligible failed-Evidence Repair predecessor.
+No hint is produced for uncertain effects, stale/drifting source, unreviewed
+Local verification commands or completed Local work. Every hint explicitly
+requires the existing trusted embedding and a separate independent grant;
+none replays an Attempt, approves costs, modifies files or claims Objective
+completion. Existing read-only Store and one-step Controller boundaries
+remain unchanged. Negative and synthetic continuation tests are added.
+Windows/Linux CI for the new HEAD must pass before claiming offline success;
+actual Codex Host Live and independent delivered Objective E2E remain unverified.

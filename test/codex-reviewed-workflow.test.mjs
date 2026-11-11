@@ -24,6 +24,7 @@ test('top-level help exposes current Codex Goal review path without implying exe
  assert.equal(result.status,0,result.stderr || result.error?.message);
  assert.match(result.stdout,/codefleet-alpha objective help/);
  assert.match(result.stdout,/objective codex-goal-progress <planning-session-id> --repository ABSOLUTE_PATH/);
+ assert.match(result.stdout,/objective codex-bootstrap-progress <task-id>/);
  assert.match(result.stdout,/objective review-codex-plan <planning-session-id> --repository ABSOLUTE_PATH/);
  assert.match(result.stdout,/objective review-codex-workflow <workflow-id> --repository ABSOLUTE_PATH/);
  assert.match(result.stdout,/Plain CLI review is read-only/);

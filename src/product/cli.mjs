@@ -144,6 +144,35 @@ function reviewedGoalRunCommand(review, sessionId, workflowId) {
   };
 }
 
+// Read-only handoff hints for the trusted, one-step NEW_PROJECT bridge.
+// Only return exact, current-state argv; a request needing caller-selected
+// Local verification input is deliberately not guessed. None is an approval.
+export function codexBootstrapHandoffCommands(taskId, continuation) {
+  const next = continuation?.next;
+  if (!next?.itemId) return [];
+  const hint = (kind, itemId, argv) => ({
+    kind, itemId, argv, trustedEmbeddingRequired: true,
+    independentGrantRequired: true, executionGranted: false,
+    automaticReplay: false
+  });
+  if (continuation.status === 'HOST_PROPOSAL_REQUIRED' &&
+      next.kind === 'PROPOSE_FILESET')
+    return [hint('PROPOSE_FILESET', next.itemId,
+      ['advance-codex-bootstrap', taskId])];
+  if (continuation.status === 'AWAIT_OPERATOR' &&
+      next.kind === 'MATERIALIZE')
+    return [hint('MATERIALIZE', next.itemId,
+      ['advance-codex-bootstrap', taskId])];
+  if (continuation.status === 'AWAIT_REPAIR_SELECTION' &&
+      next.kind === 'REPAIR_REQUIRED' && next.failedEvidenceRef &&
+      Array.isArray(next.repairCandidates))
+    return [...new Set(next.repairCandidates)]
+      .filter(id => typeof id === 'string' && id.length)
+      .map(id => hint('PROPOSE_REPAIR_FILESET', id,
+        ['advance-codex-bootstrap', taskId, '--repair-item', id]));
+  return [];
+}
+
 function requireCodexGoalEntryArgs(args, o) {
   if (args.length !== 1 || !args[0]?.trim() ||
       Object.keys(o).length !== 1 || !path.isAbsolute(o.repository ?? ''))
@@ -770,6 +799,7 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       data: {
         schemaVersion:1, kind:'CODEFLEET_CODEX_BOOTSTRAP_PROGRESS_V1',
         taskId:args[0], progress, continuation:progress.continuation,
+        nextCommands:codexBootstrapHandoffCommands(args[0], progress.continuation),
         localComplete:progress.acceptance?.complete === true,
         objectiveComplete:false, automaticReplay:false,
         executionGranted:false, protectedVerified:false,
