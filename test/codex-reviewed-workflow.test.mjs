@@ -1,4 +1,6 @@
 import test from 'node:test';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { mkdtemp,mkdir,writeFile,readFile,rm,realpath } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -13,6 +15,20 @@ import { beginPlanning,submitPlanning } from '../src/hosts/planning.mjs';
 import { validateDraft } from '../src/intent/contract.mjs';
 import { prepareReviewedCodexWorkflow, inspectReviewedCodexPlan } from '../src/product/codex-reviewed-workflow.mjs';
 import { dispatchProduct, productCli } from '../src/product/cli.mjs';
+
+test('top-level help exposes current Codex Goal review path without implying execution',()=>{
+ const entry=fileURLToPath(new URL('../src/alpha/cli.mjs',import.meta.url));
+ const result=spawnSync(process.execPath,[entry,'--help'],{
+  encoding:'utf8',timeout:20000
+ });
+ assert.equal(result.status,0,result.stderr || result.error?.message);
+ assert.match(result.stdout,/codefleet-alpha objective help/);
+ assert.match(result.stdout,/objective codex-goal-progress <planning-session-id> --repository ABSOLUTE_PATH/);
+ assert.match(result.stdout,/objective review-codex-plan <planning-session-id> --repository ABSOLUTE_PATH/);
+ assert.match(result.stdout,/objective review-codex-workflow <workflow-id> --repository ABSOLUTE_PATH/);
+ assert.match(result.stdout,/Plain CLI review is read-only/);
+ assert.match(result.stdout,/authenticated Operator approval, budget and Lease/);
+});
 
 const goal='Repair arithmetic behavior in src/a.js with test/a.test.js and independently verify results.';
 const multiGoal='Repair arithmetic behavior in src/a.js and src/b.js with both protected regression tests and independently verify the result.';

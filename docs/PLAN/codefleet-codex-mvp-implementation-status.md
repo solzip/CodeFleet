@@ -1782,3 +1782,18 @@ compares the Workflow and Goal status, and checks the existing diagnostic
 child-report/no-additional-Attempt contract. Native Host Live and Objective
 E2E acceptance are still unverified; independent Windows/Linux CI for the
 new commit must be checked before reporting an offline test PASS.
+ 
+## Discoverable top-level Codex Goal review path (fresh CI required)
+
+The top-level `codefleet-alpha --help` now points developers to
+`objective help`, `codex-goal-progress`, `review-codex-plan`, and
+`review-codex-workflow` with explicit clean-repository review options.
+Previously these Objective entry points were documented only behind
+`codefleet-alpha objective help`, making the Goal-to-DAG review route
+difficult to discover at first launch. The help separates read-only public
+review from trusted Host planning and authenticated Workflow execution
+(approval, budget and Lease remain unchanged). A subprocess regression
+asserts the actual top-level help output. This is developer entry-point UX,
+not Operator binding, Host Live, or Objective E2E acceptance. Local Node 24,
+full repository checkout and Docker are unavailable; separate Windows/Linux
+CI for this new HEAD remains required before reporting test PASS.

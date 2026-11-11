@@ -50,6 +50,16 @@ try {
     }
   } else if (!action || ['help', '--help'].includes(action)) {
     console.log(hostHelp + '\n');
+    // Public entry-point discovery only: no new trusted Host or Operator grant.
+    console.log([
+      'Codex Host-Native Goal and Objective:',
+      '  codefleet-alpha objective help',
+      '  codefleet-alpha objective codex-goal-progress <planning-session-id> --repository ABSOLUTE_PATH',
+      '  codefleet-alpha objective review-codex-plan <planning-session-id> --repository ABSOLUTE_PATH',
+      '  codefleet-alpha objective review-codex-workflow <workflow-id> --repository ABSOLUTE_PATH',
+      'Plain CLI review is read-only. Model planning and Workflow execution need a trusted Host embedding;',
+      'Workflow execution additionally requires authenticated Operator approval, budget and Lease.'
+    ].join('\n'));
     console.log('Optional explicit-trust local diagnostics: inspect-local REQUEST.json; verify-local REQUEST.json --trust COMMAND_HASH --acknowledge-unisolated. Local success is never protected VERIFIED.');
     console.log(`CodeFleet experimental alpha — test-driven Node and Java changes\n\n  codefleet-alpha plan "objective" [repository] [--draft draft.json] (read-only, no model call)\n  codefleet-alpha doctor [contract.json]\n  codefleet-alpha prepare-java <contract.json> <trusted-repository>\n  codefleet-alpha run <contract.json> <repository>\n  codefleet-alpha resume <run-id>\n  codefleet-alpha pause|cancel <run-id>\n  codefleet-alpha status [run-id]\n  codefleet-alpha export <run-id> <directory>\n\nOptional: --state <local-state-directory>\n\nRun grants the explicit contract scope and delivery permission. Only named context/test files are sent to Claude. Requires a clean repository, an existing failing regression test, Claude authentication and a pinned Docker verifier image. Node uses ${IMAGE}. Java supports JDK 21 with Gradle 9.4.1 or Maven 3.9.9; prepare-java executes the trusted baseline with network to cache dependencies in a local image. Candidate verification is offline. Alpha never merges PRs, deploys, or edits the original repository. Cost is provider-reported, not an independent billing guarantee.`);
   } else if (action === 'plan') {
