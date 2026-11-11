@@ -1900,3 +1900,16 @@ separate CLI process, the pending-approval Workflow state and no new
 Attempt/event. Node 24/full local tests and Docker are unavailable; fresh
 Windows/Linux CI is required for this HEAD. Real Codex Host Live and final
 independent Objective E2E remain unverified.
+
+## Persisted Goal discovery after delivered Objective and source drift (fresh CI required)
+
+The existing approved synthetic A→B managed-Host joined fixture now observes
+`codex-goals` after Local delivery and asserts that the read-only Goal index
+shows the independently reobserved COMPLETE Objective, its Workflow handoff,
+and no execution authority. It then changes a delivered source file outside
+CodeFleet and launches a separate CLI process to confirm the index no longer
+claims Objective completion, without a new Attempt, event or Host Turn.
+This is a regression of delivered-tree status visibility across CLI restarts,
+not a Codex Host Live run, OS-authenticated Operator grant, protected verification
+or final Objective E2E acceptance. The changed HEAD requires its own Windows
+and Linux GitHub Actions results before claiming the new assertions passed.

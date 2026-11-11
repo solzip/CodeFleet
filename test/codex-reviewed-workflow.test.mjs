@@ -2388,6 +2388,34 @@ test('reviewed Codex multi-WorkItem Goal executes ordered A then B through authe
  assert.deepEqual(hostTurns,['a','b']);
  assert.equal(f.store.events(prepared.data.workflowId).length,beforeNoOpEvents);
  assert.equal(countWorkflowAttempts(f.store),3);
+ // A recovered Goal index must reflect the independently observed delivered
+ // Objective, not merely the persisted terminal Workflow or WorkItem.
+ const indexAfterDelivery=await productCli(['codex-goals'],f.store.directory);
+ assert.equal(indexAfterDelivery.exitCode,0,indexAfterDelivery.data?.error);
+ const settledGoal=indexAfterDelivery.data.sessions.find(x=>x.sessionId===sessionId);
+ assert.equal(settledGoal?.workflowId,prepared.data.workflowId);
+ assert.equal(settledGoal?.workflowContinuationStatus,'OBJECTIVE_COMPLETE');
+ assert.equal(settledGoal?.goalStatus,'OBJECTIVE_COMPLETE');
+ assert.equal(settledGoal?.objectiveComplete,true);
+ assert.equal(settledGoal?.sourceFreshness,'NOT_RECHECKED');
+ assert.equal(settledGoal?.progressCommand.executionGranted,false);
+
+ // Source drift after delivery invalidates Goal completion in a fresh CLI
+ // process without reissuing a Turn or mutating the immutable Attempt log.
+ const beforeDriftEvents=f.store.events(prepared.data.workflowId).length;
+ await writeFile(join(f.repo,'src/a.js'),'export function add(x,y){ return x+y; }\n');
+ const cli=fileURLToPath(new URL('../src/alpha/cli.mjs',import.meta.url));
+ const proc=spawnSync(process.execPath,[cli,'--state',f.store.directory,'objective','codex-goals'],{
+  encoding:'utf8',timeout:20000
+ });
+ assert.equal(proc.status,0,proc.stderr || proc.error?.message);
+ const driftedGoal=JSON.parse(proc.stdout).sessions.find(x=>x.sessionId===sessionId);
+ assert.ok(driftedGoal);
+ assert.equal(driftedGoal.objectiveComplete,false);
+ assert.notEqual(driftedGoal.goalStatus,'OBJECTIVE_COMPLETE');
+ assert.equal(driftedGoal.progressCommand.executionGranted,false);
+ assert.equal(f.store.events(prepared.data.workflowId).length,beforeDriftEvents);
+ assert.equal(countWorkflowAttempts(f.store),3);
 });
 
 test('Codex multi-WorkItem draft rejects cyclic, overlapping or broadened scope before a Workflow',async t=>{
