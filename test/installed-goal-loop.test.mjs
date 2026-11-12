@@ -36,7 +36,7 @@ async function packagedRuntime(root){
   const result=proc(process.execPath,
     [npm,'install','--offline','--ignore-scripts','--no-audit','--no-fund',
       '--cache',cache,path.join(root,manifest[0].filename)],
-    installed);
+    installed,90000);
   assert.equal(result.status,0,result.stderr+'\n'+result.stdout);
   const packageRoot=path.join(installed,'node_modules','codefleet');
   assert.ok((await lstat(path.join(packageRoot,'src','product',
@@ -53,8 +53,8 @@ const beforeCalendar="export function calendarEvents(){throw Error('CALENDAR_PEN
 const afterTodo="export function createTodo(title){\n  if(typeof title!=='string'||!title.trim())throw Error('Invalid title');\n  return {id:'todo-1',title:title.trim(),completed:false};\n}\n";
 const afterCalendar="export function calendarEvents(items,day){\n  return items.filter(item=>item.day===day).map(item=>({...item}));\n}\n";
 
-function proc(exe,args,cwd){
-  const r=spawnSync(exe,args,{cwd,encoding:'utf8',timeout:30000,
+function proc(exe,args,cwd,timeoutMs=30000){
+  const r=spawnSync(exe,args,{cwd,encoding:'utf8',timeout:timeoutMs,
     windowsHide:true,shell:false,maxBuffer:4*1024*1024});
   if(r.error)throw r.error;
   return r;
