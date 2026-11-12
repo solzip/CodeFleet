@@ -1,0 +1,66 @@
+{
+  "repository": "solzip/CodeFleet",
+  "base": "7e304033c5e391da59c77ad75c9c6acbecbcba45",
+  "head": "fde7689727b19751f865dd7743c2a138e61a8e68",
+  "tree": "da8857164d53f3e13b62ecb219a781c36696deac",
+  "branch": "work/r01-live-acceptance-integrity-20261112",
+  "pull_request": 33,
+  "pull_request_base": "work/codex-todo-calendar-real-vertical-20261111",
+  "draft": true,
+  "files": [
+    {
+      "path": "scripts/codex-live-acceptance.mjs",
+      "git_blob": "96ac713704d8a694e3bb42ff2e2b399076a95aa6",
+      "sha256": "60ebaba928fe266cf3b05c424ca2f9fd4778c704681c451c4334e95295c60cd1",
+      "bytes": 25401
+    },
+    {
+      "path": "test/codex-live-acceptance.test.mjs",
+      "git_blob": "f601ab2780f9522d063017c527f376435fcf0aaa",
+      "sha256": "d375f9f340b86f054a9f6c01b4a9e8e9d4dd0f8426ec8f5f346a81c4e042206c",
+      "bytes": 12793
+    }
+  ],
+  "original_tests_preserved": true,
+  "local_scope": {
+    "node": "22.16.0",
+    "os": "Linux",
+    "two_file_isolated_workspace": true,
+    "passed": 21,
+    "failed": 0,
+    "skipped": 0
+  },
+  "ci": {
+    "alpha_run": 43152220039,
+    "codex_cli_compatibility_run": 43152219940,
+    "status": "COMPLETED_SUCCESS",
+    "codex_cli_compatibility": "SUCCESS_WINDOWS_AND_UBUNTU",
+    "live_acceptance_safety_step": "SUCCESS_WINDOWS_AND_LINUX",
+    "alpha_overall": "SUCCESS_WINDOWS_AND_LINUX",
+    "required_node": "24.14.1",
+    "safety_tests_per_os": {
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0
+    },
+    "alpha_linux_job": 130963847902,
+    "alpha_windows_job": 130963848183,
+    "alpha_windows_completed_at": "2026-11-12T04:12:35Z",
+    "alpha_linux_completed_at": "2026-11-12T04:11:18Z",
+    "windows_existing_platform_skips": {
+      "codex_mvp": 4,
+      "host_installation_exchange": 1
+    },
+    "workflow_reruns_requested": 0
+  },
+  "main_changed": false,
+  "parent_branch_changed": false,
+  "live_model_turns_started": 0,
+  "merged": false,
+  "github_test_merge_commit": "bedb62f46ce3726a505326b68d8595709ff34a06",
+  "test_merge_tree_matches_head": true,
+  "result_comment_id": 6814303352,
+  "result_comment_url": "https://github.com/solzip/CodeFleet/pull/33#issuecomment-6814303352",
+  "r01_overall": "PARTIAL_BROADER_INTEGRATION_REVIEW_OPEN",
+  "r02_actual_model_acceptance": "NOT_RUN"
+}

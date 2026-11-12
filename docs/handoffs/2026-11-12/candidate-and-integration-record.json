@@ -1,0 +1,219 @@
+{
+  "kind": "CODEFLEET_R01_BRANCH_RECONCILIATION_AND_R02_CANDIDATE_V1",
+  "report_date_kst": "2026-11-12",
+  "repository": "solzip/CodeFleet",
+  "refs": {
+    "pr14": "ec24da6b9606067d9d8c278e62e1ed9dad173e49",
+    "pr32": "7e304033c5e391da59c77ad75c9c6acbecbcba45",
+    "pr33": "fde7689727b19751f865dd7743c2a138e61a8e68",
+    "common_ancestor": "e82f6876cc8af6913a54ee186bc7bae14959c35c"
+  },
+  "source_of_comparison": "GitHub connector compare_commits, both directions; manually normalized path inventories",
+  "comparison": {
+    "pr14_exclusive_commits": 33,
+    "pr33_exclusive_commits": 27,
+    "pr14_changed_paths_since_common_ancestor": [
+      "README.en.md",
+      "README.md",
+      "docs/INDEX.md",
+      "docs/PLAN/codefleet-codex-mvp-implementation-status.md",
+      "docs/runs/2026-11-11/codex-goal-skill-handoff.md",
+      "package.json",
+      "src/alpha/cli.mjs",
+      "src/hosts/install.mjs",
+      "src/product/cli.mjs",
+      "src/product/codex-bootstrap-index.mjs",
+      "src/product/codex-goal-result.mjs",
+      "src/product/codex-planning-status.mjs",
+      "src/product/report.mjs",
+      "test/codex-bootstrap-files.test.mjs",
+      "test/codex-installed-goal-recovery.test.mjs",
+      "test/codex-mvp-facade.test.mjs",
+      "test/codex-mvp-joined-fixture.test.mjs",
+      "test/codex-reviewed-workflow.test.mjs",
+      "test/host.test.mjs"
+    ],
+    "pr33_changed_paths_since_common_ancestor": [
+      ".github/workflows/alpha.yml",
+      ".github/workflows/codex-cli.yml",
+      "README.en.md",
+      "README.md",
+      "docs/INDEX.md",
+      "docs/audits/2026-10-30/01-persistent-worklog-integration.md",
+      "docs/implementation/objective-recovery.md",
+      "docs/product-completion/host-native-guide.md",
+      "docs/product-completion/progress.md",
+      "docs/runs/2026-10-30/persistent-worklog.md",
+      "docs/runs/2026-10-30/supervised-adoption-repair.md",
+      "docs/runs/2026-10-30/supervised-proposal-continuation.md",
+      "docs/runs/2026-10-30/todo-fileset-review-prepared.md",
+      "docs/runs/2026-10-30/todo-integrated-verification-recovery.md",
+      "docs/runs/2026-10-30/undelivered-handoff-recovery-v2.md",
+      "docs/runs/2026-10-30/undelivered-handoff-recovery.md",
+      "package.json",
+      "scripts/codex-cli-client-acceptance.mjs",
+      "scripts/codex-live-acceptance.mjs",
+      "src/hosts/codex-app-server-session.mjs",
+      "src/hosts/codex-managed-planning.mjs",
+      "src/hosts/codex-mcp.mjs",
+      "src/hosts/install.mjs",
+      "src/intent/contract.mjs",
+      "src/product/cli.mjs",
+      "src/product/continuation.mjs",
+      "src/product/contract-revisions.mjs",
+      "src/product/directives.mjs",
+      "src/product/native-local.mjs",
+      "src/product/recovery.mjs",
+      "src/product/reservations.mjs",
+      "src/product/tasks.mjs",
+      "src/product/work-log.mjs",
+      "test/codex-app-server-session.test.mjs",
+      "test/codex-live-acceptance.test.mjs",
+      "test/codex-managed-planning.test.mjs",
+      "test/codex-mcp.test.mjs",
+      "test/codex-reviewed-workflow.test.mjs",
+      "test/codex-todo-calendar-vertical.test.mjs",
+      "test/codex-workspace-execution.test.mjs",
+      "test/fixtures/todo-calendar-vertical/package.json",
+      "test/fixtures/todo-calendar-vertical/src/calendar.js",
+      "test/fixtures/todo-calendar-vertical/src/todo.js",
+      "test/fixtures/todo-calendar-vertical/test/calendar.test.js",
+      "test/fixtures/todo-calendar-vertical/test/todo.test.js",
+      "test/installed-goal-loop.test.mjs",
+      "test/work-log.test.mjs",
+      "tools/proofs/p1-appserver-handshake.test.mjs",
+      "tools/proofs/p1-r2-preflight.mjs",
+      "tools/proofs/p1-r2-preflight.test.mjs"
+    ],
+    "paths_modified_on_both_sides": [
+      "README.en.md",
+      "README.md",
+      "docs/INDEX.md",
+      "package.json",
+      "src/hosts/install.mjs",
+      "src/product/cli.mjs",
+      "test/codex-reviewed-workflow.test.mjs"
+    ],
+    "caution": "Commit exclusivity is graph ancestry, not proof of unique functionality; shared paths are not confirmed merge conflicts.",
+    "merge_simulation": "NOT_RUN"
+  },
+  "candidate": {
+    "commit": "fde7689727b19751f865dd7743c2a138e61a8e68",
+    "tree": "da8857164d53f3e13b62ecb219a781c36696deac",
+    "pr": 33,
+    "scope": "Single explicitly authorized Codex proposal Turn in the disposable normalizeTitle EXISTING_LOCAL fixture, separate Owner file/test reviews, LOCAL_ONLY",
+    "selection_status": "PINNED_FOR_R02_PREFLIGHT_NOT_LIVE_ACCEPTED",
+    "not_a_unified_product_candidate": true,
+    "not_release_approval": true,
+    "files": [
+      {
+        "path": "scripts/codex-live-acceptance.mjs",
+        "git_blob": "96ac713704d8a694e3bb42ff2e2b399076a95aa6",
+        "sha256": "60ebaba928fe266cf3b05c424ca2f9fd4778c704681c451c4334e95295c60cd1",
+        "bytes": 25401,
+        "artifact_bytes_match_published_record": true
+      },
+      {
+        "path": "test/codex-live-acceptance.test.mjs",
+        "git_blob": "f601ab2780f9522d063017c527f376435fcf0aaa",
+        "sha256": "d375f9f340b86f054a9f6c01b4a9e8e9d4dd0f8426ec8f5f346a81c4e042206c",
+        "bytes": 12793,
+        "artifact_bytes_match_published_record": true
+      }
+    ]
+  },
+  "observed_ci": {
+    "pr14": {
+      "head": "ec24da6b9606067d9d8c278e62e1ed9dad173e49",
+      "alpha_run": 43150932740,
+      "status": "completed",
+      "conclusion": "success"
+    },
+    "pr33": {
+      "head": "fde7689727b19751f865dd7743c2a138e61a8e68",
+      "alpha_run": 43152220039,
+      "codex_cli_compatibility_run": 43152219940,
+      "status": "completed",
+      "conclusion": "success"
+    },
+    "new_ci_requested_this_turn": false,
+    "integrated_pr14_plus_pr33_ci": "NOT_RUN"
+  },
+  "follow_on_integration_groups": [
+    {
+      "id": "I01",
+      "priority": "before managed Goal execution is claimed",
+      "paths": [
+        "src/product/codex-goal-result.mjs",
+        "src/product/cli.mjs",
+        "src/product/codex-planning-status.mjs"
+      ],
+      "work": "Preserve Goal-level post-execution observation and nonzero incomplete outcome; reconcile exact Contract/source review hints with candidate CLI."
+    },
+    {
+      "id": "I02",
+      "priority": "before expanded repair/recovery acceptance",
+      "paths": [
+        "src/product/report.mjs"
+      ],
+      "work": "Preserve specific REPAIR_REVIEW_REQUIRED for failed WAITING_HUMAN workflows without turning advisory status into authority."
+    },
+    {
+      "id": "I03",
+      "priority": "before managed-session restart UX acceptance",
+      "paths": [
+        "src/product/codex-bootstrap-index.mjs",
+        "src/product/codex-planning-status.mjs",
+        "src/alpha/cli.mjs",
+        "src/hosts/install.mjs",
+        "test/codex-installed-goal-recovery.test.mjs"
+      ],
+      "work": "Integrate bounded read-only Goal/Bootstrap discovery and installed recovery guidance; retain existing MCP/one-Goal loop and public execution refusal."
+    },
+    {
+      "id": "I04",
+      "priority": "before unified integration candidate",
+      "paths": [
+        "package.json",
+        "test/codex-reviewed-workflow.test.mjs",
+        "README.md",
+        "README.en.md",
+        "docs/INDEX.md"
+      ],
+      "work": "Combine test registrations and documentation consciously. Retain MCP/live safety/packed Goal/Work Log/Todo+Calendar checks. Re-run exact integrated-head CI."
+    }
+  ],
+  "environment": {
+    "node": "v22.16.0",
+    "codex_cli_in_this_runtime": null,
+    "required_node": ">=24.14.1",
+    "full_repository_checkout": "UNAVAILABLE_DNS_LOOKUP_FAILED",
+    "user_machine_status": "NOT_INSPECTED"
+  },
+  "effects": {
+    "source_edits": 0,
+    "remote_writes": 0,
+    "commits_created": 0,
+    "branches_created": 0,
+    "pull_requests_created": 0,
+    "merges": 0,
+    "model_turns": 0,
+    "credentials_read": false
+  },
+  "acceptance": {
+    "branch_inventory": "COMPLETE_AT_PINNED_REFS",
+    "targeted_route_comparison": "COMPLETE_WITH_REVIEW_LIMITS",
+    "full_security_review": "NOT_COMPLETE",
+    "r01_overall": "PARTIAL",
+    "r02_live": "NOT_RUN"
+  },
+  "evidence_urls": [
+    "https://github.com/solzip/CodeFleet/pull/14",
+    "https://github.com/solzip/CodeFleet/pull/33",
+    "https://api.github.com/repos/solzip/CodeFleet/compare/fde7689727b19751f865dd7743c2a138e61a8e68...ec24da6b9606067d9d8c278e62e1ed9dad173e49",
+    "https://api.github.com/repos/solzip/CodeFleet/compare/ec24da6b9606067d9d8c278e62e1ed9dad173e49...fde7689727b19751f865dd7743c2a138e61a8e68",
+    "https://github.com/solzip/CodeFleet/actions/runs/43150932740",
+    "https://github.com/solzip/CodeFleet/actions/runs/43152220039",
+    "https://github.com/solzip/CodeFleet/actions/runs/43152219940"
+  ]
+}
