@@ -10,6 +10,7 @@ import {Store} from '../alpha/store.mjs';
 import {enableTasks,task,createTask,submitTaskDraft,prepareTask,submitBootstrapFiles}
   from '../product/tasks.mjs';
 import {taskReport} from '../product/report.mjs';
+import {prepareNativeFilesReview,prepareNativeLocalReview} from '../product/native-local.mjs';
 
 const VERSION='2025-06-18';
 const MAX_LINE=256*1024, MAX_REPLY=180*1024;
@@ -80,13 +81,24 @@ const toolDefinitions=Object.freeze([
        itemId:{type:'string'},files:{type:'array',minItems:1,maxItems:20,
          items:{type:'object',additionalProperties:false,required:['path','content','baseSha256'],
            properties:{path:{type:'string'},content:{type:'string'},
-             baseSha256:{type:['string','null']}}}}}}}
+             baseSha256:{type:['string','null']}}}}}}},
+  {name:'codefleet_fileset_review',description:
+    'Prepare exact read-only owner review of a previously proposed Fileset. Records a review artifact, but NEVER approves, applies or executes it. Owner must consent in a separate trusted CLI session.',
+   inputSchema:{type:'object',additionalProperties:false,
+     required:['taskId','itemId'],properties:{taskId:{type:'string'},itemId:{type:'string'}}}},
+  {name:'codefleet_local_test_review',description:
+    'Prepare the exact existing Node test command from the pinned LOCAL_ONLY contract, not model-selected shell arguments. Requires an eligible completed Fileset stage; never runs tests or approves a grant.',
+   inputSchema:{type:'object',additionalProperties:false,
+     required:['taskId'],properties:{taskId:{type:'string'}}}}
+
 ]);
 const instructions=[
   'PROPOSAL-ONLY CodeFleet adapter in the existing Codex session.',
   'Read goal_status after each change. Never infer user consent from a tool call.',
   'These tools do not execute a model, approve files, apply patches, run tests,',
   'replay attempts, change protection or declare completion.',
+  'codefleet_fileset_review and codefleet_local_test_review create exact',
+  'read-only review packets. Do not call approve/apply/test tools: none exist.',
   'Exact Local fileset and test approval must occur separately via trusted',
   'objective local-files-review/accept and local-review/accept commands.',
   'Only current independent delivered-tree acceptance COMPLETE_LOCAL is Local',
@@ -148,12 +160,18 @@ function argsFor(name,value){
     exact(value,['goal'],'goal');
     if(typeof value.goal!=='string'||value.goal.trim().length<10||
        value.goal.length>4000)fail('Bounded natural-language Goal required');
-  }else if(name==='codefleet_goal_status'||name==='codefleet_goal_prepare'){
+  }else if(['codefleet_goal_status','codefleet_goal_prepare',
+           'codefleet_local_test_review'].includes(name)){
     exact(value,['taskId'],'task');
   }else if(name==='codefleet_draft_submit'){
     exact(value,['taskId','revision','proposal'],'draft');
     if(!Number.isSafeInteger(value.revision)||value.revision<1||!plain(value.proposal))
       fail('Exact Task revision and Draft required');
+  }else if(name==='codefleet_fileset_review'){
+    exact(value,['taskId','itemId'],'fileset review');
+    if(typeof value.itemId!=='string'||
+       !/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(value.itemId))
+      fail('Exact eligible Fileset WorkItem required');
   }else if(name==='codefleet_fileset_propose'){
     exact(value,['taskId','revision','itemId','files'],'fileset');
     if(!Number.isSafeInteger(value.revision)||value.revision<1||
@@ -192,6 +210,63 @@ async function invokeTool(config,name,value){
       return {...(await show(store,value.taskId)),
         prepared:true,workflowApproved:false,executionGranted:false,
         preparedTaskRevision:prepared.revision};
+    }
+    if(name==='codefleet_fileset_review'){
+      const current=task(store,value.taskId);
+      const report=await taskReport(store,value.taskId);
+      if(current.acceptanceMode!=='LOCAL_ONLY'||
+         report.contractKind!=='EXISTING_LOCAL')
+        fail('Supervised Fileset review requires explicit LOCAL_ONLY Task');
+      const review=await prepareNativeFilesReview(store,value.taskId,value.itemId);
+      return {
+        kind:'CODEFLEET_OWNER_FILESET_REVIEW_V1',taskId:value.taskId,
+        itemId:value.itemId,reviewRef:review.reviewRef,
+        reviewHash:review.reviewHash,scope:review.review,
+        files:review.files,ownerDecision:'REQUIRED_OUTSIDE_MCP',
+        ownerCommand:'objective local-files-accept '+review.reviewRef+
+          ' --trust '+review.reviewHash+' --acknowledge-unisolated',
+        executionGranted:false,applicationPerformed:false,
+        ownerAuthenticated:false,automaticReplay:false
+      };
+    }
+    if(name==='codefleet_local_test_review'){
+      const current=task(store,value.taskId);
+      const plan=store.readArtifact(current.planRef);
+      if(current.acceptanceMode!=='LOCAL_ONLY'||
+         plan.contractKind!=='EXISTING_LOCAL')
+        fail('Local test review requires an explicitly LOCAL_ONLY Task');
+      // The Node test command is reconstructed from the persisted immutable
+      // acceptance plan. No executable, argv, cwd or file names from the
+      // model/tool request may select a different command or protected asset.
+      const declared=plan.draft?.plannedTests;
+      if(!Array.isArray(declared)||!declared.length||declared.length>20)
+        fail('Current plan has no bounded declared Node tests');
+      const testPaths=declared.map(entry=>entry?.path);
+      if(testPaths.some(p=>typeof p!=='string'||
+            !/^(test|tests)\/[A-Za-z0-9_./-]+\.test\.(mjs|cjs|js|ts)$/.test(p)||
+            p.split('/').some(s=>s==='..'||!s||s.startsWith('.')))||
+         new Set(testPaths).size!==testPaths.length)
+        fail('Declared Node test identities are not safe and unique');
+      const request={
+        executable:process.execPath,
+        args:['--test','--test-reporter=tap',...testPaths],
+        directory:ctx.root,
+        timeoutMs:Math.min(current.settings?.timeoutSeconds*1000||30000,120000)
+      };
+      const review=await prepareNativeLocalReview(store,value.taskId,{request});
+      if(!review.reviewRef||!review.reviewHash)
+        fail('Local verification is not eligible for exact review');
+      return {
+        kind:'CODEFLEET_OWNER_LOCAL_TEST_REVIEW_V1',taskId:value.taskId,
+        reviewRef:review.reviewRef,reviewHash:review.reviewHash,
+        command:request,scope:review.review,
+        ownerDecision:'REQUIRED_OUTSIDE_MCP',
+        ownerCommand:'objective local-accept '+review.reviewRef+
+          ' --trust '+review.reviewHash+' --acknowledge-unisolated',
+        executionGranted:false,testExecuted:false,
+        ownerAuthenticated:false,automaticReplay:false,
+        protectedVerified:false
+      };
     }
     const proposal=await submitBootstrapFiles(store,value.taskId,{
       revision:value.revision,itemId:value.itemId,files:value.files});

@@ -78,7 +78,8 @@ test('Codex MCP handshake and same-session Goal → validated Draft → pending 
   assert.deepEqual(results[1].result.tools.map(x=>x.name),[
     'codefleet_goal_start','codefleet_goal_status',
     'codefleet_draft_submit','codefleet_goal_prepare',
-    'codefleet_fileset_propose'
+    'codefleet_fileset_propose',
+    'codefleet_fileset_review','codefleet_local_test_review'
   ]);
   assert.ok(!results[1].result.tools.some(x=>/run|apply|approve|execute|bill/.test(x.name)));
   const planned=value(results[2]);
@@ -144,11 +145,66 @@ test('Codex MCP handshake and same-session Goal → validated Draft → pending 
     tools(9,'codefleet_fileset_propose',packet)
   ])[0]);
   assert.ok(['STALE_SCOPE','INVALID_OR_BLOCKED','REVIEW_OR_DEPENDENCY_REQUIRED'].includes(denied.reason));
+
+  // The MCP offers only exact reviews. A separately supervised CLI call,
+  // representing an explicitly reviewed one-use Local approval in this
+  // disposable test, owns every actual file write and test execution.
+  const filesReview=value(talk(f.repo,f.state,[
+    tools(10,'codefleet_fileset_review',{taskId,itemId:'todo'})
+  ])[0]);
+  assert.equal(filesReview.kind,'CODEFLEET_OWNER_FILESET_REVIEW_V1');
+  assert.equal(filesReview.executionGranted,false);
+  assert.equal(filesReview.applicationPerformed,false);
+  assert.equal(filesReview.ownerAuthenticated,false);
+  assert.equal(filesReview.files[0].content,next);
+  assert.ok(filesReview.reviewRef&&filesReview.reviewHash);
+  assert.match(filesReview.ownerCommand,/objective local-files-accept /);
+  assert.equal(await readFile(join(f.repo,files[0]),'utf8'),f.old);
+  const cli=fileURLToPath(new URL('../src/alpha/cli.mjs',import.meta.url));
+  const owner=(args,allowed=0)=>{
+    const response=spawnSync(process.execPath,[
+      cli,'--state',f.state,'objective',...args
+    ],{encoding:'utf8',shell:false,windowsHide:true,timeout:25000});
+    assert.equal(response.status,allowed,response.stderr+'\n'+response.stdout);
+    return JSON.parse(response.stdout);
+  };
+  const applied=owner(['local-files-accept',filesReview.reviewRef,
+    '--trust',filesReview.reviewHash,'--acknowledge-unisolated']);
+  assert.equal(applied.status,'MATERIALIZED');
+  assert.equal(await readFile(join(f.repo,files[0]),'utf8'),next);
+  const testReview=value(talk(f.repo,f.state,[
+    tools(11,'codefleet_local_test_review',{taskId})
+  ])[0]);
+  assert.equal(testReview.kind,'CODEFLEET_OWNER_LOCAL_TEST_REVIEW_V1');
+  assert.equal(testReview.executionGranted,false);
+  assert.equal(testReview.testExecuted,false);
+  assert.deepEqual(testReview.command.args,[
+    '--test','--test-reporter=tap','test/todo.test.mjs'
+  ]);
+  assert.equal(testReview.command.executable,process.execPath);
+  assert.ok(testReview.reviewRef&&testReview.reviewHash);
+  const verified=owner(['local-accept',testReview.reviewRef,
+    '--trust',testReview.reviewHash,'--acknowledge-unisolated']);
+  assert.equal(verified.execution.status,'LOCAL_PASSED');
+  assert.equal(verified.complete,true);
+  const finished=value(talk(f.repo,f.state,[
+    tools(12,'codefleet_goal_status',{taskId})
+  ])[0]);
+  assert.equal(finished.complete,true);
+  assert.equal(finished.acceptance.complete,true);
+  assert.equal(finished.continuation.status,'COMPLETE_LOCAL');
+  assert.equal(finished.protectedVerification,'UNSATISFIED');
+  assert.equal(finished.acceptancePolicy,'LOCAL_ONLY');
+  const noReplay=blocked(talk(f.repo,f.state,[
+    tools(13,'codefleet_local_test_review',{taskId})
+  ])[0]);
+  assert.equal(noReplay.executionGranted,false);
 });
 test('Codex MCP refuses executable/approval tools, unbound repo and source-side State',async t=>{
   const f=await project(t,'negative');
   const unapproved=talk(f.repo,f.state,[
     tools(1,'codefleet_execute',{command:'node --test'}),
+    tools(10,'codefleet_local_test_review',{taskId:'invalid',executable:'/tmp/malicious'}),
     tools(2,'codefleet_goal_start',{
       goal:'Normalize titles safely in this source repository.',
       executionGranted:true

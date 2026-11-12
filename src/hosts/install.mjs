@@ -43,10 +43,17 @@ ${host === 'codex' ? `
 If the user separately configured a CodeFleet MCP server bound to this
 repository and an explicit State directory OUTSIDE the repository, prefer
 its codefleet_goal_start, codefleet_goal_status, codefleet_draft_submit,
-codefleet_goal_prepare and codefleet_fileset_propose tools. These let this
+codefleet_goal_prepare, codefleet_fileset_propose,
+codefleet_fileset_review and codefleet_local_test_review tools. These let this
 Codex model advance the existing CodeFleet Task without writing intermediary
 JSON files or starting a second Codex model process. Follow the Goal loop
 below and read goal_status after every accepted proposal.
+After a proposed Fileset, call codefleet_fileset_review to obtain its
+current exact reviewRef, reviewHash, file bytes and owner-only action. Once
+the owner separately accepts that review through the existing trusted CLI,
+refresh codefleet_goal_status. After all dependencies are materialized, call
+codefleet_local_test_review for the pinned test command; only a separate
+reviewed owner CLI call can execute that test. Never self-accept either review.
 No MCP tool approves, executes, edits source, bills, runs tests or certifies
 completion. Do not invent such a tool or call other shell operations to
 circumvent the missing authority. Exact owner-approved Local reviews remain

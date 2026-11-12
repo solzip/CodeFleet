@@ -33,12 +33,20 @@ session's `/mcp` or tool list after reloading as needed.
 
 The server exposes `codefleet_goal_start`, `codefleet_goal_status`,
 `codefleet_draft_submit`, `codefleet_goal_prepare`, and
-`codefleet_fileset_propose`. The model can submit its own structured
+`codefleet_fileset_propose`, `codefleet_fileset_review`, and
+`codefleet_local_test_review`. The model can submit its own structured
 Draft/Fileset proposals and inspect durable Task state without launching a
 second Codex model process or writing intermediate JSON files. All fileset
-proposals remain **unapplied** until independently reviewed through the
-existing `objective local-files-review` / `local-files-accept` procedure;
-tests likewise require separate exact `local-review` / `local-accept`.
+proposals remain **unapplied**. The MCP review tools prepare and expose
+exact file bytes or the pinned Node test command, an expiring `reviewRef`,
+`reviewHash`, and the corresponding **owner-only CLI action**. The model
+cannot change the selected test command or the Task acceptance policy.
+The owner must independently inspect and accept the exact review through
+`objective local-files-accept` or `objective local-accept`, using the same
+external State directory. **CodeFleet MCP never accepts those reviews,
+executes commands, or uses an MCP tool invocation as human consent.**
+After an owner action the model can read `codefleet_goal_status` to continue
+until the delivered Objective is independently `COMPLETE_LOCAL`.
 The server has **no** approve, execution, testing, direct model invocation,
 provider credential, deployment, or public Operator grant tool. Its project
 root and external State location are fixed at startup, not chosen by MCP
