@@ -1960,3 +1960,19 @@ Operator admission, and the original source bytes must remain unchanged.
 This is packaged offline user-path coverage, not an authenticated Operator
 connection, Codex Host Live execution, or Objective E2E acceptance. Windows/
 Linux CI for this HEAD is required before reporting test PASS.
+
+## Restarted Goal index links directly to independent Workflow review (fresh CI required)
+
+The read-only `objective codex-goals` index now includes an exact
+`review-codex-workflow <workflow-id>` argv for a separately reobserved,
+persisted Workflow. This avoids manual Workflow ID transcription when a
+developer returns after a Host or CLI restart. The hint does **not** attest
+current repository source: `sourceRechecked: false` requires the developer
+to add `--repository ABSOLUTE_PATH` for an independent current-source check
+before approval. An unprepared or unreadable Goal receives no Workflow
+review command. The installed-Skill separate-process regression checks the
+new read-only hint against the actual Workflow reviewer and confirms it
+never supplies an approval or execution grant. This is continuity UX,
+not authenticated Operator admission, Host Live or Objective E2E acceptance.
+The new HEAD requires Windows/Linux CI; local Node 24/full-checkout/Docker
+verification remains unavailable in this runtime.

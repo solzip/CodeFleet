@@ -82,6 +82,7 @@ test('installed Codex Skill resumes reviewed Goal -> pending Workflow without gr
   assert.equal(entry?.objectiveComplete, false);
   assert.equal(list.data.executionGranted, false);
   assert.equal(entry?.progressCommand?.executionGranted, false);
+  assert.equal(entry?.workflowReviewCommand, null);
 
   const progress = invoke(['codex-goal-progress', request.sessionId,
     '--repository', repo]);
@@ -134,6 +135,16 @@ test('installed Codex Skill resumes reviewed Goal -> pending Workflow without gr
   const workflow = resumed.data.sessions.find(x => x.sessionId === request.sessionId);
   assert.equal(workflow?.workflowId, prepared.data.workflowId);
   assert.equal(workflow?.objectiveComplete, false);
+  assert.deepEqual(workflow?.workflowReviewCommand?.argv, [
+    'review-codex-workflow', prepared.data.workflowId
+  ]);
+  assert.equal(workflow?.workflowReviewCommand?.sourceRechecked, false);
+  assert.equal(workflow?.workflowReviewCommand?.executionGranted, false);
+  const reviewedWorkflow = invoke(workflow.workflowReviewCommand.argv);
+  assert.equal(reviewedWorkflow.exitCode, 0, reviewedWorkflow.stderr);
+  assert.equal(reviewedWorkflow.data.workflowHash, reviewed.data.workflowHash);
+  assert.equal(reviewedWorkflow.data.approvalState, 'MISSING_OR_EXPIRED');
+  assert.equal(reviewedWorkflow.data.executionGranted, false);
 
   const deniedAgain = invoke(['run-codex-goal', request.sessionId,
     '--hash', reviewed.data.workflowHash]);

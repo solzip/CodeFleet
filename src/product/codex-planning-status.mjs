@@ -153,7 +153,12 @@ export async function listCodexGoalSessions(store, { offset = 0 } = {}) {
       objectiveComplete: progress.objectiveComplete === true,
       sourceFreshness: 'NOT_RECHECKED',
       progressCommand: { argv: ['codex-goal-progress', row.id],
-        readOnly: true, executionGranted: false, automaticReplay: false } });
+        readOnly: true, executionGranted: false, automaticReplay: false },
+      workflowReviewCommand: progress.workflowId && progress.workflow
+        ? { argv: ['review-codex-workflow', progress.workflowId],
+            readOnly: true, sourceRechecked: false,
+            executionGranted: false, automaticReplay: false }
+        : null });
   }
   return { ...base, status: unreadableCount ? 'PARTIAL_BLOCKED'
     : sessions.length ? 'AVAILABLE' : 'EMPTY',
