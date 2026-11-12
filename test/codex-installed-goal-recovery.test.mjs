@@ -13,7 +13,14 @@ import { installHost } from '../src/hosts/install.mjs';
 // A synthetic validated Host Planning result is NOT a Codex Host Live turn.
 test('installed Codex Skill resumes reviewed Goal -> pending Workflow without granting execution', async t => {
   const root = await mkdtemp(join(tmpdir(), 'cf-installed-goal-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  let store = null;
+  t.after(async () => {
+    try {
+      store?.close();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   const repo = join(root, 'repo');
   await mkdir(join(repo, 'src'), { recursive: true });
   await mkdir(join(repo, 'test'));
@@ -28,8 +35,7 @@ test('installed Codex Skill resumes reviewed Goal -> pending Workflow without gr
   }
 
   const state = join(root, 'state');
-  let store = new Store(state);
-  t.after(() => store?.close());
+  store = new Store(state);
   const goal = 'Repair arithmetic behavior in src/a.js with test/a.test.js and independently verify results.';
   const request = await beginPlanning(store, repo, goal, { host: 'codex', version: '0.166.0' });
   const draft = {
