@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {mkdtemp,writeFile,readFile,lstat,rm} from 'node:fs/promises';
@@ -102,3 +103,163 @@ test('tampered immutable tests refuse inspection and completion before model spa
   call(['finalize','--dir',f.dir],1);
   assert.equal(await lstat(join(f.dir,'turn-intent.json')).catch(()=>null),null);
 });
+
+
+// Contract-drift probes use disposable repositories and fake executables only.
+// A passed probe never establishes a real Codex Turn or Owner identity.
+const digest=value=>createHash('sha256').update(value).digest('hex');
+async function manifestOf(f){
+  return JSON.parse(await readFile(join(f.dir,'manifest.json'),'utf8'));
+}
+async function replaceManifest(f,m){
+  await writeFile(join(f.dir,'manifest.json'),JSON.stringify(m,null,2)+'\n');
+}
+function fixtureGit(f,args){
+  const p=spawnSync('git',args,{cwd:join(f.dir,'project'),encoding:'utf8',
+    shell:false,windowsHide:true,timeout:10000});
+  assert.equal(p.status,0,p.stderr);
+  return p.stdout.trim();
+}
+async function commitFixture(f){
+  fixtureGit(f,['add','src/todo.mjs','test/todo.test.mjs']);
+  fixtureGit(f,['-c','user.name=Synthetic Acceptance Fixture',
+    '-c','user.email=fixture@example.invalid','commit','-m','Synthetic drift']);
+  return fixtureGit(f,['rev-parse','HEAD']);
+}
+async function assertRejectedBeforeCodex(f){
+  const marker=join(f.parent,'synthetic-spawn-marker');
+  const fake=join(f.parent,'synthetic-not-a-real-codex.mjs');
+  await writeFile(fake,[
+    "import {appendFileSync} from 'node:fs';",
+    'appendFileSync('+JSON.stringify(marker)+', "SYNTHETIC_ONLY\\n");',
+    "if(process.argv.includes('--version'))console.log('codex-cli 0.167.1');",
+    "else if(process.argv.includes('login'))process.exit(0);",
+    "else process.exit(3);"
+  ].join('\n'));
+  for(const action of ['status','review','finalize'])call([action,'--dir',f.dir],1);
+  call(['preflight','--dir',f.dir,'--codex',fake],1);
+  call(['run','--dir',f.dir,'--codex',fake,
+    '--allow-model-turn','--acknowledge-unknown-cost'],1);
+  assert.equal(await lstat(marker).catch(()=>null),null,'No selected executable may start');
+  for(const name of ['turn-intent.json','turn-receipt.json','state']){
+    assert.equal(await lstat(join(f.dir,name)).catch(()=>null),null,
+      'Rejected contract must not create '+name);
+  }
+}
+
+test('rewriting immutable test and its manifest hash never redefines acceptance',async t=>{
+  const f=await fixture(t),m=await manifestOf(f);
+  const weakened='// Synthetic negative fixture: every assertion removed.\n';
+  await writeFile(join(f.dir,'project','test','todo.test.mjs'),weakened);
+  m.testSha256=digest(weakened);
+  await replaceManifest(f,m);
+  await assertRejectedBeforeCodex(f);
+});
+
+test('recommitting weakened tests and rehashing the manifest remains blocked',async t=>{
+  const f=await fixture(t),m=await manifestOf(f);
+  const weakened='// Synthetic negative fixture: no independent tests.\n';
+  await writeFile(join(f.dir,'project','test','todo.test.mjs'),weakened);
+  m.gitHead=await commitFixture(f);
+  m.testSha256=digest(weakened);
+  await replaceManifest(f,m);
+  assert.equal(fixtureGit(f,['status','--porcelain']),'');
+  await assertRejectedBeforeCodex(f);
+});
+
+test('rehashed and recommitted initial source cannot replace the fixed baseline',async t=>{
+  const f=await fixture(t),m=await manifestOf(f);
+  const changed="export function normalizeTitle(value) { return 'synthetic'; }\n";
+  await writeFile(join(f.dir,'project','src','todo.mjs'),changed);
+  m.gitHead=await commitFixture(f);
+  m.sourceSha256=digest(changed);
+  await replaceManifest(f,m);
+  await assertRejectedBeforeCodex(f);
+});
+
+test('Git baseline source is checked byte-for-byte without whitespace trimming',async t=>{
+  const f=await fixture(t),m=await manifestOf(f);
+  const path=join(f.dir,'project','src','todo.mjs');
+  await writeFile(path,'  '+await readFile(path,'utf8')+'\n');
+  m.gitHead=await commitFixture(f);
+  await replaceManifest(f,m);
+  await assertRejectedBeforeCodex(f);
+});
+
+test('restoring the working test does not hide a changed Git baseline test',async t=>{
+  const f=await fixture(t),m=await manifestOf(f);
+  const path=join(f.dir,'project','test','todo.test.mjs');
+  const original=await readFile(path);
+  await writeFile(path,'// Synthetic changed baseline test.\n');
+  m.gitHead=await commitFixture(f);
+  await writeFile(path,original);
+  await replaceManifest(f,m);
+  await assertRejectedBeforeCodex(f);
+});
+
+const scopeChanges=[
+  ['test path substitution',m=>{m.testPaths=['src/todo.mjs'];}],
+  ['empty test selection',m=>{m.testPaths=[];}],
+  ['extra test argv injection',m=>{m.testPaths=['--import=./unexpected.mjs','test/todo.test.mjs'];}],
+  ['source scope substitution',m=>{m.sourcePaths=['test/todo.test.mjs'];}],
+  ['acceptance policy drift',m=>{m.acceptancePolicy='PROTECTED_REQUIRED';}],
+  ['invented model execution claim',m=>{m.modelTurnExecuted=true;}],
+  ['invented owner grant',m=>{m.ownerGrantIssued=true;}],
+  ['unrecognized authority field',m=>{m.executionAuthorized=true;}]
+];
+for(const [name,change] of scopeChanges){
+  test('fixed acceptance manifest rejects '+name,async t=>{
+    const f=await fixture(t),m=await manifestOf(f);
+    change(m);
+    await replaceManifest(f,m);
+    await assertRejectedBeforeCodex(f);
+  });
+}
+
+test('equivalent manifest key order is accepted without model execution',async t=>{
+  const f=await fixture(t),m=await manifestOf(f);
+  await replaceManifest(f,Object.fromEntries(Object.entries(m).reverse()));
+  const status=call(['status','--dir',f.dir]);
+  assert.equal(status.status,'NOT_STARTED');
+  assert.equal(status.actualCodexTurnObserved,false);
+  assert.equal(status.currentTreeComplete,false);
+  assert.equal(await lstat(join(f.dir,'turn-intent.json')).catch(()=>null),null);
+});
+
+for(const [name,record] of [
+  ['well-formed unresolved intent','{"kind":"SYNTHETIC_UNCONFIRMED_INTENT"}\n'],
+  ['partially written intent','{"kind":']
+]){
+  test(name+' directs reconciliation, never another run',async t=>{
+    const f=await fixture(t);
+    await writeFile(join(f.dir,'turn-intent.json'),record);
+    const status=call(['status','--dir',f.dir]);
+    assert.equal(status.status,'UNCONFIRMED_TURN_NO_RECEIPT');
+    assert.match(status.next,/reconcil/i);
+    assert.match(status.next,/do not (?:re)?run/i);
+    assert.doesNotMatch(status.next,/must explicitly choose run/);
+    assert.equal(status.actualCodexTurnObserved,false);
+    assert.equal(status.automaticReplay,false);
+    const blocked=call(['preflight','--dir',f.dir],2);
+    assert.equal(blocked.status,'BLOCKED_TURN_ALREADY_RESERVED');
+    assert.equal(await readFile(join(f.dir,'turn-intent.json'),'utf8'),record);
+    assert.equal(await lstat(join(f.dir,'turn-receipt.json')).catch(()=>null),null);
+  });
+}
+for(const [name,record] of [
+  ['failed synthetic receipt','{"status":"HUMAN_RECONCILIATION_REQUIRED"}\n'],
+  ['partially written receipt','{"status":']
+]){
+  test(name+' never recommends effect approval or another run',async t=>{
+    const f=await fixture(t);
+    await writeFile(join(f.dir,'turn-receipt.json'),record);
+    const status=call(['status','--dir',f.dir]);
+    assert.equal(status.status,'HUMAN_RECONCILIATION_REQUIRED');
+    assert.match(status.next,/reconcil/i);
+    assert.match(status.next,/do not (?:re)?run/i);
+    assert.doesNotMatch(status.next,/approve via separate CLI/);
+    assert.equal(status.actualCodexTurnObserved,false);
+    assert.equal(await readFile(join(f.dir,'turn-receipt.json'),'utf8'),record);
+    assert.equal(await lstat(join(f.dir,'turn-intent.json')).catch(()=>null),null);
+  });
+}

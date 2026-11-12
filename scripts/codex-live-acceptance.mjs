@@ -25,6 +25,18 @@ const testSource=[
   "  assert.throws(() => normalizeTitle(42), /title|empty|invalid/i);",
   "});", ''
 ].join('\n');
+// The reviewed runner defines this disposable test contract. A mutable
+// manifest records its identity; it cannot redefine tests, scope or authority.
+const fixtureContract=Object.freeze({
+  sourceSha256:hash(initialSource),testSha256:hash(testSource),
+  testPaths:Object.freeze(['test/todo.test.mjs']),
+  sourcePaths:Object.freeze(['src/todo.mjs']),
+  acceptancePolicy:'LOCAL_ONLY',modelTurnExecuted:false,ownerGrantIssued:false
+});
+const manifestKeys=new Set(['kind','directory','project','state','goal','gitHead',
+  ...Object.keys(fixtureContract)]);
+const samePaths=(actual,expected)=>Array.isArray(actual)&&
+  actual.length===expected.length&&actual.every((path,i)=>path===expected[i]);
 const fail=text=>{throw Error(text);};
 const commands=new Set(['prepare','preflight','run','status','review','finalize']);
 function opts(argv){
@@ -53,20 +65,35 @@ function opts(argv){
     fail('Selected Codex executable must be an absolute path');
   return {action,directory:resolve(options['--dir']),codex:options['--codex']??'codex'};
 }
-function cmd(executable,args,cwd){
+function cmd(executable,args,cwd,preserveOutput=false){
   const p=spawnSync(executable,args,{cwd,encoding:'utf8',windowsHide:true,shell:false,timeout:25000,maxBuffer:1024*1024});
   if(p.error||p.status!==0)fail('Acceptance Git or Codex preflight failed; no model turn: '+(p.error?.code??p.status));
-  return p.stdout.trim();
+  return preserveOutput?p.stdout:p.stdout.trim();
 }
 const json=async path=>JSON.parse(await readFile(path,'utf8'));
+async function recordExists(path){
+  try{await lstat(path);return true;}
+  catch(error){if(error.code==='ENOENT')return false;throw error;}
+}
 const paths=dir=>({project:join(dir,'project'),state:join(dir,'state'),
   manifest:join(dir,'manifest.json'),intent:join(dir,'turn-intent.json'),
   receipt:join(dir,'turn-receipt.json')});
 async function checked(dir){
   const pp=paths(dir),m=await json(pp.manifest);
-  if(m.kind!=='CODEFLEET_CODEX_LIVE_ACCEPTANCE_V1'||m.directory!==dir||
-    m.project!==pp.project||m.state!==pp.state||m.goal!==goal)
+  if(!m||typeof m!=='object'||Array.isArray(m)||
+    m.kind!=='CODEFLEET_CODEX_LIVE_ACCEPTANCE_V1'||m.directory!==dir||
+    m.project!==pp.project||m.state!==pp.state||m.goal!==goal||
+    typeof m.gitHead!=='string'||!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(m.gitHead))
     fail('Acceptance manifest identity invalid');
+  if(Object.keys(m).length!==manifestKeys.size||
+    Object.keys(m).some(key=>!manifestKeys.has(key))||
+    m.sourceSha256!==fixtureContract.sourceSha256||
+    m.testSha256!==fixtureContract.testSha256||
+    !samePaths(m.testPaths,fixtureContract.testPaths)||
+    !samePaths(m.sourcePaths,fixtureContract.sourcePaths)||
+    m.acceptancePolicy!==fixtureContract.acceptancePolicy||
+    m.modelTurnExecuted!==false||m.ownerGrantIssued!==false)
+    fail('Pinned acceptance contract changed');
   // Windows realpath can normalize temporary directory casing/junction
   // spelling differently from the absolute user-selected path. This is a
   // freshly created fixture: require a real directory, never a symlink,
@@ -76,10 +103,13 @@ async function checked(dir){
     fail('Acceptance directory identity changed');
   if(cmd('git',['rev-parse','HEAD'],pp.project)!==m.gitHead)
     fail('Fixture Git HEAD changed');
-  if(hash(await readFile(join(pp.project,'test','todo.test.mjs')))!==m.testSha256)
+  if(hash(await readFile(join(pp.project,'test','todo.test.mjs')))!==fixtureContract.testSha256)
     fail('Immutable test source changed');
-  if(hash(cmd('git',['show','HEAD:src/todo.mjs'],pp.project)+'\n')!==m.sourceSha256)
+  // Do not trim Git blob output: whitespace is part of the pinned bytes.
+  if(hash(cmd('git',['show','HEAD:src/todo.mjs'],pp.project,true))!==fixtureContract.sourceSha256)
     fail('Pinned baseline source changed');
+  if(hash(cmd('git',['show','HEAD:test/todo.test.mjs'],pp.project,true))!==fixtureContract.testSha256)
+    fail('Pinned baseline test changed');
   return {pp,m};
 }
 async function prepare(dir){
@@ -96,9 +126,7 @@ async function prepare(dir){
     'commit','-m','Pinned independent acceptance'],pp.project);
   const m={kind:'CODEFLEET_CODEX_LIVE_ACCEPTANCE_V1',directory:dir,project:pp.project,
     state:pp.state,goal,gitHead:cmd('git',['rev-parse','HEAD'],pp.project),
-    sourceSha256:hash(initialSource),testSha256:hash(testSource),
-    testPaths:['test/todo.test.mjs'],sourcePaths:['src/todo.mjs'],
-    acceptancePolicy:'LOCAL_ONLY',modelTurnExecuted:false,ownerGrantIssued:false};
+    ...fixtureContract};
   await writeFile(pp.manifest,JSON.stringify(m,null,2)+'\n',{flag:'wx'});
   return {status:'READY_FOR_EXPLICIT_CODEX_LIVE_TURN',repository:pp.project,
     state:pp.state,goal,immutableTests:m.testPaths,modelTurns:0,ownerGrantIssued:false,
@@ -143,7 +171,7 @@ function inspectCodexLogin(binary,directory){
 }
 async function preflight(dir,binary){
   const {pp}=await checked(dir);
-  if(await lstat(pp.intent).then(()=>true,()=>false))
+  if(await recordExists(pp.intent))
     return {status:'BLOCKED_TURN_ALREADY_RESERVED',readyForLiveTurn:false,
       automaticReplay:false,modelTurnsStarted:0,
       reason:'Existing one-shot intent must be reconciled, never replayed'};
@@ -165,7 +193,7 @@ async function preflight(dir,binary){
 }
 async function liveRun(dir,binary){
   const {pp,m}=await checked(dir);
-  if(await lstat(pp.intent).then(()=>true,()=>false))
+  if(await recordExists(pp.intent))
     fail('Codex Turn already reserved: inspect status; never replay an uncertain or billed Turn');
   if(cmd('git',['status','--porcelain'],pp.project))
     fail('Fixture must be clean before any Codex Turn');
@@ -326,8 +354,10 @@ async function ownerReview(dir){
 }
 async function inspect(dir,finalize=false){
   const {pp,m}=await checked(dir);
-  const receipt=await json(pp.receipt).catch(()=>null);
-  const intent=await json(pp.intent).catch(()=>null);
+  // A partial/corrupt record is an uncertain effect, never a fresh start.
+  const receiptPresent=await recordExists(pp.receipt);
+  const intentPresent=await recordExists(pp.intent);
+  const receipt=receiptPresent?await json(pp.receipt).catch(()=>null):null;
   let report=null,taskId=null;
   if(await lstat(pp.state).then(()=>true,()=>false)){
     const [{Store},{tasks},{taskReport}]=await Promise.all([
@@ -344,8 +374,10 @@ async function inspect(dir,finalize=false){
         'Ambiguous persisted Objectives: manual reconciliation required');
     }finally{store.close();}
   }
-  const state={status:receipt?.status??
-    (intent?'UNCONFIRMED_TURN_NO_RECEIPT':'NOT_STARTED'),
+  const observedTurn=receipt?.status==='CODEX_TURN_OBSERVED_AWAIT_OWNER_REVIEW';
+  const state={status:observedTurn?receipt.status:
+    receiptPresent?'HUMAN_RECONCILIATION_REQUIRED':
+      intentPresent?'UNCONFIRMED_TURN_NO_RECEIPT':'NOT_STARTED',
     objectiveId:taskId,workflowHash:report?.workflowHash??null,
     continuation:report?.continuation?.status??null,
     currentTreeComplete:report?.acceptance?.complete===true,
@@ -353,8 +385,11 @@ async function inspect(dir,finalize=false){
     protectedVerification:report?.protectedVerification??'NOT_ESTABLISHED',
     actualCodexTurnObserved:receipt?.status==='CODEX_TURN_OBSERVED_AWAIT_OWNER_REVIEW',
     costStatus:'UNKNOWN',automaticReplay:false,ownerGrantInMcp:false,
-    next:!receipt?'No model Turn recorded; owner must explicitly choose run':
-      'Review the exact Fileset with Codex and approve via separate CLI, then run finalize'};
+    next:observedTurn?
+      'Review the exact Fileset with Codex and approve via separate CLI, then run finalize':
+      intentPresent||receiptPresent?
+        'Manual reconciliation required; do not rerun this fixture or approve effects from an uncertain Turn':
+        'No model Turn recorded; owner must explicitly choose run'};
   if(!finalize)return state;
   const reasons=[];
   if(!receipt||receipt.status!=='CODEX_TURN_OBSERVED_AWAIT_OWNER_REVIEW')
