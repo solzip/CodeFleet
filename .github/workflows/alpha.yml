@@ -1,5 +1,10 @@
 name: Alpha validation
 on:
+  workflow_call:
+    inputs:
+      ref:
+        required: true
+        type: string
   pull_request:
   push:
     branches: [main, 'feat/**']
@@ -12,6 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
+          ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
@@ -23,6 +29,8 @@ jobs:
       - run: npm run pretest
       - name: P1 fake-process protocol regression (no real Codex)
         run: npm run test:p1-proof-offline
+      - name: P2 fake-protocol regression (no native Codex, no model Turn)
+        run: npm run test:p2-proof-offline
       - run: npm run test:codex-mvp
       - name: Codex Live acceptance safety gate (no real model Turn)
         run: npm run test:codex-live-acceptance
@@ -58,6 +66,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
+          ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
@@ -70,6 +79,8 @@ jobs:
           java-version: '21'
       - name: P1 fake-process protocol regression (no real Codex)
         run: npm run test:p1-proof-offline
+      - name: P2 fake-protocol regression (no native Codex, no model Turn)
+        run: npm run test:p2-proof-offline
       - run: npm run test:codex-mvp
       - name: Codex Live acceptance safety gate (no real model Turn)
         run: npm run test:codex-live-acceptance

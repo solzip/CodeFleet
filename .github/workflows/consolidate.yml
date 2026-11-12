@@ -1,57 +1,70 @@
-name: Repository consolidation inventory
+name: Repository consolidation
 on:
   push:
     branches: [work/codefleet-integration]
-    paths: [.github/workflows/consolidate.yml]
+    paths: [.github/workflows/consolidate.yml, .github/consolidate.py]
 permissions:
   contents: read
 concurrency:
   group: codefleet-repository-consolidation
   cancel-in-progress: false
 jobs:
-  inventory:
+  merge:
+    if: contains(github.event.head_commit.message, '[consolidate-20261112]')
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      candidate: ${{ steps.publish.outputs.candidate }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           fetch-depth: 0
-          persist-credentials: false
-      - name: Inventory and preserve portable Git history (no branch deletion or source publication)
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name solarchive
-          git config user.email 155644899+solzip@users.noreply.github.com
-          python3 - <<'PY'
-          import subprocess, json, pathlib
-          def git(*args):
-              return subprocess.check_output(['git',*args], text=True).strip()
-          rows = [line.split(' ',1) for line in git('for-each-ref','--format=%(objectname) %(refname:strip=3)','refs/remotes/origin/').splitlines()]
-          branches = {name:sha for sha,name in rows if name not in ('HEAD','work/codefleet-integration')}
-          def ancestor(a,b):
-              return subprocess.run(['git','merge-base','--is-ancestor',a,b],check=False).returncode == 0
-          maxima = {name:sha for name,sha in branches.items() if not any(sha!=other and ancestor(sha,other) for other in branches.values())}
-          record={'branches':branches,'maximalTips':maxima,'integrationBase':'adae700c3c971c678b0388d99449c563451023cf','inventoryCommit':git('rev-parse','HEAD'),'modelCalls':0,'remoteDeletes':0}
-          pathlib.Path('/tmp/consolidation-inventory.json').write_text(json.dumps(record,indent=2)+'\n')
-          print(json.dumps(record,indent=2))
-          PY
-          git bundle create /tmp/codefleet-consolidation.bundle --all
-          git bundle verify /tmp/codefleet-consolidation.bundle
-          echo '=== FIRST MERGE PROBE: no remote writes ==='
-          if git merge --no-commit --no-ff 1b45e2bb8db7f3a25ec39718717f4d228e1af9ca; then
-            git diff --cached --stat
-          else
-            git diff --name-only --diff-filter=U
-            git diff --cc
-          fi
-          git merge --abort
-      - name: Preserve source history and inventory for independent integration review
+          persist-credentials: true
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - name: Reproduce reviewed merges and publish exact-source candidate
+        id: publish
+        run: python3 .github/consolidate.py merge
+  alpha:
+    needs: merge
+    permissions:
+      contents: read
+    uses: ./.github/workflows/alpha.yml
+    with:
+      ref: ${{ needs.merge.outputs.candidate }}
+  codex-cli:
+    needs: merge
+    permissions:
+      contents: read
+    uses: ./.github/workflows/codex-cli.yml
+    with:
+      ref: ${{ needs.merge.outputs.candidate }}
+  cleanup:
+    needs: [merge, alpha, codex-cli]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ needs.merge.outputs.candidate }}
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Archive original HEADs, fast-forward main, then remove only preserved refs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE: ${{ needs.merge.outputs.candidate }}
+        run: python3 .github/consolidate.py cleanup
+      - name: Preserve exact cleanup result
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: codefleet-consolidation-input
-          path: |
-            /tmp/codefleet-consolidation.bundle
-            /tmp/consolidation-inventory.json
-          retention-days: 7
+          name: codefleet-consolidation-result
+          path: /tmp/consolidation-result.json
           if-no-files-found: error
+          retention-days: 30
