@@ -333,7 +333,7 @@ export async function installHost(project, host, { planning = false } = {}) {
   await mkdir(target);
   const files = { 'SKILL.md': planning ? planningSkill(host) : skill(host), LICENSE: await readFile(path.join(root, 'LICENSE'), 'utf8') };
   if (!planning) for (const name of await regularTree(path.join(root, 'src'))) files['runtime/' + name] = await readFile(path.join(root, 'src', name));
-  // src/README is a historical repository note whose parent links are not installed.
+  // src/README maps the source checkout; its parent documentation is not installed.
   if(!planning) files['runtime/README.md']='# CodeFleet installed runtime\n\nRun alpha/cli.mjs with Node 24.14.1 or newer. See ../SKILL.md for supervised usage.\n\nLicense: [MIT](../LICENSE).\n';
   const inventory = {};
   for (const [name, body] of Object.entries(files)) {

@@ -1,50 +1,31 @@
-# src/ — read this before you open `run.ts`
+# Source map
 
-Archived 2026-08-13. Covers: [한국어](../README.md) · [English](../README.en.md).
+CodeFleet extends the existing Codex CLI and Claude Code Host. Product boundaries
+are defined in the [architecture](../docs/product-completion/architecture.md);
+implementation and acceptance status are in [progress](../docs/product-completion/progress.md).
 
-## The thing you are about to notice
-
-`run.ts` is **3,038 lines.** That is the largest single defect in this
-repository, it is known, and it is one of the two reasons the project was
-closed rather than continued.
-
-One file holds five jobs that should not share a file:
-
-| | |
+| Location | Responsibility |
 | --- | --- |
-| Run planning | resolve the approved contract, role, mode, adapter, isolation |
-| Adapter launch | start the agent inside an isolated worktree |
-| Evidence collection | snapshots, changed files, git diff, command records |
-| Policy evaluation | path policy, command policy, risk rules |
-| Gate computation | decide what the collected evidence permits |
+| `hosts/` | Host installation, proposal exchange, MCP, planning, execution admission and platform isolation interfaces |
+| `intent/` | Repository discovery, goal interpretation, Draft preparation and validation |
+| `workflow/` | DAG, dependencies, capability checks, reservations and repair generations |
+| `product/` | User-facing Objective commands, reviews, Local acceptance, delivery, Work Log and recovery |
+| `verification/` | Local / Container backend contracts and capability boundaries |
+| `alpha/` | Shared Controller, Store, process handling, protected verification and existing Node/Java workflow |
+| `providers/` | Host/provider adapters and optional direct model transports |
+| Root TypeScript modules | Legacy engine contracts, policy, ledger, review and execution; retained for compatibility |
 
-The cost is not aesthetic. **Observation and judgment cannot be tested
-apart** when they live in one module: you cannot ask "was the observation
-correct?" and "was the verdict correct?" as separate questions, and every
-fix to one moves the other. Three of the defects fixed on the last day
-were that exact shape — a caller that forgot to pass evidence to the
-thing that renders it, so a completed run produced a document asserting
-that no evidence existed, two lines above a link to it.
+The Host-Native command entry is `alpha/cli.mjs`; `hosts/codex-mcp.mjs` is the
+MCP server. `cli.ts` remains the separate Legacy entry. An executable module
+can be launched by a process or a container without a static import, so lack
+of imports alone does not establish that it is unused.
 
-Full reasoning, with the measured chronology of how it got this way:
-[`docs/archive/2026-08-13/ARCHIVE.md`](../docs/archive/2026-08-13/ARCHIVE.md) §3-2.
+Persistent state, approval, lease and recovery belong to the existing Store and
+Controller paths. Changes must preserve the Legacy FINAL RULE and Alpha safety
+contracts. Local execution, synthetic Host fixtures and Protected Evidence retain
+their separate acceptance levels.
 
-## Why it was not refactored
-
-Splitting it would have been a rewrite of the layer, not a cleanup, and
-the successor project starts from that split rather than arriving at it.
-Leaving the file at its real size — and saying so here — is more useful
-than a partial extraction that hides the shape while keeping the coupling.
-
-## What is worth reading instead
-
-| | |
-| --- | --- |
-| `mutation.ts` | the eight-phase state change with one commit point, and the idempotency key derived from meaning |
-| `task-ledger.ts` | approval replayed from events; no mutable `approved` field exists |
-| `command-policy.ts` | argv-based matching, shell interpreters denied at argv[0], denied beats allowed |
-| `isolation.ts` | git worktree lifecycle, and what a discard that failed is allowed to claim |
-| `review.ts` | the gap / evidence-defect split, and why one of them can never be waived |
-
-`test/` is 11,028 lines against these 13,308 — the failure modes of every
-checker are reproduced on purpose rather than assumed.
+The large Legacy `run.ts` still combines planning, adapter launch, observation,
+policy and gate calculation. A structural extraction needs a scoped design and
+regression evidence. The [Legacy account](../docs/archive/2026-08-13/ARCHIVE.md)
+preserves its original findings and measurements.

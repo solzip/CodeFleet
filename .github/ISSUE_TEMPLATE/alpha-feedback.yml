@@ -4,12 +4,12 @@ title: '[alpha] '
 body:
   - type: markdown
     attributes:
-      value: 'Use only under the current license or explicit owner permission. Do not attach source context, state databases, tokens, account emails, or unredacted logs.'
+      value: 'Do not attach private source, state databases, tokens, account emails, or unredacted logs. Use SECURITY.md for security reports.'
   - type: textarea
     id: environment
     attributes:
       label: Environment
-      description: Package, OS, Node, Docker, and Claude CLI versions. No account details.
+      description: CodeFleet revision or package version, OS, shell, Node and Host (Codex CLI or Claude Code). Include Docker and Java versions only if that verification backend was used. No account details.
     validations:
       required: true
   - type: textarea

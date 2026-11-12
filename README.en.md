@@ -1,341 +1,111 @@
 # CodeFleet
 
-CodeFleet is a **Host-Native AI development orchestration extension for Codex CLI and Claude Code**. It uses the existing Host's models, authentication and session. Natural-language goals become Task Drafts, pass through a Validator, and form a Workflow/DAG. CodeFleet manages roles, Policy, Capability, approval requests, state and recovery; independent Evidence and Judge determine completion. An AI claim of success is not independent verification evidence.
+CodeFleet is a **Host-Native development orchestration extension for Codex CLI and Claude Code**. It reuses the Host's models, authentication and sessions to connect natural-language goals with reviewed tasks, approved changes, verification, recovery and completion decisions. A single Agent is the default; Host Agent/Subagent facilities are used where appropriate.
 
-Use a single Agent by default, with role-based collaboration where supported. Offline collaboration tests do not establish automatic Host delegation or actual Host Live acceptance; both remain unverified in the current main baseline.
+**The product is under development and acceptance testing.** Planning, review, supervised Local changes and recovery across processes are implemented. Limited supervised Windows Codex runs have been observed. Public authenticated delegation, protected execution, full platform acceptance and external-user productivity remain incomplete. [Current status](docs/product-completion/progress.md) owns the latest results and limits.
 
-Basic planning, Draft and DAG preparation need local Node, Git and the Host. Docker, WSL, separate OS accounts and direct model API keys are not default requirements. Docker is the optional protected Container Verification backend, and is required when a contract needs that backend. Explicitly trusted Local Verification does not provide Protected Verification. Host Sandbox remains NOT_VERIFIED; unavailable protection is not silently replaced by Local success.
+[Documentation](docs/README.md) · [Product principles](docs/PRODUCT_VISION.md) · [Roadmap](docs/product-completion/roadmap.md) · [Architecture](docs/product-completion/architecture.md) · [한국어](README.md)
 
-The product covers both new-project Bootstrap and improvements to existing projects. **Bootstrap without an existing Git HEAD is implemented through goal, Draft, Validator, DAG, approved file creation and local verification, verified by offline and process-level tests. Real Host Live and protected verification are not complete.** See the roadmap for acceptance criteria.
+## What can it do?
 
-[Product principles](docs/PRODUCT_VISION.md) · [Architecture](docs/product-completion/architecture.md) · [Current status](docs/product-completion/progress.md) · [Roadmap](docs/product-completion/roadmap.md) · [Host installation](docs/product-completion/host-native-guide.md) · [Core and backends](docs/product-completion/host-core-guide.md) · [한국어](README.md)
-
-## Implementation and release context
-
-> **Host-Native core:** Use planning, drafts, Workflow/DAG and approval requests in your existing Codex or Claude Code session with local Node and Git. Docker, WSL and separate OS accounts are not universal prerequisites. Docker remains required for the existing protected Alpha verifier; Local success cannot satisfy protected completion. [Core usage and backend guarantees](docs/product-completion/host-core-guide.md). Host Live remains unverified.
-
-> **Host-Native direction:** Prepare proposals in your existing Codex or Claude Code session; CodeFleet owns contracts and verification. [Install and use](docs/product-completion/host-native-guide.md) · [Transition evidence](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-20/alpha-host-native-transition.md). Direct model APIs are optional. Actual host live acceptance has not run.
-
-> **Integrated main, separate release scope:** [Integrated orchestration CLI guide](docs/product-completion/orchestration-guide.md) retains the earlier development-stage instructions. Main integration does not establish inclusion in the public Alpha package or live provider readiness. Use the current status and Host guides above for the default path.
-
-> **Java support:** alpha.4 adds Gradle and Maven verification adapters. An operator-assisted real Gradle project completed model repair, isolated tests and draft PR delivery; a Maven fixture completed locally. See the [Java guide](docs/product-completion/alpha-quickstart.md#java-gradlemaven) for supported versions and instructions.
-
-> **Quality scope:** The reproduced acceptance, cost, cancellation and recovery defects have regression fixes. Independent code review remains required; arbitrary hostile JavaScript is outside the verified scope. See [remediation evidence](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-09-30/alpha-reconciliation-fixes.md).
-
-> **Current development:** [Alpha guide](docs/product-completion/alpha-quickstart.md) and [progress](docs/product-completion/progress.md). Limited Node and Java workflows implement edit proposals, isolated verification, recovery and draft PR delivery. The [public alpha](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.4) is distributed under MIT. Independent external-user onboarding validation is still pending. The text below records the archived engine.
-
-## Historical legacy engine account
-
-The following account describes the frozen legacy engine at its original baseline. Its closure, issue policy, measurements and limits do not describe the resumed Host-Native product. Historical figures and evidence links are retained.
-
-> A structure that keeps an agent's "tests pass" from **reaching the decision at all**, tested end to end.
-> It **completed once under controlled conditions and never on a real project.** 77 findings were registered and
-> adjudicated, each cited to a file and line. <!-- fact: registered-findings = 77 -->
-> Archived 2026-08-13 — not maintained; issues and pull requests are not accepted.
-
-English | [한국어](README.md)
-
-## The question
-
-An agent edits your repository and reports "tests pass." You now hold a claim, not a fact. If you store it as `verified: true`, the value that decides your gate no longer remembers whether anything observed it.
-
-CodeFleet asked whether that could be closed structurally — not by trusting the agent less, but by making its report **unable to reach the decision at all.**
-
-There are three things here worth taking even if you never touch an agent: **deriving an idempotency key from meaning rather than from the caller**, **treating a check that examined nothing as a failure rather than a pass**, and **giving state changes exactly one commit point and naming it.** All three are below under "What it figured out" with their evidence — the first as code, the second as the three silent-green bugs the rule caught — **one of which was this repository** — the third as the eight phases by name — and none of them depend on this project being about agents.
-
-## The answer: one command, two files
-
-The single completed run left a trace containing two files. Both record the same shell command.
-
-| File | What it is | Weight |
-| --- | --- | --- |
-| `provider-commands.json` | `node test/check.js` — the agent's own account of what it ran | `PROVIDER_REPORTED_ONLY`, `notCommandTruth: true`. **Moves nothing** |
-| `verification/verify-001.json` | `node test/check.js` — re-executed by the Harness | `HARNESS_EXECUTED`, `exitCode: 0`. **This is what moved the gate** |
-
-The agent's report is not discarded — it is stored, graded, and structurally excluded. The grade is a type, not a flag:
-
-```ts
-type VerificationAuthority =
-  "NONE" | "PROVIDER_REPORTED_ONLY" | "HARNESS_OBSERVED" | "HARNESS_EXECUTED" | "WAIVED_BY_POLICY";
-
-// Gate computation filters before it reads anything:
-const executed = attempts.filter((a) => a.authority === "HARNESS_EXECUTED");
-```
-
-A `boolean` plus a separate `source` field can drift apart. One graded value cannot — there is no state in which a claim is readable as an observation.
-
-That was the whole thesis, and in the one run that finished, it held. Below: what it looked like in practice, what came out of it, and what it cost.
-
-One loop looks like this. The whole point of the picture is **the two paths splitting, and one of them stopping before the gate**.
-
-```mermaid
-flowchart TB
-    T["Task contract<br/>scope · verification · doneCriteria"]
-    AP1["Approval — frozen before execution<br/>sha256(revisionHash, guardrailHash)"]
-    T --> AP1
-    AP1 --> PR["prompt.md<br/>the contract as resolved"]
-    PR --> AG["Agent<br/>isolated git worktree"]
-
-    AG -->|"its own account"| PC["provider-commands.json<br/>PROVIDER_REPORTED_ONLY<br/>notCommandTruth: true"]
-    AG -->|"file changes"| WS["workspace changes"]
-
-    WS --> HO["harness-observation.json<br/>changed files · path/command policy"]
-    WS --> VE["verification/verify-001.json<br/>HARNESS_EXECUTED<br/>the Harness re-runs the command itself"]
-
-    PC --> X["never reaches the gate"]
-
-    HO --> GT{"Gate computation<br/>reads only authority === HARNESS_EXECUTED"}
-    VE --> GT
-    GT --> RW["Review<br/>a CAPABILITY_GAP needs a person to sign by name"]
-    RW --> LD[("Ledger · append-only<br/>patchRef.hash")]
-    LD --> AY["apply<br/>the observed patch into the workspace"]
-
-    classDef dead stroke-dasharray:4,fill:#eeeeee,color:#666666
-    class PC,X dead
-```
-
-### The contract those files came from
-
-"Contract" is the load-bearing word, so here is a real one — the task that produced the run above, verbatim:
-
-```yaml
-id: add-subtract
-goal: "Add a subtract(a, b) function to src/math.js that returns a - b, and export it."
-agentRole: INFRA_OPERATOR          # a classification: contributes a ceiling, never a grant
-scope:
-  include: ["src/**"]              # enforced against the observed changed-file list
-  exclude: ["test/**"]             # the agent cannot edit what scores it
-verification:
-  commands:
-    - commandId: fixture-check
-      command: ["node", "test/check.js"]    # argv, never a shell string
-doneCriteria:
-  - "src/math.js defines subtract(a, b) returning a - b."
-  - "node test/check.js exits 0."
-```
-
-Two details carry most of the design. `command` is an **argv array, never a shell string** — a shell string cannot be matched against a command policy, so accepting one would make the policy decorative. And `scope.exclude` is what keeps the agent out of the file that judges it, checked against what the Harness observed changing rather than against what the agent said it touched.
-
-Approving this task freezes it: `sha256(revisionHash, guardrailHash)` covers both the text above and the workspace policy in force at that moment.
-
-### The run
-
-The verification command was written to fail unless `subtract` exists and returns the right values — and was **confirmed failing before the run started**, because a check that passes without the change proves nothing.
-
-```
-task approve       → contract frozen as sha256(revisionHash, guardrailHash)
-objective attach   → the approved revision is placed in a queue
-objective run-next → git worktree created; the agent works there, never in the workspace
-                     Harness runs `node test/check.js` itself → exit 0
-                     worktree discarded
-review             → refused: an unwaived capability gap
-review --waive-gap → accepted, recorded as DEGRADED / WAIVED_INCOMPLETE
-objective import-review → decision appended to the ledger
-apply              → the observed patch applied to the workspace
-```
-
-`git diff HEAD` came out byte-identical to the patch the Harness had recorded, and the ledger's `patchRef.hash` recomputed to match. The worktree was already gone from disk and from `git worktree list` — the patch survived as evidence, not as a directory, which is why reintegration was still possible.
-
-### What "evidence" actually means here
-
-The run left a directory. Its contents are the answer to "what would you need in order to disagree with this decision six months from now":
-
-```
-run-plan.json            the contract as resolved: approval hashes, effective policy, gates
-prompt.md                what the agent was actually told
-adapter-request.json     what the adapter was permitted to do
-harness-observation.json changed files, path/command policy checks, workspace snapshots
-provider-commands.json   what the agent said it ran          ← graded, disregarded
-verification/verify-001.json  what the Harness ran itself    ← this moved the gate
-adapter-result.json      exit status, truncation counts
-git-diff.patch           the observed change
-run-summary.json         derived, explicitly not decision truth
-run-record.md            the one file a person reads
-```
-
-Two properties matter more than the list. Every artifact names the contract it belongs to (`taskId` + `taskRevision`), so losing any one of them does not orphan the rest. And each one records `unavailableReason` for anything it could not collect, so a gap in the evidence is a value in the file rather than a shorter file.
-
-The decision itself lives somewhere else — one line appended to a ledger, which is what "append-only" means concretely:
-
-```json
-{ "seq": 4, "eventId": "evt_000004_fa210ced", "type": "RUN_RESULT_APPLIED",
-  "actorId": "sol", "at": "2026-08-13T01:06:55.478Z",
-  "reason": "accepted review 2026-08-13_001-review-002; bring the isolated tree's change into the workspace",
-  "payload": {
-    "runId": "2026-08-13_001", "taskId": "add-subtract", "taskRevision": 1,
-    "reviewDecisionId": "2026-08-13_001-review-002",
-    "patchRef": { "path": ".codefleet/runs/.../git-diff.patch",
-                  "hash": "7ee840706a78708ed4b527dd6d21fb688e9b5c2eee968be5102201c49595d0c8" } } }
-```
-
-`reason` is required and free text; `seq` and `eventId` make gaps detectable; `patchRef.hash` is what lets someone recompute, months later, whether the change in the workspace is the change that was approved. Recomputing it after the fact is how the byte-identity above was confirmed.
-
-## What it figured out
-
-Ten conclusions. **Two of them** — 2 and 7 in the table below — transfer to any backend with no agent involved, and because 2 has two halves that comes to three things to take. Those first.
-
-**Idempotency keys derived from meaning, not from the caller.** Most idempotency is a client-supplied request id, which means it works only when the client cooperates. Here the key is a hash of what actually changes the resulting state — and deliberately excludes reason text and timestamps, so the same decision made twice collapses to one:
-
-```ts
-export function computeMutationId(intent: MutationIntent): string {
-  const canonical = JSON.stringify([
-    intent.mutationKind,
-    intent.targetId,
-    intent.targetHash ?? "",
-    canonicalize(intent.semanticPayload)   // only fields that change state
-  ]);
-  return `mut_${createHash("sha256").update(canonical).digest("hex").slice(0, 16)}`;
-}
-```
-
-Running `apply` twice produced the same `mut_fa210cedffe0ce00` and appended no second event.
-
-**Every check reports what it scanned, not just its verdict.** Otherwise `violations: []` means both *all clear* and *nothing was examined*, and those are the same value. Zero examined is treated as a failure, not a pass. This caught **three** silent-green bugs here: a rule parser that read 0 blocks because of CRLF and reported success, a coverage run that recorded no claims at all, and **this repository itself**.
-
-The third took longest. The checker built to stop figures in the documentation going stale printed only this:
-
-```
-declarations checked   34
-mismatches             0
-```
-
-The other **533 numbers in those same documents were not being checked**, and that output read as "the figures here are correct." It is the `violations: []` defect exactly — *all clear* and *only what I was pointed at* collapsing to one value. **A repository that wrote the rule down as a conclusion then broke it in the tool built to enforce that conclusion**, and stayed green for a day. It now prints the denominator and the unchecked remainder, with a baseline under the ratio.
-
-**Every state change goes through eight fixed phases, and exactly one of them commits.**
-
-```
-M0_RESOLVE      derive the mutation id from meaning
-M1_ACQUIRE      take the lock, naming the holder
-M2_PRECHECK     refuse here — nothing durable has happened yet
-M3_IDEMPOTENCY  this id already in the ledger? then stop, report, change nothing
-M4_APPEND       ← the commit point
-M5_REBUILD      regenerate the read model
-M6_POSTCHECK    does the rebuilt state validate?
-M7_RELEASE      release the lock
-```
-
-A failure before M4 leaves nothing behind. A failure *after* M4 does **not** roll back — the event stays and the outcome reports which phase died, because silent rollback erases the fact that something happened. That is the opposite of the usual instinct, and it is deliberate: an append-only ledger that quietly un-appends is not append-only.
-
-The rest, in brief — each expanded with implementation and evidence in [`DESIGN-NOTES.md`](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/archive/2026-08-13/DESIGN-NOTES.md):
-
-| | Conclusion | Status |
-| --- | --- | --- |
-| 1 | Type the source, don't flag it — **the authority ladder above** | observed |
-| 2 | One window for state change, with a named commit point — **the idempotency key and eight phases above** | observed |
-| 3 | Decisions append-only, state replayed. The snapshot is a read model with no authority | observed |
-| 4 | Approval covers the contract *and* the conditions it was approved under | observed |
-| 5 | Policy composes by `meet` only; roles contribute a ceiling, never a grant. Narrowing was observed; a widening attempt is refused in tests but never seen in real use | **code only** |
-| 6 | Split what you couldn't check into two kinds — a gap a person may sign for, and an evidence defect nobody can stand in for. The distinction lives in data, not in judgement | observed |
-| 7 | Every check reports what it examined, not only its verdict — **the zero-items rule above** | observed |
-| 8 | Keep a decision apart from its side effect. `apply` is a separate human act, and it applies the *observed patch*, not a directory that may have drifted | observed |
-| 9 | Child processes get an allowlisted environment and per-kind limits. A secret exported in the parent was measurably absent in the child | observed |
-| 10 | Treat the human-readable record as an artifact — listed because it **failed twice**: first silent about which command satisfied a gate, then asserting that evidence it linked to did not exist | **failed** |
-
-Two of these turned out to be one idea stated twice. The authority ladder and the gap/defect split are both answers to **how you represent not knowing, as data** — and three of the seven defect types in `LESSONS.md` share that same root: failing to distinguish *absent* from *a value*. The problem this project actually spent itself on was not verifying AI. It was representing absence. That was not the problem it set out to solve: **it took writing all ten down to see they were one.**
-
-→ Each conclusion with its problem, implementation, evidence, and what to carry forward: [`docs/archive/2026-08-13/DESIGN-NOTES.md`](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/archive/2026-08-13/DESIGN-NOTES.md)
-
-## "Isn't this just CI?"
-
-It is the first thing anyone asks, and it is about ninety percent right. Running the tests yourself after the agent finishes gets you most of this for almost none of the cost. If that is all you need, do that.
-
-What it does not get you is the other ten percent, and the four pieces of it are the part worth arguing about:
-
-- **The contract is fixed before execution, not after.** Approval hashes the task *and* the policy it was approved under — `sha256(revisionHash, guardrailHash)`. Change the workspace policy afterwards and the run is refused, because the approval covered conditions that no longer hold. Re-running CI against a moved target tells you nothing about what was agreed.
-- **The agent cannot edit the thing that judges it.** Scope is `include: src/**`, `exclude: test/**`, enforced against the observed changed-file list. The fixture run reports `1 path(s) checked against 1 allowed and 1 denied pattern(s)`. A green CI run says the tests passed; it does not say the agent left the tests alone.
-- **What could not be checked is recorded, not omitted.** A CI run that skips a step is usually just a shorter log. Here an unobservable channel becomes a named `CAPABILITY_GAP` that blocks acceptance until a person signs for it by name — and the signature, with its reason, lands in the ledger.
-- **The decision is append-only.** There is no mutable `approved` field to quietly become true. State is replayed from events; a snapshot that disagrees loses to the ledger.
-
-So: CI answers *did the tests pass*. This was trying to answer *is the record of this work something you can rely on later* — and those turn out to be different questions once the thing doing the work is also the thing reporting on it.
-
-## What not to repeat
-
-Five shapes in this codebase produced defects. The first three are small enough to recognise on sight; the last one happened in the record rather than in the code.
-
-**An optional argument for something that is never actually optional.** The run record renderer took its evidence like this:
-
-```ts
-export interface RunRecordInput {
-  // ...
-  verificationEvidence?: Record<string, unknown> | null;   // ← the whole defect
-}
-```
-
-Every run produces verification evidence, so this was never genuinely optional — it became optional because one call site did not pass it. `undefined` then selected the branch that prints *"No verification evidence was produced."* A false sentence in the only document a person reads, produced by a question mark.
-
-The fix idiom was already in the same file's neighbour: `verificationEvidenceRef: FileRef | null` forces every call site to state something. **Prefer `| null` over `?:` for anything an artifact will assert.** The type system will not ask you the question; the punctuation decides it silently.
-
-**A renderer that receives evidence as an argument instead of reading it.** The same defect from a different angle. As long as the renderer is *handed* the evidence, a call site that forgets is possible; if it reads from the evidence store itself, that failure mode does not exist. Passing state to a formatter feels cleaner and creates a second place where the truth can be wrong.
-
-**Defaults that fabricate a value for absence.**
-
-```ts
-workspaceRootRef: input.workspaceRootRef ?? ".",
-selectedWorkspaceRootRealPath: input.selectedWorkspaceRootRealPath ?? "",
-```
-
-`?? "."` is not an absence marker — it is an assertion that the working directory *is* the repository root. Every other field in that same artifact expresses absence as `{ value, unavailableReason }`; these three quietly opted out. `??` and `||` are the shortest way to satisfy a type checker, and the type checker never asks what the default means.
-
-**One axis carrying two unrelated permissions.** Roles set a ceiling over both file editing and command execution at once, so of seven built-in roles only two allow running commands, and neither of those is a role that writes application code. The narrowing rule was correct; hanging two independent capabilities on one ordering was not. The completed run needed a role substitution purely because of this.
-
-**Whoever fixed it did not update the register.** This is a defect in the record rather than in the code, and it happened more often than the three above combined. Opening eleven stranded findings showed **eight were already fixed** and only the register did not know. When the 27 unchecked ones were adjudicated after the freeze, one of them had been judged *invalidated* two days earlier. If fixing a defect and carrying the judgment across are two separate jobs, the second stops happening.
-
-**This one is not fixed.** Three document checkers (links, prose figures, file:line citations) hang off `npm test`, but what they catch is a **stale figure, a broken link, a drifted citation** — not a judgment that was never carried across. That still needs a person. The root is the same one: **a single fact lives in many copies with no source of truth.** The checkers sit on top of that; they did not reduce it.
-
-The first three share the root named above: **absence and value were not kept distinct.** A missing argument, a fabricated default, and a field declared but never produced are the same mistake wearing different clothes — which is why the fix for each is the same instinct, to make the type refuse to compile until someone says what absence means here.
-
-## How far any of this was checked
-
-Short version: **less than the list above might suggest.** "Observed" mostly means observed once.
-
-- **The pipeline completed exactly once**, on a controlled fixture, and **four workarounds were holding it up.** One was a role substitution — of seven built-in roles, only two permit command execution, and neither of those two is a role that writes application code.
-- **On a real Spring Boot project it did not complete.** Of fifteen steps, four were blocked and one failed. The command that ended up satisfying the verification gate was `gradle --version`. Our implementation could not invoke Gradle or Maven wrappers on Windows: the rule forbidding shell interpreters is correct, and it left no path to a batch file.
-- **77 registered findings** — 25 resolved, 8 partial, 1 not reproduced, 15 open, 1 accepted as a limit, and **27 never checked**. The register froze those 27 as unchecked, and every one was adjudicated afterwards — **21 valid / 3 resolved / 1 invalidated / 2 partial** ([record](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-08-14/unchecked-27-adjudication.md)). The counts above and the status column were left alone under the freeze rule, so **reading this table alone says "nobody looked", and that is no longer true.** <!-- fact: registered-findings = 77 --> <!-- fact: findings-resolved = 25 --> <!-- fact: findings-partial = 8 --> <!-- fact: findings-not-reproduced = 1 --> <!-- fact: findings-open = 15 --> <!-- fact: findings-accepted-limit = 1 --> <!-- fact: findings-unchecked = 27 -->
-- The archived engine suite, `npm run test:legacy`, exits **0 on Windows** (324 passing, 0 failing). The alpha suite runs separately; `npm test` includes both suites and document checks. <!-- fact: tests-passing = 324 --> <!-- fact: tests-failing = 0 --> **The one time CI ran, both platforms failed** — six tests on Linux, two on Windows. One of the six is a POSIX behaviour this archive predicted and never measured; the two on Windows are **tests added just before the freeze, failing on themselves**. **The workflow was then removed** — an archive has nobody to read a red check and act on it — and the run ids are kept in the record ([record](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-08-13/ci-first-run.md)). Condition coverage is 345 of 545 lines (63.3%), which means a passing test quoted that many lines — **not** that those conditions are correctly implemented. <!-- fact: conditions-covered = 345 --> <!-- fact: condition-lines = 545 --> <!-- fact: coverage-percent = 63.3 -->
-- **Nothing here was exercised under repetition, concurrency, or multiple users.**
-
-> Runnability is not warranted. These are observations, not a claim that anything works.
-> **The test count and the CI results were measured after the freeze**; the rest are figures from the moment of freezing.
-
-## Why it stopped here
-
-Two structural reasons, neither of which a partial fix would have closed.
-
-**The design led by two months; the machinery that made it binding arrived at the end.** 68 of the 90 commits to the design document landed in May and June, by which point it was three-quarters of its final size — but **none of it was in a form a machine could check.** The rule blocks first appear on 7 August and complete on 10 August, inside the same six days that carried 49 of the 51 commits to `src/`, and the tool that checks code against them arrived on the last of those days. Having a design and having a design that binds code are different projects; this repository spent two months on the first and six days on the second. 63.3% is the size of what that left.
-
-**Judgment was never separated from observation.** One file grew past 3,000 lines covering run planning, adapter launch, evidence collection, policy evaluation, and gate derivation. In that shape "is the observation correct?" and "is the judgment correct?" cannot be tested apart. The symptom is exact: recording a review re-renders the human-readable run record, and that call site did not pass it the verification evidence — so the document asserts that no verification evidence was produced while linking to that evidence two lines further down. Three separate fixes on the final day all had this shape.
-
-→ Full account with the measured chronology: [`docs/archive/2026-08-13/ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md)
-
-## Further reading
-
-| | |
+| Task | Current scope |
 | --- | --- |
-| [`DESIGN-NOTES.md`](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/archive/2026-08-13/DESIGN-NOTES.md) | The ten conclusions in full — problem, implementation, evidence, and what a successor should keep or drop |
-| [`LESSONS.md`](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/archive/2026-08-13/LESSONS.md) | The 50 judged findings grouped into seven recurring types with their structural causes. The largest is schema fields no code consumes |
-| [`ENVIRONMENT.md`](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/archive/2026-08-13/ENVIRONMENT.md) | Measured behaviour for anyone building agent tooling on Windows: a CP949 console against UTF-8 decoding of child output, batch wrappers unreachable behind a shell-interpreter rule, worktree paths that must be asked of git, `SIGTERM` that only reliably kills because Windows maps it to `TerminateProcess`, and a spawn environment narrowed to `PATH` — which left the child without a home directory. Each with its reproduction condition; 3 unresolved, 4 unverified, 1 unmeasured |
-| [`ARCHIVE.md`](docs/archive/2026-08-13/ARCHIVE.md) | State, reasons, and asset list at close. The source of every number on this page |
+| Review a development goal | Draft, acceptance criteria, file scope, Validator and Workflow/DAG review |
+| Improve an existing project | Proposal review, exact Fileset approval and application, Local tests and acceptance |
+| Bootstrap a new project | Approved file creation, verification, Repair and recovery implemented; full real-Host acceptance pending |
+| Resume interrupted work | Persisted Goal, contract, Work Log and Evidence discovery; recovery across processes |
+| Repair a failed change | Bounded Repair and re-verification tied to failure evidence and separate approval |
 
-Historical audit and run records are available through Git history linked from [`docs/INDEX.md`](docs/INDEX.md). The current tree contains 0 audit and run records. <!-- fact: audit-run-records = 0 --> The frozen findings register is [`docs/REGISTER.md`](docs/REGISTER.md); recording conventions are in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).
+The flow is `Goal → Draft → Validator → DAG → Approval → Execution → Evidence → Judge`. A valid plan does not authorize execution. An AI success report is not independent evidence. Local completion must be reobserved if the source changes afterwards.
 
-A separate [product completion plan](docs/product-completion/README.md) now describes a proposed product for public use. The limited alpha is distributed under MIT; this does not change the archived results. External pilot validation and the broader roadmap remain unfinished.
+## Install and start
 
-## Successor
+Use Node.js **24.14.1 or newer**, Git and your existing Host. Basic planning needs no Docker, WSL, separate OS account or direct model API key. No runtime dependency installation is needed in a source checkout.
 
-**The product is unfinished. The shutdown is not.** Those are two different things.
+```sh
+git clone https://github.com/solzip/CodeFleet.git
+cd CodeFleet
+node --version
+node src/alpha/cli.mjs --help
+```
 
-The pipeline never completed on a real project — that stands exactly as written above. Closing it, on the other hand, was carried through: **every registered finding was adjudicated**, with the ones still valid handed forward as the list the next project has to investigate; assets were split into carried and discarded with a reason on each; and "did the design lead the code?" was settled by measuring the commit chronology instead of asserting it. The figures, links and file:line citations in these documents are still checked by `npm test`. **Making what was learned here usable by something else was the last piece of work in this repository, and it was finished.**
+Replace `PROJECT` with an existing project directory and choose your Host:
 
-**What is left after it.** Three things hold whether or not you care about agents — deriving an idempotency key from meaning rather than from the caller, treating a check that examined nothing as a failure rather than a pass, and giving state changes exactly one commit point and naming it. The evidence is under "What it figured out" above.
+```text
+node scripts/host-install.mjs install codex PROJECT
+node scripts/host-install.mjs install claude PROJECT
+```
 
-**What you would not have to build today.** The code that creates and tears down an isolated worktree by hand, and the code that scraped a child process's output to work out what the agent had done. The harness supplies both, as native worktrees and as hook events. Of the five subjects [`ENVIRONMENT.md`](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/archive/2026-08-13/ENVIRONMENT.md) measured on Windows, **two of them contain exactly these** — decoding child-process output (§1-2), and the worktree paths a process must ask git about rather than normalise, together with their teardown order (§3-1, §3-3).
+| Host | Project installation | Invoke in the Host session |
+| --- | --- | --- |
+| Codex CLI | `.agents/skills/codefleet/` | `$codefleet` |
+| Claude Code | `.claude/skills/codefleet/` | `/codefleet` |
 
-**What is still missing.** What the harness took is a means of observation, not a judgment layer. An event arriving does not grade itself as observed or claimed; it does not split what went unconfirmed into a gap a human can sign for and an evidence defect nobody can stand in for; and it does not write the decision to an append-only ledger you can recompute six months later. Nor does it make an approval cover the contract together with the policy that contract sat on. **The problem this project actually spent itself on was that side, not the plumbing, and nothing supplies it yet.**
+Installation adds a Skill, runtime snapshot and license. Existing installations are not overwritten or automatically upgraded. Management commands are `status`, `disable`, `enable` and `remove`. Discovery and real model execution are separate checks. Follow the [installation guide](docs/product-completion/host-native-guide.md).
 
-The product definition was reworked and restarted under the name **Warrant** — that judgment layer, exactly. It does not own an execution engine, and it keeps judgment separate from observation. **That stopped too.** As the banner at the top says, the harness took worktrees and session observation natively, which invalidated two of the premises; the existing implementations (agentsd, Bernstein) were then examined at the code level, and the redesign was put on hold. There is no public repository.
+Start by reviewing a small task:
 
-## License
+```text
+Add a filter that hides completed todos.
+Propose the change scope, acceptance criteria and tests, then wait for approval.
+```
 
-Released under the MIT license. Use, modification, distribution and commercial use are permitted with the copyright and license notice retained. See [`LICENSE`](LICENSE).
+For a command-line planning check, replace `STATE` with an external preparation state directory and `REPO` with the repository to review. This command records preparation state without model calls or source changes. It may return exit 2 when more input is required.
 
-The owner approved replacing the previous restrictive policy. Historical commits and audit records describe their original policy; the current distribution uses MIT. Permission to use is not a warranty of correctness or production readiness.
+```text
+node src/alpha/cli.mjs --state STATE host codex plan "Fix duplicate event handling" REPO
+```
+
+Follow the [Core guide](docs/product-completion/host-core-guide.md) for Draft submission, contract review and approval requests. Existing projects use a reviewed Git baseline; new projects use the Bootstrap contract. Do not copy authentication material or sessions.
+
+## Verification levels and limits
+
+Local Verification executes an explicitly trusted exact command with local user permissions. `COMPLETE_LOCAL` accepts that contract and candidate. It does not establish OS isolation or Protected Verification.
+
+Container Verification is a separate backend requiring Docker, fixed verification inputs and qualified isolation. Local success cannot replace it when the contract requires protection. Host Sandbox is `NOT_VERIFIED`; public authenticated delegation is `PUBLIC_DELEGATION_BLOCKED`. Fully unattended Repair, complete Host compaction and long-running recovery acceptance, and Multi-Agent time/cost advantages remain unproven.
+
+See the [Alpha guide](docs/product-completion/alpha-quickstart.md) for existing Node/Java workflows and the [Core guide](docs/product-completion/host-core-guide.md) for backend guarantees. Do not assume source main and the existing public Alpha package support the same scope.
+
+## Development and repository layout
+
+| Location | Responsibility |
+| --- | --- |
+| `src/` | [Product modules and Legacy compatibility](src/README.md) |
+| `test/`, `tools/proofs/` | Functional regression, negative cases and Host protocol verification |
+| `scripts/`, `.github/` | Installation, diagnostics, verification, packaging and CI |
+| `examples/` | Legacy Task and Java contract examples |
+| `docs/` | Official product documents, current implementation contracts and checker baselines |
+
+Run basic Docker-free regression in this order. Use `npm.cmd` in Windows PowerShell.
+
+```sh
+npm run pretest
+npm run test:legacy
+npm run test:host-core
+npm run posttest
+```
+
+`npm run test:installed-goal-loop` exercises the installed package's Local flow using synthetic proposals and no model calls. Full `npm test` includes mandatory protected Docker checks; prepare the environment described in [.github/workflows/alpha.yml](.github/workflows/alpha.yml). Basic regression is not full protected acceptance.
+
+Follow the [working rules](CLAUDE.md) and report commands, exit codes, skips and unverified scope. Use [SECURITY.md](SECURITY.md) for security reports. Do not publish personal paths, credentials, session transcripts or runtime databases.
+
+<details>
+<summary>Machine-checked Legacy figures</summary>
+
+The frozen register's 77 findings are not the current product's unresolved-defect count. <!-- fact: registered-findings = 77 --> Read them within their [historical scope](docs/INDEX.md).
+
+| Measured surface | Value and scope |
+| --- | --- |
+| Frozen register | 77 findings <!-- fact: registered-findings = 77 --> |
+| Resolved / partial at freeze | 25 / 8 <!-- fact: findings-resolved = 25 --> <!-- fact: findings-partial = 8 --> |
+| Not reproduced / open at freeze | 1 / 15 <!-- fact: findings-not-reproduced = 1 --> <!-- fact: findings-open = 15 --> |
+| Accepted limit / unchecked at freeze | 1 / 27 <!-- fact: findings-accepted-limit = 1 --> <!-- fact: findings-unchecked = 27 --> |
+| Legacy tests | 324 passing / 0 failing <!-- fact: tests-passing = 324 --> <!-- fact: tests-failing = 0 --> |
+| Quoted rule-condition coverage | 345 of 545 lines, 63.3%; not implementation completeness <!-- fact: conditions-covered = 345 --> <!-- fact: condition-lines = 545 --> <!-- fact: coverage-percent = 63.3 --> |
+| Audit/run records in the current tree | 0; originals remain in Git history <!-- fact: audit-run-records = 0 --> |
+
+These figures are compared against generated Legacy test results, the register and disk. They do not replace execution evidence from a new environment.
+
+</details>
+
+[MIT License](LICENSE). Permission to use is not a claim of product completion or production suitability.

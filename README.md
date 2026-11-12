@@ -1,193 +1,98 @@
 # CodeFleet
 
-**CodeFleet — Host-Native AI Development Orchestration**
+Codex CLI·Claude Code의 기존 모델·인증·세션을 활용하는 **Host-Native 개발 오케스트레이션 확장 도구**입니다. 자연어 목표를 검토 가능한 작업으로 만들고, 승인된 변경과 검증·복구·완료 판정을 연결합니다. 단일 Agent가 기본이며 필요한 경우 Host의 Agent/Subagent 기능을 활용합니다.
 
-**Autonomous Execution. Controlled Process. Verified Results.**
+**현재는 개발·수용 검증 단계입니다.** 계획·검토, 감독형 Local 변경, 별도 프로세스 복구를 구현했습니다. 제한된 Windows Codex 감독형 실행 관측은 있지만 공개 인증 위임·보호 실행·전체 OS 수용·외부 사용자 생산성은 아직 검증이 끝나지 않았습니다. 최신 결과와 한계는 [진행 현황](docs/product-completion/progress.md)을 따릅니다.
 
-CodeFleet은 **Codex CLI와 Claude Code의 기존 모델·인증·세션·도구·Agent 기능을 활용하는 개발 오케스트레이션 확장 도구**입니다. 자연어 개발 목표를 계약으로 구체화하고 실제 구현·검증·오류 수정·복구를 조정합니다. 기본은 단일 Agent이며, 독립 작업에 이점이 있을 때 Host-Native Multi-Agent/Subagent를 활용합니다. AI의 성공 주장 대신 **현재 계약과 Candidate에 결합된 Evidence/Judge**로 완료를 판정합니다.
+[문서 안내](docs/README.md) · [제품 원칙](docs/PRODUCT_VISION.md) · [로드맵](docs/product-completion/roadmap.md) · [아키텍처](docs/product-completion/architecture.md) · [English](README.en.md)
 
-기본 계획·분석에는 **Node.js와 Git, 사용하는 Host**가 필요합니다. Docker·WSL·별도 Linux 계정·직접 모델 API Key는 기본 설치 요건이 아닙니다. Docker는 기존 Alpha의 보호된 검증 Backend로 유지합니다.
+## 무엇을 할 수 있나요?
 
-**Windows Codex의 실제 감독형 개발과 Local 검증을 수용했습니다.** 이 README는 기존 Host-Native Core와 감독형 개발·협업, 완료 이후 계약 변경과 실패 기반 Repair를 설명합니다. Repair 수용의 구현 기준은 [검증 커밋](https://github.com/solzip/CodeFleet/commit/0b96ffbc9bb3cbe701f28e6b5fa744a27d19cdd0)이며, 이전 checkout이나 설치된 런타임 snapshot에는 이 기능이 없을 수 있습니다. 이 결과를 Claude Code나 다른 OS의 검증 완료로 확대하지 않습니다.
-
-[제품 원칙](docs/PRODUCT_VISION.md) · [공식 아키텍처](docs/product-completion/architecture.md) · [현재 상태](docs/product-completion/progress.md) · [Host 설치·사용](docs/product-completion/host-native-guide.md) · [Core와 검증 Backend](docs/product-completion/host-core-guide.md) · [문서 색인](docs/INDEX.md) · [English](README.en.md)
-
-신규 프로젝트 Bootstrap과 기존 프로젝트 개선을 모두 목표로 합니다. **Git HEAD 없는 신규 프로젝트 Bootstrap은 목표→Draft→Validator→DAG→승인된 파일 생성→로컬 검증까지 구현돼 오프라인·프로세스 단위 테스트로 검증됐습니다. 실제 Host Live와 보호 검증은 아직 완료되지 않았습니다.** 구현·수용 완료 기준은 [로드맵](docs/product-completion/roadmap.md#현재-host-native-후속-작업)에서 관리합니다.
-
-## 해결하려는 문제
-
-AI가 코드를 작성하는 것과 합의한 범위 안에서 작업을 끝내고 검증하는 것은 다릅니다. CodeFleet은 목표·변경 범위·완료 기준을 계약으로 고정하고, 진행 가능한 작업과 아직 검증되지 않은 항목을 드러냅니다.
-
-**AI의 자기 보고는 독립 검증 증거가 아닙니다.** “테스트가 통과했다”는 응답만으로 승인이나 완료 상태를 만들 수 없습니다. 실행 권한은 Policy·Capability·승인으로 제한하고, 완료 여부는 계약과 실제 증거를 대조하는 Judge가 판단합니다.
-
-## 주요 기능
-
-| 기능 | 현재 제공하는 범위 |
+| 작업 | 현재 제공하는 범위 |
 | --- | --- |
-| 목표와 Task | 자연어 목표 접수, 구조화된 Draft, 파일·테스트·기준 검토, 기존 Contract Validator 검사 |
-| Workflow/DAG | 작업 분해, 의존 관계, 조회, 실행 가능성 설명, 승인 요청 |
-| 역할과 협업 | 단일 Agent 기본. 실제 Codex Subagent 협업·독립 작업의 병렬 실행 관측, 범위·의존성·파일 충돌 관리 |
-| 실행 제어 | Policy·Capability·승인 Revision, Lease, 재시도 예산, 취소·복구·중복 요청 처리 |
-| 검증 | Local / Container Backend, 계약·Candidate에 결합된 Evidence/Judge. 검증된 Repair Core에서 필수 Criterion의 승인된 테스트 매핑·실행·무결성 확인 |
-| 계약 변경·Repair | 검증된 Repair Core에서 완료 Objective의 후속 Contract Revision → 실제 실패 → Host Agent 제안 → 감독형 적용 → 재검증 → Recovery 수용 |
-| Host 연동 | Codex·Claude 프로젝트 Skill 설치 지원. Windows Codex의 설치된 `$codefleet` Skill을 통한 실제 감독형 개발 수용; Claude 최종 Host Live는 미완료 |
+| 개발 목표 정리 | Draft·완료 기준·파일 범위·Validator·Workflow/DAG 검토 |
+| 기존 프로젝트 개선 | 제안 검토, 정확한 Fileset 승인·적용, Local 테스트와 완료 판정 |
+| 신규 프로젝트 Bootstrap | 승인된 파일 생성·검증·Repair·재개 구현. 실제 Host 전체 수용은 미완료 |
+| 중단 후 재개 | 영속 Goal·계약·Work Log·Evidence 조회와 별도 프로세스 Recovery |
+| 실패 후 수정 | 실패 근거와 별도 승인에 결합된 제한적 Repair·재검증 |
 
-일반 목표를 접수할 수 있지만 실행은 선택한 계약과 Backend의 지원 범위를 따릅니다. 기존 Alpha의 Node·Java 수정 경로와 Existing Local의 승인된 텍스트 소스 생성·수정 경로를 구분합니다. 지원하지 않는 목표는 `NEEDS_INPUT` 또는 `CAPABILITY_GAP`으로 남습니다. 역할 이름이 있다는 사실은 여러 독립 Agent가 실제 실행됐다는 증거가 아닙니다.
+기본 흐름은 `목표 → Draft → Validator → DAG → 승인 → 실행 → Evidence → Judge`입니다. 계획 통과는 실행 승인이 아니며, AI의 성공 보고는 독립 검증 증거가 아닙니다. 완료한 뒤 소스가 바뀌면 기존 Local 완료도 다시 확인해야 합니다.
 
-Windows Codex 수용에서 자연어 목표 → Draft → Validator → DAG, 실제 코드 생성과 감독형 Fileset 적용, 단일 Agent 및 실제 Subagent 협업을 확인했습니다. 독립 작업의 병렬 실행도 관측했지만 Multi-Agent의 일반적인 시간·비용 우위를 입증한 것은 아닙니다. [설치된 Skill 수용](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-28/public-existing-local-v2.md)과 [협업·병렬 실행 기록](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-28/manager-proposal-handoff.md)은 각 실행의 범위를 구분합니다.
+## 설치와 시작
 
-최신 Repair 수용에서는 B/C 각각 **30/30 PASS, COMPLETE_LOCAL**, Criterion Evidence Coverage와 별도 프로세스 Recovery·중복 실행 방지를 확인했습니다. 최종 Host Core 회귀도 전체 통과했습니다. 과거 모델 입력 토큰 초과 `POLICY_VIOLATION` 기록은 보존하며 소급 승인하지 않습니다. [제품 진행 기록의 최종 회귀 수치와 수용 근거](docs/product-completion/progress.md)에서 명령·종료 코드·검증 환경을 확인할 수 있습니다.
-
-## 작동 원리
-
-```text
-Host에서 목표 분석 → Task Draft → Validator → Workflow/DAG
- → 정책·Capability 확인 → 승인 요청 → 허용된 실행 경로
- → 검증 Backend → Evidence → Judge
-완료 이후 변경 → 감독형 Contract Revision → 실제 실패 Evidence
- → Host Agent Repair 제안 → 정확한 Fileset 승인·적용
- → 새 Candidate의 독립 Local 재검증 → Evidence/Judge → Recovery
-```
-
-Draft 작성과 DAG 준비는 실행 승인이 아닙니다. 필요한 Capability가 없는 WorkItem은 차단되고 후속 의존 작업은 기다립니다. 독립적으로 실행 가능한 작업은 계속 진행할 수 있지만 필수 검증이 남으면 전체 Workflow를 완료하지 않습니다.
-
-## Persistent Work Log & Continuous Development
-
-최종 제품은 Objective별로 목표·현재 지침, Contract Revision·WorkItem·DAG, 담당 Agent와 미완료 작업, 중요한 결정·근거·결과를 일관되게 관리해야 합니다. Fileset·Attempt·Evidence·예산·승인을 연결하고, 새 사용자 지침이 진행 중 작업에 미치는 영향과 Agent 간 전달·수신·미확정 인계를 추적해야 합니다.
-
-기존 SQLite·Persistent Work Log·Manager·Recovery를 활용해 세션 종료나 Context Compaction 이후에도 현재 계약과 실행 효과를 복구하고 다음 적격 작업을 안전하게 이어가는 구조입니다. 별도 상태 시스템을 추가하지 않습니다. **새 지침 자동 대조 → Agent 전달 → 진행 중 Context Recovery → 연속 실행의 전체 연결은 다음 P0 개발 대상**입니다. 현재의 별도 프로세스 Recovery 성공을 이 전체 기능의 완료로 보지 않으며, 인수인계 요약 자체는 실행 권한이나 Evidence가 아닙니다.
-
-## 기본 설치
-
-Node.js **24.14.1 이상**, Git, 기존 Codex CLI 또는 Claude Code를 준비합니다. 아래는 소스 checkout 기준이며 npm 레지스트리 배포를 가정하지 않습니다. 런타임 의존성 설치를 위한 `npm install`은 필요하지 않습니다.
+Node.js **24.14.1 이상**, Git, 사용하는 Host가 필요합니다. 기본 계획에는 Docker·WSL·별도 OS 계정·직접 모델 API 키가 필요하지 않습니다. 소스 checkout에는 런타임 의존성 설치가 필요 없습니다.
 
 ```sh
 git clone https://github.com/solzip/CodeFleet.git
 cd CodeFleet
 node --version
-node src/alpha/cli.mjs host codex doctor
+node src/alpha/cli.mjs --help
 ```
 
-신뢰할 수 있는 checkout에서 사용할 프로젝트 경로를 지정합니다. `PROJECT`는 이미 존재하는 프로젝트 디렉터리로 바꾸고 사용하는 Host의 설치 명령을 선택하세요.
+기존 프로젝트 경로 `PROJECT`를 지정하고 사용할 Host를 선택합니다.
 
 ```text
 node scripts/host-install.mjs install codex PROJECT
 node scripts/host-install.mjs install claude PROJECT
-node scripts/host-install.mjs status codex PROJECT
 ```
 
-| Host | 설치 위치 | 세션에서 호출 |
+| Host | 프로젝트 설치 위치 | Host 세션에서 호출 |
 | --- | --- | --- |
-| Codex | `PROJECT/.agents/skills/codefleet/SKILL.md` | `$codefleet` |
-| Claude Code | `PROJECT/.claude/skills/codefleet/SKILL.md` | `/codefleet` |
+| Codex CLI | `.agents/skills/codefleet/` | `$codefleet` |
+| Claude Code | `.claude/skills/codefleet/` | `/codefleet` |
 
-설치기는 프로젝트 내부에 Skill·런타임 snapshot·라이선스를 추가합니다. 전역 설정을 변경하지 않으며 기존 설치를 덮어쓰지 않습니다. 필요시 Host 세션을 다시 열어 Skill을 발견하게 하세요. 발견과 실제 모델을 통한 Skill 수행은 별개의 검증입니다.
+설치기는 Skill·런타임 snapshot·라이선스를 추가합니다. 기존 설치는 덮어쓰지 않으며 자동 업데이트되지 않습니다. 관리 명령은 `status`, `disable`, `enable`, `remove`입니다. 설치·발견과 실제 모델 수행은 별도입니다. [설치·사용 안내](docs/product-completion/host-native-guide.md)를 확인하세요.
 
-설치 파일을 검토하고 프로젝트의 추적·제외 정책을 정한 뒤 깨끗한 Git 기준선을 준비하세요. 계획 대상 저장소에는 기존 HEAD가 필요합니다. 상태 DB와 응답 JSON은 대상 저장소 밖에 둡니다. 인증정보를 복사하지 않습니다.
-
-Windows Fixture는 LF 줄바꿈으로 준비하세요. CodeFleet은 Git을 `core.autocrlf=false`로 관측하므로 일반 `git status`가 깨끗해도 줄바꿈 차이로 기준선 검사가 차단될 수 있습니다. 정책을 우회하지 말고 Fixture의 줄바꿈과 기준선을 확인합니다.
-
-관리 명령은 `status`, `disable`, `enable`, `remove`이며 두 Host 모두 지원합니다. 수정된 설치 파일은 자동 삭제하지 않습니다. 업데이트는 기존 설치를 검토한 뒤 재설치하며 snapshot은 자동 갱신되지 않습니다.
-
-## Quick Start: 먼저 계획만 만들기
-
-공개 가능한 작은 Fixture 프로젝트의 새 Host 세션에서 `$codefleet` 또는 `/codefleet`을 호출하고 다음과 같이 요청합니다.
+처음에는 작은 작업의 계획만 검토하세요.
 
 ```text
-중복 이벤트가 두 번 처리되는 원인을 분석해 주세요.
-파일을 수정하거나 명령으로 테스트를 실행하지 말고,
-Task Draft와 Workflow/DAG를 작성한 뒤 미검증 항목을 표시해 주세요.
+완료한 할 일을 숨기는 필터를 추가하려고 합니다.
+변경 범위와 완료 기준, 필요한 테스트를 제안하고 승인을 기다려 주세요.
 ```
 
-이 예시는 계획 전용 시작 요청이며 위에 링크한 실제 개발 수용 기록과는 별개입니다. Host 도구 권한과 허용된 상태 기록 경로를 먼저 정하세요. Skill의 자연어 지침 자체는 보안 Sandbox가 아닙니다.
-
-모델 호출 없이 준비 경로를 직접 확인할 수도 있습니다. 아래 명령은 신뢰할 수 있는 CodeFleet checkout에서 실행합니다. `STATE`는 대상 저장소 밖의 준비 상태 디렉터리, `REPO`는 깨끗한 Fixture Git 저장소, `TASK`는 `plan` 결과의 taskId로 바꾸세요. 파일 경로와 기준은 실제 Fixture에 맞게 검토합니다.
+명령으로 계획 경로를 확인할 때는 `STATE`를 대상 프로젝트 밖의 준비 상태 경로로, `REPO`를 검토할 저장소로 바꿉니다. 이 명령은 모델 호출과 소스 변경 없이 준비 상태를 기록합니다. 입력 보완이 필요하면 exit 2로 종료할 수 있습니다.
 
 ```text
 node src/alpha/cli.mjs --state STATE host codex plan "Fix duplicate event handling" REPO
-node src/alpha/cli.mjs --state STATE host codex status TASK
-node src/alpha/cli.mjs --state STATE host codex review TASK --files src/events.js --tests test/events.test.js --criterion "Duplicate event is handled once"
-node src/alpha/cli.mjs --state STATE host codex prepare TASK
-node src/alpha/cli.mjs --state STATE host codex workflow TASK
-node src/alpha/cli.mjs --state STATE host codex explain TASK
-node src/alpha/cli.mjs --state STATE host codex approval-request TASK
 ```
 
-Claude에는 `codex` 대신 `claude`를 사용합니다. 위 준비 명령은 모델을 호출하거나 소스를 수정하지 않으며 `STATE`에 준비 상태를 기록합니다. `plan`은 입력 보완이 필요할 때, `prepare`와 `approval-request`는 승인 대기 상태에서 exit 2를 반환할 수 있습니다. 이는 검증된 완료가 아닙니다.
+후속 Draft·계약 검토·승인 요청은 [Core 안내](docs/product-completion/host-core-guide.md)를 따릅니다. 기존 프로젝트는 검토한 Git 기준선을, 신규 프로젝트는 Bootstrap 계약을 사용합니다. 인증정보나 세션을 복사하지 않습니다.
 
-Host가 작성한 의미 기반 Draft는 `host codex draft TASK proposal.json`으로 제출합니다. 필수 schema·revision·base·정확한 파일 인용은 [Draft 계약 안내](docs/product-completion/host-core-guide.md)에 있습니다. 임의의 승인·Evidence 필드를 제출할 수 없습니다.
+## 검증 수준과 제한
 
-## Skills와 Single-Agent / Hybrid
+Local Verification은 사용자가 신뢰한 정확한 명령을 로컬 권한으로 실행합니다. `COMPLETE_LOCAL`은 해당 계약·후보의 Local 수락입니다. OS 격리나 Protected Verification을 보증하지 않습니다.
 
-- **일반 `codefleet`**: Docker 없는 계획·분석·Draft·DAG 조회와 승인 요청의 기본 경로입니다.
-- **엄격한 H6 `codefleet-plan`**: 별도의 격리 프로필입니다. 일반 Skill과 혼동하지 마세요. [H6 구현과 자원 검증](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-21/h6-uid-resource-recovery.md)을 참고하세요.
-- **Single-Agent / Hybrid**: 기본은 하나의 Host Agent가 역할을 나눠 추론하는 방식입니다. Hybrid는 계약에 명시된 WorkItem·의존성·예산에 따라 제한된 병렬 실행을 관리합니다. [오케스트레이션 안내](docs/product-completion/orchestration-guide.md)에 세부 계약이 있습니다.
+Container Verification은 Docker와 고정 검증 입력·격리 조건이 필요한 별도 Backend입니다. 해당 Backend가 필수인 계약은 Local 성공으로 대체하지 않습니다. Host Sandbox는 `NOT_VERIFIED`, 공개 인증 위임은 `PUBLIC_DELEGATION_BLOCKED`입니다. 완전 무인 Repair, Host Compaction과 장기 실행의 전체 수용, Multi-Agent의 시간·비용 이점은 미입증입니다.
 
-실제 Host Agent/Subagent 협업에서는 Manager가 파일 범위·입출력·의존성과 검증 책임을 배정합니다. Agent 응답은 제안이며 실행 승인이 아닙니다. 통합한 Candidate는 다시 검증해야 합니다. 선택적 협업의 실제 관측과 기존 Hybrid 후보 검증, 인증된 공개 사전 승인 위임은 서로 다른 범위입니다.
+기존 Node·Java Alpha 경로는 [Alpha 안내](docs/product-completion/alpha-quickstart.md), Backend별 보장은 [Core 안내](docs/product-completion/host-core-guide.md)에서 확인합니다. main의 코드와 기존 공개 Alpha 패키지의 지원 범위는 같다고 가정하지 않습니다.
 
-현재 공개 Host 경로의 `requests`·`submit`·`run`·`resume`은 보호 실행 게이트에 의해 차단됩니다. 내부 오프라인 Fixture에서 검증한 H4 Linux IPC 경로를 일반 사용자 Live 실행 지원으로 해석하지 마세요. [Host 설치·실행 경계](docs/product-completion/host-native-guide.md)를 따르며 내부 모듈이나 Legacy 명령으로 우회하지 않습니다.
+## 개발·저장소 구조
 
-이 보호 경로의 차단과 별개로, 정확한 Review와 명시적 동의를 요구하는 감독형 `objective` Fileset·Local 검증 경로를 수용했습니다. 공개 사전 승인 위임은 계속 `PUBLIC_DELEGATION_BLOCKED`입니다.
+| 위치 | 책임 |
+| --- | --- |
+| `src/` | [제품 모듈과 Legacy 호환 경로](src/README.md) |
+| `test/`, `tools/proofs/` | 기능 회귀·부정 사례·Host 프로토콜 검증 |
+| `scripts/`, `.github/` | 설치·진단·검증·패키지·CI |
+| `examples/` | Legacy Task·Java 계약 예제 |
+| `docs/` | 공식 제품 문서·현행 구현 계약·검사 기준선 |
 
-## Verification Backend와 Evidence
-
-| Backend | 용도와 보장 | 한계 |
-| --- | --- | --- |
-| Local Verification | 명시적으로 신뢰한 정확한 명령·인자·snapshot의 실행 결과 수집 | 동일 사용자 권한의 실행. OS 격리·네트워크 차단·보호된 독립 검증을 보장하지 않음 |
-| Container Verification | 기존 Alpha Docker Harness, 고정 이미지·보호 테스트 입력·네트워크 제한·자원 제한 | Docker 필요. 검증된 범위와 신뢰 경계 안에서만 보장하며 임의의 적대적 코드를 모두 안전하게 실행한다는 뜻이 아님 |
-| Host Sandbox | 플랫폼·도구별 보안 검증이 필요한 확장 지점 | 현재 `NOT_VERIFIED`, 활성화되지 않음 |
-
-저장소의 테스트·빌드도 부작용을 일으킬 수 있습니다. 명령 이름만 보고 Local 실행을 안전하다고 판단하지 않습니다. Container가 필요한 계약에서 Docker가 없으면 해당 검증을 차단하며 Local로 자동 대체하지 않습니다.
-
-Evidence는 Backend 이름뿐 아니라 실행 권한, 격리 Capability, 검증자 독립성, 무결성, Contract Hash, Candidate Tree Hash, 필수 게이트 결과를 구분합니다. `PROVIDER_REPORTED_ONLY`는 AI의 보고, `LOCAL_EXECUTED`는 로컬 관측, 기존 `HARNESS_EXECUTED`는 보호된 Harness 실행 의미를 유지합니다. **Local 성공은 Protected VERIFIED로 승격되지 않습니다.**
-
-보호된 Judge는 실제 실패 기준선과 후보 테스트, 일치하는 테스트 식별자, 후보·산출물 무결성 및 모든 필수 게이트를 요구합니다. 누락·실패·변조된 증거를 AI의 설명으로 대체할 수 없습니다. 자세한 보장과 한계는 [Core 안내](docs/product-completion/host-core-guide.md), 기존 Node·[Java Gradle/Maven 안내](docs/product-completion/alpha-quickstart.md#java-gradlemaven)를 참고하세요.
-
-## 개발과 테스트
+Docker 없는 기본 회귀는 아래 순서로 실행합니다. Windows PowerShell에서는 `npm.cmd`를 사용합니다.
 
 ```sh
+npm run pretest
+npm run test:legacy
 npm run test:host-core
-npm run test:host
-npm run check:links
-npm run check:citations
-npm run check:facts
-npm run alpha:package-smoke
+npm run posttest
 ```
 
-Host Core 테스트에는 Docker 없는 실제 준비 경로·Local 실행과 명시적인 Fake Backend 반증 시험이 포함됩니다. Host 테스트의 Docker 조건부 시험을 미실행했다면 보호 검증 통과로 계산하지 않습니다. 패키지 Smoke는 기본 옵션에서 모델을 호출하지 않습니다.
+설치 제품의 Local 흐름은 `npm run test:installed-goal-loop`로 확인합니다. 실제 패키지를 설치하지만 제안은 합성 데이터이며 모델을 호출하지 않습니다. 전체 `npm test`에는 Docker 보호 시험이 포함되므로 [.github/workflows/alpha.yml](.github/workflows/alpha.yml)의 환경 준비가 필요합니다. 기본 회귀 통과는 전체 보호 검증 통과가 아닙니다.
 
-전체 회귀는 `npm test`입니다. Legacy·Alpha·Host Core와 문서/규칙 검사를 실행하며 보호 시험에 필요한 Docker 이미지와 JDK/Java fixture 구성을 먼저 준비해야 합니다. Docker 없는 계획 사용자에게 이 전체 개발 검증 환경을 요구하지 않습니다. 정확한 플랫폼별 준비·실행 계약은 [.github/workflows/alpha.yml](.github/workflows/alpha.yml), [CI 준비 스크립트](scripts/prepare-alpha-ci.mjs), [Alpha 실행기](scripts/test-alpha-ci.mjs)에 있습니다. 환경 변수만 켜는 것으로 검증 준비가 끝나지 않습니다.
-
-`node src/alpha/cli.mjs host codex doctor`는 기본 Host 준비 상태를 확인합니다. 기존 `doctor --no-auth`는 Alpha 인증 검사를 생략하며 나머지 검사가 통과해도 exit 2입니다. 전체 사용 준비 성공으로 읽지 않습니다.
-
-## 현재 상태와 다음 수용 검증
-
-| 구분 | 범위 |
-| --- | --- |
-| 실제 검증 | Windows Codex 감독형 개발, 승인된 파일 변경·Local 검증, 선택적 Host-Native 협업. 검증된 Repair Core의 감독형 후속 Contract Revision·Repair·Recovery |
-| 다음 P0 | Persistent Work Log → Directive Reconciliation → Agent Handoff → 진행 중 Context Recovery → Continuous Development |
-| 미완료·차단 | 인증된 공개 사전 승인 위임 `PUBLIC_DELEGATION_BLOCKED`, Protected 필수 Evidence `UNSATISFIED`, 완전 무인 자동 Repair |
-| 미검증 | 진행 중 Objective의 전체 Context Compaction·Agent 인수인계 E2E, Claude Code 최종 Host Live, Windows·macOS·Linux 전체 공식 호환성, 실제 브라우저 E2E 최종 수용, Multi-Agent의 일반적인 시간·비용 우위 |
-
-`COMPLETE_LOCAL`은 해당 계약과 Candidate의 Local 수락이며 전체 제품 완성이나 Protected 성공이 아닙니다. Host-Native 오프라인 시험과 기존 Legacy·Alpha 경로를 유지합니다. Linux Legacy 탐색 실패는 미해결이며 현재 Linux 필수 CI의 시험 범위와 구분합니다. Alpha 인증 확인도 오프라인 CI 성공에 포함되지 않습니다.
-
-[최초 분석 전용 Live 사전 점검](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-20/first-host-native-acceptance-preflight.md)은 당시 기록으로 보존합니다. 새 실행에서는 Host 버전·모델·프로젝트/Skill Hash·권한·네트워크·예산과 정확한 승인을 다시 확인해야 합니다. 후속 개발 기준은 [제품 진행 기록](docs/product-completion/progress.md)과 [로드맵](docs/product-completion/roadmap.md)을 따릅니다.
-
-## 설계 자료와 역사적 기록
-
-현재 제품 안내와 과거 실험의 결론을 구분합니다. 기존 README 전문과 링크는 [main 통합 시점의 README](https://github.com/solzip/CodeFleet/blob/cd31fdb3810a48b2ae42dc05d1f1e461eb9822bc/README.md)에 보존돼 있습니다. 과거의 종료·미지원 설명을 현재 제품 전체의 상태로 해석하지 마세요.
-
-- [제품 계획](docs/product-completion/README.md) · [진행 기록](docs/product-completion/progress.md) · [Alpha Quick Start](docs/product-completion/alpha-quickstart.md) · [공개 Alpha 릴리스](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.4)
-- [문서·실행 기록 색인](docs/INDEX.md) · [결함 등재부](docs/REGISTER.md) · [작업 규약](docs/CONVENTIONS.md)
-- [설계에서 배운 점](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/archive/2026-08-13/DESIGN-NOTES.md) · [결함 유형](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/archive/2026-08-13/LESSONS.md) · [환경 기록](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/archive/2026-08-13/ENVIRONMENT.md) · [아카이브](docs/archive/2026-08-13/ARCHIVE.md)
-- [초기 CI 기록](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-08-13/ci-first-run.md) · [문서 검사 보완](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-08-14/unchecked-27-adjudication.md) · [Alpha 검증 보완](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-09-30/alpha-reconciliation-fixes.md) · [Host-Native 전환 기록](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-20/alpha-host-native-transition.md)
-
-## 기여와 라이선스
+기여 시 [작업 규칙](CLAUDE.md)을 따르고 실행 명령·종료 코드·제외·미검증 범위를 남겨 주세요. 보안 문제는 [SECURITY.md](SECURITY.md)를 통해 보고하고, 개인 경로·인증정보·세션 대화·실행 DB는 공개하지 마세요.
 
 <details>
-<summary>기존 문서의 기계 검사 대상 수치와 역사적 범위</summary>
+<summary>Legacy 자동 검사 수치</summary>
 
-기존 문서 검사의 기준을 낮추지 않기 위해 아래 선언을 보존합니다. 동결된 결함 등재부의 77건은 현재 제품의 미해결 결함 수가 아닙니다. <!-- fact: registered-findings = 77 --> 이후 재판정은 위 역사적 기록을 참고하세요.
+동결된 등재부의 77건은 현재 제품의 미해결 결함 수가 아닙니다. <!-- fact: registered-findings = 77 --> [과거 기록](docs/INDEX.md)의 범위와 함께 읽습니다.
 
 | 검사 대상 | 수치와 범위 |
 | --- | --- |
@@ -195,14 +100,12 @@ Host Core 테스트에는 Docker 없는 실제 준비 경로·Local 실행과 �
 | 당시 해소 / 부분해소 | 25 / 8건 <!-- fact: findings-resolved = 25 --> <!-- fact: findings-partial = 8 --> |
 | 당시 재현 안 됨 / 미해소 | 1 / 15건 <!-- fact: findings-not-reproduced = 1 --> <!-- fact: findings-open = 15 --> |
 | 당시 수용된 한계 / 미확인 | 1 / 27건 <!-- fact: findings-accepted-limit = 1 --> <!-- fact: findings-unchecked = 27 --> |
-| Legacy 테스트 기준 | 통과 324 / 실패 0 <!-- fact: tests-passing = 324 --> <!-- fact: tests-failing = 0 --> |
+| Legacy 테스트 | 통과 324 / 실패 0 <!-- fact: tests-passing = 324 --> <!-- fact: tests-failing = 0 --> |
 | 규칙 조건 인용 커버리지 | 545줄 중 345줄, 63.3%. 구현 완성률이 아님 <!-- fact: condition-lines = 545 --> <!-- fact: conditions-covered = 345 --> <!-- fact: coverage-percent = 63.3 --> |
-| 현재 트리의 감사·실행 기록 (과거 기록은 Git 이력 참조) | 0편 <!-- fact: audit-run-records = 0 --> |
+| 현재 트리의 감사·실행 기록 | 0편. 원본은 Git 이력에 보존 <!-- fact: audit-run-records = 0 --> |
 
-테스트 수치 선언은 문서 검사에서 생성된 Legacy 결과와 대조하며, 새 환경에서 시험을 실행했다는 증거를 대신하지 않습니다.
+수치는 생성된 Legacy 시험 결과·등재부·디스크와 대조하며 새 환경의 실행 증거를 대신하지 않습니다.
 
 </details>
 
-문제 보고에는 재현 조건, 실행한 명령, 실제 결과와 미실행 항목을 포함하세요. 인증정보·개인 경로·세션 대화·런타임 DB는 공개하지 마세요. 변경 제안은 기존 계약·보호 테스트를 유지하고 관련 회귀와 문서 검사를 함께 확인합니다. 저장소 작업 규칙은 [CLAUDE.md](CLAUDE.md), 보안 안내는 [SECURITY.md](SECURITY.md)에 있습니다.
-
-[MIT License](LICENSE). 배포 시 저작권과 라이선스 고지를 유지해야 하며 사용 허용은 품질이나 운영 적합성을 보증하지 않습니다. 과거 아카이브의 사용 금지 정책은 현재 배포본에 적용되지 않습니다.
+[MIT License](LICENSE). 사용 허용은 제품 완성이나 운영 적합성을 보증하지 않습니다.

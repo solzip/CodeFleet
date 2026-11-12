@@ -1,6 +1,6 @@
 # 구현·검증 진행 현황
 
-갱신: 2026-11-12 · 소스 기준: `6dcd64fa52fdd5290395cff90432376bf93634bf` + 현재 작업 트리의 일회성 도구 정리.
+갱신: 2026-11-12 · 검토 기준: `2901dc9` + 저장소 전체 정리 후보. 런타임 로직·승인·수락 기준은 변경하지 않았다.
 제품 목적은 [제품 원칙](../PRODUCT_VISION.md), 구조는 [아키텍처](architecture.md), 수락 조건과 순서는 [로드맵](roadmap.md)에서 관리한다.
 
 ## 현재 상태 요약
@@ -31,13 +31,15 @@ Local 완료는 `COMPLETE_LOCAL`이며 보호 검증은 `UNSATISFIED`다. 설치
 
 | 실행 명령 | 결과 | 확인한 범위 |
 | --- | --- | --- |
+| 전체 코드 구문 검사 | exit 0 · 265개 | Node 내장 TypeScript 제거 후 모듈 구문 검사. 최초 파일 직접 `--check`는 `yaml.ts`의 TypeScript 인식 실패로 exit 1, 검사 방식 수정 후 코드 변경 없이 통과 |
+| package 명령·Legacy 예제 검사 | exit 0 | package script 경로 참조 89개 누락 없음, 예제 Task Validator 오류·경고 없음 |
+| `npm.cmd run pretest` → `npm.cmd run test:legacy` | 각각 exit 0 · 324 PASS | Legacy 측정 산출물을 새로 생성하고 계약·문서 검사기 회귀 실행 |
 | `npm.cmd run test:installed-goal-loop` | exit 0 · 2 PASS | 실제 npm 패키지의 Codex·Claude Skill 설치, 준비된 제안의 승인·적용·Node 검증·Recovery·완료 후 소스 변경 감지 |
-| `npm.cmd run test:todo-fixture` | exit 0 · 10 PASS | Todo CRUD·완료 필터·Calendar 월/주 표시·일정 변경·입력 검증 |
-| `node --test test/codex-installed-goal-recovery.test.mjs test/controlled-delivery.test.mjs test/objective-status.test.mjs` | exit 0 · 41 PASS / 1 SKIP | 설치 Goal 재발견·파일 반영 승인·완료 재관측·변조 거부. Windows 실행 권한 비트 변경 시험은 SKIP |
+| `npm.cmd run test:host` | exit 0 · 20 PASS / 1 SKIP | 설치·제안·승인·취소·복구와 변조 거부. Docker Harness 조건부 시험은 SKIP |
 | `npm.cmd pack --dry-run --ignore-scripts --json` | exit 0 · 배포 파일 155개 | 로컬 상태·개인 설정·테스트·Proof 도구 혼입 0개 |
 | `npm.cmd run posttest`, `git diff --check` | 각각 exit 0 | 기존 Legacy 커버리지 산출물과 문서 링크·인용·선언 사실·공백 검사 |
 
-위 기능 시험 합계는 **53 PASS / 0 FAIL / 1 SKIP**이다. 준비된 제안을 이용한 Local 시험이며 실제 AI의 자연어 작업 품질, 사람의 개입 시간, 브라우저 사용성 또는 Protected Evidence를 입증하지 않는다.
+위 실행은 준비된 제안을 이용한 로컬 회귀이며 실제 AI의 자연어 작업 품질, 사람의 개입 시간, 브라우저 사용성 또는 Protected Evidence를 입증하지 않는다. 앞선 Todo·Calendar 및 복구 시나리오의 53 PASS / 1 SKIP은 [이전 상태 문서](https://github.com/solzip/CodeFleet/blob/2901dc9/docs/product-completion/progress.md)에 보존한다.
 
 ### 이전 전체 회귀의 한계
 
@@ -55,4 +57,6 @@ Local 완료는 `COMPLETE_LOCAL`이며 보호 검증은 `UNSATISFIED`다. 설치
 
 이 문서는 현재 상태를 갱신하며 작업 일지를 누적하지 않는다. 과거 기록은 [고정 커밋 안내](../INDEX.md)에서 조회한다. 제품 상태 변경에는 계약·후보·환경과 검증 근거를 연결하고, 문서 정리는 DOCUMENTED로 기록한다.
 
-이번 정리: 문서 최소화와 일회성 도구 4개 제거, 로컬 상태 제외 규칙 보강, 위 Local 시험 결과를 반영했다. 기존 실행 상태·백업은 보존했고 삭제 파일은 Git 이력에서 복구할 수 있다. 후속 작업은 위 실사용 시험이며 Host Live·Protected·외부 파일럿 수용은 미완료다. 신규 결함 ID·기능 수용 승격은 없다.
+이번 검토는 기준 커밋의 추적 파일 329개를 대상으로 분류·중복·진입점·참조 관계를 점검했다. 완전 중복 파일은 없었고 정적 import가 없는 소스도 CLI·MCP·격리 실행 진입점임을 확인했다. 한·영 README, 소스 지도, package 설명과 문제·보안 안내를 현재 범위로 맞추고, 참조되지 않는 과거 원격 전달 시험·H1 준비 스크립트를 제거했다. 기존 실행 상태·백업·테스트·Proof 도구·검사 기준선은 보존했다. 삭제 파일과 과거 설명은 Git 이력에서 복구할 수 있다.
+
+이는 저장소 정리(DOCUMENTED)와 위 범위의 회귀 결과다. 대형 Legacy 모듈 분리, 전체 보안 감사, Linux/macOS 재검증, 전체 Alpha 보호 시험 및 실제 Host 수용을 완료한 것은 아니다. 후속 작업은 위 실사용 시험이며 신규 결함 ID·기능 수용 승격은 없다.

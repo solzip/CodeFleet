@@ -15,7 +15,7 @@
     "README.en.md"
   ],
   "type": "module",
-  "description": "Experimental AI-assisted Node and Java repair workflow with isolated verification, recovery and draft PR delivery.",
+  "description": "Host-Native development orchestration for Codex CLI and Claude Code with reviewed tasks, controlled execution, verification and recovery.",
   "bin": {
     "codefleet": "./src/cli.ts",
     "codefleet-alpha": "./src/alpha/cli.mjs"

@@ -1,6 +1,8 @@
-# Security reporting for the experimental alpha
+# Security reporting
 
-The alpha is under development and is not a security boundary for hostile operators or a compromised local CLI/Docker installation. Its intended boundaries are explicit edit paths, protected tests, tool-free model proposals, and a network-disabled, unprivileged verification container. Local state and exported evidence may contain source and logs.
+CodeFleet development builds and alpha packages are under development. They are not a security boundary against hostile operators or compromised local tools. Host-Native planning, supervised Local execution and the protected Container verifier have different guarantees; see the [current status](docs/product-completion/progress.md) and [backend contracts](docs/product-completion/host-core-guide.md).
+
+Local verification runs explicitly approved commands with local user permissions. It does not provide OS isolation or Protected Evidence. The Container verifier requires its reviewed isolation and immutable verification inputs. Host Sandbox remains unverified. Local state and exported evidence may contain source and logs.
 
 Do not post credentials, private source, state databases, or exploit details affecting private repositories in public issues. Contact the maintainer at `solarchive.dev@gmail.com` with a short, sanitized description and affected version. Do not send live credentials. This is a reporting address, not a response-time guarantee.
 
