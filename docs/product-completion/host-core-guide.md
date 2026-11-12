@@ -6,7 +6,7 @@ Workflow/DAG, roles, policy, recovery and evidence-bound completion.
 No direct model API, Docker, WSL or separate OS account is required to prepare
 work. The current local runtime requires Node 24.14.1 or newer and Git.
 
-This is an unreleased implementation. [Windows supervised Codex Live acceptance](../runs/2026-10-28/public-existing-local-v2.md)
+This is an unreleased implementation. [Windows supervised Codex Live acceptance](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-28/public-existing-local-v2.md)
 covers installed Skill invocation, two implementation WorkItems, Local verification
 and Recovery. Authenticated public delegation remains blocked; this does not
 establish Protected verification or a production Host Sandbox profile.
@@ -20,7 +20,7 @@ npm.cmd run alpha:package-smoke -- --supervised-only --repository REPO --recover
 Recovery options are optional as a pair. Planning uses temporary State and the
 repository hash must remain unchanged. This is distribution verification, not a
 new Host Live or application test. The legacy default smoke creates fixture
-commits and requires its own authorization. See the [observed result](../runs/2026-10-28/trusted-authorization-boundary.md).
+commits and requires its own authorization. See the [observed result](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-28/trusted-authorization-boundary.md).
 
 ## Docker-free preparation
 
@@ -217,7 +217,7 @@ all Legacy/Alpha/H3/H4/H6 checks and requires their existing Docker/JDK fixture
 configuration. A Docker-free user need not run the full security qualification
 suite to use planning; omission of that suite is never a security pass.
 
-See the [implementation record](../runs/2026-10-20/host-native-core-verification.md).
+See the [implementation record](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-20/host-native-core-verification.md).
 Later Host Live work needs separate authorization, actual Skill discovery/invocation,
 effective permissions, protected state/approval boundaries where required, and
 measured cancellation/stale-result handling. H8 installation is not a prerequisite

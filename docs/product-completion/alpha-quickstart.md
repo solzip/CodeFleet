@@ -2,7 +2,7 @@
 
 미배포 개발 브랜치의 자연어 계획·검토·Workflow 기능은 [통합 CLI 안내](orchestration-guide.md)를 따른다. 아래 공개 Alpha V1 사용법과 Live 지원 범위는 별도로 유지한다.
 
-> **품질 범위: 독립 검토를 유지하는 제한된 알파.** 재현된 조기 종료·비용 기록·검증 복구 결함의 수정과 회귀 검증을 완료했다. 임의의 적대적 JS에 대한 무인 수락은 보증하지 않는다. [수정 근거](../runs/2026-09-30/alpha-quality-remediation.md)를 따른다.
+> **품질 범위: 독립 검토를 유지하는 제한된 알파.** 재현된 조기 종료·비용 기록·검증 복구 결함의 수정과 회귀 검증을 완료했다. 임의의 적대적 JS에 대한 무인 수락은 보증하지 않는다. [수정 근거](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-09-30/alpha-quality-remediation.md)를 따른다.
 
 
 상태: MIT 라이선스의 실험적 공개 알파. [릴리스 다운로드](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.4). 운영자 보조 Java 적용을 확인했으며 독립 외부 사용자 자가 온보딩과 운영 환경 적합성 검증은 아직 미완료다.

@@ -299,6 +299,6 @@ Node verification requires the pinned Docker image; Java verification retains th
 
 Obtain separate authorization naming the host, repository fixture, permissions, model/account limits and allowed actions. Verify skill discovery in the actual session and enforce operator/state separation. Perform goal → review → approval → proposal → Harness → report, plus denial/cancellation/stale-result checks in both hosts. Save sanitized evidence without credentials or transcripts. Only then assign HOST_LIVE_VERIFIED to the tested host/environment. The current offline tests cannot establish that status.
 
-See [architecture and official sources](../implementation/host-native.md) and the [transition record](../runs/2026-10-20/alpha-host-native-transition.md).
+See [architecture and official sources](../implementation/host-native.md) and the [transition record](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-20/alpha-host-native-transition.md).
 
-For the prepared temporary repositories, fixed scope and outstanding authorization/security gates, use the [H1 acceptance packet](host-live-acceptance.md).
+For the prepared temporary repositories, fixed scope and outstanding authorization/security gates, use the [H1 acceptance packet](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/product-completion/host-live-acceptance.md).

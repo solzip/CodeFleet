@@ -122,4 +122,4 @@ After each application, recover/status provides the next eligible WorkItem.
 Final local-review/local-accept uses the existing durable Decision/Reservation
 and Evidence/Judge. Completed applications only report receipts on replay.
 The supervised actual two-implementation result and limitations are recorded in
-[the acceptance run](../runs/2026-10-28/public-existing-local.md).
+[the acceptance run](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-28/public-existing-local.md).

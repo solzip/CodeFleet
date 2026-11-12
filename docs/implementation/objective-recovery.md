@@ -64,7 +64,7 @@ New preparation is currently possible only when no unresolved handoff remains
 (for example an unsent packet invalidated by an approved revision). Preparation
 does not call a model, retransmit a packet, grant execution, or acknowledge receipt.
 Uncertain dispatch remains RECONCILE; unverifiable historical observations remain
-HUMAN_HANDOFF. See [trust correction](../runs/2026-10-30/undelivered-handoff-recovery-v2.md).
+HUMAN_HANDOFF. See [trust correction](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-30/undelivered-handoff-recovery-v2.md).
 
 Continuation skips items whose handoffs or prerequisite handoffs are pending,
 except for the exact supervised adoption below;
@@ -78,7 +78,7 @@ budget. Fresh approvals and existing Capability checks are still mandatory.
 commands and separate OS processes. It is not Host Live or compaction evidence.
 Host Context Compaction remains NOT_VERIFIED. PUBLIC_DELEGATION_BLOCKED and
 Protected UNSATISFIED remain unchanged. See the
-[implementation record](../runs/2026-10-30/persistent-worklog.md).
+[implementation record](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-30/persistent-worklog.md).
 
 ### Supervised adoption of an existing direct proposal
 
@@ -120,7 +120,7 @@ Expired historical approval does not erase adoption and cannot authorize Repair.
 Native Fileset review preparation and acceptance recheck coordination; recorded
 Native Fileset review revocation also prevents a fresh application. Duplicate
 completed acceptance remains a record-only response, never another application.
-See [combined repair regression](../runs/2026-10-30/supervised-adoption-repair.md).
+See [combined repair regression](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-30/supervised-adoption-repair.md).
 
 ## Environment-only reverification
 
@@ -161,7 +161,7 @@ The original failed evidence remains readable after the new evidence becomes
 current through a validated environment-recovery link. Corrupt policy evidence
 invalidates both recovery and Local completion. Local-only completion is derived
 from actual current-candidate test evidence. Protected contracts remain incomplete.
-See [the implementation run](../runs/2026-10-27/environment-reverification.md).
+See [the implementation run](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-27/environment-reverification.md).
 
 ### Explicit Native Local environment recovery
 

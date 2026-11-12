@@ -157,7 +157,7 @@ and wait beyond their bounded lifetime without claiming universal cleanup. No cr
 guarantee follows from Windows tests. The private `hooks` embedding seam is used
 only for fixture fault injection and is never accepted from CLI JSON.
 
-See [implementation evidence](../runs/2026-10-23/durable-reservation-p1-b.md)
+See [implementation evidence](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-23/durable-reservation-p1-b.md)
 and `test/bootstrap-reservations.test.mjs`. Multiple sequential WorkItems need a
 separate approved contract for per-item decisions, cumulative budget allocation,
 revision transitions and reconciliation. These records provide reusable bindings

@@ -34,7 +34,7 @@ AI가 코드를 작성하는 것과 합의한 범위 안에서 작업을 끝내�
 
 일반 목표를 접수할 수 있지만 실행은 선택한 계약과 Backend의 지원 범위를 따릅니다. 기존 Alpha의 Node·Java 수정 경로와 Existing Local의 승인된 텍스트 소스 생성·수정 경로를 구분합니다. 지원하지 않는 목표는 `NEEDS_INPUT` 또는 `CAPABILITY_GAP`으로 남습니다. 역할 이름이 있다는 사실은 여러 독립 Agent가 실제 실행됐다는 증거가 아닙니다.
 
-Windows Codex 수용에서 자연어 목표 → Draft → Validator → DAG, 실제 코드 생성과 감독형 Fileset 적용, 단일 Agent 및 실제 Subagent 협업을 확인했습니다. 독립 작업의 병렬 실행도 관측했지만 Multi-Agent의 일반적인 시간·비용 우위를 입증한 것은 아닙니다. [설치된 Skill 수용](docs/runs/2026-10-28/public-existing-local-v2.md)과 [협업·병렬 실행 기록](docs/runs/2026-10-28/manager-proposal-handoff.md)은 각 실행의 범위를 구분합니다.
+Windows Codex 수용에서 자연어 목표 → Draft → Validator → DAG, 실제 코드 생성과 감독형 Fileset 적용, 단일 Agent 및 실제 Subagent 협업을 확인했습니다. 독립 작업의 병렬 실행도 관측했지만 Multi-Agent의 일반적인 시간·비용 우위를 입증한 것은 아닙니다. [설치된 Skill 수용](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-28/public-existing-local-v2.md)과 [협업·병렬 실행 기록](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-28/manager-proposal-handoff.md)은 각 실행의 범위를 구분합니다.
 
 최신 Repair 수용에서는 B/C 각각 **30/30 PASS, COMPLETE_LOCAL**, Criterion Evidence Coverage와 별도 프로세스 Recovery·중복 실행 방지를 확인했습니다. 최종 Host Core 회귀도 전체 통과했습니다. 과거 모델 입력 토큰 초과 `POLICY_VIOLATION` 기록은 보존하며 소급 승인하지 않습니다. [제품 진행 기록의 최종 회귀 수치와 수용 근거](docs/product-completion/progress.md)에서 명령·종료 코드·검증 환경을 확인할 수 있습니다.
 
@@ -120,7 +120,7 @@ Host가 작성한 의미 기반 Draft는 `host codex draft TASK proposal.json`�
 ## Skills와 Single-Agent / Hybrid
 
 - **일반 `codefleet`**: Docker 없는 계획·분석·Draft·DAG 조회와 승인 요청의 기본 경로입니다.
-- **엄격한 H6 `codefleet-plan`**: 별도의 격리 프로필입니다. 일반 Skill과 혼동하지 마세요. [H6 구현과 자원 검증](docs/runs/2026-10-21/h6-uid-resource-recovery.md)을 참고하세요.
+- **엄격한 H6 `codefleet-plan`**: 별도의 격리 프로필입니다. 일반 Skill과 혼동하지 마세요. [H6 구현과 자원 검증](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-21/h6-uid-resource-recovery.md)을 참고하세요.
 - **Single-Agent / Hybrid**: 기본은 하나의 Host Agent가 역할을 나눠 추론하는 방식입니다. Hybrid는 계약에 명시된 WorkItem·의존성·예산에 따라 제한된 병렬 실행을 관리합니다. [오케스트레이션 안내](docs/product-completion/orchestration-guide.md)에 세부 계약이 있습니다.
 
 실제 Host Agent/Subagent 협업에서는 Manager가 파일 범위·입출력·의존성과 검증 책임을 배정합니다. Agent 응답은 제안이며 실행 승인이 아닙니다. 통합한 Candidate는 다시 검증해야 합니다. 선택적 협업의 실제 관측과 기존 Hybrid 후보 검증, 인증된 공개 사전 승인 위임은 서로 다른 범위입니다.
@@ -171,7 +171,7 @@ Host Core 테스트에는 Docker 없는 실제 준비 경로·Local 실행과 �
 
 `COMPLETE_LOCAL`은 해당 계약과 Candidate의 Local 수락이며 전체 제품 완성이나 Protected 성공이 아닙니다. Host-Native 오프라인 시험과 기존 Legacy·Alpha 경로를 유지합니다. Linux Legacy 탐색 실패는 미해결이며 현재 Linux 필수 CI의 시험 범위와 구분합니다. Alpha 인증 확인도 오프라인 CI 성공에 포함되지 않습니다.
 
-[최초 분석 전용 Live 사전 점검](docs/runs/2026-10-20/first-host-native-acceptance-preflight.md)은 당시 기록으로 보존합니다. 새 실행에서는 Host 버전·모델·프로젝트/Skill Hash·권한·네트워크·예산과 정확한 승인을 다시 확인해야 합니다. 후속 개발 기준은 [제품 진행 기록](docs/product-completion/progress.md)과 [로드맵](docs/product-completion/roadmap.md)을 따릅니다.
+[최초 분석 전용 Live 사전 점검](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-20/first-host-native-acceptance-preflight.md)은 당시 기록으로 보존합니다. 새 실행에서는 Host 버전·모델·프로젝트/Skill Hash·권한·네트워크·예산과 정확한 승인을 다시 확인해야 합니다. 후속 개발 기준은 [제품 진행 기록](docs/product-completion/progress.md)과 [로드맵](docs/product-completion/roadmap.md)을 따릅니다.
 
 ## 설계 자료와 역사적 기록
 
@@ -179,8 +179,8 @@ Host Core 테스트에는 Docker 없는 실제 준비 경로·Local 실행과 �
 
 - [제품 계획](docs/product-completion/README.md) · [진행 기록](docs/product-completion/progress.md) · [Alpha Quick Start](docs/product-completion/alpha-quickstart.md) · [공개 Alpha 릴리스](https://github.com/solzip/CodeFleet/releases/tag/v0.2.0-alpha.4)
 - [문서·실행 기록 색인](docs/INDEX.md) · [결함 등재부](docs/REGISTER.md) · [작업 규약](docs/CONVENTIONS.md)
-- [설계에서 배운 점](docs/archive/2026-08-13/DESIGN-NOTES.md) · [결함 유형](docs/archive/2026-08-13/LESSONS.md) · [환경 기록](docs/archive/2026-08-13/ENVIRONMENT.md) · [아카이브](docs/archive/2026-08-13/ARCHIVE.md)
-- [초기 CI 기록](docs/runs/2026-08-13/ci-first-run.md) · [문서 검사 보완](docs/runs/2026-08-14/unchecked-27-adjudication.md) · [Alpha 검증 보완](docs/runs/2026-09-30/alpha-reconciliation-fixes.md) · [Host-Native 전환 기록](docs/runs/2026-10-20/alpha-host-native-transition.md)
+- [설계에서 배운 점](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/archive/2026-08-13/DESIGN-NOTES.md) · [결함 유형](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/archive/2026-08-13/LESSONS.md) · [환경 기록](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/archive/2026-08-13/ENVIRONMENT.md) · [아카이브](docs/archive/2026-08-13/ARCHIVE.md)
+- [초기 CI 기록](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-08-13/ci-first-run.md) · [문서 검사 보완](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-08-14/unchecked-27-adjudication.md) · [Alpha 검증 보완](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-09-30/alpha-reconciliation-fixes.md) · [Host-Native 전환 기록](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-20/alpha-host-native-transition.md)
 
 ## 기여와 라이선스
 
@@ -197,7 +197,7 @@ Host Core 테스트에는 Docker 없는 실제 준비 경로·Local 실행과 �
 | 당시 수용된 한계 / 미확인 | 1 / 27건 <!-- fact: findings-accepted-limit = 1 --> <!-- fact: findings-unchecked = 27 --> |
 | Legacy 테스트 기준 | 통과 324 / 실패 0 <!-- fact: tests-passing = 324 --> <!-- fact: tests-failing = 0 --> |
 | 규칙 조건 인용 커버리지 | 545줄 중 345줄, 63.3%. 구현 완성률이 아님 <!-- fact: condition-lines = 545 --> <!-- fact: conditions-covered = 345 --> <!-- fact: coverage-percent = 63.3 --> |
-| 색인에 기록된 감사·실행 기록 | 145편 <!-- fact: audit-run-records = 145 --> |
+| 현재 트리의 감사·실행 기록 (과거 기록은 Git 이력 참조) | 0편 <!-- fact: audit-run-records = 0 --> |
 
 테스트 수치 선언은 문서 검사에서 생성된 Legacy 결과와 대조하며, 새 환경에서 시험을 실행했다는 증거를 대신하지 않습니다.
 

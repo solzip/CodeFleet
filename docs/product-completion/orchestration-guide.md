@@ -1,6 +1,6 @@
 # 통합 오케스트레이션 CLI — 개발 브랜치
 
-이 안내는 아직 배포하지 않은 G6 작업 트리용이다. 공개 alpha.4에 이 명령이 포함되었다는 뜻이 아니다. 기존 사용법은 [알파 실행 안내](alpha-quickstart.md), 검증 범위와 제한은 [G6 기록](../runs/2026-10-19/alpha-g6-product-integration.md)을 따른다.
+이 안내는 아직 배포하지 않은 G6 작업 트리용이다. 공개 alpha.4에 이 명령이 포함되었다는 뜻이 아니다. 기존 사용법은 [알파 실행 안내](alpha-quickstart.md), 검증 범위와 제한은 [G6 기록](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-19/alpha-g6-product-integration.md)을 따른다.
 
 **현재 Live 운영 상태: BLOCKED_OR_UNSUPPORTED.** 로컬 계획·검토·승인·보고는 사용할 수 있다. 새 Workflow 실행은 Provider의 필수 Capability가 검증되지 않아 차단된다. `--allow-model`은 호출 동의이며 Capability 검사를 우회하는 옵션이 아니다. Codex 실행 차단은 유지한다. 기존 Claude V1 경로의 권한을 새 Workflow로 자동 이관하지 않는다.
 

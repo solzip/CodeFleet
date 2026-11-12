@@ -112,4 +112,4 @@ skill/fixture hashes, allowed tools, protected auth/transport, scratch/evidence
 writes, one session/turn and usage/time bounds. The old no-tool approval does
 not cover HOST_OBSERVED tools. Code changes/Harness execution need another scope.
 
-See the [H6 run](../runs/2026-10-20/alpha-h6-host-planning-isolation.md).
+See the [H6 run](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-20/alpha-h6-host-planning-isolation.md).
