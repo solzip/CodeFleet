@@ -26,10 +26,10 @@ const testSource=[
   "});", ''
 ].join('\n');
 const fail=text=>{throw Error(text);};
-const commands=new Set(['prepare','run','status','review','finalize']);
+const commands=new Set(['prepare','preflight','run','status','review','finalize']);
 function opts(argv){
   const [action,...rest]=argv;
-  if(!commands.has(action))fail('Usage: node scripts/codex-live-acceptance.mjs prepare|run|status|review|finalize --dir ABSOLUTE_PATH [--codex PATH] [--allow-model-turn --acknowledge-unknown-cost]');
+  if(!commands.has(action))fail('Usage: node scripts/codex-live-acceptance.mjs prepare|preflight|run|status|review|finalize --dir ABSOLUTE_PATH [--codex PATH] [--allow-model-turn --acknowledge-unknown-cost]');
   const options={};
   for(let i=0;i<rest.length;i++){
     const key=rest[i];
@@ -43,8 +43,10 @@ function opts(argv){
   }
   if(!isAbsolute(options['--dir']??'')||options['--dir'].includes('\0'))
     fail('Exact absolute --dir is mandatory');
-  if(action!=='run'&&(options['--codex']||options['--allow-model-turn']||options['--acknowledge-unknown-cost']))
-    fail('Model flags are run-only');
+  if(!['run','preflight'].includes(action)&&options['--codex'])
+    fail('Codex executable selection is only for preflight or run');
+  if(action!=='run'&&(options['--allow-model-turn']||options['--acknowledge-unknown-cost']))
+    fail('Model spending flags are run-only; preflight never grants execution');
   if(action==='run'&&(!options['--allow-model-turn']||!options['--acknowledge-unknown-cost']))
     fail('Actual billable Codex Turn requires --allow-model-turn and --acknowledge-unknown-cost; subscription USD cap is NOT enforceable');
   if(options['--codex']&&(!isAbsolute(options['--codex'])||options['--codex'].includes('\0')))
@@ -123,16 +125,53 @@ const modelConfig=pp=>[
 ];
 const codexInvoke=(binary,args)=>/\.m?js$/i.test(binary)?
   {exe:process.execPath,args:[binary,...args]}:{exe:binary,args};
+function inspectCodexVersion(binary,directory){
+  const invocation=codexInvoke(binary,['--version']);
+  const version=cmd(invocation.exe,invocation.args,directory);
+  if(!/\b0\.167\.1\b/.test(version))
+    fail('This acceptance is bound to verified Codex CLI 0.167.1; observed version unsupported');
+  return version;
+}
+function inspectCodexLogin(binary,directory){
+  // Official Codex 'login status' returns nonzero when authentication is
+  // unavailable. Discard ALL output; it may contain account/key metadata.
+  // Exit status is not independent proof of Owner identity or quota.
+  const {exe,args}=codexInvoke(binary,['login','status']);
+  const result=spawnSync(exe,args,{cwd:directory,encoding:'utf8',
+    shell:false,windowsHide:true,timeout:15000,maxBuffer:256*1024});
+  return !result.error&&result.status===0;
+}
+async function preflight(dir,binary){
+  const {pp}=await checked(dir);
+  if(await lstat(pp.intent).then(()=>true,()=>false))
+    return {status:'BLOCKED_TURN_ALREADY_RESERVED',readyForLiveTurn:false,
+      automaticReplay:false,modelTurnsStarted:0,
+      reason:'Existing one-shot intent must be reconciled, never replayed'};
+  if(cmd('git',['status','--porcelain'],pp.project))
+    return {status:'BLOCKED_DIRTY_FIXTURE',readyForLiveTurn:false,
+      modelTurnsStarted:0,reason:'Pinned fixture must be clean'};
+  const version=inspectCodexVersion(binary,pp.project);
+  const loginReported=inspectCodexLogin(binary,pp.project);
+  return {
+    status:loginReported?'READY_FOR_EXPLICIT_OWNER_MODEL_APPROVAL':
+      'BLOCKED_CODEX_LOGIN_UNAVAILABLE',
+    readyForLiveTurn:loginReported,codexVersion:version,
+    loginAuthority:'CODEX_CLI_EXIT_STATUS_ONLY_NOT_INDEPENDENT_IDENTITY',
+    modelTurnsStarted:0,ownerGrantIssued:false,
+    costStatus:'UNKNOWN',usdCostCapEnforced:false,automaticReplay:false,
+    next:loginReported?'Owner may explicitly invoke run with both model/cost acknowledgments':
+      'Authenticate supported Codex CLI separately, then repeat preflight; no model Turn or reservation was started'
+  };
+}
 async function liveRun(dir,binary){
   const {pp,m}=await checked(dir);
   if(await lstat(pp.intent).then(()=>true,()=>false))
     fail('Codex Turn already reserved: inspect status; never replay an uncertain or billed Turn');
   if(cmd('git',['status','--porcelain'],pp.project))
     fail('Fixture must be clean before any Codex Turn');
-  const versionCall=codexInvoke(binary,['--version']);
-  const version=cmd(versionCall.exe,versionCall.args,pp.project);
-  if(!/\b0\.167\.1\b/.test(version))
-    fail('This acceptance is bound to verified Codex CLI 0.167.1; observed version unsupported');
+  const version=inspectCodexVersion(binary,pp.project);
+  if(!inspectCodexLogin(binary,pp.project))
+    fail('Codex login status unavailable: authenticate Codex CLI before spending approval; no Turn reserved');
   const q=prompt(m);
   const argumentsForExec=['exec','--json','--ephemeral','--ignore-user-config',
     '--sandbox','read-only','--cd',pp.project,
@@ -341,11 +380,13 @@ async function inspect(dir,finalize=false){
 async function main(){
   const o=opts(process.argv.slice(2));
   const result=o.action==='prepare'?await prepare(o.directory):
+    o.action==='preflight'?await preflight(o.directory,o.codex):
     o.action==='run'?await liveRun(o.directory,o.codex):
     o.action==='review'?await ownerReview(o.directory):
       await inspect(o.directory,o.action==='finalize');
   console.log(JSON.stringify(result,null,2));
   if(o.action==='finalize'&&result.reasons.length)process.exitCode=2;
+  if(o.action==='preflight'&&!result.readyForLiveTurn)process.exitCode=2;
 }
 main().catch(error=>{
   console.error('CODEFLEET_LIVE_ACCEPTANCE_BLOCKED: '+error.message);

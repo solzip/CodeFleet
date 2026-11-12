@@ -106,7 +106,15 @@ and a new absolute directory outside any valuable project:
 ```text
 node scripts/codex-live-acceptance.mjs prepare --dir ABS_NEW_FIXTURE
 node scripts/codex-live-acceptance.mjs status --dir ABS_NEW_FIXTURE
+node scripts/codex-live-acceptance.mjs preflight --dir ABS_NEW_FIXTURE
 ```
+
+The nonbillable `preflight` checks the pinned fixture, exact CLI version,
+clean source and official `codex login status` before reserving any model
+Turn. A blocked login leaves `turn-intent.json` absent. It neither logs
+credentials nor proves independent Owner identity, usable subscription quota
+or a USD budget cap. The expected readiness indicator is
+`READY_FOR_EXPLICIT_OWNER_MODEL_APPROVAL`.
 
 Only if an authenticated **Codex CLI 0.167.1** is accessible, the Owner
 explicitly chooses to spend an unknown amount of subscription usage, and

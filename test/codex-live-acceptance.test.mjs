@@ -47,19 +47,42 @@ test('real Codex Turn requires both owner flags; uncertain effect is durable one
   call(['run','--dir',f.dir,'--codex',unsupported,
     '--allow-model-turn','--acknowledge-unknown-cost'],1);
   assert.equal(await lstat(join(f.dir,'turn-intent.json')).catch(()=>null),null);
+  const noLogin=join(f.parent,'synthetic-no-login.mjs');
+  await writeFile(noLogin,[
+    "if(process.argv.includes('--version')){console.log('codex-cli 0.167.1');process.exit(0)}",
+    "if(process.argv.includes('login')){process.exit(1)}",
+    "process.exit(2)"
+  ].join('\n'));
+  const noAuth=call(['preflight','--dir',f.dir,'--codex',noLogin],2);
+  assert.equal(noAuth.status,'BLOCKED_CODEX_LOGIN_UNAVAILABLE');
+  assert.equal(noAuth.readyForLiveTurn,false);
+  assert.equal(noAuth.modelTurnsStarted,0);
+  assert.equal(await lstat(join(f.dir,'turn-intent.json')).catch(()=>null),null);
+  call(['run','--dir',f.dir,'--codex',noLogin,
+    '--allow-model-turn','--acknowledge-unknown-cost'],1);
+  assert.equal(await lstat(join(f.dir,'turn-intent.json')).catch(()=>null),null);
+  call(['preflight','--dir',f.dir,'--allow-model-turn'],1);
   const fake=join(f.parent,'synthetic-only.mjs');
   await writeFile(fake,[
     "if(process.argv.includes('--version'))console.log('codex-cli 0.167.1');",
+    "else if(process.argv.includes('login'))process.stderr.write('Synthetic fixture login only');",
     "else if(process.argv.includes('exec')){",
     "console.log(JSON.stringify({type:'thread.started',thread_id:'SYNTHETIC-NEVER-LIVE'}));",
     "console.log(JSON.stringify({type:'turn.started'}));",
     "console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:1,output_tokens:1}}));",
     "}"
   ].join('\n'));
+  const ready=call(['preflight','--dir',f.dir,'--codex',fake]);
+  assert.equal(ready.status,'READY_FOR_EXPLICIT_OWNER_MODEL_APPROVAL');
+  assert.equal(ready.modelTurnsStarted,0);
+  assert.equal(ready.costStatus,'UNKNOWN');
+  assert.equal(await lstat(join(f.dir,'turn-intent.json')).catch(()=>null),null);
   const run=call(['run','--dir',f.dir,'--codex',fake,
     '--allow-model-turn','--acknowledge-unknown-cost']);
   assert.equal(run.status,'HUMAN_RECONCILIATION_REQUIRED',
     'Synthetic JSONL with no CodeFleet Task cannot complete a Live gate');
+  const reserved=call(['preflight','--dir',f.dir,'--codex',fake],2);
+  assert.equal(reserved.status,'BLOCKED_TURN_ALREADY_RESERVED');
   const receipt=JSON.parse(await readFile(join(f.dir,'turn-receipt.json'),'utf8'));
   assert.equal(receipt.pendingExactFilesetReviewObserved,false);
   assert.equal(receipt.projectUnchangedByModel,true);
