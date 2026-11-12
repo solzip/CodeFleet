@@ -1,0 +1,57 @@
+name: Repository consolidation inventory
+on:
+  push:
+    branches: [work/codefleet-integration]
+    paths: [.github/workflows/consolidate.yml]
+permissions:
+  contents: read
+concurrency:
+  group: codefleet-repository-consolidation
+  cancel-in-progress: false
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Inventory and preserve portable Git history (no branch deletion or source publication)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name solarchive
+          git config user.email 155644899+solzip@users.noreply.github.com
+          python3 - <<'PY'
+          import subprocess, json, pathlib
+          def git(*args):
+              return subprocess.check_output(['git',*args], text=True).strip()
+          rows = [line.split(' ',1) for line in git('for-each-ref','--format=%(objectname) %(refname:strip=3)','refs/remotes/origin/').splitlines()]
+          branches = {name:sha for sha,name in rows if name not in ('HEAD','work/codefleet-integration')}
+          def ancestor(a,b):
+              return subprocess.run(['git','merge-base','--is-ancestor',a,b],check=False).returncode == 0
+          maxima = {name:sha for name,sha in branches.items() if not any(sha!=other and ancestor(sha,other) for other in branches.values())}
+          record={'branches':branches,'maximalTips':maxima,'integrationBase':'adae700c3c971c678b0388d99449c563451023cf','inventoryCommit':git('rev-parse','HEAD'),'modelCalls':0,'remoteDeletes':0}
+          pathlib.Path('/tmp/consolidation-inventory.json').write_text(json.dumps(record,indent=2)+'\n')
+          print(json.dumps(record,indent=2))
+          PY
+          git bundle create /tmp/codefleet-consolidation.bundle --all
+          git bundle verify /tmp/codefleet-consolidation.bundle
+          echo '=== FIRST MERGE PROBE: no remote writes ==='
+          if git merge --no-commit --no-ff 1b45e2bb8db7f3a25ec39718717f4d228e1af9ca; then
+            git diff --cached --stat
+          else
+            git diff --name-only --diff-filter=U
+            git diff --cc
+          fi
+          git merge --abort
+      - name: Preserve source history and inventory for independent integration review
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: codefleet-consolidation-input
+          path: |
+            /tmp/codefleet-consolidation.bundle
+            /tmp/consolidation-inventory.json
+          retention-days: 7
+          if-no-files-found: error
