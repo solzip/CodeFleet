@@ -101,9 +101,11 @@ test('installed Codex Skill resumes reviewed Goal -> pending Workflow without gr
   const blocked = invoke(['run-codex-goal', request.sessionId,
     '--hash', reviewed.data.workflowHash]);
   assert.equal(blocked.exitCode, 1);
-  assert.equal(blocked.data.status, 'CODEX_GOAL_EXECUTION_NOT_READY');
-  assert.match(blocked.data.error, /no current reviewed Workflow/);
-  assert.equal(blocked.data.executionGranted, false);
+  // The installed CLI has no trusted admission factory: it rejects before
+  // opening the Store, even when the Goal has not prepared a Workflow yet.
+  assert.equal(blocked.data.status, 'BLOCKED_OR_UNSUPPORTED');
+  assert.match(blocked.data.error,
+    /^AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE: plain CLI has no authenticated Host Operator binding$/);
   store = new Store(state, { readOnly: true });
   assert.deepEqual(store.db.prepare(
     'SELECT body,digest,status,resultHash FROM host_planning WHERE id=?'
@@ -130,7 +132,8 @@ test('installed Codex Skill resumes reviewed Goal -> pending Workflow without gr
   const deniedAgain = invoke(['run-codex-goal', request.sessionId,
     '--hash', reviewed.data.workflowHash]);
   assert.equal(deniedAgain.exitCode, 1);
-  assert.match(deniedAgain.data.error, /AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE/);
+  assert.equal(deniedAgain.data.status, blocked.data.status);
+  assert.equal(deniedAgain.data.error, blocked.data.error);
   store = new Store(state, { readOnly: true });
   assert.equal(store.get(prepared.data.workflowId).state, 'WAITING_APPROVAL');
   assert.equal(store.db.prepare(
