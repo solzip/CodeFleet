@@ -1,0 +1,28 @@
+name: Codex CLI compatibility (no model Turn)
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  codex-cli-compat:
+    name: Native Codex MCP - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - name: Install pinned official Codex CLI (no npm lifecycle scripts)
+        run: npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund @openai/codex@0.167.1
+      - name: Official Codex CLI MCP add/get/list + CodeFleet stdio Goal smoke (no model)
+        run: npm run test:codex-real-cli

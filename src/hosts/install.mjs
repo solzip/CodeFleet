@@ -49,8 +49,11 @@ Codex model advance the existing CodeFleet Task without writing intermediary
 JSON files or starting a second Codex model process. Follow the Goal loop
 below and read goal_status after every accepted proposal.
 After a proposed Fileset, call codefleet_fileset_review to obtain its
-current exact reviewRef, reviewHash, file bytes and owner-only action. Once
-the owner separately accepts that review through the existing trusted CLI,
+current exact reviewRef, reviewHash, file bytes and ownerAction with the
+absolute executable, argv and external --state. The argv is intentionally
+missing --acknowledge-unisolated; only after independent scope review may
+the owner add that flag and run it in their separate trusted terminal. Once
+the owner accepts that review through the existing trusted CLI,
 refresh codefleet_goal_status. After all dependencies are materialized, call
 codefleet_local_test_review for the pinned test command; only a separate
 reviewed owner CLI call can execute that test. Never self-accept either review.

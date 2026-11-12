@@ -5,7 +5,7 @@
 import {realpath} from 'node:fs/promises';
 import {isAbsolute,relative,resolve,sep} from 'node:path';
 import {StringDecoder} from 'node:string_decoder';
-import {pathToFileURL} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import {Store} from '../alpha/store.mjs';
 import {enableTasks,task,createTask,submitTaskDraft,prepareTask,submitBootstrapFiles}
   from '../product/tasks.mjs';
@@ -92,6 +92,19 @@ const toolDefinitions=Object.freeze([
      required:['taskId'],properties:{taskId:{type:'string'}}}}
 
 ]);
+
+const ownerReviewCommand=(ctx,kind,ref,hash)=>Object.freeze({
+  // Display-only exact argv. The MCP has no apply/exec capability.
+  // This command deliberately lacks --acknowledge-unisolated so copying
+  // an unreviewed model response cannot be treated as Local owner consent.
+  executable:process.execPath,
+  args:[fileURLToPath(new URL('../alpha/cli.mjs',import.meta.url)),
+    '--state',ctx.state,'objective',kind,ref,'--trust',hash],
+  requiredOwnerAcknowledgment:'--acknowledge-unisolated',
+  ownerMustReviewAndRunSeparately:true,
+  executionGranted:false,
+  source:'PERSISTED_CODEFLEET_REVIEW_V1'
+});
 const instructions=[
   'PROPOSAL-ONLY CodeFleet adapter in the existing Codex session.',
   'Read goal_status after each change. Never infer user consent from a tool call.',
@@ -223,8 +236,8 @@ async function invokeTool(config,name,value){
         itemId:value.itemId,reviewRef:review.reviewRef,
         reviewHash:review.reviewHash,scope:review.review,
         files:review.files,ownerDecision:'REQUIRED_OUTSIDE_MCP',
-        ownerCommand:'objective local-files-accept '+review.reviewRef+
-          ' --trust '+review.reviewHash+' --acknowledge-unisolated',
+        ownerAction:ownerReviewCommand(ctx,'local-files-accept',
+          review.reviewRef,review.reviewHash),
         executionGranted:false,applicationPerformed:false,
         ownerAuthenticated:false,automaticReplay:false
       };
@@ -261,8 +274,8 @@ async function invokeTool(config,name,value){
         reviewRef:review.reviewRef,reviewHash:review.reviewHash,
         command:request,scope:review.review,
         ownerDecision:'REQUIRED_OUTSIDE_MCP',
-        ownerCommand:'objective local-accept '+review.reviewRef+
-          ' --trust '+review.reviewHash+' --acknowledge-unisolated',
+        ownerAction:ownerReviewCommand(ctx,'local-accept',
+          review.reviewRef,review.reviewHash),
         executionGranted:false,testExecuted:false,
         ownerAuthenticated:false,automaticReplay:false,
         protectedVerified:false

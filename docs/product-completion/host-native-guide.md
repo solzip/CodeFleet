@@ -58,6 +58,34 @@ real CodeFleet Store/contract handling. It does not demonstrate a real Codex
 model Turn or authorized unattended Host Live execution. The ordinary
 supervised Local path remains available if MCP is not configured.
 
+
+### Official Codex CLI compatibility acceptance (without a model Turn)
+
+The CI gate **Codex CLI compatibility (nonbillable)** installs the pinned
+\`@openai/codex@0.167.1\` client and invokes its real \`mcp add\`,
+\`mcp get --json\`, \`mcp list --json\` and \`mcp remove\` commands with a
+disposable \`CODEX_HOME\`. It then starts the *exact stdio command recorded
+by Codex* to test MCP initialization, the seven proposed/read-only tools,
+Goal persistence and unchanged target source. The fixture's repository, Home
+and CodeFleet State are independent temporary paths (including spaces).
+No \`codex exec\`, authentication, nested model process, owner approval,
+host tool effects or subscription usage is performed.
+
+To verify a user installation manually, first install the reviewed CodeFleet
+Skill in the selected repository and register the server as above, then run:
+
+\`\`\`text
+codex mcp get codefleet --json
+codex mcp list --json
+\`\`\`
+
+Check that the entry's exact \`transport.command\` and \`transport.args\`
+point to the installed \`runtime/hosts/codex-mcp.mjs\`, the intended
+external \`--state\`, exact \`--repository\` and the owner-selected
+acceptance policy. Use \`/mcp\` inside Codex to inspect tools available to
+the current authenticated session. Registration alone is **not** a real
+model-authored Objective acceptance.
+
 ## Install and manage
 
 Use a trusted CodeFleet checkout with Node 24.14.1 or newer. No npm install or API key is required. From that checkout:

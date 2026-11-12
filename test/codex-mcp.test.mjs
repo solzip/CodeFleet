@@ -62,7 +62,7 @@ async function project(t,name){
   return {root,repo,state,old};
 }
 test('Codex MCP handshake and same-session Goal → validated Draft → pending DAG → scoped proposal without execution',async t=>{
-  const f=await project(t,'full');
+  const f=await project(t,'full directory with spaces');
   const results=talk(f.repo,f.state,[
     request(1,'initialize',{protocolVersion:'2025-06-18',
       capabilities:{},clientInfo:{name:'codex-fixture',version:'1'}}),
@@ -158,18 +158,29 @@ test('Codex MCP handshake and same-session Goal → validated Draft → pending 
   assert.equal(filesReview.ownerAuthenticated,false);
   assert.equal(filesReview.files[0].content,next);
   assert.ok(filesReview.reviewRef&&filesReview.reviewHash);
-  assert.match(filesReview.ownerCommand,/objective local-files-accept /);
+  assert.equal(filesReview.ownerAction.executable,process.execPath);
+  assert.equal(filesReview.ownerAction.args[1],'--state');
+  assert.equal(filesReview.ownerAction.args[2],f.state);
+  assert.equal(filesReview.ownerAction.requiredOwnerAcknowledgment,
+    '--acknowledge-unisolated');
+  assert.deepEqual(filesReview.ownerAction.args.slice(3),[
+    'objective','local-files-accept',filesReview.reviewRef,
+    '--trust',filesReview.reviewHash
+  ]);
   assert.equal(await readFile(join(f.repo,files[0]),'utf8'),f.old);
-  const cli=fileURLToPath(new URL('../src/alpha/cli.mjs',import.meta.url));
-  const owner=(args,allowed=0)=>{
-    const response=spawnSync(process.execPath,[
-      cli,'--state',f.state,'objective',...args
-    ],{encoding:'utf8',shell:false,windowsHide:true,timeout:25000});
-    assert.equal(response.status,allowed,response.stderr+'\n'+response.stdout);
+  const owner=(action,approved=true,expected=0)=>{
+    assert.equal(action.ownerMustReviewAndRunSeparately,true);
+    const argv=[...action.args,...(approved?[action.requiredOwnerAcknowledgment]:[])];
+    const response=spawnSync(action.executable,argv,
+      {encoding:'utf8',shell:false,windowsHide:true,timeout:25000});
+    assert.equal(response.status,expected,response.stderr+'\n'+response.stdout);
     return JSON.parse(response.stdout);
   };
-  const applied=owner(['local-files-accept',filesReview.reviewRef,
-    '--trust',filesReview.reviewHash,'--acknowledge-unisolated']);
+  // A machine-provided action is inert unless the Owner independently
+  // inspects it and explicitly adds the separate acknowledgment flag.
+  owner(filesReview.ownerAction,false,1);
+  assert.equal(await readFile(join(f.repo,files[0]),'utf8'),f.old);
+  const applied=owner(filesReview.ownerAction);
   assert.equal(applied.status,'MATERIALIZED');
   assert.equal(await readFile(join(f.repo,files[0]),'utf8'),next);
   const testReview=value(talk(f.repo,f.state,[
@@ -183,8 +194,12 @@ test('Codex MCP handshake and same-session Goal → validated Draft → pending 
   ]);
   assert.equal(testReview.command.executable,process.execPath);
   assert.ok(testReview.reviewRef&&testReview.reviewHash);
-  const verified=owner(['local-accept',testReview.reviewRef,
-    '--trust',testReview.reviewHash,'--acknowledge-unisolated']);
+  assert.deepEqual(testReview.ownerAction.args.slice(3),[
+    'objective','local-accept',testReview.reviewRef,
+    '--trust',testReview.reviewHash
+  ]);
+  owner(testReview.ownerAction,false,1);
+  const verified=owner(testReview.ownerAction);
   assert.equal(verified.execution.status,'LOCAL_PASSED');
   assert.equal(verified.complete,true);
   const finished=value(talk(f.repo,f.state,[
