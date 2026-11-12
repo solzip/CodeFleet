@@ -32,6 +32,20 @@ Host는 모델·인증·세션·자체 도구 권한을 소유한다. CodeFleet�
 
 상세 계약은 [Host 연동](../implementation/host-native.md), [승인 경계](../implementation/operator-authorization.md), [IPC](../implementation/host-ipc.md)를 참조한다. [Core 안내](host-core-guide.md)는 현재 Backend 보장 범위, [Host 안내](host-native-guide.md)는 설치·사용을 담당한다. 상세 계약 원본이나 과거 검토를 이 문서의 최신 상태표로 해석하지 않는다.
 
+## 사용자 경험과 구현 책임
+
+[제품 원칙의 UX-01~UX-05](../PRODUCT_VISION.md#핵심-사용자-경험)를 다음 기존 경계에 연결한다. 아래 표는 구현 작업의 책임 배치이며 사용자 경험 전체의 수용 완료를 뜻하지 않는다. 수락 시나리오는 [로드맵](roadmap.md#사용자-경험-수락-기준), 구현·검증 상태는 [진행 현황](progress.md#사용자-경험별-진행도)이 관리한다.
+
+| ID | 연결할 기존 책임 | 유지할 경계 |
+| --- | --- | --- |
+| UX-01 | Host/Skill의 질문·제안, `src/intent/`의 탐색·Validator, `src/product/tasks.mjs`의 계약 준비 | 자연어 설명과 구조화 계약을 연결하되 추론으로 누락된 권한·완료 기준을 확정하지 않음 |
+| UX-02 | 기존 Workflow/Controller의 적격 작업 선택, `native-local.mjs`·`work-log.mjs`·`directives.mjs`의 검토·지침, `report.mjs`의 필요한 결정 표시 | Host 권한과 정확한 승인·예산·Lease를 검사. Reporter나 Agent가 실행 권한을 생성하지 않음 |
+| UX-03 | `repair.mjs`·`contract-revisions.mjs`·기존 Controller의 실패·수정 경로와 Verification Backend | 실패 Evidence·별도 승인·새 후보 검증을 연결하며 수락 기준을 수정 루프에서 약화하지 않음 |
+| UX-04 | 기존 Store/Event/Artifact, `recovery.mjs`·Goal/Bootstrap 탐색·Work Log와 Host의 세션/압축 기능 | 동일한 계약·시도·미확정 효과·예산을 복구. 별도 Goal 엔진·상태 DB·Host 압축 구현을 추가하지 않음 |
+| UX-05 | `controlled-delivery.mjs`·`destination-evidence.mjs`·`objective-status.mjs`·기존 Evidence/Judge/Reporter | 후보 검증과 실제 대상 반영을 구분하고 현재 대상·계약의 근거로 판정. 읽기 전용 보고가 실행이나 승인을 유발하지 않음 |
+
+경로를 생략한 `.mjs` 파일명은 `src/product/` 기준이다. 사용자용 질문·상태·결과 설명은 이 영속 기록과 판정을 읽어 표현하며 별도의 요약 상태 저장소를 만들지 않는다. 승인 검토에는 정확한 계약·후보·효과·검증 범위를 연결하고, 필요한 기술 식별자는 시스템이 전달한다. 사용자에게 친숙한 표현으로 바꿔도 기존 검증자 독립성과 승인 검사를 유지한다.
+
 ## 개발 루프의 책임과 목표 경계
 
 WorkItem 초안은 Validator와 DAG 검사를 거쳐 승인된 범위에서 실행한다. Manager/Coordinator가 배정과 통합을 맡고, Harness가 실행 가능성·승인·예산·상태를 집행하며, Verification Backend가 검사를 수행하고 Evidence/Judge가 결과를 판정한다. Agent의 자체 리뷰가 이 경계를 대체하지 않는다.

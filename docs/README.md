@@ -4,6 +4,8 @@ CodeFleet은 Codex CLI·Claude Code 안에서 자연어 개발 목표를 검토 
 
 ## 처음 읽을 문서
 
+개발의 뼈대는 [제품 원칙의 핵심 사용자 경험](PRODUCT_VISION.md#핵심-사용자-경험)이다. UX-01~UX-05를 기준으로 [수락 시나리오](product-completion/roadmap.md#사용자-경험-수락-기준) → [구현 책임](product-completion/architecture.md#사용자-경험과-구현-책임) → [현재 진행도](product-completion/progress.md#사용자-경험별-진행도)를 함께 확인한다.
+
 | 확인할 내용 | 문서 |
 | --- | --- |
 | 제품 목적과 유지할 원칙 | [제품 원칙](PRODUCT_VISION.md) |
