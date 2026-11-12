@@ -24,9 +24,15 @@ CodeFleet은 기존 Codex CLI·Claude Code의 모델·인증·세션을 사용�
 
 `docs/audits/`·`docs/runs/`·`docs/archive/`의 전 문서를 시간 역순으로 나열한다. 규약은 `docs/CONVENTIONS.md`, 결함 등재 현황은 `docs/REGISTER.md`.
 
-작성 기준: 2026-10-30. 전수 150개 문서 (감사 42 · 실행 101 · 아카이브 7). <!-- fact: docs-indexed = 150 --> <!-- fact: docs-on-disk = 150 -->
+작성 기준: 2026-11-12. 전수 152개 문서 (감사 42 · 실행 103 · 아카이브 7). <!-- fact: docs-indexed = 152 --> <!-- fact: docs-on-disk = 152 -->
 
 현재 공개 사용 제품 계획은 [제품 완성 문서](product-completion/README.md)에 있다. 기존 아카이브의 실측과 새 제품 계획을 구분하며, 구현 상태는 새 진행 현황에서 관리한다.
+
+## 2026-11-12
+
+| Date | Document | Type | Result | Follow-up |
+| --- | --- | --- | --- | --- |
+| 11-12 | `runs/2026-11-12/repository-consolidation.md` | All-branch consolidation | All source histories integrated; exact-head results in Actions | [Local preflight](handoffs/2026-11-12/CONSOLIDATED_LOCAL_TESTS_KO.md) |
 
 ## 2026-11-11
 

@@ -1782,7 +1782,7 @@ compares the Workflow and Goal status, and checks the existing diagnostic
 child-report/no-additional-Attempt contract. Native Host Live and Objective
 E2E acceptance are still unverified; independent Windows/Linux CI for the
 new commit must be checked before reporting an offline test PASS.
- 
+
 ## Discoverable top-level Codex Goal review path (fresh CI required)
 
 The top-level `codefleet-alpha --help` now points developers to
