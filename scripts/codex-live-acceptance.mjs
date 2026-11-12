@@ -4,7 +4,7 @@
 // This is not a trusted Owner identity broker or USD spending-cap enforcer.
 import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdir, readFile, writeFile, realpath, lstat } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, lstat } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { StringDecoder } from 'node:string_decoder';
@@ -65,7 +65,12 @@ async function checked(dir){
   if(m.kind!=='CODEFLEET_CODEX_LIVE_ACCEPTANCE_V1'||m.directory!==dir||
     m.project!==pp.project||m.state!==pp.state||m.goal!==goal)
     fail('Acceptance manifest identity invalid');
-  if(await realpath(pp.project)!==pp.project||!isAbsolute(pp.state))
+  // Windows realpath can normalize temporary directory casing/junction
+  // spelling differently from the absolute user-selected path. This is a
+  // freshly created fixture: require a real directory, never a symlink,
+  // while the exact manifest/State path binding is checked above.
+  const stat=await lstat(pp.project);
+  if(!stat.isDirectory()||stat.isSymbolicLink()||!isAbsolute(pp.state))
     fail('Acceptance directory identity changed');
   if(cmd('git',['rev-parse','HEAD'],pp.project)!==m.gitHead)
     fail('Fixture Git HEAD changed');
