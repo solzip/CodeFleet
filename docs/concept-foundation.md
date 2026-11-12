@@ -5169,7 +5169,7 @@ repairBehavior
 ```text
 - 하나의 설계 항목이 결정되면 대화에만 남기지 않고 source of truth 문서에 즉시 반영한다.
 - CodeFleet 최종 모델의 source of truth 문서는 docs/concept-foundation.md다.
-- 다음 세션 연결에 필요한 진행 상태와 다음 논의 항목은 docs/session-handoff.md에 함께 갱신한다.
+- 현재 진행 상태와 다음 작업은 docs/product-completion/progress.md 및 roadmap.md에 근거와 함께 갱신한다.
 - 미확정 항목은 FINAL RULE처럼 쓰지 않고 DESIGN CANDIDATE 또는 다음 논의 항목으로 남긴다.
 ```
 
@@ -16509,8 +16509,8 @@ repairBehavior:
 
 ```text
 1. 이 문서 전체를 읽는다.
-2. docs/session-handoff.md를 읽고 현재 진행도와 다음 논의 주제를 확인한다.
-3. docs/architecture.md는 현재 구현 구조 참고용으로 본다.
+2. docs/product-completion/progress.md를 읽고 현재 구현·검증 상태를 확인한다.
+3. docs/product-completion/architecture.md와 roadmap.md에서 현재 구조와 다음 수락 게이트를 확인한다.
 4. README는 사용자용 현재 사용법 참고용으로 본다.
 5. 구현을 바로 하지 말고 최종 목표와 목표 경계를 먼저 확인한다.
 6. 현재 논의 상태를 보고 다음 미해결 항목부터 이어간다.

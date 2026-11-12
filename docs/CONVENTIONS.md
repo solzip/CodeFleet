@@ -124,6 +124,6 @@
 
 ## 이 규약이 적용되지 않는 것
 
-- `docs/concept-foundation.md`, `docs/final-model-architecture.md` 등 **설계 문서** — 판정 기록이 아니라 정의다
-- `docs/session-handoff.md`, `docs/design-progress.md` — 상태 문서이고 덮어쓰기가 정상이다
+- `docs/concept-foundation.md`와 `docs/product-completion/architecture.md` 등 **설계 문서** — 판정 기록이 아니라 정의다
+- `docs/product-completion/progress.md` — 현재 상태 문서이며 근거가 연결된 상태만 갱신한다
 - 코드 주석 — 규약의 대상이 아니지만, **판정 근거로는 쓸 수 없다** (§8)

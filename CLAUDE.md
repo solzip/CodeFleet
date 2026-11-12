@@ -175,9 +175,9 @@ docs/rule-implementation-status.json  why each unclaimed rule is unclaimed
 npm run coverage:uncovered            rules with unclaimed conditions, right now
 ```
 
-`docs/session-handoff.md` and `docs/design-progress.md` are the state of 2026-08-11 and
-2026-08-10 and were never brought forward. Each says so at the top. They are kept because
-they record what was believed at the time, not because they describe anything current.
+The obsolete 2026-08 design handoff and progress documents were removed during the
+2026-11-12 documentation consolidation. Use `docs/product-completion/progress.md` for
+current state and `docs/INDEX.md` for preserved historical evidence.
 
 Never trust a count written in prose here. Run the command and read the number it prints.
 

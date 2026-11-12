@@ -35,8 +35,8 @@
     },
     "IMPLEMENTATION_SLICING_MUST_PRESERVE_FINAL_BOUNDARIES": {
       "status": "NOT_CODE_VERIFIABLE",
-      "evidence": "docs/design-progress.md",
-      "detail": "a rule about how implementation slices are chosen, not about runtime behaviour. It constrains the plan, and the plan is a document."
+      "evidence": "docs/product-completion/roadmap.md",
+      "detail": "a rule about how implementation slices are chosen, not about runtime behaviour. The current roadmap constrains each slice through ordered acceptance gates and verification evidence."
     },
     "MANUAL_SPINE_PASS_IS_EVIDENCE_CHECKLIST": {
       "status": "NOT_CODE_VERIFIABLE",

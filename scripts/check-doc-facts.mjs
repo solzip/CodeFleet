@@ -28,6 +28,7 @@
 // Output is ASCII only; the console this runs on is CP949.
 
 import { readFile, readdir, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -192,7 +193,12 @@ export function repositoryMarkdown(root) {
   if (git.error !== undefined || git.status !== 0) {
     throw new Error(`could not list tracked files: ${git.error?.message ?? `git exited ${git.status}`}`);
   }
-  return git.stdout.split("\n").map((l) => l.trim()).filter((l) => l.endsWith(".md")).sort();
+  return git.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.endsWith(".md"))
+    .filter((line) => existsSync(path.join(root, line)))
+    .sort();
 }
 
 async function readClaims() {

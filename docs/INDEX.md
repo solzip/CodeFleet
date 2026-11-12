@@ -15,7 +15,7 @@ CodeFleet은 기존 Codex CLI·Claude Code의 모델·인증·세션을 사용�
 | [Core 안내](product-completion/host-core-guide.md) | Docker 없는 기본 준비, Local / Container / Host Sandbox 보장 범위 |
 | [기록 규약](CONVENTIONS.md) | 작업 기록 작성 규칙 |
 
-상세 계약은 `docs/implementation/`, 실제 실행 증거는 `docs/runs/`, 당시 감사는 `docs/audits/`, 보존 기록은 `docs/archive/`에 둔다. 기존 경로와 해시 고정 원본은 유지한다. 루트의 구형 아키텍처·검토·인계 문서는 당시 설계이며, `concept-foundation.md`는 legacy 검사 계약으로 남는다.
+상세 계약은 `docs/implementation/`, 실제 실행 증거는 `docs/runs/`, 당시 감사는 `docs/audits/`, 보존 기록은 `docs/archive/`에 둔다. 해시 고정 증거와 과거 감사 기록은 유지한다. 중복된 구형 아키텍처·검토·인계 문서는 2026-11-12 정리에서 제거했으며, `concept-foundation.md`는 테스트가 직접 참조하는 Legacy FINAL RULE 계약으로 남는다.
 
 ## 역사 기록 색인
 
