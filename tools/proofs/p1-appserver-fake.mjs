@@ -25,9 +25,13 @@ rl.on("line", (line) => {
     send({ id: 1, result: { userAgent: "fake", platformFamily: "test", platformOs: "test", account: { email: "never-record" } } });
   } else if (message.method === "model/list" && scenario !== "missing") {
     send({ id: 2, result: { data: [{ id: "fake-model", model: "fake-model", displayName: "Fake", defaultReasoningEffort: "low", supportedReasoningEfforts: [{ reasoningEffort: "low", description: "omit" }], isDefault: true, credential: "never-record" }] } });
+    if (scenario === "trailing-incomplete")
+      process.stdout.write('{"id":91,"method":"unapproved/server-request"');
+    if (scenario === "trailing-server-request")
+      send({ id: 91, method: "account/chatgptAuthTokens/refresh", params: { token: "never-record" } });
   }
 });
 rl.on("close", () => {
   if (scenario === "no-exit") setInterval(() => {}, 1_000);
-  else process.exit(0);
+  else process.stdout.write("", () => process.exit(0));
 });
