@@ -1976,3 +1976,19 @@ never supplies an approval or execution grant. This is continuity UX,
 not authenticated Operator admission, Host Live or Objective E2E acceptance.
 The new HEAD requires Windows/Linux CI; local Node 24/full-checkout/Docker
 verification remains unavailable in this runtime.
+
+## NEW_PROJECT persisted Bootstrap discovery after CLI restart (fresh CI required)
+
+The read-only `objective codex-bootstraps [--offset N]` command now scans
+bounded pages of persisted NEW_PROJECT Tasks without requiring the Task ID
+from an earlier Host session. It reads immutable Plan artifacts to distinguish
+NEW_PROJECT from unrelated Tasks, returns a `codex-bootstrap-progress` handoff
+for prepared Tasks, and reuses TaskReport to reobserve Local continuation and
+target drift. Unprepared Tasks are not executable; corrupt records produce
+PARTIAL_BLOCKED (exit 2) without hiding other recoverable Tasks.
+The index omits raw Goal/Fileset content and does not grant execution or
+claim independent Objective completion. Pagination scans all Task records;
+a filtered page can be empty but have nextOffset. An offline regression checks
+cross-Store read-only recovery, event preservation and malformed-row isolation.
+Host Live and final Objective E2E remain unverified. Node 24/full checkout and
+Docker are unavailable locally; this HEAD requires new Windows/Linux CI.

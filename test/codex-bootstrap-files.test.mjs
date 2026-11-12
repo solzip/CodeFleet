@@ -1746,3 +1746,34 @@ test('trusted NEW_PROJECT CLI completes persisted Todo to Calendar to real Local
   assert.deepEqual(materializationGrants,['todo','calendar']);
   assert.deepEqual(localGrants,['tests'],'Verified Local command cannot be replayed');
 });
+
+test('NEW_PROJECT index recovers prepared Bootstrap through read-only CLI without grant or replay', async t => {
+  const f = await prepared({ passing: true });
+  t.after(async () => { f.store.close(); await rm(f.root, { recursive: true, force: true }); });
+  const before = f.store.events(f.id).length;
+  const indexed = await productCli(['codex-bootstraps'], f.store.directory);
+  assert.equal(indexed.exitCode, 0);
+  assert.equal(indexed.data.authority, 'READ_ONLY_PERSISTED_INDEX');
+  assert.equal(indexed.data.executionGranted, false);
+  const entry = indexed.data.tasks.find(item => item.taskId === f.id);
+  assert.ok(entry);
+  assert.equal(entry.objectiveComplete, false);
+  assert.equal(entry.executionGranted, false);
+  assert.deepEqual(entry.progressCommand?.argv, ['codex-bootstrap-progress', f.id]);
+  const resumed = await productCli(entry.progressCommand.argv, f.store.directory);
+  assert.equal(resumed.data.taskId, f.id);
+  assert.equal(resumed.data.executionGranted, false);
+  assert.equal(resumed.data.objectiveComplete, false);
+  assert.equal(f.store.events(f.id).length, before);
+  const denied = await productCli(['codex-bootstraps', '--allow-model'], f.store.directory);
+  assert.equal(denied.exitCode, 1);
+  assert.equal(f.store.events(f.id).length, before);
+  f.store.db.prepare('INSERT INTO product_tasks (id,revision,body) VALUES (?,?,?)')
+    .run('damaged-bootstrap-task', 1, '{');
+  const partial = await productCli(['codex-bootstraps'], f.store.directory);
+  assert.equal(partial.exitCode, 2);
+  assert.equal(partial.data.status, 'PARTIAL_BLOCKED');
+  assert.equal(partial.data.tasks.find(item => item.taskId === f.id)?.objectiveComplete, false);
+  assert.equal(partial.data.tasks.find(item => item.taskId === 'damaged-bootstrap-task')?.status, 'BLOCKED');
+  assert.equal(f.store.events(f.id).length, before);
+});

@@ -19,6 +19,7 @@ import { inspectReviewedCodexPlan, inspectReviewedCodexPlanAtSource, inspectRevi
 import { readDeliveredObjectiveStatus } from './objective-status.mjs';
 import { isCodexMvpFacadeForStore } from './codex-mvp-facade.mjs';
 import { inspectCodexPlanningStatus, inspectCodexGoalProgress, listCodexGoalSessions } from './codex-planning-status.mjs';
+import { listCodexBootstrapTasks } from './codex-bootstrap-index.mjs';
 import { presentCodexGoalExecution } from './codex-goal-result.mjs';
 import { CodexPlanningDispatchError } from '../hosts/codex-managed-planning.mjs';
 import { approval as requireWorkflowApproval } from '../workflow/persistence.mjs';
@@ -37,6 +38,7 @@ codefleet-alpha objective status [task-id] | report <task-or-run-id>
 codefleet-alpha objective delivered-status <workflow-id> (read-only delivered-tree Objective acceptance; never starts Host or writes State)
 codefleet-alpha objective workflow-progress <workflow-id> (read-only DAG/Repair progress and current delivered Objective; never grants execution)
 codefleet-alpha objective codex-goals [--offset 0..999999] (read-only persisted Goal/Workflow/Objective status after restart; inspect each Goal separately; no Host/Operator grant)
+codefleet-alpha objective codex-bootstraps [--offset 0..999999] (read-only persisted NEW_PROJECT Task discovery after restart; inspect each Task separately; no Host/Operator grant)
 codefleet-alpha objective codex-planning-status <planning-session-id> [--repository ABSOLUTE_PATH] (read-only Host Planning lifecycle; optional current-source check for validated results, no-replay recovery)
 codefleet-alpha objective codex-goal-progress <planning-session-id> [--repository ABSOLUTE_PATH] (read-only Goal→Planning→Workflow/DAG→delivered Objective; with --repository, expose exact current-source Plan review or pending Workflow approval/Contract review before dispatch; no-replay continuation)
 codefleet-alpha objective codex-bootstrap-progress <task-id> (read-only persisted NEW_PROJECT Fileset/DAG/Repair/Local verification handoff; never grants execution)\ncodefleet-alpha objective review-codex-plan <planning-session-id> [--repository ABSOLUTE_PATH] (read-only pinned Contract/DAG review; optional clean Git checkout check, never grants execution)
@@ -265,6 +267,13 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
   const { positional: args, options: o } = parse(rest);
   if (o.repository !== undefined && !['plan-codex-goal', 'codex-planning-status', 'codex-goal-progress', 'review-codex-plan', 'review-codex-workflow', 'prepare-codex-workflow'].includes(action))
     throw Error('--repository is only valid for Codex planning/Workflow review or pending Workflow creation');
+  if (action === 'codex-bootstraps') {
+    if (args.length || Object.keys(o).some(key => key !== 'offset') ||
+        (o.offset !== undefined && !/^(0|[1-9]\d{0,5})$/.test(o.offset)))
+      throw Error('codex-bootstraps accepts optional --offset 0..999999 only; no execution flags');
+    const data = await listCodexBootstrapTasks(store, { offset: Number(o.offset ?? 0) });
+    return { exitCode: data.status === 'PARTIAL_BLOCKED' ? 2 : 0, data };
+  }
   if (action === 'codex-goals') {
     if (args.length || Object.keys(o).some(key => key !== 'offset') ||
         (o.offset !== undefined && !/^(0|[1-9]\d{0,5})$/.test(o.offset)))
@@ -1056,7 +1065,7 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
             ? positional[2] : options['verification-request']));
     }
     if (!argv[0] || ['help', '--help'].includes(argv[0])) return await dispatchProduct(argv);
-    store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request', 'delivered-status', 'workflow-progress', 'codex-planning-status', 'codex-goal-progress', 'codex-goals', 'codex-bootstrap-progress', 'review-codex-plan', 'review-codex-workflow'].includes(argv[0]) });
+    store = new Store(directory, { readOnly: ['recover', 'proposal-batch', 'repair-proposal-request', 'delivered-status', 'workflow-progress', 'codex-planning-status', 'codex-goal-progress', 'codex-goals', 'codex-bootstraps', 'codex-bootstrap-progress', 'review-codex-plan', 'review-codex-workflow'].includes(argv[0]) });
     if (codexTrusted) {
       const codexAdmission = await createCodexAdmission(store);
       // dispatchProduct still checks authentic facade identity, current Store

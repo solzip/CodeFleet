@@ -55,6 +55,7 @@ try {
       'Codex Host-Native Goal and Objective:',
       '  codefleet-alpha objective help',
       '  codefleet-alpha objective codex-goals',
+      '  codefleet-alpha objective codex-bootstraps',
       '  codefleet-alpha objective codex-goal-progress <planning-session-id> --repository ABSOLUTE_PATH',
       '  codefleet-alpha objective codex-bootstrap-progress <task-id>',
       '  codefleet-alpha objective review-codex-plan <planning-session-id> --repository ABSOLUTE_PATH',
