@@ -1,46 +1,58 @@
-# 진행 현황과 결정 목록
+# 구현·검증 진행 현황
+
+갱신: 2026-11-12 · 소스 기준: `6dcd64fa52fdd5290395cff90432376bf93634bf` + 현재 작업 트리의 일회성 도구 정리.
+제품 목적은 [제품 원칙](../PRODUCT_VISION.md), 구조는 [아키텍처](architecture.md), 수락 조건과 순서는 [로드맵](roadmap.md)에서 관리한다.
 
 ## 현재 상태 요약
 
-갱신일: 2026-11-12. 검토 기준선: `5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6`.
-이 문서가 현재 상태의 진입점이다. 과거 기록은 아래 고정 커밋 링크에서 확인하며, 당시 승인 대기·다음 작업은 현재 실행 지시가 아니다.
+**계획·검토와 감독형 Local 개발 흐름을 구현한 개발 단계다.** 설치된 패키지에서 수정 승인 → 테스트 → 완료 판정 → 별도 프로세스 복구를 확인했다. 실제 Host 제안을 감독형으로 적용한 제한된 과거 관측도 있다. 공개 인증 위임·보호 실행·양쪽 Host의 전체 수용과 공개 사용 릴리스는 미완료다.
 
-문서 최소화: 실행·감사·인계·초기 설계 자료는 [정리 전 Git 이력](https://github.com/solzip/CodeFleet/tree/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs)에 보존한다. 이번 변경은 DOCUMENTED이며 기능 수용 상태는 변경하지 않는다. 선행 기준은 제품 원칙·로드맵이다. 신규 결함 ID는 부여하지 않았다.
+Local 완료는 `COMPLETE_LOCAL`이며 보호 검증은 `UNSATISFIED`다. 설치 시험의 Codex·Claude 명칭은 설치 대상 Host를 뜻하며, 그 시험에서 실제 모델을 호출하지 않았다.
 
-제품은 **Host-Native 계획·검토와 감독형 Local 실행을 구현한 개발 단계**다. 공개 사용 릴리스와 양쪽 Host의 독립적인 전체 수용은 아직 완료되지 않았다. 구현, 합성 회귀, 실제 감독형 Host 관측, Protected Evidence를 각각 구분한다.
+## 기능별 상태
 
-| 영역 | 구현·관측 상태 | 남은 수락 조건과 근거 |
+| 영역 | 구현·검증 수준 | 남은 조건 |
 | --- | --- | --- |
-| 목표·Draft·Validator·DAG | 구현 및 오프라인 회귀 근거 있음 | [Core 안내](host-core-guide.md). 유효한 계획에도 별도 실행 승인 필요 |
-| Codex Goal·Workflow·Bootstrap 탐색 | 영속 Goal 목록, 계약 리뷰, 미승인 Workflow 준비와 재개 안내 구현 | [Skill 후속 기록](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-11-11/codex-goal-skill-handoff.md). 실제 Host 인증·실행 수용과 기존 설치물 업그레이드는 별도 |
-| MCP·관리형 Goal 경로 | 두 경로의 소스와 시험을 main에 통합 | [통합 기록](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-11-12/repository-consolidation.md). 통합 당시 CI·ref 정리 결과는 해당 Actions에서 별도 확인해야 함 |
-| 신규 프로젝트 Bootstrap | Fileset·별도 승인·Local 검증·Repair·재개 구현 및 합성/설치 회귀 | 실제 모델을 연결한 신규 프로젝트 전체 수용과 보호 검증은 미완료 |
-| 기존 프로젝트 감독형 Local | 실제 Host 제안·별도 적용 승인·Local Evidence/Judge·프로세스 복구 관측 | [Local 수용](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-28/public-existing-local-v2.md), [통합 검증](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-30/todo-integrated-verification-recovery.md). 범용 무인 실행 수용으로 확대하지 않음 |
-| 계약 변경·Repair·Work Log·Recovery | 기존 Store·Event·Lease 경계에 연결, Local 회귀 근거 있음 | [Repair 연결](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-30/supervised-adoption-repair.md), [인계 신뢰 경계](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-30/undelivered-handoff-recovery-v2.md). 실제 인계 독립 인증과 Host Compaction은 미검증 |
-| 역할 협업 | 감독형 자식 제안 및 제한된 비교 관측 있음 | [비교 기록](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-28/manager-proposal-handoff.md). 공개 인증 위임은 BLOCKED, 성능 이점 입증 안 됨 |
-| 검증 Backend | Local / Container 경로 구현, Host Sandbox NOT_VERIFIED | [Backend 안내](host-core-guide.md). Local은 UNPROTECTED이며 Protected 수용을 만족시키지 않음 |
-| 공개 실행·출시 | PUBLIC_DELEGATION_BLOCKED, 전체 Host Live 수용 미완료 | 인증된 Owner 승인·실제 실행 집행·비용 한도 수용 필요. P2 native 실행 차단과 P1 old-R2 보류는 [통합 기록](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-11-12/repository-consolidation.md) 참조 |
-| 실사용 가치·플랫폼 | 제한된 Windows 관측과 과거 Linux 시험 이력 있음 | 전체 OS 수용, Todo + Calendar 사용자 흐름·브라우저 E2E, 독립 외부 파일럿·생산성/비용 개선 및 M5 미완료 |
+| 목표·Draft·Validator·DAG | 계획·계약 검토·의존성·승인 요청 구현, 오프라인 회귀 근거 있음 | 실제 Host에서 목표부터 최종 결과까지 전체 수용 |
+| Codex Goal·MCP·재개 안내 | 영속 Goal 탐색, 계약 리뷰, 미승인 Workflow 준비와 설치 CLI 재발견 구현 | 인증된 운영 연결과 기존 설치물 업그레이드 수용 |
+| 신규 프로젝트 Bootstrap | Fileset 승인·생성·Local 검증·Repair·재개 구현, 합성·설치 회귀 근거 있음 | 실제 모델을 연결한 신규 프로젝트 전체 수용·보호 검증 |
+| 기존 프로젝트 변경 | 감독형 Fileset 승인·적용·Local 완료·프로세스 복구 관측 있음 | 범용 무인 실행과 독립 사용자 수용 |
+| 계약 변경·Repair·Work Log | 기존 Store·Event·Lease·Recovery에 연결, Local 회귀 근거 있음 | 실제 인계의 독립 인증·Host Compaction·장기 실행 수용 |
+| 역할 협업 | 제한된 자식 제안·감독형 통합·비교 관측 있음 | 공개 인증 위임은 BLOCKED, Multi-Agent 성능 이점 미입증 |
+| 검증 Backend | Local·Container 경로 구현 | Host Sandbox NOT_VERIFIED, Local 결과로 Protected 수용 불가 |
+| 플랫폼·실사용·출시 | 제한된 Windows 관측과 과거 Linux 시험 이력 있음 | 전체 OS 수용·브라우저 E2E·외부 파일럿·생산성/비용 개선·M5 미완료 |
 
-### 최근 로컬 검증
+구현 근거: [Core 안내](host-core-guide.md), [Local 수용 계약](../implementation/local-only-acceptance.md), [복구 계약](../implementation/objective-recovery.md).
+과거 관측: [감독형 Local 수용](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-28/public-existing-local-v2.md), [Repair 연결](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-30/supervised-adoption-repair.md), [인계 신뢰 경계](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-30/undelivered-handoff-recovery-v2.md), [협업 비교](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-28/manager-proposal-handoff.md).
 
-환경: Windows / PowerShell / Node v24.14.1. 아래는 문서 정리 후보에 대해 이번 세션에서 실행한 결과이며 실제 모델 호출과 원격 CI 재검증은 수행하지 않았다.
+## 최근 검증
 
-| 명령·검사 | 결과와 한계 |
-| --- | --- |
-| `npm.cmd test` | exit 1. Live 안전성 21 PASS, MCP 3 PASS, 설치 Goal 2 PASS, Codex MVP 319 PASS / 4 SKIP, Legacy 324 PASS. Alpha 469 PASS / 5 FAIL / 7 SKIP에서 중단 |
-| Alpha 실패 | Docker 보호 시험의 `CODEFLEET_TEST_DOCKER` 미설정: H2 isolation, H3 runtime, H4 IPC, H6 planning, Operator guard. 필수 보호 시험은 실패 상태로 보존 |
-| `npm.cmd run test:host-core` | 별도 실행 exit 0, 135 PASS |
-| `npm.cmd run posttest` | 별도 실행 exit 0. FINAL RULE 커버리지·링크·인용·선언 사실 검사 통과. 과거 인용의 미확정·의심 항목은 기존 한계로 유지 |
+환경: Windows / PowerShell / Node v24.14.1. 모델 호출·원격 CI 재검증은 수행하지 않았다.
 
-기본 npm 캐시 접근 거부로 설치 Goal 시험이 처음 실패했으며, 쓰기 가능한 임시 캐시를 사용한 후속 실행은 통과했다. 문서 정리 후 삭제된 파일을 참조하던 Legacy 상태 근거를 현행 로드맵으로 갱신했다. 커버리지·수치 기준선은 변경하지 않았다.
+| 실행 명령 | 결과 | 확인한 범위 |
+| --- | --- | --- |
+| `npm.cmd run test:installed-goal-loop` | exit 0 · 2 PASS | 실제 npm 패키지의 Codex·Claude Skill 설치, 준비된 제안의 승인·적용·Node 검증·Recovery·완료 후 소스 변경 감지 |
+| `npm.cmd run test:todo-fixture` | exit 0 · 10 PASS | Todo CRUD·완료 필터·Calendar 월/주 표시·일정 변경·입력 검증 |
+| `node --test test/codex-installed-goal-recovery.test.mjs test/controlled-delivery.test.mjs test/objective-status.test.mjs` | exit 0 · 41 PASS / 1 SKIP | 설치 Goal 재발견·파일 반영 승인·완료 재관측·변조 거부. Windows 실행 권한 비트 변경 시험은 SKIP |
+| `npm.cmd pack --dry-run --ignore-scripts --json` | exit 0 · 배포 파일 155개 | 로컬 상태·개인 설정·테스트·Proof 도구 혼입 0개 |
+| `npm.cmd run posttest`, `git diff --check` | 각각 exit 0 | 기존 Legacy 커버리지 산출물과 문서 링크·인용·선언 사실·공백 검사 |
 
-### 공개 문서 최소화 기록
+위 기능 시험 합계는 **53 PASS / 0 FAIL / 1 SKIP**이다. 준비된 제안을 이용한 Local 시험이며 실제 AI의 자연어 작업 품질, 사람의 개입 시간, 브라우저 사용성 또는 Protected Evidence를 입증하지 않는다.
 
-2026-11-12 / 기준 커밋: 위 검토 기준선 / 유형: 문서 정리 / 상태: DOCUMENTED. 사용자 승인에 따라 과거 문서는 Git 이력에 보존하고 현재 트리에서 파일 349개를 제거했다. 새 진입점 포함 docs 파일은 29개이며 제품 문서·현행 구현 계약·Legacy 검사 필수 자료를 남겼다. 삭제 대상 근거 링크는 고정 커밋으로 변경했다. `INDEX.md`와 두 README의 현재 기록 수는 디스크와 일치하도록 갱신했고 검사 기준선은 변경하지 않았다.
+### 이전 전체 회귀의 한계
 
-검증: Windows / PowerShell / Node v24.14.1, `npm.cmd run posttest` exit 0. 이 검사는 남은 문서와 기존 Legacy 커버리지 산출물을 검사하며 삭제 전 역사 기록 자체를 재검증한 결과가 아니다. 다음 작업은 위 수락 게이트를 따른다. Host Live·Protected·외부 파일럿은 여전히 미완료다. 커밋·푸시는 이 변경에 대해 수행하지 않았다.
+문서 정리 전 후보에서 실행한 `npm.cmd test`는 **exit 1**이었다. Live 안전성 21 PASS, MCP 3 PASS, 설치 Goal 2 PASS, Codex MVP 319 PASS / 4 SKIP, Legacy 324 PASS 이후 Alpha에서 469 PASS / 5 FAIL / 7 SKIP으로 중단됐다. 실패는 Docker 보호 시험의 `CODEFLEET_TEST_DOCKER` 미설정(H2 isolation, H3 runtime, H4 IPC, H6 planning, Operator guard)이었다.
 
-### 다음 수락 게이트
+뒤의 Host Core는 별도로 실행해 exit 0 · 135 PASS를 확인했다. 이 결과를 현재 후보의 전체 회귀·보호 검증 통과로 집계하지 않는다.
 
-[로드맵](roadmap.md#현재-host-native-후속-작업)에 따라 신규 프로젝트 Bootstrap 재현과 Host별 Capability·승인 경계를 확인하고, 정확한 계약에 승인된 실제 Host 수용 근거를 확보한다. [통합 후 인계](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/handoffs/2026-11-12/CONSOLIDATED_LOCAL_TESTS_KO.md)를 사용할 때에도 기준 커밋·환경·미확정 효과·승인을 다시 대조한다. 과거 인계 문서의 후보 선정이나 명령 예시는 현재 실행 권한을 부여하지 않는다.
+## 다음 작업과 차단 조건
+
+다음 실사용 시험은 **작은 기능 변경 → 명시적 승인 → 구현·검증 → 중단·재개 → 최종 검토**다. 대상 프로젝트와 작업 범위를 고정하고 해당 계약의 실행 승인을 확보해야 시작할 수 있다. 기본 Host와 비교할 때는 동일 작업·초기 상태·품질 기준으로 준비·개입·검토 시간, 결함·재작업과 관측 가능한 비용을 기록한다.
+
+공개 위임은 `PUBLIC_DELEGATION_BLOCKED`를 유지한다. 인증된 Owner 승인, 실제 Host 집행과 비용 통제는 수용 근거가 필요하다. P2 native 실행 차단과 P1 old-R2 보류는 [통합 당시 기록](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-11-12/repository-consolidation.md)을 따른다. 새 범위는 로드맵의 선행 조건을 확인해 진행한다.
+
+## 기록 관리
+
+이 문서는 현재 상태를 갱신하며 작업 일지를 누적하지 않는다. 과거 기록은 [고정 커밋 안내](../INDEX.md)에서 조회한다. 제품 상태 변경에는 계약·후보·환경과 검증 근거를 연결하고, 문서 정리는 DOCUMENTED로 기록한다.
+
+이번 정리: 문서 최소화와 일회성 도구 4개 제거, 로컬 상태 제외 규칙 보강, 위 Local 시험 결과를 반영했다. 기존 실행 상태·백업은 보존했고 삭제 파일은 Git 이력에서 복구할 수 있다. 후속 작업은 위 실사용 시험이며 Host Live·Protected·외부 파일럿 수용은 미완료다. 신규 결함 ID·기능 수용 승격은 없다.
