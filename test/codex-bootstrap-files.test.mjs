@@ -1777,3 +1777,36 @@ test('NEW_PROJECT index recovers prepared Bootstrap through read-only CLI withou
   assert.equal(partial.data.tasks.find(item => item.taskId === 'damaged-bootstrap-task')?.status, 'BLOCKED');
   assert.equal(f.store.events(f.id).length, before);
 });
+
+test('NEW_PROJECT discovery exposes the next read-only page when newer unrelated Tasks hide an older Bootstrap', async t => {
+  const f = await prepared({ passing: true });
+  t.after(async () => { f.store.close(); await rm(f.root, { recursive: true, force: true }); });
+  const before = f.store.events(f.id).length;
+  const unrelatedPlan = f.store.artifact({ kind: 'IntentPlan', contractKind: 'EXISTING_REPOSITORY' });
+  // The index pages all Tasks, not only Bootstrap Tasks. None of the first
+  // twenty newest rows below should be mistaken for a missing older Bootstrap.
+  for (let i = 0; i < 21; i++) {
+    const id = `unrelated-task-${i}`;
+    f.store.db.prepare('INSERT INTO product_tasks (id,revision,body) VALUES (?,?,?)')
+      .run(id, 1, JSON.stringify({ id, revision: 1, planRef: unrelatedPlan }));
+  }
+  const first = await productCli(['codex-bootstraps'], f.store.directory);
+  assert.equal(first.exitCode, 0);
+  assert.equal(first.data.status, 'MORE_PAGES');
+  assert.deepEqual(first.data.tasks, []);
+  assert.equal(first.data.nextOffset, 20);
+  assert.deepEqual(first.data.nextPageCommand, {
+    argv: ['codex-bootstraps', '--offset', '20'],
+    readOnly: true, executionGranted: false, automaticReplay: false
+  });
+  const second = await productCli(first.data.nextPageCommand.argv, f.store.directory);
+  assert.equal(second.exitCode, 0);
+  assert.equal(second.data.status, 'AVAILABLE');
+  assert.equal(second.data.tasks.find(item => item.taskId === f.id)?.objectiveComplete, false);
+  assert.equal(second.data.tasks.find(item => item.taskId === f.id)?.executionGranted, false);
+  assert.deepEqual(second.data.tasks.find(item => item.taskId === f.id)?.progressCommand?.argv,
+    ['codex-bootstrap-progress', f.id]);
+  assert.equal(second.data.nextOffset, null);
+  assert.equal(second.data.nextPageCommand, null);
+  assert.equal(f.store.events(f.id).length, before);
+});

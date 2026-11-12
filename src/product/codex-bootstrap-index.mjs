@@ -14,7 +14,7 @@ export async function listCodexBootstrapTasks(store, { offset = 0 } = {}) {
   if (!store.db.prepare(
     "SELECT 1 FROM sqlite_master WHERE type='table' AND name='product_tasks'"
   ).get()) return { ...base, status: 'EMPTY', tasks: [], unreadableCount: 0,
-    nextOffset: null };
+    nextOffset: null, nextPageCommand: null };
   // The Task's contract kind is in its immutable Plan artifact, not SQL.
   // Scan at most 20 Tasks per page; filtered pages may have nextOffset.
   const rows = store.db.prepare(
@@ -55,7 +55,14 @@ export async function listCodexBootstrapTasks(store, { offset = 0 } = {}) {
         executionGranted: false, automaticReplay: false });
     }
   }
+  // A page can contain only unrelated Tasks while older Bootstrap records
+  // remain. Return an explicit continuation instead of a false EMPTY result.
+  const nextOffset = rows.length > 20 ? offset + 20 : null;
+  const nextPageCommand = nextOffset !== null && nextOffset <= 999999
+    ? { argv: ['codex-bootstraps', '--offset', String(nextOffset)],
+        readOnly: true, executionGranted: false, automaticReplay: false }
+    : null;
   return { ...base, status: unreadableCount ? 'PARTIAL_BLOCKED'
-    : tasks.length ? 'AVAILABLE' : 'EMPTY',
-    tasks, unreadableCount, nextOffset: rows.length > 20 ? offset + 20 : null };
+    : tasks.length ? 'AVAILABLE' : nextOffset !== null ? 'MORE_PAGES' : 'EMPTY',
+    tasks, unreadableCount, nextOffset, nextPageCommand };
 }

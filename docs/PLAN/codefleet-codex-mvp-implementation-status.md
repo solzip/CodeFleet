@@ -1992,3 +1992,17 @@ a filtered page can be empty but have nextOffset. An offline regression checks
 cross-Store read-only recovery, event preservation and malformed-row isolation.
 Host Live and final Objective E2E remain unverified. Node 24/full checkout and
 Docker are unavailable locally; this HEAD requires new Windows/Linux CI.
+
+## NEW_PROJECT filtered-page recovery handoff (fresh Windows/Linux CI required)
+
+The read-only `codex-bootstraps` index no longer reports `EMPTY` when its
+bounded page contains only unrelated Tasks but older records remain. It returns
+`MORE_PAGES` with a non-executing `nextPageCommand` and retains the current
+20-row limit; missing Task tables and exhausted pages still report `EMPTY`.
+A separate CLI-process regression seeds 21 newer non-Bootstrap Tasks ahead
+of a persisted NEW_PROJECT Task, follows the exact next-page argv, and checks
+that its original Bootstrap handoff is discoverable without new Attempts,
+approvals or Task events. This is restart/discovery UX only, not Host Live,
+Operator admission, Objective acceptance or a privileged execution path.
+The required Node 24 full local suite and Docker are unavailable in this
+runtime; the new commit needs independent Windows/Linux CI before PASS claims.
