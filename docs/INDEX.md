@@ -28,6 +28,12 @@ CodeFleet은 기존 Codex CLI·Claude Code의 모델·인증·세션을 사용�
 
 현재 공개 사용 제품 계획은 [제품 완성 문서](product-completion/README.md)에 있다. 기존 아카이브의 실측과 새 제품 계획을 구분하며, 구현 상태는 새 진행 현황에서 관리한다.
 
+## 2026-11-11
+
+| Date | Document | Type | Result | Follow-up |
+| --- | --- | --- | --- | --- |
+| 2026-11-11 | `runs/2026-11-11/codex-goal-skill-handoff.md` | Codex Host Skill navigation | Persisted Goal, Workflow review and NEW_PROJECT read-only handoff added to the generated Skill | Windows/Linux CI and independent managed Host acceptance remain open |
+
 ## 2026-10-30
 
 | Date | Document | Type | Result | Follow-up |

@@ -1314,6 +1314,12 @@ test('trusted NEW_PROJECT continuation advances exactly one persisted step and s
   assert.equal(proposed.data.itemId,'todo');
   assert.equal(proposed.data.result.approvalRequest.authority,'REQUEST_ONLY');
   assert.equal(proposed.data.continuation.status,'AWAIT_OPERATOR');
+  assert.equal(proposed.data.taskId,f.id);
+  assert.deepEqual(proposed.data.progress,await taskReport(f.store,f.id));
+  assert.equal(proposed.data.progress.continuation.status,proposed.data.continuation.status);
+  assert.equal(proposed.data.objectiveComplete,false);
+  assert.equal(proposed.data.executionGranted,false);
+  assert.equal(proposed.data.automaticReplay,false);
   assert.equal(proposed.data.hostLiveAcceptance,'UNVERIFIED');
   assert.equal(proposed.data.protectedVerified,false);
   assert.deepEqual([turns,proposals,materializationGrants],[1,1,0]);
@@ -1323,6 +1329,10 @@ test('trusted NEW_PROJECT continuation advances exactly one persisted step and s
   assert.equal(pending.exitCode,2);
   assert.equal(pending.data.status,'HUMAN_HANDOFF');
   assert.equal(pending.data.continuation.next.kind,'AWAIT_FILESET_APPROVAL');
+  assert.equal(pending.data.taskId,f.id);
+  assert.deepEqual(pending.data.progress,await taskReport(f.store,f.id));
+  assert.equal(pending.data.objectiveComplete,false);
+  assert.equal(pending.data.automaticReplay,false);
   assert.deepEqual([turns,proposals,materializationGrants],[1,1,0]);
 
   approve(f,proposed.data.result.approvalRequest);
@@ -1330,6 +1340,10 @@ test('trusted NEW_PROJECT continuation advances exactly one persisted step and s
   assert.equal(materialized.exitCode,0,materialized.data?.error);
   assert.equal(materialized.data.step,'MATERIALIZE');
   assert.equal(materialized.data.result.status,'MATERIALIZED');
+  assert.deepEqual(materialized.data.progress,await taskReport(f.store,f.id));
+  assert.equal(materialized.data.progress.continuation.status,
+    materialized.data.continuation.status);
+  assert.equal(materialized.data.objectiveComplete,false);
   assert.deepEqual([turns,proposals,materializationGrants],[1,1,1]);
   for(const file of proposedTodoFiles)
     assert.equal(await readFile(join(f.dir,file.path),'utf8'),file.content);
@@ -1370,6 +1384,10 @@ test('trusted NEW_PROJECT continuation advances exactly one persisted step and s
     'Expected read-only Local verification handoff: '+JSON.stringify(needsLocalTrust.data));
   assert.equal(needsLocalTrust.data.status,'HUMAN_HANDOFF');
   assert.equal(needsLocalTrust.data.continuation.next.kind,'RUN_LOCAL_VERIFICATION');
+  assert.deepEqual(needsLocalTrust.data.progress,await taskReport(f.store,f.id));
+  assert.equal(needsLocalTrust.data.taskId,f.id);
+  assert.equal(needsLocalTrust.data.objectiveComplete,false);
+  assert.equal(needsLocalTrust.data.executionGranted,false);
   assert.deepEqual([turns,proposals,materializationGrants],[2,2,2]);
   assert.equal(task(f.store,f.id).bootstrap.verifications?.tests,undefined);
   assert.equal((await taskReport(f.store,f.id)).complete,false);
@@ -1727,4 +1745,68 @@ test('trusted NEW_PROJECT CLI completes persisted Todo to Calendar to real Local
   assert.deepEqual(hostTurns,['todo','calendar']);
   assert.deepEqual(materializationGrants,['todo','calendar']);
   assert.deepEqual(localGrants,['tests'],'Verified Local command cannot be replayed');
+});
+
+test('NEW_PROJECT index recovers prepared Bootstrap through read-only CLI without grant or replay', async t => {
+  const f = await prepared({ passing: true });
+  t.after(async () => { f.store.close(); await rm(f.root, { recursive: true, force: true }); });
+  const before = f.store.events(f.id).length;
+  const indexed = await productCli(['codex-bootstraps'], f.store.directory);
+  assert.equal(indexed.exitCode, 0);
+  assert.equal(indexed.data.authority, 'READ_ONLY_PERSISTED_INDEX');
+  assert.equal(indexed.data.executionGranted, false);
+  const entry = indexed.data.tasks.find(item => item.taskId === f.id);
+  assert.ok(entry);
+  assert.equal(entry.objectiveComplete, false);
+  assert.equal(entry.executionGranted, false);
+  assert.deepEqual(entry.progressCommand?.argv, ['codex-bootstrap-progress', f.id]);
+  const resumed = await productCli(entry.progressCommand.argv, f.store.directory);
+  assert.equal(resumed.data.taskId, f.id);
+  assert.equal(resumed.data.executionGranted, false);
+  assert.equal(resumed.data.objectiveComplete, false);
+  assert.equal(f.store.events(f.id).length, before);
+  const denied = await productCli(['codex-bootstraps', '--allow-model'], f.store.directory);
+  assert.equal(denied.exitCode, 1);
+  assert.equal(f.store.events(f.id).length, before);
+  f.store.db.prepare('INSERT INTO product_tasks (id,revision,body) VALUES (?,?,?)')
+    .run('damaged-bootstrap-task', 1, '{');
+  const partial = await productCli(['codex-bootstraps'], f.store.directory);
+  assert.equal(partial.exitCode, 2);
+  assert.equal(partial.data.status, 'PARTIAL_BLOCKED');
+  assert.equal(partial.data.tasks.find(item => item.taskId === f.id)?.objectiveComplete, false);
+  assert.equal(partial.data.tasks.find(item => item.taskId === 'damaged-bootstrap-task')?.status, 'BLOCKED');
+  assert.equal(f.store.events(f.id).length, before);
+});
+
+test('NEW_PROJECT discovery exposes the next read-only page when newer unrelated Tasks hide an older Bootstrap', async t => {
+  const f = await prepared({ passing: true });
+  t.after(async () => { f.store.close(); await rm(f.root, { recursive: true, force: true }); });
+  const before = f.store.events(f.id).length;
+  const unrelatedPlan = f.store.artifact({ kind: 'IntentPlan', contractKind: 'EXISTING_REPOSITORY' });
+  // The index pages all Tasks, not only Bootstrap Tasks. None of the first
+  // twenty newest rows below should be mistaken for a missing older Bootstrap.
+  for (let i = 0; i < 21; i++) {
+    const id = `unrelated-task-${i}`;
+    f.store.db.prepare('INSERT INTO product_tasks (id,revision,body) VALUES (?,?,?)')
+      .run(id, 1, JSON.stringify({ id, revision: 1, planRef: unrelatedPlan }));
+  }
+  const first = await productCli(['codex-bootstraps'], f.store.directory);
+  assert.equal(first.exitCode, 0);
+  assert.equal(first.data.status, 'MORE_PAGES');
+  assert.deepEqual(first.data.tasks, []);
+  assert.equal(first.data.nextOffset, 20);
+  assert.deepEqual(first.data.nextPageCommand, {
+    argv: ['codex-bootstraps', '--offset', '20'],
+    readOnly: true, executionGranted: false, automaticReplay: false
+  });
+  const second = await productCli(first.data.nextPageCommand.argv, f.store.directory);
+  assert.equal(second.exitCode, 0);
+  assert.equal(second.data.status, 'AVAILABLE');
+  assert.equal(second.data.tasks.find(item => item.taskId === f.id)?.objectiveComplete, false);
+  assert.equal(second.data.tasks.find(item => item.taskId === f.id)?.executionGranted, false);
+  assert.deepEqual(second.data.tasks.find(item => item.taskId === f.id)?.progressCommand?.argv,
+    ['codex-bootstrap-progress', f.id]);
+  assert.equal(second.data.nextOffset, null);
+  assert.equal(second.data.nextPageCommand, null);
+  assert.equal(f.store.events(f.id).length, before);
 });

@@ -22,7 +22,9 @@ import { submitBootstrapFiles } from './tasks.mjs';
 import { inspectReviewedCodexPlan, inspectReviewedCodexPlanAtSource, inspectReviewedCodexWorkflow, inspectReviewedCodexWorkflowAtSource, prepareReviewedCodexWorkflow } from './codex-reviewed-workflow.mjs';
 import { readDeliveredObjectiveStatus } from './objective-status.mjs';
 import { isCodexMvpFacadeForStore } from './codex-mvp-facade.mjs';
-import { inspectCodexPlanningStatus, inspectCodexGoalProgress } from './codex-planning-status.mjs';
+import { inspectCodexPlanningStatus, inspectCodexGoalProgress, listCodexGoalSessions } from './codex-planning-status.mjs';
+import { listCodexBootstrapTasks } from './codex-bootstrap-index.mjs';
+import { presentCodexGoalExecution } from './codex-goal-result.mjs';
 import { CodexPlanningDispatchError } from '../hosts/codex-managed-planning.mjs';
 import { approval as requireWorkflowApproval } from '../workflow/persistence.mjs';
 import { validateWorkflow } from '../workflow/definition.mjs';
@@ -39,12 +41,14 @@ codefleet-alpha objective run|resume <task-id> --allow-model
 codefleet-alpha objective status [task-id] | report <task-or-run-id>
 codefleet-alpha objective delivered-status <workflow-id> (read-only delivered-tree Objective acceptance; never starts Host or writes State)
 codefleet-alpha objective workflow-progress <workflow-id> (read-only DAG/Repair progress and current delivered Objective; never grants execution)
+codefleet-alpha objective codex-goals [--offset 0..999999] (read-only persisted Goal/Workflow/Objective status after restart; inspect each Goal separately; no Host/Operator grant)
+codefleet-alpha objective codex-bootstraps [--offset 0..999999] (read-only persisted NEW_PROJECT Task discovery after restart; inspect each Task separately; no Host/Operator grant)
 codefleet-alpha objective codex-planning-status <planning-session-id> [--repository ABSOLUTE_PATH] (read-only Host Planning lifecycle; optional current-source check for validated results, no-replay recovery)
-codefleet-alpha objective codex-goal-progress <planning-session-id> (read-only Goal→Planning→Workflow/DAG→delivered Objective and no-replay continuation)
-codefleet-alpha objective review-codex-plan <planning-session-id> [--repository ABSOLUTE_PATH] (read-only pinned Contract/DAG review; optional clean Git checkout check, never grants execution)
+codefleet-alpha objective codex-goal-progress <planning-session-id> [--repository ABSOLUTE_PATH] (read-only Goal→Planning→Workflow/DAG→delivered Objective; with --repository, expose exact current-source Plan review or pending Workflow approval/Contract review before dispatch; no-replay continuation)
+codefleet-alpha objective codex-bootstrap-progress <task-id> (read-only persisted NEW_PROJECT Fileset/DAG/Repair/Local verification handoff; never grants execution)\ncodefleet-alpha objective review-codex-plan <planning-session-id> [--repository ABSOLUTE_PATH] (read-only pinned Contract/DAG review; optional clean Git checkout check, never grants execution)
 codefleet-alpha objective review-codex-workflow <workflow-id> [--repository ABSOLUTE_PATH] (read-only Contract/DAG, approval and optional clean Git baseline check; no execution)
 codefleet-alpha objective plan-codex-goal "natural-language Goal" --repository ABSOLUTE_PATH
-  (trusted Host embedding only; independent read-only planning Turn grant, model usage may be billed; no Workflow approval or source writes)
+  (trusted Host embedding only; read-only Host planning with current-source Contract/DAG review in response; model usage may be billed; no Workflow approval or source writes)
 codefleet-alpha objective propose-codex-bootstrap-files <task-id> <local-edit-item-id>
   (trusted Host embedding only; separately approved NEW_PROJECT Fileset proposal, no filesystem writes or execution grant)
 codefleet-alpha objective advance-codex-bootstrap <task-id> [--repair-item <local-edit-item-id> | --verification-request REQUEST.json]
@@ -110,7 +114,7 @@ No command enables an unverified Provider or performs remote delivery.`;
 function parse(values) {
   const positional = [], options = {};
   const flags = new Set(['allow-model', 'json', 'acknowledge-unisolated', 'local-existing']);
-  const allowed = new Set(['repair-item', 'verification-request', 'acceptance', 'files', 'tests', 'criterion', 'item', 'parallel', 'attempts', 'timeout', 'budget', 'hash', 'actor', 'planner', 'codex-executable', 'claude-executable', 'unknown', 'scope', 'revision', 'trust', 'decision', 'request-id', 'expires', 'repository', 'source-hash']);
+  const allowed = new Set(['repair-item', 'verification-request', 'acceptance', 'files', 'tests', 'criterion', 'item', 'parallel', 'attempts', 'timeout', 'budget', 'hash', 'actor', 'planner', 'codex-executable', 'claude-executable', 'unknown', 'scope', 'revision', 'trust', 'decision', 'request-id', 'expires', 'repository', 'source-hash', 'offset']);
   for (let i = 0; i < values.length; i++) {
     const value = values[i];
     if (!value.startsWith('--')) { positional.push(value); continue; }
@@ -124,6 +128,65 @@ function parse(values) {
 }
 const list = value => value?.split(',').filter(Boolean);
 const number = (value, fallback) => value === undefined ? fallback : Number(value);
+
+// This exact argv is a read-only suggestion, not an implicit review, approval
+// or permission to dispatch a Host Turn.
+function reviewedGoalPrepareCommand(review, sessionId, repository) {
+  if (review?.status !== 'REVIEW_REQUIRED' ||
+      review.sourceFreshness !== 'PINNED_CLEAN_AT_REVIEW' ||
+      !/^[a-f0-9]{64}$/.test(review.workflowHash ?? '') ||
+      !/^[a-f0-9]{64}$/.test(review.sourceContractHash ?? '')) return null;
+  return {
+    argv: ['prepare-codex-workflow', sessionId, '--repository', repository,
+      '--hash', review.workflowHash, '--source-hash', review.sourceContractHash],
+    humanReviewRequired: true, approved: false, executionGranted: false
+  };
+}
+
+// A structured suggestion for a reviewed, currently approved Workflow is
+// not an Operator identity, a managed Host grant, or a restart permission.
+function reviewedGoalRunCommand(review, sessionId, workflowId) {
+  if (review?.status !== 'REVIEW_REQUIRED' ||
+      review.sourceFreshness !== 'PINNED_CLEAN_AT_REVIEW' ||
+      review.approvalState !== 'CURRENT_WORKFLOW_APPROVAL_VALID' ||
+      review.workflowId !== workflowId ||
+      !/^[a-f0-9]{64}$/.test(review.workflowHash ?? '')) return null;
+  return {
+    argv: ['run-codex-goal', sessionId, '--hash', review.workflowHash],
+    trustedEmbeddingRequired: true, authenticatedOperatorRequired: true,
+    managedHostGrantRequired: true, executionGranted: false,
+    automaticReplay: false
+  };
+}
+
+// Read-only handoff hints for the trusted, one-step NEW_PROJECT bridge.
+// Only return exact, current-state argv; a request needing caller-selected
+// Local verification input is deliberately not guessed. None is an approval.
+export function codexBootstrapHandoffCommands(taskId, continuation) {
+  const next = continuation?.next;
+  if (!next?.itemId) return [];
+  const hint = (kind, itemId, argv) => ({
+    kind, itemId, argv, trustedEmbeddingRequired: true,
+    independentGrantRequired: true, executionGranted: false,
+    automaticReplay: false
+  });
+  if (continuation.status === 'HOST_PROPOSAL_REQUIRED' &&
+      next.kind === 'PROPOSE_FILESET')
+    return [hint('PROPOSE_FILESET', next.itemId,
+      ['advance-codex-bootstrap', taskId])];
+  if (continuation.status === 'AWAIT_OPERATOR' &&
+      next.kind === 'MATERIALIZE')
+    return [hint('MATERIALIZE', next.itemId,
+      ['advance-codex-bootstrap', taskId])];
+  if (continuation.status === 'AWAIT_REPAIR_SELECTION' &&
+      next.kind === 'REPAIR_REQUIRED' && next.failedEvidenceRef &&
+      Array.isArray(next.repairCandidates))
+    return [...new Set(next.repairCandidates)]
+      .filter(id => typeof id === 'string' && id.length)
+      .map(id => hint('PROPOSE_REPAIR_FILESET', id,
+        ['advance-codex-bootstrap', taskId, '--repair-item', id]));
+  return [];
+}
 
 function requireCodexGoalEntryArgs(args, o) {
   if (args.length !== 1 || !args[0]?.trim() ||
@@ -213,8 +276,22 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
   const [action, ...rest] = argv;
   if (!action || ['help', '--help'].includes(action)) return { exitCode: 0, data: { schemaVersion: 1, help } };
   const { positional: args, options: o } = parse(rest);
-  if (o.repository !== undefined && !['plan-codex-goal', 'codex-planning-status', 'review-codex-plan', 'review-codex-workflow', 'prepare-codex-workflow'].includes(action))
+  if (o.repository !== undefined && !['plan-codex-goal', 'codex-planning-status', 'codex-goal-progress', 'review-codex-plan', 'review-codex-workflow', 'prepare-codex-workflow'].includes(action))
     throw Error('--repository is only valid for Codex planning/Workflow review or pending Workflow creation');
+  if (action === 'codex-bootstraps') {
+    if (args.length || Object.keys(o).some(key => key !== 'offset') ||
+        (o.offset !== undefined && !/^(0|[1-9]\d{0,5})$/.test(o.offset)))
+      throw Error('codex-bootstraps accepts optional --offset 0..999999 only; no execution flags');
+    const data = await listCodexBootstrapTasks(store, { offset: Number(o.offset ?? 0) });
+    return { exitCode: data.status === 'PARTIAL_BLOCKED' ? 2 : 0, data };
+  }
+  if (action === 'codex-goals') {
+    if (args.length || Object.keys(o).some(key => key !== 'offset') ||
+        (o.offset !== undefined && !/^(0|[1-9]\d{0,5})$/.test(o.offset)))
+      throw Error('codex-goals accepts no Goal ID and optional --offset 0..999999 only; no execution flags');
+    const data = await listCodexGoalSessions(store, { offset: Number(o.offset ?? 0) });
+    return { exitCode: data.status === 'PARTIAL_BLOCKED' ? 2 : 0, data };
+  }
   if (action === 'plan-codex-goal') {
     requireCodexGoalEntryArgs(args, o);
     const binding = execution?.codexAdmission;
@@ -225,8 +302,23 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     // flags or a Goal string, nor does it approve/promote the resulting DAG.
     try {
       const data = await binding.facade.planExisting(o.repository, args[0], { cwd: o.repository });
+      // Include the current-source, independent Contract/DAG review in the
+      // planning handoff. A VALIDATED Host result is not a Workflow approval,
+      // execution grant or evidence of actual Codex Host Live acceptance.
+      const planningSessionId = data.evidence?.sessionId ?? null;
+      const planReview = data.status === 'VALIDATED' && planningSessionId
+        ? await inspectReviewedCodexPlanAtSource(store, planningSessionId, o.repository)
+        : null;
+      const prepareCommand = reviewedGoalPrepareCommand(planReview, planningSessionId, o.repository);
       return { exitCode: data.status === 'VALIDATED' ? 0 : 2,
-        data: { ...data, hostLiveAcceptance: 'UNVERIFIED' } };
+        data: { ...data, planningSessionId, ...(planReview ? {
+          planReview,
+          nextAction: planReview.status === 'REVIEW_REQUIRED' &&
+            planReview.sourceFreshness === 'PINNED_CLEAN_AT_REVIEW'
+            ? 'Independently inspect planReview Contract/DAG and both hashes before explicitly preparing an unapproved Workflow'
+            : 'Reobserve the exact clean repository and replan before preparing a Workflow'
+        } : {}), ...(prepareCommand ? { prepareCommand } : {}),
+        hostLiveAcceptance: 'UNVERIFIED' } };
     } catch (error) {
       // Only a genuinely reserved Host Turn can supply a bound session ID.
       // Do not manufacture a replayable request, approval or status from a
@@ -331,7 +423,10 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     if (!step || !next?.itemId)
       return { exitCode: 2, data: {
         schemaVersion: 1, status: 'HUMAN_HANDOFF',
-        continuation, executionGranted: false,
+        taskId: args[0], progress: before, continuation,
+        localComplete: before.acceptance?.complete === true,
+        objectiveComplete: false, automaticReplay: false,
+        executionGranted: false,
         protectedVerified: false, hostLiveAcceptance: 'UNVERIFIED'
       } };
     // Recheck the persisted task before entering the approved Controller/Host
@@ -378,19 +473,57 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
           : result.status === 'MATERIALIZED' ? 0 : 2,
       data: {
         schemaVersion: 1, status: result.status ?? 'STEP_RECORDED',
-        step, itemId: repairItem ?? next.itemId,
+        taskId: args[0], step, itemId: repairItem ?? next.itemId,
         ...(step === 'PROPOSE_REPAIR_FILESET' ? { verificationItem: next.itemId } : {}),
-        result, continuation: after.continuation,
+        result, progress: after, continuation: after.continuation,
+        localComplete: after.acceptance?.complete === true,
+        objectiveComplete: false, automaticReplay: false, executionGranted: false,
         ...(step === 'RUN_LOCAL_VERIFICATION' ? { protection: 'UNPROTECTED' } : {}),
         protectedVerified: false, hostLiveAcceptance: 'UNVERIFIED'
       } };
   }
   if (action === 'codex-goal-progress') {
     if (args.length !== 1 || !args[0] || args[0].startsWith('-') ||
-        Object.keys(o).length !== 0)
-      throw Error('codex-goal-progress requires exactly one Planning session ID and no execution/approval options');
+        Object.keys(o).some(key => key !== 'repository') ||
+        (o.repository !== undefined && !path.isAbsolute(o.repository)))
+      throw Error('codex-goal-progress requires one Planning session ID and optional absolute --repository only; no execution/approval options');
     const data = await inspectCodexGoalProgress(store,args[0]);
-    return { exitCode:data.objectiveComplete === true ? 0 : 2, data };
+    if (!o.repository) return { exitCode:data.objectiveComplete === true ? 0 : 2, data };
+    // This is a pre-dispatch source check, never an execution or replay grant.
+    // After an Attempt or Delivery, the persisted recovery and independently
+    // observed delivered Objective take precedence over the original baseline.
+    if (data.status === 'OBJECTIVE_COMPLETE' ||
+        data.workflow?.workItems?.some(item => item.attempt !== null) ||
+        data.workflow?.workflowState === 'COMPLETED' ||
+        data.workflow?.continuation?.status === 'RECONCILE_REQUIRED')
+      return { exitCode:data.objectiveComplete === true ? 0 : 2,
+        data:{...data,sourceFreshness:'NOT_RECHECKED_AFTER_DISPATCH'} };
+    if (!['AWAIT_WORKFLOW_REVIEW','WORKFLOW_IN_PROGRESS'].includes(data.status))
+      return { exitCode:2, data:{...data,sourceFreshness:'NOT_CHECKED'} };
+    const review = data.workflowId
+      ? await inspectReviewedCodexWorkflowAtSource(store,data.workflowId,o.repository)
+      : await inspectReviewedCodexPlanAtSource(store,args[0],o.repository);
+    if (review.status !== 'REVIEW_REQUIRED' ||
+        review.sourceFreshness !== 'PINNED_CLEAN_AT_REVIEW')
+      return { exitCode:2, data:{
+        ...data, status:'SOURCE_REVIEW_REQUIRED', sourceFreshness:'STALE_OR_MISMATCHED',
+        continuation:{kind:'REVIEW_SOURCE_OR_REPLAN',
+          automaticReplay:false,executionGranted:false}
+      } };
+    // Once the exact repository has been independently reobserved, surface
+    // the same immutable Contract/DAG preview as review-codex-plan in this
+    // Goal-level handoff. Reading hashes is not signing or approving them.
+    const prepareCommand = data.status === 'AWAIT_WORKFLOW_REVIEW'
+      ? reviewedGoalPrepareCommand(review, args[0], o.repository) : null;
+    const runCommand = data.status === 'WORKFLOW_IN_PROGRESS'
+      ? reviewedGoalRunCommand(review, args[0], data.workflowId) : null;
+    return { exitCode:2, data:{
+      ...data, sourceFreshness:'PINNED_CLEAN_AT_REVIEW',
+      ...(data.status === 'AWAIT_WORKFLOW_REVIEW' ? { planReview:review } : {}),
+      ...(data.status === 'WORKFLOW_IN_PROGRESS' ? { workflowReview:review } : {}),
+      ...(prepareCommand ? { prepareCommand } : {}),
+      ...(runCommand ? { runCommand } : {})
+    } };
   }
   if (action === 'codex-planning-status') {
     if (args.length !== 1 || !args[0] || args[0].startsWith('-') ||
@@ -446,10 +579,23 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       authorizeReview: async scope =>
         scope.workflowHash === o.hash && scope.sourceContractHash === o['source-hash']
     });
+    // Reuse the independent read-only reviewer immediately after Workflow
+    // promotion. A persisted Workflow is not approved or executable; if its
+    // source changed during this observation, expose a fresh-review handoff.
+    const review = await inspectReviewedCodexWorkflowAtSource(
+      store, data.workflowId, o.repository).catch(() => null);
+    const reviewCurrent = review?.status === 'REVIEW_REQUIRED' &&
+      review.sourceFreshness === 'PINNED_CLEAN_AT_REVIEW' &&
+      review.workflowHash === data.workflowHash &&
+      review.sourceContractHash === data.sourceContractHash;
     return { exitCode: 0, data: { ...data,
       reviewAuthority: 'EXPLICIT_LOCAL_HASH_CONFIRMATION_ONLY',
+      workflowReview: reviewCurrent ? review : null,
+      workflowReviewStatus: reviewCurrent ? 'CURRENT_SOURCE_REVIEWED' : 'RECHECK_REQUIRED',
       hostLiveAcceptance: 'UNVERIFIED',
-      nextAction: 'Separate Workflow approval and trusted managed-Host execution grant required'
+      nextAction: reviewCurrent
+        ? 'Inspect workflowReview and obtain separate Workflow approval, authenticated Operator admission and managed-Host grant'
+        : 'Recheck the original clean source and reviewed Workflow before any approval or execution'
     } };
   }
   if (action === 'run-codex-goal' || action === 'resume-codex-goal') {
@@ -460,13 +606,34 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     // which enforces current Operator approval, source freshness, budget,
     // Lease, Host grant and cancellation without a second execution engine.
     const progress = await inspectCodexGoalProgress(store, args[0]);
+    // A validated Goal may still be waiting for its independently reviewed
+    // Workflow. Preserve the persisted handoff instead of returning an opaque
+    // hash error; neither this response nor the supplied hash is a run grant.
+    if (['PLANNING_NOT_READY','AWAIT_WORKFLOW_REVIEW','BLOCKED'].includes(progress.status) &&
+        progress.workflowId === null)
+      return { exitCode:1, data: {
+        schemaVersion:1, status:'CODEX_GOAL_EXECUTION_NOT_READY',
+        planningSessionId:args[0], workflowId:null,
+        error:'Codex Goal has no current reviewed Workflow ready for execution',
+        goalProgress:progress, goalProgressStatus:'OBSERVED',
+        continuation:progress.continuation, objectiveComplete:false,
+        automaticReplay:false, executionSucceeded:false, executionGranted:false,
+        hostLiveAcceptance:'UNVERIFIED', protectedVerified:false,
+        nextAction:progress.status === 'AWAIT_WORKFLOW_REVIEW'
+          ? 'Review current source with codex-goal-progress --repository ABSOLUTE_PATH, then explicitly prepare the reviewed Workflow'
+          : 'Inspect codex-planning-status and resolve Planning or provenance before execution'
+      } };
     if (!['WORKFLOW_IN_PROGRESS','OBJECTIVE_COMPLETE'].includes(progress.status) ||
         progress.workflowId !== 'planning-'+args[0] ||
         progress.workflow?.workflowHash !== o.hash)
       throw Error('Codex Goal requires a current reviewed Workflow and exact hash; inspect codex-goal-progress');
     if (progress.objectiveComplete) {
+      // Preserve the Goal-level response shape for a settled, no-op resume.
+      // The already reobserved Objective is read-only: no new Host or Operator grant.
       return { exitCode:0, data: {
-        ...progress, executionSucceeded:false, executionGranted:false,
+        ...progress, planningSessionId:args[0],
+        goalProgress:progress, goalProgressStatus:'OBSERVED',
+        executionSucceeded:false, executionGranted:false,
         nextAction:'Delivered Objective already complete; no Host Turn started'
       } };
     }
@@ -475,7 +642,11 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
         action === 'resume-codex-goal' ? 'resume-codex-workflow' : 'run-codex-workflow',
         progress.workflowId, '--hash', o.hash
       ], {store,execution,plannerRegistry});
-      return { ...delegated, data: { ...delegated.data, planningSessionId:args[0] } };
+      // Report the same persisted Goal → reviewed DAG → delivered Objective
+      // handoff after delegated execution or a managed-Host denial. Never
+      // manufacture COMPLETE when the fresh read-only projection is unavailable.
+      const goalProgress = await inspectCodexGoalProgress(store,args[0]).catch(() => null);
+      return presentCodexGoalExecution(delegated,args[0],goalProgress);
     } catch (error) {
       // Pre-dispatch denials need the same persisted recovery handoff as
       // failures after the Controller starts. Do not grant or replay a Turn.
@@ -639,6 +810,27 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
       } };
     }
     return { exitCode:data.objective?.objectiveComplete === true ? 0 : 2, data };
+  }
+  if (action === 'codex-bootstrap-progress') {
+    if (args.length !== 1 || !args[0] || args[0].startsWith('-') ||
+        Object.keys(o).length)
+      throw Error('codex-bootstrap-progress requires one NEW_PROJECT Task ID and no execution or approval options');
+    // Observe the same persisted NEW_PROJECT continuation used by the
+    // trusted one-step bridge, but without opening a writable Store, starting
+    // a Host Turn, approving Filesets or accepting Local evidence as Objective.
+    const progress = await taskReport(store, args[0]);
+    if (progress.contractKind !== 'NEW_PROJECT' || !progress.bootstrap)
+      throw Error('codex-bootstrap-progress requires a prepared NEW_PROJECT Task');
+    return { exitCode: progress.acceptance?.complete === true ? 0 : 2,
+      data: {
+        schemaVersion:1, kind:'CODEFLEET_CODEX_BOOTSTRAP_PROGRESS_V1',
+        taskId:args[0], progress, continuation:progress.continuation,
+        nextCommands:codexBootstrapHandoffCommands(args[0], progress.continuation),
+        localComplete:progress.acceptance?.complete === true,
+        objectiveComplete:false, automaticReplay:false,
+        executionGranted:false, protectedVerified:false,
+        hostLiveAcceptance:'UNVERIFIED'
+      } };
   }
   if (action === 'workflow-progress') {
     if (args.length !== 1 || Object.keys(o).length || !args[0] || args[0].startsWith('-'))
@@ -905,7 +1097,7 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
             ? positional[2] : options['verification-request']));
     }
     if (!argv[0] || ['help', '--help'].includes(argv[0])) return await dispatchProduct(argv);
-    store = new Store(directory, { readOnly: ['recover', 'work-log', 'proposal-batch', 'repair-proposal-request', 'supervised-proposal-review', 'delivered-status', 'workflow-progress', 'codex-planning-status', 'codex-goal-progress', 'review-codex-plan', 'review-codex-workflow'].includes(argv[0]) });
+    store = new Store(directory, { readOnly: ['recover', 'work-log', 'proposal-batch', 'repair-proposal-request', 'supervised-proposal-review', 'delivered-status', 'workflow-progress', 'codex-planning-status', 'codex-goal-progress', 'review-codex-plan', 'review-codex-workflow', 'codex-goals', 'codex-bootstraps', 'codex-bootstrap-progress'].includes(argv[0]) });
     if (codexTrusted) {
       const codexAdmission = await createCodexAdmission(store);
       // dispatchProduct still checks authentic facade identity, current Store

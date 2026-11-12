@@ -1538,3 +1538,471 @@ rather than automatic replay after interruption. This tests recovery visibility
 at the dependent WorkItem boundary; it does not simulate a native Codex process
 crash, certify Host Live, or accept a Protected Objective. Fresh Windows/Linux
 CI is required for this test-only revision.
+
+## Goal-ID managed execution returns current Goal-level continuation (new CI required)
+
+The trusted `run-codex-goal` / `resume-codex-goal` entry now includes a fresh
+read-only `codex-goal-progress` projection after delegated Controller execution,
+alongside the Workflow result and originating Planning session ID. The embedding
+can present the current Goal → reviewed Contract/DAG → WorkItems → delivered
+Objective handoff after a managed Host denial or settled execution without a
+second CLI invocation. No new authorization or replay is introduced. If the
+read-only observation fails, `goalProgressStatus: UNAVAILABLE` and
+`goalProgress: null` explicitly avoid an invented completed Objective.
+Synthetic regressions cover a rejected Host grant and a delivered two-WorkItem
+Goal. This is not native Codex Host Live, authenticated Operator credential
+integration, protected execution or independent final Objective acceptance.
+Fresh Windows/Linux CI is required.
+
+## One-command Goal source readiness before Host dispatch (fresh CI required)
+
+The read-only `codex-goal-progress <planning-session-id> --repository ABSOLUTE_PATH`
+option checks the canonical checkout against the original persisted
+Planning/Workflow repository identity and clean pinned Git baseline before
+any WorkItem dispatch. A different repository, dirty working tree, changed
+HEAD or missing checkout returns `SOURCE_REVIEW_REQUIRED` with an explicit
+no-replay review/replan handoff rather than suggesting Workflow approval
+against stale source. Once a WorkItem has been attempted or delivery has
+settled, the optional pre-dispatch check is skipped and labeled
+`NOT_RECHECKED_AFTER_DISPATCH`: persisted recovery and independent delivered
+Objective re-observation remain authoritative. Offline regressions cover
+Planning and pending Workflow, source drift, invalid relative paths, unchanged
+Store events/Attempts and completed Delivery. This grants no Operator/Host
+authority and does not prove Host Live or final Objective acceptance.
+New Windows/Linux CI is required for this revision.
+
+## Current-source Goal readiness includes exact Contract/DAG preview (fresh CI required)
+
+The read-only `codex-goal-progress <session-id> --repository ABSOLUTE_PATH`
+now includes `planReview` from the existing `review-codex-plan` validator
+when a validated Plan has no Workflow yet **and** its original repository,
+Git HEAD and clean source baseline have been reobserved. Developers can
+inspect the WorkItem DAG, mandatory final criterion, exact Workflow and
+source-contract hashes, execution limits and required verification in one
+Goal-level status call before explicitly preparing a pending Workflow.
+Without `--repository`, after Workflow creation, or when source drift is
+observed, this field is absent; the mismatched source requires review or
+replanning. The projection remains read-only and does not approve a plan,
+create a Workflow, authenticate an Operator, start Codex or grant a Lease.
+An offline regression compares the embedded review with the existing
+independent review command and checks stale-source omission and no new
+Attempts. This is not Host Live or final Objective acceptance. The new
+HEAD needs independent Windows/Linux CI.
+
+## Goal-level approved Workflow review before first Host dispatch (fresh CI required)
+
+The read-only `codex-goal-progress <session-id> --repository ABSOLUTE_PATH`
+now includes the existing independent `review-codex-workflow` projection as
+`workflowReview` when a validated Plan has already been promoted, the exact
+original repository is still clean/pinned, and no WorkItem Attempt or Delivery
+requires recovery. This surfaces the current Workflow DAG and Contract hash,
+`MISSING_OR_EXPIRED` versus `CURRENT_WORKFLOW_APPROVAL_VALID` approval state,
+and the separate authenticated Operator/managed-Host grant handoff without
+asking the developer to guess another command. Source drift suppresses this
+review and demands explicit source review/replanning; after dispatch the
+persisted recovery and delivered Objective state remain authoritative.
+Offline regression checks parity with the existing Workflow review command,
+missing/valid approval, zero new Attempts, and review omission on source drift.
+This is read-only visibility, not permission to execute or evidence of Codex
+Host Live, PROTECTED verification or Objective completion. This HEAD requires
+its own Windows/Linux CI before treating the new regressions as passing.
+
+## Goal execution before Workflow review returns actionable handoff (fresh CI required)
+
+The trusted `run-codex-goal` and `resume-codex-goal` aliases now return an
+explicit `CODEX_GOAL_EXECUTION_NOT_READY` response when the persisted Goal
+is still in Planning, awaiting independent Workflow preparation, or blocked
+by invalid provenance. It includes the current read-only `goalProgress`,
+a non-replay continuation and a concrete review/replan instruction rather than
+only an opaque Workflow hash error. An invalid hash against an existing
+reviewed Workflow still fails closed. Offline regressions exercise both
+aliases before Workflow creation with zero Host Turns or WorkItem Attempts.
+This is a recovery/entry UX improvement, not a grant, native Host Live
+evidence or Objective acceptance. The new HEAD requires its own CI result.
+
+## Delivered Goal run/resume no-op response parity (fresh CI required)
+
+After a previously delivered Goal has a currently independently observed
+`OBJECTIVE_COMPLETE` verdict, both trusted `run-codex-goal` and
+`resume-codex-goal` now return the same `planningSessionId`,
+`goalProgressStatus: OBSERVED`, and read-only `goalProgress` envelope as
+the delegated execution path. The no-op still reports
+`executionSucceeded: false` and `executionGranted: false`; it never
+repeats a Host Turn or reuses a prior Operator grant for a new effect.
+The two-WorkItem synthetic CLI fixture checks both aliases, unchanged
+attempt/event counts, exact current Goal progress, and no additional Turns.
+This is offline UX consistency, not a Host Live or Protected Objective proof.
+Fresh Windows/Linux CI is required for this change.
+
+## NEW_PROJECT one-command progress and handoff parity (fresh CI required)
+
+The trusted `advance-codex-bootstrap` response now includes the existing
+read-only `TaskReport` snapshot for both one-step results and human handoffs,
+with Task ID, Local completion diagnostic and explicit non-Objective completion.
+A developer can continue the NEW_PROJECT Fileset → approved materialization →
+Local verification handoff without a separate status round-trip. No new
+execution, approval, replay, source write or scheduler authority is introduced.
+The existing synthetic Todo/Calendar progression fixture checks the response
+against the same persisted TaskReport at proposal, pending approval, materialized
+state and Local-verification handoff. This is not native Codex Host Live,
+protected verification or final independent Objective acceptance. The new
+commit requires its own Windows/Linux CI before claiming offline PASS.
+
+## Single-command Goal Planning returns a current-source Contract/DAG preview (new CI required)
+
+The trusted `plan-codex-goal` result now includes the Planning session ID and
+the existing independent `review-codex-plan --repository` projection for a
+persisted VALIDATED draft. The response exposes the source-bound Workflow and
+source-contract hashes, ordered WorkItems/dependencies, mandatory final
+acceptance criteria and limits immediately after the Host planning Turn.
+A changed/mismatched repository produces a BLOCKED review rather than a
+reviewable Contract; an unvalidated or denied plan has no review preview.
+The separate explicit `prepare-codex-workflow` confirmation, Workflow approval,
+authenticated Operator admission, Host grant and Lease remain mandatory.
+Offline regression assertions compare the embedded projection to the standalone
+review and require no Workflow/Attempt creation or additional Host Turn.
+The current environment cannot check out the full repo or run Node 24/Docker;
+Windows/Linux CI for this new head is the pending independent offline check.
+This is not native Codex Host Live or Objective E2E acceptance.
+
+## Goal Plan-to-Workflow structured preparation handoff (fresh CI required)
+
+The trusted `plan-codex-goal` result and the read-only
+`codex-goal-progress <session-id> --repository ABSOLUTE_PATH` preview
+now return an exact `prepareCommand.argv` for the persisted, independently
+reviewable Plan when the original repository is currently pinned and clean.
+The structured argument vector carries the exact session, absolute source
+root and both bound Workflow/source-contract hashes. It avoids manual hash
+transcription in the developer's Goal → Contract/DAG → pending Workflow path.
+A missing/stale review, missing source check, or already-promoted Workflow
+does not produce a preparation command. This is a suggestion for **explicit
+human review**, not an automatic invocation, execution grant, Workflow
+approval or Operator admission. Existing source freshness and authorization
+guards remain authoritative at the actual preparation/execution boundary.
+Offline regressions assert exact argv for the trusted Planning and read-only
+Goal paths and omission after promotion or source drift. The full repository
+checkout, Node 24 and Docker are unavailable in this runtime, so the
+new HEAD requires independent Windows/Linux CI before any offline PASS claim.
+Native Codex Host Live and final Objective E2E acceptance remain deferred.
+
+## Pending Workflow promotion immediately returns independent approval review (fresh CI required)
+
+The explicit `prepare-codex-workflow` result now includes the existing
+independent `review-codex-workflow --repository` projection for the newly
+persisted, still-unapproved Workflow. A developer receives the current-source
+Contract/DAG, approval state and separate authenticated Operator/Host handoff
+in the same response, including idempotent repeat preparation. When the
+post-promotion source observation is unavailable or stale, the projection
+is suppressed with `workflowReviewStatus: RECHECK_REQUIRED` instead of
+presenting a stale review as current. This adds no Workflow approval, grant,
+execution, WorkItem Attempt or Objective claim. The offline test compares the
+embedded review with the independent command, checks approval absence and
+idempotent no-dispatch behavior. Full local checkout, Node 24 and Docker
+remain unavailable in the current automation environment; the new HEAD
+requires its own Windows/Linux CI before calling the regression passed.
+Native Host Live and final Objective E2E acceptance remain deferred.
+
+## Exact authenticated Goal run handoff after Workflow approval (new CI required)
+
+The read-only `codex-goal-progress <session-id> --repository ABSOLUTE_PATH`
+now offers a structured `runCommand.argv` with the exact reviewed Workflow
+hash only when the original repository is pinned and clean, a Workflow exists,
+and its current independent approval is valid **before first dispatch**.
+A validated Plan or unapproved Workflow exposes no run command; stale source,
+in-flight Attempts, recovery and completed Delivery also suppress the hint.
+The command is for a **trusted authenticated Host embedding**, not a plain
+unauthenticated CLI entry point: Operator admission, managed Host grant, Lease
+and budget remain enforced on actual dispatch. Regression checks cover
+unapproved, approved, stale and delivered views without extra Attempts.
+This is a read-only UX improvement, not Host Live or Objective acceptance.
+Local Node 24/full-checkout/Docker validation is unavailable here; this HEAD
+must receive separate Windows/Linux CI before claiming an offline PASS.
+
+## Persisted A-to-B Goal resume command handoff (independent CI required)
+
+The read-only `codex-goal-progress` projection now returns an exact
+`resume-codex-goal <planning-session-id> --hash <workflowHash>` argv only
+when at least one WorkItem has a persisted terminal SUCCEEDED attempt,
+another dependency-ready WorkItem remains, Workflow approval is current,
+and the coordinator's lease is inactive. Live leases, pending/uncertain
+Attempts, incomplete approval and completed Objectives expose no resume
+command. The command is **advisory only**, explicitly states that source was
+not rechecked, and still requires a new authenticated Operator review,
+the existing Controller/Lease/budget guard and a separate managed Host grant.
+Offline tests model a settled A, ready B, active Lease and unresolved B;
+they do not certify accepted child Evidence, real process restart or Host Live.
+The runtime here has Node 22, no full GitHub checkout/Docker and cannot run
+the required Node 24/Alpha regression locally. The new HEAD requires its own
+Windows/Linux GitHub CI before these tests can be called passing.
+
+## Goal WorkItem reconciliation and bounded Repair review handoff (fresh CI required)
+
+The read-only `codex-goal-progress` projection now returns a structured
+`recoveryHandoff` when the existing Controller reports an unresolved
+Host/Delivery effect or a terminal failed WorkItem. It identifies the current
+Workflow revision, affected WorkItems, persisted Attempt child/generation/status,
+and a read-only `workflow-progress` inspection command; uncertain delivery
+also points to read-only `delivered-status`. It never suggests
+`resume-codex-goal` for uncertain or failed work and cannot mint a Repair
+authorization, Operator grant or Host execution capability. An offline
+regression changes synthetic B from STARTED to FAILED after persisted A and
+checks both no-replay and separate Repair review. Full local Node 24/Docker
+regression is not available in the current environment; the new commit needs
+its own Windows/Linux CI. Host Live and final Objective E2E acceptance
+remain deferred.
+
+## Persisted WorkItem recovery diagnostics through the existing report command (fresh CI required)
+
+A failed or uncertain WorkItem in the read-only `codex-goal-progress`
+`recoveryHandoff` now includes its persisted diagnostic reason and an exact
+`report <childId>` command for that same generation's child Run. This reuses
+the existing RunReport rather than inventing a second evidence reader. The
+report command is diagnostic, not an execution grant, approval, replay, verified
+Evidence or an automatic Repair. An offline regression exercises a synthetic
+A-settled/B-uncertain-to-failed transition, resolves the actual recorded child
+report and checks there is no new Attempt or Workflow event. It is not an actual
+Host failure or native Codex recovery proof. Fresh Windows/Linux CI is required;
+Host Live and final Objective E2E acceptance remain UNVERIFIED.
+
+
+## Controller WAITING_HUMAN failed-WorkItem Repair handoff (fresh CI required)
+
+A real managed-Host child failure is persisted by the existing Controller as
+an immutable FAILED WorkItem Attempt while the parent Workflow enters
+`WAITING_HUMAN`. The read-only Workflow/Goal progress projection previously
+returned a generic HUMAN_HANDOFF before inspecting that failed Attempt, so
+its already implemented `recoveryHandoff` and exact child `report` command
+were missing in this ordinary post-failure path. It now exposes
+`REPAIR_REVIEW_REQUIRED` for persisted failed children even when the parent
+is waiting, with the current evidence, budget and approval requiring separate
+human review; pause/cancel and WAITING_HUMAN without failure retain generic
+HUMAN_HANDOFF. No automatic replay, new grant, or Repair Attempt is created.
+The offline regression models the real WAITING_HUMAN state after B failure,
+compares the Workflow and Goal status, and checks the existing diagnostic
+child-report/no-additional-Attempt contract. Native Host Live and Objective
+E2E acceptance are still unverified; independent Windows/Linux CI for the
+new commit must be checked before reporting an offline test PASS.
+ 
+## Discoverable top-level Codex Goal review path (fresh CI required)
+
+The top-level `codefleet-alpha --help` now points developers to
+`objective help`, `codex-goal-progress`, `review-codex-plan`, and
+`review-codex-workflow` with explicit clean-repository review options.
+Previously these Objective entry points were documented only behind
+`codefleet-alpha objective help`, making the Goal-to-DAG review route
+difficult to discover at first launch. The help separates read-only public
+review from trusted Host planning and authenticated Workflow execution
+(approval, budget and Lease remain unchanged). A subprocess regression
+asserts the actual top-level help output. This is developer entry-point UX,
+not Operator binding, Host Live, or Objective E2E acceptance. Local Node 24,
+full repository checkout and Docker are unavailable; separate Windows/Linux
+CI for this new HEAD remains required before reporting test PASS.
+
+## Read-only NEW_PROJECT Bootstrap continuation from ordinary CLI (CI required)
+
+The public `codefleet-alpha objective codex-bootstrap-progress <task-id>` now
+opens an existing Store read-only and returns the current persisted NEW_PROJECT
+`TaskReport`, next permitted Fileset/DAG/Repair/Local verification handoff,
+and explicit local-vs-Objective completion separation. It does not initialize
+Task tables, request an Operator or Host grant, run a model, apply Filesets,
+replay a failed verification or promote Local evidence to Protected/Objective
+acceptance. The existing trusted `advance-codex-bootstrap` still owns every
+separately authorized effect. An offline regression inspects both a prepared
+Bootstrap and a Fileset-materialized Bootstrap through a separate read-only
+CLI Store, rejects execution/approval options, and checks persisted Task bytes
+and event counts remain unchanged. This is persistence/recovery UX, not actual
+Codex Host Live or independent Objective E2E acceptance. Full local Node 24,
+checkout and Docker are unavailable here; Windows/Linux CI for this exact
+commit is required before claiming the tests pass.
+
+## NEW_PROJECT recovery handoff command discovery (new CI required)
+
+The top-level alpha help now exposes the read-only `codex-bootstrap-progress`
+entry. Its persisted status response additionally presents exact `advance-codex-bootstrap`
+argv hints for a currently ready Fileset proposal, independently reviewed
+materialization, or each eligible failed-Evidence Repair predecessor.
+No hint is produced for uncertain effects, stale/drifting source, unreviewed
+Local verification commands or completed Local work. Every hint explicitly
+requires the existing trusted embedding and a separate independent grant;
+none replays an Attempt, approves costs, modifies files or claims Objective
+completion. Existing read-only Store and one-step Controller boundaries
+remain unchanged. Negative and synthetic continuation tests are added.
+Windows/Linux CI for the new HEAD must pass before claiming offline success;
+actual Codex Host Live and independent delivered Objective E2E remain unverified.
+
+## Reopened Store synthetic Goal delivery check (fresh CI required)
+
+The existing two-dependent-WorkItem synthetic managed Host fixture now closes
+and reopens the real SQLite Store after A→B and final local delivery. It checks
+that immutable Attempt identities, persisted event counts, independently
+observed delivered-Objective status, and WorkItem outcomes survive the Store
+reopen without an additional Host Turn, before confirming source drift still
+invalidates current Objective completion. This covers durable read-only
+re-observation after completion, **not** mid-Turn crash recovery, a real
+Codex Host session, protected verification, or independent Objective E2E
+acceptance. The new HEAD needs its own Windows/Linux CI.
+
+## Separate CLI process recovery of pending and failed WorkItem (CI required)
+
+The existing read-only Codex Goal continuation regression now launches the
+actual `codefleet-alpha --state ... objective codex-goal-progress` command
+in a separate Node process at both a persisted B `STARTED`/uncertain
+checkpoint and a B `FAILED` human handoff. It checks no automatic resume
+or new Attempt/event, preserved child identity, and the separate-process
+`report <child-id>` failure diagnostic. This verifies process-boundary
+inspection of the persisted synthetic state, not safe replay, a real
+mid-Turn crash, authenticated Operator binding, Codex Host Live, or final
+Objective E2E acceptance. Windows/Linux CI of the new commit must be
+checked before reporting offline PASS.
+
+## Post-dispatch Codex Goal completion re-observation (fresh CI required)
+
+The trusted `run-codex-goal`/`resume-codex-goal` path now returns a successful
+Goal-level CLI exit only when its separately reobserved persisted delivered
+Objective remains COMPLETE for the same Workflow ID and hash. Previously, a
+managed Workflow could return exit 0 while the second Goal projection was
+missing, incomplete or stale, and the CLI would still report success. The
+new `CODEX_GOAL_COMPLETION_UNVERIFIED` response exits 2, preserves the
+original Workflow result as diagnostic `workflowExecution`, and prohibits
+implicit replay. A pure regression checks successful, unavailable, incomplete
+and mismatched post-dispatch observations as well as blocked grant outcomes.
+The isolated Node 22 helper smoke test passed locally; full Node 24 repo tests
+and Docker were unavailable. This HEAD needs fresh Windows/Linux CI before an
+offline regression PASS claim. The change does not authenticate the Operator,
+provide a live Host binding, or establish final Objective E2E acceptance.
+
+## Persisted Codex Goal session discovery across CLI restarts (new CI required)
+
+The ordinary read-only `objective codex-goals [--offset N]` entry now lists up to 20
+persisted Codex Planning session IDs per page in newest-first order, with each
+session's independently inspected Planning status and exact read-only
+`codex-goal-progress` argv. This addresses losing the Planning session ID after
+restarting the Host/CLI; the index intentionally does not expose raw Goal/model
+output, reconstruct authorization, recheck repository freshness, start Turns or
+claim Objective completion. Malformed/execution flags are rejected, legacy
+Stores are not migrated, and separate-process/pagination/no-mutation offline
+regressions are authored. Full Node 24/local Docker validation is unavailable;
+check fresh Windows/Linux CI for this commit before claiming offline PASS.
+The authenticated Operator/managed Codex Host execution binding, actual Host
+Live and final independent Objective E2E acceptance remain incomplete.
+
+## Read-only Goal index includes persisted Workflow handoff (fresh CI required)
+
+The bounded `objective codex-goals` list now reuses the existing read-only
+`inspectCodexGoalProgress` projection for each of at most 20 persisted Codex
+sessions. Developers returning after a CLI restart can distinguish unprepared
+Plans from a reviewed Workflow awaiting approval and see its ID, continuation
+status, possible recovery handoff and independently reobserved Objective
+completion without manually opening every Goal. The index never supplies an
+approval, Host grant, source-freshness proof or automatic resume; the detailed
+`codex-goal-progress` review remains required. The new regression covers a
+separate CLI process, the pending-approval Workflow state and no new
+Attempt/event. Node 24/full local tests and Docker are unavailable; fresh
+Windows/Linux CI is required for this HEAD. Real Codex Host Live and final
+independent Objective E2E remain unverified.
+
+## Persisted Goal discovery after delivered Objective and source drift (fresh CI required)
+
+The existing approved synthetic A→B managed-Host joined fixture now observes
+`codex-goals` after Local delivery and asserts that the read-only Goal index
+shows the independently reobserved COMPLETE Objective, its Workflow handoff,
+and no execution authority. It then changes a delivered source file outside
+CodeFleet and launches a separate CLI process to confirm the index no longer
+claims Objective completion, without a new Attempt, event or Host Turn.
+This is a regression of delivered-tree status visibility across CLI restarts,
+not a Codex Host Live run, OS-authenticated Operator grant, protected verification
+or final Objective E2E acceptance. The changed HEAD requires its own Windows
+and Linux GitHub Actions results before claiming the new assertions passed.
+
+## Read-only Codex Goal discovery survives one unreadable session (fresh CI required)
+
+When the persisted Codex Goal list contains a malformed session identifier or
+an individual Goal projection throws, the bounded index now preserves the other
+recoverable sessions instead of aborting the entire CLI discovery. The affected
+row is marked `BLOCKED / PERSISTED_GOAL_UNREADABLE`, with no progress or resume
+command; the index returns `PARTIAL_BLOCKED` and CLI exit code 2 so users cannot
+mistake partial discovery for a clean result. A regression fixture corrupts one
+Planning identifier and verifies that another submitted Goal remains discoverable
+after a separate CLI process restart, that pagination remains stable, and that
+the read-only command creates no events or Attempts. This repairs persistence
+and recovery UX only: it does not reconcile unknown Host effects, authenticate
+an Operator, prove Codex Host Live, or accept a delivered Objective. The new
+commit requires its own Windows/Linux CI before any offline PASS claim.
+
+## Installed Codex Host Skill exposes persisted Goal and Bootstrap handoff (new CI required)
+
+The generated `codefleet` Skill for Codex now includes a runnable read-only
+navigation path from `codex-goals` to a source-checked Goal/Contract/DAG review,
+pending Workflow preparation requiring explicit user confirmation, and separate
+`codex-bootstrap-progress` for NEW_PROJECT tasks. It explains that the existing
+staged `host codex plan` Task ID differs from a managed Planning session ID,
+that incomplete read-only Goal inspections may exit nonzero, and that local
+Bootstrap success is not delivered Objective completion. The installed Skill
+does not provision `createCodexAdmission`, authenticate an Operator or grant
+managed Host/cost authority. Existing installations are not replaced because
+the installer deliberately refuses to overwrite them; this applies to newly
+installed Skills only. An installed-Skill regression checks the included
+commands and absence from Claude's Skill. Local Node 24 full checkout/Docker are
+unavailable; this new HEAD requires Windows/Linux CI. Codex Host Live and
+independent delivered Objective E2E acceptance remain unverified.
+
+## Installed Skill CLI replay across process restart (new CI required)
+
+A new integration regression installs the actual Codex Skill runtime, seeds a
+synthetic validated Host Planning session in an isolated Git fixture, closes the
+Store and invokes independent installed CLI processes for `codex-goals`,
+`codex-goal-progress --repository` and `review-codex-plan`. It checks exact
+pinned hashes, review-only commands and preserved Planning records. A second
+CLI process prepares the exact reviewed Workflow; the persisted outcome must
+remain `WAITING_APPROVAL` with zero Workflow approvals and Attempts. Both
+preparation and recovery must deny plain-CLI `run-codex-goal` without trusted
+Operator admission, and the original source bytes must remain unchanged.
+This is packaged offline user-path coverage, not an authenticated Operator
+connection, Codex Host Live execution, or Objective E2E acceptance. Windows/
+Linux CI for this HEAD is required before reporting test PASS.
+
+## Restarted Goal index links directly to independent Workflow review (fresh CI required)
+
+The read-only `objective codex-goals` index now includes an exact
+`review-codex-workflow <workflow-id>` argv for a separately reobserved,
+persisted Workflow. This avoids manual Workflow ID transcription when a
+developer returns after a Host or CLI restart. The hint does **not** attest
+current repository source: `sourceRechecked: false` requires the developer
+to add `--repository ABSOLUTE_PATH` for an independent current-source check
+before approval. An unprepared or unreadable Goal receives no Workflow
+review command. The installed-Skill separate-process regression checks the
+new read-only hint against the actual Workflow reviewer and confirms it
+never supplies an approval or execution grant. This is continuity UX,
+not authenticated Operator admission, Host Live or Objective E2E acceptance.
+The new HEAD requires Windows/Linux CI; local Node 24/full-checkout/Docker
+verification remains unavailable in this runtime.
+
+## NEW_PROJECT persisted Bootstrap discovery after CLI restart (fresh CI required)
+
+The read-only `objective codex-bootstraps [--offset N]` command now scans
+bounded pages of persisted NEW_PROJECT Tasks without requiring the Task ID
+from an earlier Host session. It reads immutable Plan artifacts to distinguish
+NEW_PROJECT from unrelated Tasks, returns a `codex-bootstrap-progress` handoff
+for prepared Tasks, and reuses TaskReport to reobserve Local continuation and
+target drift. Unprepared Tasks are not executable; corrupt records produce
+PARTIAL_BLOCKED (exit 2) without hiding other recoverable Tasks.
+The index omits raw Goal/Fileset content and does not grant execution or
+claim independent Objective completion. Pagination scans all Task records;
+a filtered page can be empty but have nextOffset. An offline regression checks
+cross-Store read-only recovery, event preservation and malformed-row isolation.
+Host Live and final Objective E2E remain unverified. Node 24/full checkout and
+Docker are unavailable locally; this HEAD requires new Windows/Linux CI.
+
+## NEW_PROJECT filtered-page recovery handoff (fresh Windows/Linux CI required)
+
+The read-only `codex-bootstraps` index no longer reports `EMPTY` when its
+bounded page contains only unrelated Tasks but older records remain. It returns
+`MORE_PAGES` with a non-executing `nextPageCommand` and retains the current
+20-row limit; missing Task tables and exhausted pages still report `EMPTY`.
+A separate CLI-process regression seeds 21 newer non-Bootstrap Tasks ahead
+of a persisted NEW_PROJECT Task, follows the exact next-page argv, and checks
+that its original Bootstrap handoff is discoverable without new Attempts,
+approvals or Task events. This is restart/discovery UX only, not Host Live,
+Operator admission, Objective acceptance or a privileged execution path.
+The required Node 24 full local suite and Docker are unavailable in this
+runtime; the new commit needs independent Windows/Linux CI before PASS claims.

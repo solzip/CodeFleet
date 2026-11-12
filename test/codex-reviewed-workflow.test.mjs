@@ -1,4 +1,6 @@
 import test from 'node:test';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { mkdtemp,mkdir,writeFile,readFile,rm,realpath } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -13,6 +15,23 @@ import { beginPlanning,submitPlanning } from '../src/hosts/planning.mjs';
 import { validateDraft } from '../src/intent/contract.mjs';
 import { prepareReviewedCodexWorkflow, inspectReviewedCodexPlan } from '../src/product/codex-reviewed-workflow.mjs';
 import { dispatchProduct, productCli } from '../src/product/cli.mjs';
+import { presentCodexGoalExecution } from '../src/product/codex-goal-result.mjs';
+
+test('top-level help exposes current Codex Goal review path without implying execution',()=>{
+ const entry=fileURLToPath(new URL('../src/alpha/cli.mjs',import.meta.url));
+ const result=spawnSync(process.execPath,[entry,'--help'],{
+  encoding:'utf8',timeout:20000
+ });
+ assert.equal(result.status,0,result.stderr || result.error?.message);
+ assert.match(result.stdout,/codefleet-alpha objective help/);
+ assert.match(result.stdout,/objective codex-goals/);
+ assert.match(result.stdout,/objective codex-goal-progress <planning-session-id> --repository ABSOLUTE_PATH/);
+ assert.match(result.stdout,/objective codex-bootstrap-progress <task-id>/);
+ assert.match(result.stdout,/objective review-codex-plan <planning-session-id> --repository ABSOLUTE_PATH/);
+ assert.match(result.stdout,/objective review-codex-workflow <workflow-id> --repository ABSOLUTE_PATH/);
+ assert.match(result.stdout,/Plain CLI review is read-only/);
+ assert.match(result.stdout,/authenticated Operator approval, budget and Lease/);
+});
 
 const goal='Repair arithmetic behavior in src/a.js with test/a.test.js and independently verify results.';
 const multiGoal='Repair arithmetic behavior in src/a.js and src/b.js with both protected regression tests and independently verify the result.';
@@ -296,11 +315,24 @@ test('public hash-confirmed Codex plan creates an idempotent pending Workflow wi
  assert.equal(first.data.approved,false);
  assert.equal(first.data.reviewAuthority,'EXPLICIT_LOCAL_HASH_CONFIRMATION_ONLY');
  assert.equal(first.data.hostLiveAcceptance,'UNVERIFIED');
+ // Promotion returns the same current-source Workflow review as the
+ // independent command without any approval or Host dispatch.
+ const currentReview=await productCli([
+  'review-codex-workflow',first.data.workflowId,'--repository',f.repo
+ ],f.store.directory);
+ assert.equal(currentReview.exitCode,0);
+ assert.equal(first.data.workflowReviewStatus,'CURRENT_SOURCE_REVIEWED');
+ assert.deepEqual(first.data.workflowReview,currentReview.data);
+ assert.equal(first.data.workflowReview.approvalState,'MISSING_OR_EXPIRED');
+ assert.equal(first.data.workflowReview.executionGranted,false);
+ assert.equal(first.data.workflowReview.authenticatedOperatorAvailable,false);
  assert.equal(f.store.get(first.data.workflowId).kind,'workflow');
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM workflow_attempts').get().n,0);
  const repeated=await productCli(argv,f.store.directory);
  assert.equal(repeated.exitCode,0);
  assert.equal(repeated.data.workflowId,first.data.workflowId);
+ assert.equal(repeated.data.workflowReviewStatus,'CURRENT_SOURCE_REVIEWED');
+ assert.deepEqual(repeated.data.workflowReview,currentReview.data);
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,1);
 });
 
@@ -389,6 +421,139 @@ test('a read-only Store without Host planning records reports UNAVAILABLE withou
   assert.equal(checked.db.prepare("SELECT 1 FROM sqlite_master WHERE name='host_planning'").get(),undefined);
   assert.equal(checked.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
  }finally{ checked.close(); }
+});
+
+
+test('read-only Codex Goal discovery survives process restart and supports bounded pagination',async t=>{
+ const f=await fixture(t), first=f.request.sessionId;
+ const second=await beginPlanning(f.store,f.repo,f.originalGoal,{host:'codex',version:'0.166.0'});
+ const beforeEvents=f.store.db.prepare('SELECT count(*) AS n FROM events').get().n;
+ const beforeRows=f.store.db.prepare('SELECT count(*) AS n FROM host_planning').get().n;
+ const result=await productCli(['codex-goals'],f.store.directory);
+ assert.equal(result.exitCode,0,result.data?.error);
+ assert.equal(result.data.kind,'CODEFLEET_CODEX_GOAL_INDEX_V1');
+ assert.equal(result.data.authority,'READ_ONLY_PERSISTED_INDEX');
+ assert.deepEqual(result.data.sessions.map(x=>x.sessionId),[second.sessionId,first]);
+ assert.equal(result.data.sessions[0].planningStatus,'OPEN');
+ assert.equal(result.data.sessions[1].validationStatus,'VALIDATED');
+ assert.equal(result.data.sessions[1].continuationKind,'REVIEW_CONTRACT_AT_CURRENT_SOURCE');
+ assert.deepEqual(result.data.sessions[1].progressCommand.argv,['codex-goal-progress',first]);
+ assert.equal(result.data.sessions[1].progressCommand.executionGranted,false);
+ assert.equal(result.data.nextOffset,null);
+ assert.equal(result.data.executionGranted,false);
+ assert.equal(result.data.automaticReplay,false);
+ const older=await productCli(['codex-goals','--offset','1'],f.store.directory);
+ assert.equal(older.exitCode,0,older.data?.error);
+ assert.deepEqual(older.data.sessions.map(x=>x.sessionId),[first]);
+ const entry=fileURLToPath(new URL('../src/alpha/cli.mjs',import.meta.url));
+ const proc=spawnSync(process.execPath,[entry,'--state',f.store.directory,'objective','codex-goals'],{
+  encoding:'utf8',timeout:20000
+ });
+ assert.equal(proc.status,0,proc.stderr || proc.error?.message);
+ const reopened=JSON.parse(proc.stdout);
+ assert.deepEqual(reopened.sessions.map(x=>x.sessionId),[second.sessionId,first]);
+ for(const argv of [
+  ['codex-goals','--allow-model'],['codex-goals','--repository',f.repo],
+  ['codex-goals','--offset','-1'],['codex-goals','--offset','1000000'],
+  ['codex-goals','unexpected-session-id']
+ ]) {
+  const denied=await productCli(argv,f.store.directory);
+  assert.equal(denied.exitCode,1,argv.join(' '));
+ }
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM host_planning').get().n,beforeRows);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM events').get().n,beforeEvents);
+ assert.equal(countWorkflowAttempts(f.store),0);
+});
+
+test('one unreadable persisted Codex Goal does not hide healthy sessions after restart',async t=>{
+ const f=await fixture(t), healthyId=f.request.sessionId;
+ const corrupt=await beginPlanning(f.store,f.repo,f.originalGoal,{host:'codex',version:'0.166.0'});
+ // Simulate an invalid legacy/corrupt primary key without changing the
+ // stored Codex request. The index must not abort before the valid Goal.
+ f.store.db.prepare('UPDATE host_planning SET id=? WHERE id=?')
+   .run('invalid-session-id',corrupt.sessionId);
+ const beforeEvents=f.store.db.prepare('SELECT count(*) AS n FROM events').get().n;
+ const beforeRows=f.store.db.prepare('SELECT count(*) AS n FROM host_planning').get().n;
+ const result=await productCli(['codex-goals'],f.store.directory);
+ assert.equal(result.exitCode,2);
+ assert.equal(result.data.status,'PARTIAL_BLOCKED');
+ assert.equal(result.data.unreadableCount,1);
+ assert.deepEqual(result.data.sessions.map(s=>s.sessionId),['invalid-session-id',healthyId]);
+ const blocked=result.data.sessions[0];
+ assert.equal(blocked.goalStatus,'BLOCKED');
+ assert.equal(blocked.planningStatus,'BLOCKED');
+ assert.equal(blocked.reason,'PERSISTED_GOAL_UNREADABLE');
+ assert.equal(blocked.continuationKind,'INSPECT_PERSISTED_GOAL');
+ assert.equal(blocked.objectiveComplete,false);
+ assert.equal(blocked.progressCommand,null);
+ assert.equal(blocked.executionGranted,false);
+ assert.equal(blocked.automaticReplay,false);
+ assert.equal(result.data.sessions[1].goalStatus,'AWAIT_WORKFLOW_REVIEW');
+ assert.deepEqual(result.data.sessions[1].progressCommand.argv,['codex-goal-progress',healthyId]);
+ const entry=fileURLToPath(new URL('../src/alpha/cli.mjs',import.meta.url));
+ const proc=spawnSync(process.execPath,[entry,'--state',f.store.directory,'objective','codex-goals'],{
+   encoding:'utf8',timeout:20000
+ });
+ assert.equal(proc.status,2,proc.stderr || proc.error?.message);
+ assert.deepEqual(JSON.parse(proc.stdout),result.data);
+ const older=await productCli(['codex-goals','--offset','1'],f.store.directory);
+ assert.equal(older.exitCode,0,older.data?.error);
+ assert.equal(older.data.unreadableCount,0);
+ assert.deepEqual(older.data.sessions.map(s=>s.sessionId),[healthyId]);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM host_planning').get().n,beforeRows);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM events').get().n,beforeEvents);
+ assert.equal(countWorkflowAttempts(f.store),0);
+});
+
+test('Codex Goal index shows Workflow approval state after process restart without advancing',async t=>{
+  const f=await fixture(t);
+  const before=await productCli(['codex-goals'],f.store.directory);
+  assert.equal(before.exitCode,0,before.data?.error);
+  assert.equal(before.data.sessions[0].goalStatus,'AWAIT_WORKFLOW_REVIEW');
+  assert.equal(before.data.sessions[0].workflowId,null);
+  assert.equal(before.data.sessions[0].objectiveComplete,false);
+
+  const created=await prepareReviewedCodexWorkflow(f.store,f.repo,f.request.sessionId,{
+    authorizeReview:async()=>true
+  });
+  const attempts=countWorkflowAttempts(f.store);
+  const events=f.store.db.prepare('SELECT count(*) AS n FROM events').get().n;
+  const list=await productCli(['codex-goals'],f.store.directory);
+  assert.equal(list.exitCode,0,list.data?.error);
+  assert.equal(list.data.sessions.length,1);
+  const entry=list.data.sessions[0];
+  assert.equal(entry.goalStatus,'WORKFLOW_IN_PROGRESS');
+  assert.equal(entry.workflowId,created.workflowId);
+  assert.equal(entry.workflowContinuationStatus,'AWAIT_WORKFLOW_APPROVAL');
+  assert.equal(entry.recoveryHandoffKind,null);
+  assert.equal(entry.objectiveComplete,false);
+  assert.equal(entry.sourceFreshness,'NOT_RECHECKED');
+  assert.equal(entry.progressCommand.readOnly,true);
+  assert.equal(entry.progressCommand.executionGranted,false);
+
+  const cli=fileURLToPath(new URL('../src/alpha/cli.mjs',import.meta.url));
+  const proc=spawnSync(process.execPath,[cli,'--state',f.store.directory,'objective','codex-goals'],{
+    encoding:'utf8',timeout:20000
+  });
+  assert.equal(proc.status,0,proc.stderr || proc.error?.message);
+  assert.deepEqual(JSON.parse(proc.stdout).sessions,list.data.sessions);
+  assert.equal(countWorkflowAttempts(f.store),attempts);
+  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM events').get().n,events);
+});
+
+test('legacy read-only Codex Goal discovery does not create a Planning table',async t=>{
+ const directory=await mkdtemp(join(tmpdir(),'codefleet-codex-goals-empty-'));
+ const store=new Store(directory);store.close();
+ t.after(async()=>rm(directory,{recursive:true,force:true}));
+ const result=await productCli(['codex-goals'],directory);
+ assert.equal(result.exitCode,0,result.data?.error);
+ assert.equal(result.data.status,'EMPTY');
+ assert.deepEqual(result.data.sessions,[]);
+ assert.equal(result.data.nextOffset,null);
+ const checked=new Store(directory,{readOnly:true});
+ try {
+  assert.equal(checked.db.prepare("SELECT name FROM sqlite_master WHERE name='host_planning'").get(),undefined);
+ }finally{checked.close();}
 });
 
 // A hybrid DAG can carry role assignment and resource-lock constraints. Those
@@ -648,6 +813,11 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
   assert.equal(planned.data.status,'VALIDATED');
   assert.equal(planned.data.hostLiveAcceptance,'UNVERIFIED');
   const sessionId=planned.data.evidence.sessionId;
+  assert.equal(planned.data.planningSessionId,sessionId);
+  assert.equal(planned.data.planReview.status,'REVIEW_REQUIRED');
+  assert.equal(planned.data.planReview.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+  assert.equal(planned.data.planReview.executionGranted,false);
+  assert.equal(planned.data.planReview.approved,false);
   assert.equal(planningScopes.length,1);
   assert.deepEqual(planningTurns,[sessionId]);
   const review=await productCli([
@@ -655,6 +825,13 @@ test('reviewed Codex Goal crosses approved Workflow, bounded fake Host, delivere
   ],f.store.directory);
   assert.equal(review.exitCode,0,review.data?.error);
   assert.equal(review.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+  assert.deepEqual(planned.data.planReview,review.data,
+    'Single-command preview must match the separate independent Plan review');
+  assert.deepEqual(planned.data.prepareCommand,{
+    argv:['prepare-codex-workflow',sessionId,'--repository',f.repo,
+      '--hash',review.data.workflowHash,'--source-hash',review.data.sourceContractHash],
+    humanReviewRequired:true,approved:false,executionGranted:false
+  });
   assert.equal(review.data.workflowHash,f.result.workflowPreview.workflow.workflowHash);
   const staged=await productCli([
     'prepare-codex-workflow',sessionId,'--repository',f.repo,
@@ -1430,6 +1607,11 @@ test('trusted CLI can route a natural-language Goal through reviewed Codex plann
   assert.equal(accepted.data.hostReceipt.threadId,'offline-thread');
   assert.equal(accepted.data.authority,'PROVIDER_REPORTED_ONLY');
   assert.equal(accepted.data.hostLiveAcceptance,'UNVERIFIED');
+  assert.equal(accepted.data.planningSessionId,accepted.data.evidence.sessionId);
+  assert.equal(accepted.data.planReview.status,'REVIEW_REQUIRED');
+  assert.equal(accepted.data.planReview.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+  assert.equal(accepted.data.planReview.workItems.length,1);
+  assert.match(accepted.data.nextAction,/inspect planReview Contract\/DAG/);
   assert.equal(factoryCalls,1);
   assert.equal(planningGrants,1);
   assert.equal(fakeTurns,1);
@@ -1767,6 +1949,99 @@ test('Codex Goal progress starts from validated Planning and preserves existing 
  assert.equal(countWorkflowAttempts(f.store),0);
 });
 
+test('Goal progress checks original repository readiness before dispatch without granting attempts',async t=>{
+ const f=await fixture(t),id=f.request.sessionId;
+ const cmd=['codex-goal-progress',id,'--repository',f.repo];
+ const planning=await productCli(cmd,f.store.directory);
+ assert.equal(planning.exitCode,2);
+ assert.equal(planning.data.status,'AWAIT_WORKFLOW_REVIEW');
+ assert.equal(planning.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+ // A single current-source Goal view now contains the identical exact
+ // Contract/DAG review available from the separate non-executing command.
+ const review=await productCli(['review-codex-plan',id,'--repository',f.repo],f.store.directory);
+ assert.equal(review.exitCode,0);
+ assert.deepEqual(planning.data.planReview,review.data);
+ assert.deepEqual(planning.data.prepareCommand,{
+  argv:['prepare-codex-workflow',id,'--repository',f.repo,
+   '--hash',review.data.workflowHash,'--source-hash',review.data.sourceContractHash],
+  humanReviewRequired:true,approved:false,executionGranted:false
+ });
+ assert.equal(planning.data.runCommand,undefined);
+ assert.equal(planning.data.planReview.status,'REVIEW_REQUIRED');
+ assert.equal(planning.data.planReview.approved,false);
+ assert.equal(planning.data.planReview.executionGranted,false);
+ assert.match(planning.data.planReview.workflowHash,/^[a-f0-9]{64}$/);
+ assert.match(planning.data.planReview.sourceContractHash,/^[a-f0-9]{64}$/);
+ assert.deepEqual(planning.data.planReview.workItems.map(item=>item.id),['change']);
+ const created=await prepareReviewedCodexWorkflow(f.store,f.repo,id,{
+  authorizeReview:async()=>true
+ });
+ const clean=await productCli(cmd,f.store.directory);
+ assert.equal(clean.data.status,'WORKFLOW_IN_PROGRESS');
+ assert.equal(clean.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+ assert.equal(clean.data.planReview,undefined);
+ assert.equal(clean.data.prepareCommand,undefined);
+ assert.equal(clean.data.runCommand,undefined);
+ assert.equal(clean.data.continuation.status,'AWAIT_WORKFLOW_APPROVAL');
+ // The Goal-level pre-dispatch handoff must disclose the exact persisted
+ // Workflow DAG, current approval state and the need for separate Host grants.
+ const pendingReview=await productCli([
+  'review-codex-workflow',created.workflowId,'--repository',f.repo
+ ],f.store.directory);
+ assert.equal(pendingReview.exitCode,0);
+ assert.deepEqual(clean.data.workflowReview,pendingReview.data);
+ assert.equal(clean.data.workflowReview.approvalState,'MISSING_OR_EXPIRED');
+ assert.equal(clean.data.workflowReview.executionGranted,false);
+ assert.equal(clean.data.workflowReview.authenticatedOperatorAvailable,false);
+ approveWorkflow(f.store,created.workflowId,{
+  actor:'offline-owner',workflowHash:created.workflowHash,
+  expiresAt:Date.now()+60_000
+ });
+ const approved=await productCli(cmd,f.store.directory);
+ assert.equal(approved.data.workflowReview.approvalState,'CURRENT_WORKFLOW_APPROVAL_VALID');
+ assert.equal(approved.data.workflowReview.executionGranted,false);
+ assert.equal(approved.data.sourceFreshness,'PINNED_CLEAN_AT_REVIEW');
+ assert.deepEqual(approved.data.runCommand,{
+  argv:['run-codex-goal',id,'--hash',created.workflowHash],
+  trustedEmbeddingRequired:true,authenticatedOperatorRequired:true,
+  managedHostGrantRequired:true,executionGranted:false,
+  automaticReplay:false
+ });
+ assert.equal(countWorkflowAttempts(f.store),0);
+ const events=f.store.events(created.workflowId).length;
+ const invalid=await productCli(['codex-goal-progress',id,'--repository','relative/repo'],f.store.directory);
+ assert.equal(invalid.exitCode,1);
+ assert.match(invalid.data.error,/absolute --repository only/);
+ await writeFile(join(f.repo,'src/a.js'),'export function add(x,y){ return x-y; }\n');
+ const stale=await productCli(cmd,f.store.directory);
+ assert.equal(stale.exitCode,2);
+ assert.equal(stale.data.status,'SOURCE_REVIEW_REQUIRED');
+ assert.equal(stale.data.sourceFreshness,'STALE_OR_MISMATCHED');
+ assert.equal(stale.data.workflowReview,undefined);
+ assert.equal(stale.data.runCommand,undefined);
+ assert.equal(stale.data.workflowId,created.workflowId);
+ assert.equal(stale.data.continuation.kind,'REVIEW_SOURCE_OR_REPLAN');
+ assert.equal(stale.data.continuation.automaticReplay,false);
+ assert.equal(stale.data.executionGranted,false);
+ assert.equal(stale.data.objectiveComplete,false);
+ assert.equal(f.store.events(created.workflowId).length,events);
+ assert.equal(countWorkflowAttempts(f.store),0);
+});
+
+test('Goal readiness suppresses exact Plan review when pre-Workflow source is stale',async t=>{
+ const f=await fixture(t),id=f.request.sessionId;
+ await writeFile(join(f.repo,'src/a.js'),'export function add(x,y){ return x-y; }\n');
+ const stale=await productCli(['codex-goal-progress',id,'--repository',f.repo],f.store.directory);
+ assert.equal(stale.exitCode,2);
+ assert.equal(stale.data.status,'SOURCE_REVIEW_REQUIRED');
+ assert.equal(stale.data.planReview,undefined);
+ assert.equal(stale.data.prepareCommand,undefined);
+ assert.equal(stale.data.continuation.kind,'REVIEW_SOURCE_OR_REPLAN');
+ assert.equal(stale.data.executionGranted,false);
+ assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
+ assert.equal(countWorkflowAttempts(f.store),0);
+});
+
 test('Codex Goal progress blocks forged Workflow provenance and execution options without new effects',async t=>{
  const f=await fixture(t);
  const missing=await productCli(
@@ -1845,11 +2120,29 @@ test('Goal execution alias preserves reviewed DAG, exact hash and independent Ho
  const plain=await productCli(entry,f.store.directory);
  assert.equal(plain.exitCode,1);
  assert.match(plain.data.error,/AUTHENTICATED_CODEX_ADMISSION_UNAVAILABLE/);
- const notPrepared=await productCli(entry,f.store.directory,{createCodexAdmission});
- assert.equal(notPrepared.exitCode,1);
- assert.match(notPrepared.data.error,/current reviewed Workflow and exact hash/);
+ for(const action of ['run-codex-goal','resume-codex-goal']) {
+  const notPrepared=await productCli([
+   action,sessionId,'--hash',validHash
+  ],f.store.directory,{createCodexAdmission});
+  assert.equal(notPrepared.exitCode,1);
+  assert.equal(notPrepared.data.status,'CODEX_GOAL_EXECUTION_NOT_READY');
+  assert.equal(notPrepared.data.planningSessionId,sessionId);
+  assert.equal(notPrepared.data.workflowId,null);
+  assert.equal(notPrepared.data.goalProgressStatus,'OBSERVED');
+  assert.equal(notPrepared.data.goalProgress.status,'AWAIT_WORKFLOW_REVIEW');
+  assert.equal(notPrepared.data.continuation.kind,'REVIEW_AND_PREPARE_WORKFLOW');
+  assert.equal(notPrepared.data.continuation.automaticReplay,false);
+  assert.match(notPrepared.data.nextAction,/codex-goal-progress --repository/);
+  assert.equal(notPrepared.data.objectiveComplete,false);
+  assert.equal(notPrepared.data.executionGranted,false);
+  assert.equal(notPrepared.data.executionSucceeded,false);
+  assert.deepEqual(notPrepared.data.goalProgress,
+   (await productCli(['codex-goal-progress',sessionId],f.store.directory)).data);
+ }
  assert.equal(operatorReviews,0);
  assert.equal(hostGrants,0);
+ assert.equal(hostTurns,0);
+ assert.equal(countWorkflowAttempts(f.store),0);
  const created=await prepareReviewedCodexWorkflow(f.store,f.repo,sessionId,{
   authorizeReview:async()=>true
  });
@@ -1902,6 +2195,11 @@ test('Goal execution alias preserves reviewed DAG, exact hash and independent Ho
   assert.equal(blocked.data.planningSessionId,sessionId);
   assert.match(blocked.data.error,/Exact managed Workflow execution grant denied/);
   assert.equal(blocked.data.progress.kind,'CODEFLEET_WORKFLOW_PROGRESS_V1');
+  assert.equal(blocked.data.goalProgressStatus,'OBSERVED');
+  assert.equal(blocked.data.goalProgress.status,'WORKFLOW_IN_PROGRESS');
+  assert.equal(blocked.data.goalProgress.workflowId,created.workflowId);
+  assert.equal(blocked.data.goalProgress.continuation.automaticReplay,false);
+  assert.equal(blocked.data.goalProgress.objectiveComplete,false);
   assert.equal(blocked.data.continuation.status,'AUTHENTICATED_HOST_ADMISSION_REQUIRED');
   assert.equal(blocked.data.continuation.automaticReplay,false);
   assert.equal(blocked.data.executionGranted,false);
@@ -2071,6 +2369,14 @@ test('reviewed Codex multi-WorkItem Goal executes ordered A then B through authe
  assert.ok(verified.some(x=>x.includes('test/b.test.js')));
  assert.ok(verified.some(x=>x.length===2),'Final regression must cover both protected tests');
  assert.equal(executed.data.progress.objectiveComplete,true);
+ assert.equal(executed.data.goalProgressStatus,'OBSERVED');
+ assert.equal(executed.data.goalProgress.kind,'CODEFLEET_CODEX_GOAL_PROGRESS_V1');
+ assert.equal(executed.data.goalProgress.status,'OBJECTIVE_COMPLETE');
+ assert.equal(executed.data.goalProgress.objectiveComplete,true);
+ assert.equal(executed.data.goalProgress.workflowId,prepared.data.workflowId);
+ assert.equal(executed.data.goalProgress.continuation.automaticReplay,false);
+ assert.deepEqual(executed.data.goalProgress.workflow.workItems.map(item=>[item.id,item.state]),
+  [['a','SUCCEEDED'],['b','SUCCEEDED']]);
  assert.deepEqual(executed.data.progress.workItems.map(item=>[item.id,item.state]),
   [['a','SUCCEEDED'],['b','SUCCEEDED']]);
  assert.equal(executed.data.progress.continuation.status,'OBJECTIVE_COMPLETE');
@@ -2088,6 +2394,68 @@ test('reviewed Codex multi-WorkItem Goal executes ordered A then B through authe
  const progress=await productCli(['codex-goal-progress',sessionId],f.store.directory);
  assert.equal(progress.exitCode,0);
  assert.equal(progress.data.objectiveComplete,true);
+ const afterDelivery=await productCli([
+  'codex-goal-progress',sessionId,'--repository',f.repo
+ ],f.store.directory);
+ assert.equal(afterDelivery.exitCode,0);
+ assert.equal(afterDelivery.data.status,'OBJECTIVE_COMPLETE');
+ assert.equal(afterDelivery.data.sourceFreshness,'NOT_RECHECKED_AFTER_DISPATCH');
+ assert.equal(afterDelivery.data.runCommand,undefined);
+ // Already delivered Goals are read-only through both entrypoints and
+ // preserve the Goal progress response shape used by normal execution.
+ const beforeNoOpEvents=f.store.events(prepared.data.workflowId).length;
+ for(const action of ['run-codex-goal','resume-codex-goal']){
+  const noOp=await productCli([
+   action,sessionId,'--hash',prepared.data.workflowHash
+  ],f.store.directory,{createCodexAdmission:store=>({
+   facade:createCodexMvpFacade(store,{
+    executable:process.execPath,model:'OFFLINE_NOOP_ONLY'
+   }),
+   authorizeOperator:async()=>{throw Error('No new Operator review for settled Goal');}
+  })});
+  assert.equal(noOp.exitCode,0,noOp.data?.error);
+  assert.equal(noOp.data.status,'OBJECTIVE_COMPLETE');
+  assert.equal(noOp.data.planningSessionId,sessionId);
+  assert.equal(noOp.data.goalProgressStatus,'OBSERVED');
+  assert.equal(noOp.data.goalProgress.objectiveComplete,true);
+  assert.equal(noOp.data.goalProgress.continuation.automaticReplay,false);
+  assert.equal(noOp.data.executionSucceeded,false);
+  assert.equal(noOp.data.executionGranted,false);
+  assert.equal(noOp.data.hostLiveAcceptance,'UNVERIFIED');
+  const observed=await productCli(['codex-goal-progress',sessionId],f.store.directory);
+  assert.deepEqual(noOp.data.goalProgress,observed.data);
+ }
+ assert.deepEqual(hostTurns,['a','b']);
+ assert.equal(f.store.events(prepared.data.workflowId).length,beforeNoOpEvents);
+ assert.equal(countWorkflowAttempts(f.store),3);
+ // A recovered Goal index must reflect the independently observed delivered
+ // Objective, not merely the persisted terminal Workflow or WorkItem.
+ const indexAfterDelivery=await productCli(['codex-goals'],f.store.directory);
+ assert.equal(indexAfterDelivery.exitCode,0,indexAfterDelivery.data?.error);
+ const settledGoal=indexAfterDelivery.data.sessions.find(x=>x.sessionId===sessionId);
+ assert.equal(settledGoal?.workflowId,prepared.data.workflowId);
+ assert.equal(settledGoal?.workflowContinuationStatus,'OBJECTIVE_COMPLETE');
+ assert.equal(settledGoal?.goalStatus,'OBJECTIVE_COMPLETE');
+ assert.equal(settledGoal?.objectiveComplete,true);
+ assert.equal(settledGoal?.sourceFreshness,'NOT_RECHECKED');
+ assert.equal(settledGoal?.progressCommand.executionGranted,false);
+
+ // Source drift after delivery invalidates Goal completion in a fresh CLI
+ // process without reissuing a Turn or mutating the immutable Attempt log.
+ const beforeDriftEvents=f.store.events(prepared.data.workflowId).length;
+ await writeFile(join(f.repo,'src/a.js'),'export function add(x,y){ return x+y; }\n');
+ const cli=fileURLToPath(new URL('../src/alpha/cli.mjs',import.meta.url));
+ const proc=spawnSync(process.execPath,[cli,'--state',f.store.directory,'objective','codex-goals'],{
+  encoding:'utf8',timeout:20000
+ });
+ assert.equal(proc.status,0,proc.stderr || proc.error?.message);
+ const driftedGoal=JSON.parse(proc.stdout).sessions.find(x=>x.sessionId===sessionId);
+ assert.ok(driftedGoal);
+ assert.equal(driftedGoal.objectiveComplete,false);
+ assert.notEqual(driftedGoal.goalStatus,'OBJECTIVE_COMPLETE');
+ assert.equal(driftedGoal.progressCommand.executionGranted,false);
+ assert.equal(f.store.events(prepared.data.workflowId).length,beforeDriftEvents);
+ assert.equal(countWorkflowAttempts(f.store),3);
 });
 
 test('Codex multi-WorkItem draft rejects cyclic, overlapping or broadened scope before a Workflow',async t=>{
@@ -2123,4 +2491,188 @@ test('Codex multi-WorkItem draft rejects cyclic, overlapping or broadened scope 
  }
  assert.equal(countWorkflowAttempts(f.store),0);
  assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM runs').get().n,0);
+});
+
+test('Codex Goal read-only continuation offers bounded resume only for an idle settled A to ready B',async t=>{
+ const f=await fixture(t,{multi:true}),id=f.request.sessionId;
+ const prepared=await prepareReviewedCodexWorkflow(f.store,f.repo,id,{
+  authorizeReview:async()=>true
+ });
+ approveWorkflow(f.store,prepared.workflowId,{
+  actor:'offline-continuation-reviewer',workflowHash:prepared.workflowHash,
+  expiresAt:Date.now()+60_000
+ });
+ const argv=['codex-goal-progress',id];
+ const fresh=await productCli(argv,f.store.directory);
+ assert.equal(fresh.data.continuation.status,'AUTHENTICATED_HOST_ADMISSION_REQUIRED');
+ assert.equal(fresh.data.resumeCommand,undefined,
+  'Initial ready A is a run, not a resumed WorkItem');
+ // Synthetic persisted A terminal checkpoint; this does not purport to be
+ // independent Accepted Evidence or an actual Host crash/Host Live proof.
+ const run=f.store.get(prepared.workflowId);
+ run.states.a='SUCCEEDED';run.states.b='PENDING';run.state='RUNNING';
+ f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
+  .run(JSON.stringify(run),prepared.workflowId);
+ const a={id:'synthetic-settled-a',state:'COMPLETED',
+  reportedCostUsd:0,unknownCostAttempts:0};
+ f.store.db.prepare('INSERT INTO runs(id,body) VALUES (?,?)')
+  .run(a.id,JSON.stringify(a));
+ f.store.db.prepare('INSERT INTO workflow_attempts VALUES (?,?,?,?,?)')
+  .run(prepared.workflowId,'a',a.id,run.revision,'SUCCEEDED');
+ const events=f.store.events(prepared.workflowId).length;
+ const attempts=countWorkflowAttempts(f.store);
+ const ready=await productCli(argv,f.store.directory);
+ assert.equal(ready.data.continuation.status,'AUTHENTICATED_HOST_ADMISSION_REQUIRED');
+ assert.deepEqual(ready.data.workflow.dependencyReadyIds,['b']);
+ assert.deepEqual(ready.data.resumeCommand,{
+  argv:['resume-codex-goal',id,'--hash',prepared.workflowHash],
+  sourceRechecked:false,trustedEmbeddingRequired:true,
+  authenticatedOperatorRequired:true,managedHostGrantRequired:true,
+  executionGranted:false,automaticReplay:false
+ });
+ const withRepo=await productCli([...argv,'--repository',f.repo],f.store.directory);
+ assert.equal(withRepo.data.sourceFreshness,'NOT_RECHECKED_AFTER_DISPATCH');
+ assert.deepEqual(withRepo.data.resumeCommand,ready.data.resumeCommand);
+ // WAITING_HUMAN without a failed Attempt must remain a manual decision,
+ // not be misclassified as a Repair or made automatically resumable.
+ run.state='WAITING_HUMAN';
+ f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
+  .run(JSON.stringify(run),prepared.workflowId);
+ const awaitingDecision=await productCli(argv,f.store.directory);
+ assert.equal(awaitingDecision.data.continuation.status,'HUMAN_HANDOFF');
+ assert.equal(awaitingDecision.data.resumeCommand,undefined);
+ assert.equal(awaitingDecision.data.recoveryHandoff,undefined);
+ run.state='RUNNING';
+ f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
+  .run(JSON.stringify(run),prepared.workflowId);
+ // Active coordinator Lease means another invocation is not a recovery.
+ f.store.db.prepare('UPDATE runs SET owner=?,leaseUntil=?,control=? WHERE id=?')
+  .run('synthetic-active-owner',Date.now()+60_000,'run',prepared.workflowId);
+ const owned=await productCli(argv,f.store.directory);
+ assert.equal(owned.data.resumeCommand,undefined);
+ f.store.db.prepare('UPDATE runs SET owner=NULL,leaseUntil=0 WHERE id=?')
+  .run(prepared.workflowId);
+ // A reserved-but-unsettled B must be reconciled, never replayed.
+ const b={id:'synthetic-unsettled-b',state:'READY',
+  reportedCostUsd:0,unknownCostAttempts:0};
+ f.store.db.prepare('INSERT INTO runs(id,body) VALUES (?,?)')
+  .run(b.id,JSON.stringify(b));
+ f.store.db.prepare('INSERT INTO workflow_attempts VALUES (?,?,?,?,?)')
+  .run(prepared.workflowId,'b',b.id,run.revision,'STARTED');
+ const uncertain=await productCli(argv,f.store.directory);
+ assert.equal(uncertain.data.continuation.status,'RECONCILE_REQUIRED');
+ assert.equal(uncertain.data.resumeCommand,undefined);
+ assert.equal(uncertain.data.continuation.automaticReplay,false);
+ assert.deepEqual(uncertain.data.recoveryHandoff,{
+  kind:'RECONCILE_EXISTING_EFFECTS',
+  workflowId:prepared.workflowId,revision:run.revision,itemIds:['b'],
+  attempts:[{itemId:'b',childId:b.id,generation:1,status:'STARTED',
+   reason:null,reportCommand:{argv:['report',b.id],
+    diagnosticOnly:true,executionGranted:false,automaticReplay:false}}],
+  inspectCommand:{argv:['workflow-progress',prepared.workflowId],readOnly:true},
+  requiredNextAction:'INSPECT_PERSISTED_EFFECTS_AND_LEASE',
+  executionGranted:false,automaticReplay:false
+ });
+ // A separate CLI process must observe the persisted uncertain B and direct
+ // its operator to inspect the existing effect, not silently dispatch B again.
+ const cliEntry=fileURLToPath(new URL('../src/alpha/cli.mjs',import.meta.url));
+ const restarted=spawnSync(process.execPath,[
+  cliEntry,'--state',f.store.directory,'objective',...argv
+ ],{encoding:'utf8',timeout:20000});
+ assert.equal(restarted.status,2,restarted.stderr || restarted.error?.message);
+ const restartedProgress=JSON.parse(restarted.stdout);
+ assert.equal(restartedProgress.continuation.status,'RECONCILE_REQUIRED');
+ assert.equal(restartedProgress.resumeCommand,undefined);
+ assert.equal(restartedProgress.recoveryHandoff.attempts[0].childId,b.id);
+ assert.equal(restartedProgress.recoveryHandoff.automaticReplay,false);
+ assert.equal(f.store.events(prepared.workflowId).length,events);
+ assert.equal(countWorkflowAttempts(f.store),attempts+1);
+ // Resolve the synthetic uncertain B as a terminal failure. A retry must
+ // remain separately reviewed bounded Repair, not a resumed Host Turn.
+ b.state='FAILED';
+ b.reason='Synthetic B verification failed';
+ f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
+  .run(JSON.stringify(b),b.id);
+ // Match the real Controller's failed-child terminal handoff: its
+ // persisted Workflow becomes WAITING_HUMAN, not a synthetic RUNNING state.
+ run.states.b='BLOCKED';run.state='WAITING_HUMAN';
+ run.reason='WorkItem capability, approval or dependency gates unsatisfied';
+ f.store.db.prepare('UPDATE runs SET body=? WHERE id=?')
+  .run(JSON.stringify(run),prepared.workflowId);
+ f.store.db.prepare('UPDATE workflow_attempts SET status=? WHERE runId=? AND itemId=?')
+  .run('FAILED',prepared.workflowId,'b');
+ const repair=await productCli(argv,f.store.directory);
+ assert.equal(repair.data.continuation.status,'REPAIR_REVIEW_REQUIRED');
+ const directWorkflow=await productCli(['workflow-progress',prepared.workflowId],f.store.directory);
+ assert.equal(directWorkflow.data.continuation.status,'REPAIR_REVIEW_REQUIRED');
+ assert.deepEqual(directWorkflow.data.continuation.itemIds,['b']);
+ assert.equal(repair.data.resumeCommand,undefined);
+ assert.deepEqual(repair.data.recoveryHandoff,{
+  kind:'REVIEW_FAILED_WORKITEM_EVIDENCE',
+  workflowId:prepared.workflowId,revision:run.revision,itemIds:['b'],
+  attempts:[{itemId:'b',childId:b.id,generation:1,status:'FAILED',
+   reason:'Synthetic B verification failed',
+   reportCommand:{argv:['report',b.id],
+    diagnosticOnly:true,executionGranted:false,automaticReplay:false}}],
+  inspectCommand:{argv:['workflow-progress',prepared.workflowId],readOnly:true},
+  requiredNextAction:'REVIEW_FAILURE_EVIDENCE_AND_NEW_REPAIR_GRANT',
+  executionGranted:false,automaticReplay:false
+ });
+
+ // The handoff points to the exact persisted failed child, whose report
+ // can be inspected without submitting a Host or Repair attempt.
+ const childReport=await productCli(repair.data.recoveryHandoff.attempts[0].reportCommand.argv,
+  f.store.directory);
+ assert.equal(childReport.exitCode,0);
+ assert.equal(childReport.data.runId,b.id);
+ assert.equal(childReport.data.reason,b.reason);
+ assert.equal(childReport.data.verification.status,'NOT_RUN');
+ // A second process must preserve the failed-child handoff and report without
+ // granting Repair, replaying the child or changing its terminal evidence.
+ const restartedFailed=spawnSync(process.execPath,[
+  cliEntry,'--state',f.store.directory,'objective',...argv
+ ],{encoding:'utf8',timeout:20000});
+ assert.equal(restartedFailed.status,2,restartedFailed.stderr || restartedFailed.error?.message);
+ const failedProgress=JSON.parse(restartedFailed.stdout);
+ assert.equal(failedProgress.continuation.status,'REPAIR_REVIEW_REQUIRED');
+ assert.equal(failedProgress.resumeCommand,undefined);
+ assert.equal(failedProgress.recoveryHandoff.attempts[0].childId,b.id);
+ assert.equal(failedProgress.recoveryHandoff.attempts[0].status,'FAILED');
+ const restartedReport=spawnSync(process.execPath,[
+  cliEntry,'--state',f.store.directory,'objective','report',b.id
+ ],{encoding:'utf8',timeout:20000});
+ assert.equal(restartedReport.status,0,restartedReport.stderr || restartedReport.error?.message);
+ assert.equal(JSON.parse(restartedReport.stdout).reason,b.reason);
+ assert.equal(f.store.events(prepared.workflowId).length,events);
+ assert.equal(countWorkflowAttempts(f.store),attempts+1,
+  'Read-only status and child report must not create an additional Attempt');
+});
+
+
+test('Goal success exit requires a fresh matching persisted Objective observation',()=>{
+ const sessionId='11111111-1111-4111-8111-111111111111';
+ const workflowId='planning-'+sessionId,workflowHash='a'.repeat(64);
+ const delegated={exitCode:0,data:{workflowId,objective:{status:'COMPLETE'},
+  progress:{workflowHash}}};
+ const complete={status:'OBJECTIVE_COMPLETE',objectiveComplete:true,
+  workflowId,workflow:{workflowHash}};
+ const passed=presentCodexGoalExecution(delegated,sessionId,complete);
+ assert.equal(passed.exitCode,0);
+ assert.equal(passed.data.goalProgressStatus,'OBSERVED');
+ for(const observation of [null,
+  {...complete,status:'WORKFLOW_IN_PROGRESS',objectiveComplete:false},
+  {...complete,workflowId:'planning-other'},
+  {...complete,workflow:{workflowHash:'b'.repeat(64)}}]){
+  const blocked=presentCodexGoalExecution(delegated,sessionId,observation);
+  assert.equal(blocked.exitCode,2);
+  assert.equal(blocked.data.status,'CODEX_GOAL_COMPLETION_UNVERIFIED');
+  assert.equal(blocked.data.objectiveComplete,false);
+  assert.equal(blocked.data.automaticReplay,false);
+  assert.equal(blocked.data.workflowExecution,delegated.data);
+  assert.equal(blocked.data.objective,undefined);
+ }
+ const denied=presentCodexGoalExecution({exitCode:1,data:{
+  status:'CODEX_WORKFLOW_EXECUTION_BLOCKED'}},sessionId,null);
+ assert.equal(denied.exitCode,1);
+ assert.equal(denied.data.status,'CODEX_WORKFLOW_EXECUTION_BLOCKED');
 });

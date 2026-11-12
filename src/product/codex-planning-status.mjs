@@ -93,6 +93,78 @@ export function inspectCodexPlanningStatus(store, sessionId) {
 }
 
 
+
+/**
+ * List persisted Codex Planning session identifiers after a CLI/Host restart.
+* This is a bounded, read-only index: current Goal/Workflow status is
+ * re-observed from persisted state and delivered-tree Evidence where present.
+ * An index entry never implies a usable approval or fresh source checkout.
+ * Inspect the full Goal through codex-goal-progress before any next action.
+ */
+export async function listCodexGoalSessions(store, { offset = 0 } = {}) {
+  if (!store?.db || typeof store.db.prepare !== 'function' ||
+      !Number.isSafeInteger(offset) || offset < 0 || offset > 999999)
+    throw Error('Codex Goal discovery requires an existing Store and bounded offset');
+  const base = { schemaVersion: 1, kind: 'CODEFLEET_CODEX_GOAL_INDEX_V1',
+    authority: 'READ_ONLY_PERSISTED_INDEX', offset, limit: 20,
+    executionGranted: false, automaticReplay: false,
+    hostLiveAcceptance: 'UNVERIFIED', protectedVerified: false };
+  if (!store.db.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='host_planning'"
+  ).get()) return { ...base, status: 'EMPTY', sessions: [], nextOffset: null };
+  // beginPlanning stores compact JSON including a pinned Host identifier.
+  // Inspect each candidate independently; this index never trusts its body.
+  // The extra row detects more records without loading unlimited Goal history.
+  const rows = store.db.prepare(
+    `SELECT id FROM host_planning
+     WHERE instr(body, '"host":"codex"') > 0
+     ORDER BY rowid DESC LIMIT 21 OFFSET ?`
+  ).all(offset);
+  const sessions = [];
+  let unreadableCount = 0;
+  // Reuse the same independent, fail-closed Goal projection as the detail
+  // command. Do not infer completion from a Planning or Workflow flag.
+  // Keep this bounded and sequential to avoid unbounded disk/tree reads.
+  for (const row of rows.slice(0, 20)) {
+    let progress;
+    try {
+      progress = await inspectCodexGoalProgress(store, row.id);
+    } catch {
+      // A malformed persisted session must not hide other recoverable Goals.
+      // Never infer its Objective result or provide an unusable resume command.
+      unreadableCount++;
+      sessions.push({ sessionId: row.id, planningStatus: 'BLOCKED',
+        validationStatus: null, continuationKind: 'INSPECT_PERSISTED_GOAL',
+        goalStatus: 'BLOCKED', workflowId: null,
+        workflowContinuationStatus: null, recoveryHandoffKind: null,
+        objectiveComplete: false, sourceFreshness: 'NOT_RECHECKED',
+        progressCommand: null, reason: 'PERSISTED_GOAL_UNREADABLE',
+        executionGranted: false, automaticReplay: false });
+      continue;
+    }
+    const observed = progress.planning;
+    sessions.push({ sessionId: row.id, planningStatus: observed.status,
+      validationStatus: observed.validationStatus ?? null,
+      continuationKind: observed.continuation?.kind ?? null,
+      goalStatus: progress.status,
+      workflowId: progress.workflowId,
+      workflowContinuationStatus: progress.workflow?.continuation?.status ?? null,
+      recoveryHandoffKind: progress.recoveryHandoff?.kind ?? null,
+      objectiveComplete: progress.objectiveComplete === true,
+      sourceFreshness: 'NOT_RECHECKED',
+      progressCommand: { argv: ['codex-goal-progress', row.id],
+        readOnly: true, executionGranted: false, automaticReplay: false },
+      workflowReviewCommand: progress.workflowId && progress.workflow
+        ? { argv: ['review-codex-workflow', progress.workflowId],
+            readOnly: true, sourceRechecked: false,
+            executionGranted: false, automaticReplay: false }
+        : null });
+  }
+  return { ...base, status: unreadableCount ? 'PARTIAL_BLOCKED'
+    : sessions.length ? 'AVAILABLE' : 'EMPTY',
+    unreadableCount, sessions, nextOffset: rows.length > 20 ? offset + 20 : null };
+}
+
 // One Goal-level, non-executing observation across persisted Planning,
 // reviewed Workflow/DAG, delivery and the independent Objective verdict.
 // An existing Workflow must originate from this exact validated session.
@@ -137,11 +209,65 @@ export async function inspectCodexGoalProgress(store, sessionId) {
         workflow.workflowHash !== reviewed.workflowHash ||
         workflow.revision !== reviewed.revision)
       throw Error('Workflow changed during Goal observation');
+    // An interrupted multi-WorkItem Goal can be resumed from persisted
+    // accepted A after the coordinator has released its Lease. This is only
+    // a command hint: the actual resume independently rechecks original
+    // source, authenticated Operator, Workflow approval, budget and Host grant.
+    // Never suggest a second entry while a coordinator or Host Turn is live,
+    // on uncertain effects, before any WorkItem settles, or after completion.
+    const coordinator = store.db.prepare(
+      'SELECT owner,leaseUntil,control FROM runs WHERE id=?'
+    ).get(workflowId);
+    const coordinatorIdle = (!coordinator?.owner ||
+      coordinator.leaseUntil <= Date.now()) &&
+      (!coordinator?.control || coordinator.control === 'run');
+    const resumable = !workflow.objectiveComplete &&
+      workflow.continuation.status === 'AUTHENTICATED_HOST_ADMISSION_REQUIRED' &&
+      workflow.workItems.some(item => item.attempt?.status === 'SUCCEEDED') &&
+      workflow.dependencyReadyIds.length > 0 &&
+      workflow.activeAttemptIds.length === 0 && coordinatorIdle;
+    const resumeCommand = resumable ? {
+      argv:['resume-codex-goal',sessionId,'--hash',workflow.workflowHash],
+      sourceRechecked:false, trustedEmbeddingRequired:true,
+      authenticatedOperatorRequired:true,managedHostGrantRequired:true,
+      executionGranted:false,automaticReplay:false
+    } : null;
+    // Expose an inspectable, read-only handoff at the two persisted recovery
+    // boundaries. An uncertain Host effect must be reconciled before retry;
+    // a terminal failure requires independently reviewed bounded Repair.
+    // References are diagnostics, never a fresh Host/Operator grant.
+    const recoveryKind = workflow.continuation.status === 'RECONCILE_REQUIRED'
+      ? 'RECONCILE_EXISTING_EFFECTS'
+      : workflow.continuation.status === 'REPAIR_REVIEW_REQUIRED'
+        ? 'REVIEW_FAILED_WORKITEM_EVIDENCE' : null;
+    const recoveryHandoff = recoveryKind ? {
+      kind:recoveryKind,workflowId,revision:workflow.revision,
+      itemIds:[...workflow.continuation.itemIds],
+      attempts:workflow.workItems
+        .filter(item=>workflow.continuation.itemIds.includes(item.id) && item.attempt)
+        .map(item=>({itemId:item.id,childId:item.attempt.childId,
+          generation:item.attempt.generation,status:item.attempt.status,
+          // A prior child report can expose persisted failure diagnostics.
+          // It is not a retry command or an independently accepted verdict.
+          reason:item.reason ?? null,
+          reportCommand:{argv:['report',item.attempt.childId],
+            diagnosticOnly:true,executionGranted:false,automaticReplay:false}})),
+      inspectCommand:{argv:['workflow-progress',workflowId],readOnly:true},
+      ...(workflow.objective?.status === 'RECONCILING'
+        ? {deliveredStatusCommand:{argv:['delivered-status',workflowId],readOnly:true}}
+        : {}),
+      requiredNextAction:recoveryKind === 'RECONCILE_EXISTING_EFFECTS'
+        ? 'INSPECT_PERSISTED_EFFECTS_AND_LEASE'
+        : 'REVIEW_FAILURE_EVIDENCE_AND_NEW_REPAIR_GRANT',
+      executionGranted:false,automaticReplay:false
+    } : null;
     return { ...base, status:workflow.objectiveComplete
       ? 'OBJECTIVE_COMPLETE' : 'WORKFLOW_IN_PROGRESS',
       workflowId, workflow, objective:workflow.objective,
       objectiveComplete:workflow.objectiveComplete === true,
-      continuation:workflow.continuation };
+      continuation:workflow.continuation,
+      ...(resumeCommand ? { resumeCommand } : {}),
+      ...(recoveryHandoff ? { recoveryHandoff } : {}) };
   } catch {
     // A failed delivered-tree observation is not a valid Objective verdict.
     return { ...base, status:'BLOCKED',

@@ -158,6 +158,37 @@ to bypass their gates. An objective unknown needs the user's explicit scope
 clarification through the existing operator contract, not a planner assertion.
 ` : ''}
 
+
+${host === 'codex' ? `
+Codex managed Goal recovery (read-only; separate from staged host codex plan):
+Use node CLI --state STATE objective codex-goals [--offset N] to discover
+persisted Planning session IDs after a Host restart. Keep STATE unchanged
+and outside the repository; an index entry is not an execution approval.
+For an existing Planning SESSION_ID, run node CLI --state STATE objective
+codex-goal-progress SESSION_ID --repository ABSOLUTE_PATH. A nonzero exit
+may mean the Objective is incomplete: inspect its JSON status and handoff,
+never retry a write or assume the returned Objective was accepted.
+For a VALIDATED plan awaiting review, use objective review-codex-plan
+SESSION_ID --repository ABSOLUTE_PATH, inspect the exact Contract/DAG and
+source hash, then request an explicit user decision before any
+prepare-codex-workflow SESSION_ID --repository ABSOLUTE_PATH --hash
+WORKFLOW_HASH --source-hash SOURCE_CONTRACT_HASH. Preparing persists an
+UNAPPROVED Workflow only; it is not a Host Turn or Operator authorization.
+For an existing Workflow, review with objective review-codex-workflow
+WORKFLOW_ID --repository ABSOLUTE_PATH. Inspect persisted recovery via
+codex-goal-progress and workflow-progress; an uncertain Attempt must be
+reconciled and a failed Attempt needs separately approved Repair.
+For a NEW_PROJECT Bootstrap TASK_ID (not a Planning SESSION_ID), use
+objective codex-bootstrap-progress TASK_ID to inspect Fileset, dependent
+local checks and Repair handoff without writing destination files.
+Do not convert LOCAL_PASSED into Objective COMPLETE.
+The installed Skill does NOT supply the trusted createCodexAdmission,
+authenticated Operator, managed Host execution grant or cost approval.
+Never invoke plan-codex-goal, run-codex-goal, resume-codex-goal or
+advance-codex-bootstrap as if plain CLI/Skill text could authorize them.
+These require an independently provisioned trusted Host embedding.
+` : ''}
+
 For an existing Git project, explicitly select host ${host} plan "goal" REPOSITORY
 --local-existing --acceptance LOCAL_ONLY. This snapshots current files and dirty
 state; it does not initialize Git or overwrite uncommitted work. ExistingLocalDraft
