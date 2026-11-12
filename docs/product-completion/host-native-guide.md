@@ -86,6 +86,84 @@ acceptance policy. Use \`/mcp\` inside Codex to inspect tools available to
 the current authenticated session. Registration alone is **not** a real
 model-authored Objective acceptance.
 
+### Real Codex model Turn acceptance — explicit Owner opt-in
+
+CodeFleet includes a **one-turn, no-automatic-retry acceptance runner** for
+an authenticated Codex CLI **0.167.1** installation. This is intended to
+cross the final boundary between a model-free MCP smoke and an actual
+model-authored, CodeFleet-reviewed development Objective.
+
+It does **not** copy credentials, alter global Codex MCP settings, execute
+the user's existing project, create Owner approvals, weaken protected tests,
+or grant a model direct source writes. It creates an exclusively new,
+disposable Git fixture with a pinned Todo test and an external CodeFleet
+State directory.
+
+From a reviewed CodeFleet checkout or installed package, run with Node 24.14.1+
+and a new absolute directory outside any valuable project:
+
+
+ `text
+node scripts/codex-live-acceptance.mjs prepare --dir ABS_NEW_FIXTURE
+node scripts/codex-live-acceptance.mjs status --dir ABS_NEW_FIXTURE
+`
+
+Only if an authenticated **Codex CLI 0.167.1** is accessible, the Owner
+explicitly chooses to spend an unknown amount of subscription usage, and
+accepts that this script **does not enforce a USD cap**, run **once**:
+
+
+ `text
+node scripts/codex-live-acceptance.mjs run --dir ABS_NEW_FIXTURE --allow-model-turn --acknowledge-unknown-cost
+`
+
+The runner constructs \`codex exec --json --ephemeral --ignore-user-config
+--sandbox read-only\` with per-command \`-c mcp_servers.codefleet_live\`
+overrides. Authentication is taken from the user's existing Codex session;
+the runner neither copies nor saves tokens. It records a **durable one-shot
+intent before spawn**, hashes stdout/stderr without persisting raw transcripts,
+observes the Codex-reported Thread, Turn and successful CodeFleet MCP calls,
+and independently checks for an eligible Fileset proposal in CodeFleet
+State. Crashes, denied permissions, uncertain effects, rejected model
+proposals and nonzero exits are **HUMAN_RECONCILIATION_REQUIRED**. Re-running
+the same intent is refused, even after a failed call. Each new attempt
+requires a fresh fixture and deliberate Owner approval.
+
+Once the real Codex proposal has ended successfully, request a review:
+
+
+ `text
+node scripts/codex-live-acceptance.mjs review --dir ABS_NEW_FIXTURE
+`
+
+The resulting \`ownerAction\` contains an absolute Node executable and
+the exact CLI argv, review reference, hash, scope and external State path.
+It is deliberately *not* an executable approval: the Owner must inspect
+the proposed file bytes, and only in a separate trusted terminal append
+\`--acknowledge-unisolated\` to the returned argument list and run it.
+The model/MCP server cannot make that decision. After a successful source
+Fileset application, run \`review\` again to prepare the pinned Node test
+command, then independently approve that exact second action.
+
+Finally:
+
+
+ `text
+node scripts/codex-live-acceptance.mjs status --dir ABS_NEW_FIXTURE
+node scripts/codex-live-acceptance.mjs finalize --dir ABS_NEW_FIXTURE
+`
+
+\`finalize\` requires **both** one completed Codex-reported proposal Turn
+and CodeFleet's independent current-tree \`COMPLETE_LOCAL\` based on the
+original immutable tests and reviewed Local evidence; unexpected files,
+changed Git HEAD or tests, missing evidence and uncertain attempts fail
+closed. The verdict is \`CODEX_TURN_OBSERVED_AND_OBJECTIVE_COMPLETE_LOCAL\`,
+never an assertion of independently authenticated Owner identity, proved
+protected OS confinement or enforced USD spending limits. The runner is
+only an acceptance tool, not an arbitrary-task or production autonomous
+executor. CI tests its safety gates with an explicitly synthetic executable
+and **never invokes a real billable model Turn**.
+
 ## Install and manage
 
 Use a trusted CodeFleet checkout with Node 24.14.1 or newer. No npm install or API key is required. From that checkout:

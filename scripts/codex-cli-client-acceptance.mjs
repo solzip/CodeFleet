@@ -138,6 +138,25 @@ try{
   assert.ok((await lstat(config)).isFile(),
     'Official Codex must write config only inside temporary CODEX_HOME');
   assert.equal((await lstat(state)).isDirectory(),true);
+  // Nonbillable preflight of the *same ephemeral -c overrides* later used
+  // by codex exec --ignore-user-config. They must work without mutating
+  // the user's global Codex config or starting a model Turn.
+  const ephemeralName='codefleet_live';
+  const ephemeralParams=[
+    '-c','mcp_servers.'+ephemeralName+'.command='+JSON.stringify(process.execPath),
+    '-c','mcp_servers.'+ephemeralName+'.args='+JSON.stringify(serverArgs),
+    '-c','mcp_servers.'+ephemeralName+'.enabled=true'
+  ];
+  const extra=getJson(codex(['mcp','list','--json',...ephemeralParams]));
+  const inline=extra.find(item=>item.name===ephemeralName);
+  assert.ok(inline,'Codex must accept ephemeral MCP config overrides');
+  assert.equal(inline.transport.command,process.execPath);
+  assert.deepEqual(inline.transport.args,serverArgs);
+  const execHelp=codex(['exec','--help']).stdout;
+  assert.match(execHelp,/--ignore-user-config/);
+  assert.match(execHelp,/--ephemeral/);
+  assert.match(execHelp,/--sandbox/);
+  assert.match(execHelp,/--json/);
   codex(['mcp','remove',serverName]);
   assert.equal(getJson(codex(['mcp','list','--json']))
     .some(item=>item.name===serverName),false);

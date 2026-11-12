@@ -119,6 +119,7 @@ test('Codex MCP handshake and same-session Goal → validated Draft → pending 
       taskId,revision:status.revision,proposal:draft})
   ])[0]);
   assert.equal(drafted.status,'VALIDATED');
+  assert.equal(drafted.sourceDigests['src/todo.mjs'],sha(f.old));
   const prepared=value(talk(f.repo,f.state,[
     tools(6,'codefleet_goal_prepare',{taskId})
   ])[0]);
@@ -183,6 +184,9 @@ test('Codex MCP handshake and same-session Goal → validated Draft → pending 
   const applied=owner(filesReview.ownerAction);
   assert.equal(applied.status,'MATERIALIZED');
   assert.equal(await readFile(join(f.repo,files[0]),'utf8'),next);
+  assert.equal(value(talk(f.repo,f.state,[
+    tools(14,'codefleet_goal_status',{taskId})
+  ])[0]).sourceDigests['src/todo.mjs'],sha(next));
   const testReview=value(talk(f.repo,f.state,[
     tools(11,'codefleet_local_test_review',{taskId})
   ])[0]);

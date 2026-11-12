@@ -118,9 +118,24 @@ const instructions=[
   'completion; it is UNPROTECTED, not Host Live or protected verification.',
   'The same-account MCP process cannot authenticate a human Operator.'
 ].join(' ');
+function sourceDigestsForScope(report) {
+  const baseline=Array.isArray(report.plan?.baseline?.files)
+    ? new Map(report.plan.baseline.files
+        .filter(row=>Array.isArray(row)&&row.length===3)
+        .map(([file,mode,digest])=>[file,digest]))
+    : new Map();
+  const owned=report.bootstrap?.recordedDigests??{};
+  const files=report.plan?.draft?.plannedFiles??[];
+  if(!Array.isArray(files))return {};
+  return Object.fromEntries(files.slice(0,80)
+    .filter(item=>typeof item?.path==='string'&&
+      /^(src|lib)\/[A-Za-z0-9_./-]+$/.test(item.path))
+    .map(({path})=>[path,owned[path]??baseline.get(path)??null]));
+}
 const summarize=report=>({
   kind:'CODEFLEET_CODEX_GOAL_VIEW_V1',taskId:report.taskId,
   revision:report.revision,contractKind:report.contractKind??null,
+  sourceDigests:sourceDigestsForScope(report),
   status:report.state,workflowHash:report.workflowHash??null,
   plan:report.plan?{
     intent:report.plan.intent??null,
