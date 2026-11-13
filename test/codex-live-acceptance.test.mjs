@@ -6,6 +6,11 @@ import {mkdir,mkdtemp,writeFile,readFile,lstat,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
+import {Store} from '../src/alpha/store.mjs';
+import {enableTasks,createTask,task,submitTaskDraft,prepareTask,submitBootstrapFiles} from '../src/product/tasks.mjs';
+import {prepareNativeFilesReview,acceptNativeFilesReview} from '../src/product/native-local.mjs';
+import {workControl} from '../src/product/work-review.mjs';
+import {randomUUID} from 'node:crypto';
 
 const script=fileURLToPath(new URL('../scripts/codex-live-acceptance.mjs',import.meta.url));
 function call(args,expected=0){
@@ -23,6 +28,134 @@ async function fixture(t){
   assert.equal(prepared.status,'READY_FOR_EXPLICIT_CODEX_LIVE_TURN');
   return {parent,dir};
 }
+
+async function recoveryFixture(t){
+  const parent=await mkdtemp(join(tmpdir(),'cf-new-session-'));
+  t.after(()=>rm(parent,{recursive:true,force:true}));
+  const dir=join(parent,'new session fixture');
+  const prepared=call(['prepare-recovery','--dir',dir]);
+  assert.equal(prepared.plan.maxModelTurns,2);assert.equal(prepared.plan.ownerEffectsApproved,false);
+  const m=await manifestOf({dir}),store=new Store(m.state);enableTasks(store);
+  // SYNTHETIC/OFFLINE setup only. No Codex process, login or spending approval.
+  try{
+    const c=await createTask(store,m.project,m.goal,{localExisting:true,acceptanceMode:'LOCAL_ONLY',workProfile:'WORK_REVIEW_V1',mode:'CHANGE'});
+    const p=store.readArtifact(c.planRef),draft={...p.draft,
+      requirements:['Normalize titles'],decisions:[{topic:'runtime',choice:'Node',alternatives:[],rationale:'Existing runtime'}],
+      plannedFiles:[{path:'src/todo.mjs',purpose:'Normalize title'}],
+      plannedTests:[{path:'test/todo.test.mjs',criteria:['title']}],
+      criteria:[{id:'title',description:'Normalize title',tests:['test/todo.test.mjs']}],
+      scope:{includes:['src/todo.mjs'],excludes:['test']},
+      workItems:[{id:'implement',kind:'local-edit',dependencies:[],acceptanceCriteria:['Normalize title'],files:['src/todo.mjs']},
+        {id:'verify',kind:'local-verification',dependencies:['implement'],acceptanceCriteria:['Normalize title'],files:[]}]};
+    await submitTaskDraft(store,c.id,{revision:c.revision,proposal:draft});await prepareTask(store,c.id);
+    await submitBootstrapFiles(store,c.id,{revision:task(store,c.id).revision,itemId:'implement',files:[{
+      path:'src/todo.mjs',baseSha256:m.sourceSha256,
+      content:"export function normalizeTitle(value) { if(typeof value!=='string'||!value.trim())throw Error('invalid title'); return value.trim(); }\n"}]});
+    const review=await prepareNativeFilesReview(store,c.id,'implement');
+    await acceptNativeFilesReview(store,review.reviewRef,{trust:review.reviewHash,acknowledgeUnisolated:true});
+  }finally{store.close();}
+  await writeFile(join(dir,'turn-intent.json'),JSON.stringify({kind:'SYNTHETIC_OFFLINE_FIRST_INTENT'}));
+  await writeFile(join(dir,'turn-receipt.json'),JSON.stringify({status:'CODEX_TURN_OBSERVED_AWAIT_OWNER_REVIEW',threadIds:['SYNTHETIC-FIRST']}));
+  const checkpoint=call(['checkpoint','--dir',dir]);assert.equal(checkpoint.snapshot.phase,'AWAIT_TEST_REVIEW');
+  return {parent,dir,m,checkpoint};
+}
+
+async function recoveryCodex(f,variant='valid'){
+  const fake=join(f.parent,'synthetic-recovery.mjs');
+  const mcp=fileURLToPath(new URL('../src/hosts/codex-mcp.mjs',import.meta.url));
+  await writeFile(fake,[
+    "import {spawnSync} from 'node:child_process'; import {writeFileSync} from 'node:fs';",
+    "if(process.argv.includes('--version')){console.log('codex-cli 0.167.0');process.exit(0)}",
+    "if(process.argv.includes('login'))process.exit(0);",
+    "if(!process.argv.includes('--ephemeral')||!process.argv.includes('--ignore-user-config')||!process.argv.some(v=>v.includes('--status-only')))process.exit(3);",
+    "if(!process.argv.at(-1).includes('revision=status.revision')||!process.argv.at(-1).includes('nextAction=status.workReport.nextAction.kind'))process.exit(4);",
+    'const args='+JSON.stringify([mcp,'--state',f.m.state,'--repository',f.m.project,'--acceptance','LOCAL_ONLY','--work-profile','WORK_REVIEW_V1','--status-only'])+';',
+    "const ask=a=>{const p=spawnSync(process.execPath,args,{encoding:'utf8',input:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'codefleet_goal_status',arguments:a}})+'\\n',windowsHide:true});if(p.status!==0)throw Error('MCP process failed');return JSON.parse(JSON.parse(p.stdout).result.content[0].text);};",
+    "const list=ask({}),id=list.tasks[0].taskId,view=ask({taskId:id});",
+    "const emit=v=>console.log(JSON.stringify(v));",
+    "emit({type:'thread.started',thread_id:"+JSON.stringify(variant==='same-thread'?'SYNTHETIC-FIRST':'SYNTHETIC-SECOND')+"});emit({type:'turn.started'});",
+    "for(const a of [{},{taskId:id}])emit({type:'item.completed',item:{type:'mcp_tool_call',server:'codefleet_live',tool:'codefleet_goal_status',status:'completed',arguments:a}});",
+    "const r=view.workReport;emit({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({taskId:id,revision:view.revision,phase:r.phase,nextAction:r.nextAction.kind,attemptsUsed:r.budget.attemptsUsed})}});",
+    ...(variant==='source-drift'?['writeFileSync('+JSON.stringify(join(f.m.project,'src','todo.mjs'))+',"// SYNTHETIC external drift\\n");']:[]),
+    ...(variant==='unexpected-tool'?["emit({type:'item.completed',item:{type:'command_execution',command:'SYNTHETIC NEVER EXECUTED'}});"]:[]),
+    "emit({type:'turn.completed',usage:{input_tokens:1,output_tokens:1}});"
+  ].join('\n'));
+  return fake;
+}
+
+test('new-session fixture is exclusive, has separate bounded approvals and no implicit Turn',async t=>{
+  const parent=await mkdtemp(join(tmpdir(),'cf-new-plan-'));t.after(()=>rm(parent,{recursive:true,force:true}));
+  const dir=join(parent,'fixture'),r=call(['prepare-recovery','--dir',dir]);
+  assert.equal(r.plan.maxSecondsPerTurn,300);assert.equal(r.plan.usdCostCapEnforced,false);
+  const status=call(['status','--dir',dir]);assert.equal(status.newSessionRecovery.status,'NOT_RUN');
+  call(['prepare-recovery','--dir',dir],1);call(['checkpoint','--dir',dir],1);
+  for(const flags of [[],['--allow-model-turn'],['--acknowledge-unknown-cost']])call(['run-recovery','--dir',dir,...flags],1);
+  assert.equal(await lstat(join(dir,'recovery-turn-intent.json')).catch(()=>null),null);
+});
+
+test('synthetic new-session discovery preserves checkpoint and separately consumes one-shot intent',async t=>{
+  const f=await recoveryFixture(t),fake=await recoveryCodex(f),before=await readFile(join(f.dir,'turn-intent.json'));
+  call(['checkpoint','--dir',f.dir],1);
+  call(['review','--dir',f.dir],1); // Test approval must wait for recovery.
+  const ready=call(['preflight-recovery','--dir',f.dir,'--codex',fake]);assert.equal(ready.modelTurnsStarted,0);
+  const r=call(['run-recovery','--dir',f.dir,'--codex',fake,'--allow-model-turn','--acknowledge-unknown-cost']);
+  assert.equal(r.status,'CODEX_NEW_SESSION_CHECKPOINT_RECOVERED_AWAIT_OWNER_TEST_REVIEW');
+  assert.equal(r.recovery.newThread,true);assert.equal(r.recovery.checkpointPreserved,true);
+  assert.equal(r.recovery.compactionObserved,false);assert.equal(r.recovery.taskRediscovered,true);
+  assert.deepEqual(await readFile(join(f.dir,'turn-intent.json')),before);
+  assert.equal(call(['review','--dir',f.dir]).executionGranted,false);
+  call(['run-recovery','--dir',f.dir,'--codex',fake,'--allow-model-turn','--acknowledge-unknown-cost'],1);
+  assert.equal(call(['preflight-recovery','--dir',f.dir,'--codex',fake],2).automaticReplay,false);
+  const final=call(['finalize','--dir',f.dir],2);assert.equal(final.currentTreeComplete,false);
+});
+
+for(const variant of ['same-thread','source-drift','unexpected-tool'])test('synthetic recovery rejects '+variant+' and preserves spent intent',async t=>{
+  const f=await recoveryFixture(t),fake=await recoveryCodex(f,variant);
+  const r=call(['run-recovery','--dir',f.dir,'--codex',fake,'--allow-model-turn','--acknowledge-unknown-cost']);
+  assert.equal(r.status,'HUMAN_RECONCILIATION_REQUIRED');
+  assert.ok(await lstat(join(f.dir,'recovery-turn-intent.json')));
+  call(['review','--dir',f.dir],1);
+  call(['run-recovery','--dir',f.dir,'--codex',fake,'--allow-model-turn','--acknowledge-unknown-cost'],1);
+});
+
+test('checkpoint drift and recovery plan tampering block before Codex or new intent',async t=>{
+  const f=await recoveryFixture(t),fake=await recoveryCodex(f);
+  const target=join(f.dir,'recovery-checkpoint.json'),original=await readFile(target);
+  const changed=JSON.parse(original);changed.snapshot.budget.attemptsRemaining=99;
+  await writeFile(target,JSON.stringify(changed));
+  call(['preflight-recovery','--dir',f.dir,'--codex',fake],1);
+  await writeFile(target,original);
+  const planPath=join(f.dir,'recovery-plan.json'),plan=JSON.parse(await readFile(planPath));plan.maxModelTurns=99;
+  await writeFile(planPath,JSON.stringify(plan));
+  call(['run-recovery','--dir',f.dir,'--codex',fake,'--allow-model-turn','--acknowledge-unknown-cost'],1);
+  assert.equal(await lstat(join(f.dir,'recovery-turn-intent.json')).catch(()=>null),null);
+});
+
+for(const variant of ['paused','lease','damaged-evidence'])test('recovery admission rejects '+variant+' without consuming a new Turn',async t=>{
+  const f=await recoveryFixture(t),fake=await recoveryCodex(f),store=new Store(f.m.state);
+  try{
+    if(variant==='paused')workControl(store,f.checkpoint.snapshot.taskId,{action:'PAUSE',requestId:randomUUID(),expectedControlSeq:0});
+    if(variant==='lease')store.db.prepare('UPDATE runs SET owner=?,leaseUntil=?,pid=?').run('SYNTHETIC_OWNER',Date.now()+25000,process.pid);
+    if(variant==='damaged-evidence'){
+      const run=store.list().find(r=>r.materializationRef);assert.ok(run);
+      await writeFile(join(f.m.state,'artifacts',run.materializationRef+'.json'),'{}');
+    }
+  }finally{store.close();}
+  call(['preflight-recovery','--dir',f.dir,'--codex',fake],1);
+  call(['run-recovery','--dir',f.dir,'--codex',fake,'--allow-model-turn','--acknowledge-unknown-cost'],1);
+  assert.equal(await lstat(join(f.dir,'recovery-turn-intent.json')).catch(()=>null),null);
+});
+
+test('missing recovery plan and partial receipt cannot reopen approval or overwrite records',async t=>{
+  const f=await recoveryFixture(t),fake=await recoveryCodex(f);
+  await rm(join(f.dir,'recovery-plan.json'));
+  call(['review','--dir',f.dir],1);call(['preflight-recovery','--dir',f.dir,'--codex',fake],1);
+  const partial='{"status":';await writeFile(join(f.dir,'recovery-turn-receipt.json'),partial);
+  assert.equal(call(['preflight-recovery','--dir',f.dir,'--codex',fake],2).readyForLiveTurn,false);
+  call(['run-recovery','--dir',f.dir,'--codex',fake,'--allow-model-turn','--acknowledge-unknown-cost'],1);
+  assert.equal(await readFile(join(f.dir,'recovery-turn-receipt.json'),'utf8'),partial);
+  assert.equal(await lstat(join(f.dir,'recovery-turn-intent.json')).catch(()=>null),null);
+});
 test('Codex live acceptance prepare creates pinned isolated fixture, no bill or completion',async t=>{
   const f=await fixture(t);
   const status=call(['status','--dir',f.dir]);

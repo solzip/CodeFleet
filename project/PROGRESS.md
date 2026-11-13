@@ -1,7 +1,43 @@
 # 구현·검증 진행 현황
 
-갱신: 2026-11-13 · 구현 후보: `875182f` (`b3f8b985a903fd255983da01d6f284df3dea14aa` 기준 구현). 아래 이전 기록은 당시 범위의 근거로 보존한다.
+갱신: 2026-11-13 · 현재 기준: `afe4cbe` + 미커밋 새 세션 수용 도구 후보. 이전 구현 후보 `875182f` (`b3f8b985a903fd255983da01d6f284df3dea14aa` 기준 구현)의 기록은 당시 범위의 근거로 보존한다.
 제품 목적은 [제품 원칙](../docs/PRODUCT_VISION.md), 구조는 [아키텍처](../docs/product-completion/architecture.md), 수락 조건과 순서는 [로드맵](../docs/product-completion/roadmap.md)에서 관리한다.
+
+## 현재 결과: Codex 새 세션 통합 Local 수용 완료
+
+기준은 `afe4cbe`와 아래 미커밋 재개 회귀 후보다. 기존 정상 CHANGE 수용과 one-shot/비용 승인 기록은 재실행·재사용·초기화하지 않았다. 준비 이후 사용자가 기능 단위 통합 검증 진행을 요청하여, 동일한 새 Task의 제안 → Owner 소스 적용 → 새 세션 재개 → Owner 검증 → Local 완료를 하나의 수용 흐름으로 관측했다. 최종 `finalize`는 exit 0, `CODEX_TURN_OBSERVED_AND_OBJECTIVE_COMPLETE_LOCAL` / reasons 0건 / `currentTreeComplete=true`였다. 이는 선택한 단일 Codex 경로의 감독형 Local 수용이며 전체 제품·Protected·실제 Compaction 수용이 아니다.
+
+새 fixture `a08a006e`의 첫 proposal-only Codex CLI 0.167.0 Turn은 별도 승인된 실행으로 exit 0, `CODEX_TURN_OBSERVED_AWAIT_OWNER_REVIEW`였다. 2026-11-13 06:47:59~06:48:49 UTC에 Thread 1개·Turn 시작/완료 각 1회·실패 0회가 관측됐으며 필수 MCP와 중간 상태 조회가 모두 성공했다. Provider 보고 토큰은 input 214,231 / output 1,138이고 금액·잔여 한도는 UNKNOWN이다. 모델은 프로젝트 소스와 테스트를 변경하지 않았다. Task `task-d21b395a-af22-4c1a-9f61-adbfd36053e7`는 이때 revision 6, `implement=FILESET_PROPOSED`, `verify=PENDING_VERIFICATION`이었으며 아래 후속 효과·검증까지 같은 Task로 연결했다.
+
+`review`는 exit 0으로 `src/todo.mjs` 한 파일의 후보를 준비했다. 후보는 입력 자료형을 검사하고 trim 뒤 빈 문자열을 거절하며 trim된 값을 반환한다. Owner가 별도 PowerShell에서 대문자 `APPLY`를 직접 입력해 `MATERIALIZED` exit 0이 됐고, State 재관측과 체크포인트에서 revision 7·`AWAIT_TEST_REVIEW`·효과 `SETTLED`·검증 시도 0건을 확인했다. 적용 receipt는 `70e1af0e68f23eb7135905318a1be8e75d9174539ae91370de9f9e26aa872c4c`, 소스 hash는 `c9e99eb4c2eeec32c27068cd12acfb20e603664be824041a33cb1c9ba9a31e7c`, 후보 tree hash는 `5c3fe8bda4f13dd2d1629c2860b2c50cb1c8e094924ff1f63f7548c7d66cd330`이다. Agent가 Owner 확인 단어를 대신 입력하지 않았다.
+
+실제 사용 중 Host 채팅에 `APPLY` 확인 단어가 입력됐지만, 현 revision 3는 채팅 승인을 Owner TTY 입력으로 전달하는 기능을 제공하지 않는다. 별도 창에서는 최초 리뷰 만료 1회와 소문자 `apply`에 따른 거절 1회가 발생했다. 수락 event가 없는 상태를 적용 완료로 기록하지 않았으며, 현재 후보의 새 리뷰로만 재검토했다. 이후 대문자 `APPLY`와 최종 `VERIFY`는 사용자가 직접 수락했다. 승인 의사 부족과 구분되는 승인 전달·대소문자·만료 안내 UX의 제약으로 남긴다. 실패한 리뷰·거절·기존 모델 Turn과 비용 기록은 보존했다. 실제 사람의 준비/개입/검토 시간을 별도 계측하지 않았으므로 생산성 개선 근거로 사용하지 않는다.
+
+`checkpoint`와 `preflight-recovery`는 각각 exit 0이었다. 두 번째이자 마지막 별도 승인된 Codex Turn은 2026-11-13 07:03:45~07:03:57 UTC에 실행돼 exit 0, `CODEX_NEW_SESSION_CHECKPOINT_RECOVERED_AWAIT_OWNER_TEST_REVIEW`였다. 첫 Thread와 다른 새 Thread에서 대화 이력·Task ID 없이 빈 `goal_status`로 Task를 발견하고 해당 Task를 재조회했다. `checkpointPreserved`, `newThread`, `taskRediscovered`, `nextActionReported`가 모두 true이며 다음 행동은 `REVIEW_TESTS`였다. 원래 후보·계약·제어·예산·event/Run digests는 무변경이었다. Provider 보고 토큰은 input 51,582 / output 162로, 두 Turn 합계는 input 265,813 / output 1,300이다. 금액과 잔여 한도는 UNKNOWN이며 USD 상한은 집행하지 못한다.
+
+이후 별도 Owner 테스트 창에서 대문자 `VERIFY`를 직접 입력해 고정 명령 `node --test --test-reporter=tap test/todo.test.mjs`를 1회 실행했다. 2026-11-13 07:04:51 UTC에 기록된 Local Evidence는 exit 0, 1 PASS / 0 FAIL / 0 SKIP이며 위 동일 candidate tree·Workflow·Task revision 7에 결합됐다. Evidence ref는 `2d88cd9130b457e57c637a73fb434e15fcf134e27453285f85ef28ba77417ef9`이고 최종 Task는 revision 8, `implement=MATERIALIZED`, `verify=LOCAL_PASSED`다. 최종 판정의 `continuation=COMPLETE_LOCAL`, `reportedLocalEvidence=LOCAL_ONLY_UNPROTECTED`, `hostLiveTrust=PROVIDER_REPORTED_ONLY`, `ownerAuthentication=NOT_ESTABLISHED`, `protectedVerification=UNSATISFIED`를 구분한다. 진행 문구에는 완료 후에도 이전 단계의 `next`/`OBSERVED_AWAIT_OWNER_TEST_REVIEW`가 남는 표시 제약이 관측돼 후속 개선 대상으로 남긴다. 최종 수용 판단은 해당 문구가 아니라 현재 후보·Evidence와 최종 verdict에 따른다.
+
+`scripts/codex-live-acceptance.mjs`에 새 fixture 전용 `prepare-recovery`, 확정 적용 뒤의 `checkpoint`, 별도 `preflight-recovery`/`run-recovery`를 연결했다. 기존 Store·WorkReport·프로필·Lease·Native Owner 경계를 유지하고 새 scheduler/권한 issuer/Task 상태 저장소를 만들지 않았다. `src/hosts/codex-mcp.mjs`의 명시 `WORK_REVIEW_V1 --status-only`는 발견·상태 조회만 노출하며 모든 변경/리뷰 생성 호출을 거부한다. 테스트는 별도 Thread의 발견·현재 행동 보고, 체크포인트 무변경, 같은 Thread·소스 drift·예상 밖 도구·계획/체크포인트 변조·PAUSE·lease·손상 증거·누락 계획·부분 receipt의 차단을 포함한다. 계약과 사용 절차는 기존 설계·Host 안내에 반영했다. 오프라인 검증에 더해 위 선택된 실제 Codex 새 세션 통합 Local 경로를 관측했지만, 전체 프로필 수용은 미완료다.
+
+현재 비공개 fixture는 `.codefleet/codex-new-session-20261113-a08a006e/`이며 `manifest.json`과 `recovery-plan.json`에 별도 시나리오·runner/runtime 결합을 고정했다. runner SHA-256은 `2790d9877e23d5df21bb5bd5b554bf2196dfeb55643c801d6a725260409b6cd2`다. 준비 시점에는 exit 0, 모델 Turn·Owner 권한 0건이었으며 이후 두 Turn과 Owner 효과는 위에 별도로 기록했다. 계획의 최대 2개 Turn을 모두 소모했으며 각 300초, 자동 재시도 없음, 비용 UNKNOWN / USD 상한 없음의 경계를 유지했다. 첫 제안과 새 세션의 intent/receipt, `recovery-checkpoint.json`, Task/Run/Event와 Local Evidence를 보존한다. 앞서 준비한 `.codefleet/codex-new-session-20261113-68b93ef0/`는 응답 필드 매핑 전의 후보로 모델 0건 상태를 보존하며 사용하지 않는다. 초기 PATH preflight는 공식 npm shim 대상 불일치로 exit 1이었고, 기존 공식 npm 경로를 명시한 비과금 preflight는 exit 0이었다. 실제 CLI는 0.167.0이며 설치·로그인·전역 설정은 변경하지 않았다. 어느 fixture의 기록도 재실행하거나 초기화하지 않는다.
+
+이번 검증 환경은 Windows x64 / PowerShell / Node v24.14.1이다. `node --test test/codex-live-acceptance.test.mjs test/codex-mcp.test.mjs`는 exit 0, 38 PASS / 0 FAIL / 0 SKIP이었다. 체크포인트의 고정 목표·Git base·소스/테스트 경로 검사 보강 후 양성 새 세션 합성 사례를 다시 실행해 exit 0, 1 PASS를 확인했다. 최종 프롬프트 필드 매핑 보강 뒤 `node --test --test-name-pattern="synthetic new-session discovery|synthetic recovery rejects unexpected-tool" test/codex-live-acceptance.test.mjs`는 exit 0, 2 PASS / 0 FAIL / 0 SKIP이었다. `npm.cmd run test:work-review`는 exit 0, 20 PASS, `npm.cmd run test:host-core`는 exit 0, 135 PASS, `npm.cmd run pretest` 후 `npm.cmd run test:legacy`는 각각 exit 0, 327 PASS였다(각 FAIL/SKIP 0건). `npm.cmd run test:installed-goal-loop`는 sandbox npm 캐시 EPERM으로 최초 exit 1, 1 PASS / 2 FAIL이었으며 승인된 동일 명령 재실행은 exit 0, 3 PASS / 0 FAIL / 0 SKIP이었다.
+
+`npm.cmd run test:codex-mvp` 최초 실행은 exit 1, 318 PASS / 1 FAIL / 4 SKIP이었다. 실패한 `delivered-status` 시험은 `afe4cbe`와 동일한 경로에서 가짜 Store의 `db` 누락으로 공통 Work guard가 중단된 것이다. 제품 guard나 기존 단언을 완화하지 않고 시험 seam에 실제 임시 Store DB를 연결했다. 해당 파일 재검증은 exit 0, 8 PASS / 0 FAIL / 0 SKIP, 전체 동일 명령 재검증은 exit 0, 319 PASS / 0 FAIL / 4 SKIP이었다. 제외 4건은 Windows에서 비이식적인 POSIX 실행 비트와 두 predecessor symlink 경계 시험이다. `npm.cmd run posttest`는 exit 0, Markdown 37개·링크 236개·인용 4개·선언 사실 42건 오류 0이며 `git diff --check`도 exit 0이다. 기존 coverage/anchor 기준선은 변경하지 않았다. 전체 Docker/보호 보안 회귀는 NOT_RUN이며 위 기본 회귀를 보호 수용으로 승격하지 않는다.
+
+이 통합 시나리오의 소스·재개·검증·Local 완료 조건은 충족했다. 남은 우선 개선은 위 승인 전달·입력/만료 안내와 완료 후 상태 문구다. 현재 runner와 runtime은 Live 후보 결합을 보존하므로 후속 변경은 새 후보로 오프라인 검증하고, 이 과거 결과를 새 후보의 Live 수용으로 자동 승계하지 않는다. 실제 Compaction, VERIFY_CURRENT·실패/Repair·미해결 종료의 별도 Host 실증, Claude·Protected·macOS/Linux·6쌍 가치 비교는 여전히 미검증이며 추가 모델 실행은 새 범위와 별도 승인이 필요하다.
+
+## 재개 안전성 회귀 근거
+
+기준은 최신 main `afe4cbe`다. 해당 커밋의 정상 CHANGE Codex Host Live Local 수용은 완료된 기존 근거로 유지하며 재실행하지 않았다. 아래 운영 전 검증 표와 실패 기록은 당시 범위의 이력이다. 현재 전체 프로필 수용은 아직 미완료다.
+
+다음 WorkItem은 revision 3의 UX-03/UX-04/UX-05 재개 안전성 검증으로 선정했다. 정상 CHANGE 이후에도 남은 실패·재개 수용 조건에 대응하며, 새로운 Host·협업·제품 범위 확대보다 기존 단일 Agent 경로의 증거 보존을 먼저 검사한다. 파일 범위는 `test/work-review.test.mjs`와 이 상태 문서이며, 기존 Store·WorkReport·Native 승인·Repair 경로를 재사용한다. 사용자 요청은 저장소 구현·오프라인 검증에 적용하며 실제 모델 Turn·Owner 효과·비용 사용 승인은 부여하지 않는다.
+
+새 임시 시험 State에서 읽기 전용 Store를 여는 별도 Node 프로세스로 Task 발견과 현재 상태를 조회하는 회귀를 구현했다. 실패 Evidence와 소모 예산 보존 후 한 번의 승인된 합성 Repair, PAUSE/UNPAUSE epoch와 구승인 거부, 완료 후 외부 소스 변경의 STALE 판정, 손상 Evidence의 READ_ERROR, Run 완료/Task 연결 중단의 UNRESOLVED와 재실행 거부를 검사한다. 합성 승인은 SYNTHETIC/OFFLINE이며 기존 one-shot fixture·비용 승인 기록은 사용하거나 초기화하지 않는다. 제품 런타임 변경은 필요하지 않았다.
+
+검증 환경은 Windows x64 / PowerShell / Node v24.14.1이다. `node --test --test-name-pattern="fresh-process recovery" test/work-review.test.mjs`는 exit 0, 3 PASS였고, 중단 경계 보강 후 `node --test --test-name-pattern="work Run-completed" test/work-review.test.mjs`는 exit 0, 1 PASS였다. `node --test test/work-review.test.mjs test/codex-mcp.test.mjs`는 exit 0, 22 PASS였다. `npm.cmd run pretest` exit 0 후 `npm.cmd run test:legacy`는 exit 0, 327 PASS, `npm.cmd run test:host-core`는 exit 0, 135 PASS였다. 각 시험의 FAIL/SKIP은 0건이다. `npm.cmd run posttest`는 sandbox 계정의 Git 소유권 제한으로 링크 검사에서 최초 exit 1이었으며, 설정 변경 없이 승인된 동일 명령 재실행은 exit 0이었다(Markdown 37개·링크 234개·인용 4개·선언 사실 42건). `git diff --check`도 exit 0이다. 이는 선택한 기본 회귀의 오프라인 근거이며 전체 보안/보호 수용이 아니다. coverage·anchor 기준선은 변경하지 않았다.
+
+실제 Codex 새 세션·Compaction, VERIFY_CURRENT·실패/Repair·미해결 종료의 Host Live 수용, Claude Host Live, Protected 검증, macOS/Linux와 6쌍 가치 비교는 이번 작업에서 NOT_RUN이다. 다음 허용 작업은 이 오프라인 근거를 유지한 채 아직 관측하지 않은 Host 시나리오의 새 fixture·한도·별도 승인을 준비하는 것이다. 기존 수용 결과나 one-shot 승인을 새 시도에 이전하지 않는다.
 
 ## Work review 구현 후보와 운영 전 검증
 

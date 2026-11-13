@@ -717,6 +717,10 @@ WR-REVIEW-05: Native review의 `workContext`를 review hash에만 넣으면 충�
 | 사용자 절차 | 정상 CHANGE 승인 2회, VERIFY_CURRENT 1회, Repair 추가 2회 이하. 수동 JSON·hash 전사·명령 재조합 0회 | 사용 절차 수용 실패 |
 | Host 실증 | 선택한 Codex 환경에서 정상 CHANGE·VERIFY_CURRENT·확정 실패와 Repair·확정 체크포인트 새 세션 재개·실제 Compaction 재개·미해결 종료를 각각 별도 관측 | 관측하지 못한 경로 NOT_RUN. 전체 프로필 수용 불가 |
 
+새 세션 실증 도구는 기존 `scripts/codex-live-acceptance.mjs`의 `prepare-recovery → run → Owner 소스 적용 → checkpoint → run-recovery → Owner 검증 → finalize` 경로를 사용한다. `prepare-recovery`는 과거 fixture와 독립된 새 Git/State와 runner/runtime-bound 계획을 만들며 첫 제안 Turn과 새 세션 조회 Turn을 각각 별도 비용 승인·one-shot intent/receipt로 구분한다. 각 Turn은 최대 300초, 합계 최대 2회이며 자동 재시도·USD 상한은 제공하지 않는다. 첫 번째 Turn의 승인은 두 번째 Turn이나 Owner 효과를 승인하지 않는다.
+
+체크포인트는 `AWAIT_TEST_REVIEW`·효과 확정·검증 시도 미소모·비활성 lease 조건에서 기존 계약/profile/revision·후보·제어·예산·event/Run과 증거 무결성을 재관측한 수용 artifact다. Task/Store가 계속 권한과 상태의 원본이며 체크포인트 자체는 복구 권한이나 새 상태 저장소가 아니다. 새 세션 MCP의 `--status-only`는 명시 `WORK_REVIEW_V1`에서만 지원하며 목록/Task 상태 조회 외 모든 도구를 거절하고 읽기 전용 Store만 연다. 새 세션은 대화 이력·Task ID를 전달받지 않고 기존 Task를 발견·재독해 현재 다음 행동을 보고해야 한다. 서로 다른 provider-reported Thread, 동일 체크포인트, 정확한 다음 행동과 효과·예산 무변경을 함께 확인하며, 실패·불명 intent는 재실행하지 않는다. 성공해도 다음 Owner 검증 승인이 남고 실제 Compaction·Protected·Owner 인증은 입증하지 않는다. 이 경로의 오프라인 시험은 Host Live 수용 증거가 아니다. 구체 명령은 [Host 안내](../../guides/host-native-guide.md)를 따른다.
+
 대표 수락 시나리오 표의 모든 사례와 위 게이트를 같은 구현 후보에서 확인한다. 테스트 기준선·보호 게이트는 바꾸지 않는다. 환경이 없어 미실행한 경우와 실행해서 실패한 경우를 분리한다. 실제 Host 실증에 드는 모델 사용·설치·대상 변경은 별도로 명시 승인된 실행에 한한다.
 
 ### 고정된 실사용 비교

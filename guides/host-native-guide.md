@@ -94,7 +94,7 @@ model-authored Objective acceptance.
 
 ### Real Codex model Turn acceptance — explicit Owner opt-in
 
-CodeFleet includes a **one-turn, no-automatic-retry acceptance runner** for
+CodeFleet includes an acceptance runner with a **one-turn default and no automatic retry** for
 an authenticated allowlisted Codex CLI **0.167.0 or 0.167.1** installation. This is intended to
 cross the final boundary between a model-free MCP smoke and an actual
 model-authored, CodeFleet-reviewed development Objective.
@@ -165,6 +165,17 @@ The model/MCP server cannot make that decision. After a successful source
 Fileset application, run `review` again to prepare the pinned Node test
 command, then independently approve that exact second action.
 
+For `WORK_REVIEW_V1`, the Owner TTY wrapper is `objective work-owner-review
+REVIEW_REF --hash REVIEW_HASH` under the exact external `--state`. The MCP
+returns its complete Owner command. In that separate terminal, inspect the
+shown before/after source or exact test command and type uppercase `APPLY`
+for source application or uppercase `VERIFY` for tests, then press Enter.
+Lowercase input declines; a decline can exit successfully without executing
+anything. Chat messages are not forwarded as TTY consent. A review expires
+after ten minutes: prepare a fresh review of the current candidate after a
+decline or expiration, preserving the old record and never repeating the
+model Turn. The new-session scenario below pauses before test review.
+
 Finally:
 
 
@@ -172,6 +183,66 @@ Finally:
 node scripts/codex-live-acceptance.mjs status --dir ABS_NEW_FIXTURE
 node scripts/codex-live-acceptance.mjs finalize --dir ABS_NEW_FIXTURE
 ```
+
+For the separate **new-session checkpoint recovery** scenario, create an
+entirely new fixture with `prepare-recovery` instead of `prepare`. Never attach
+this scenario to an earlier completed, failed or cost-approved fixture.
+
+```text
+node scripts/codex-live-acceptance.mjs prepare-recovery --dir ABS_NEW_RECOVERY_FIXTURE
+node scripts/codex-live-acceptance.mjs preflight --dir ABS_NEW_RECOVERY_FIXTURE
+```
+
+The pinned `recovery-plan.json` binds the fixture, runner and runtime. It allows
+at most two separately approved model Turns, each bounded to 300 seconds,
+with no automatic retry and no enforceable USD cap. Preparation and preflight
+do not authorize either Turn. First use the existing `run` command with both
+explicit model/cost flags, then obtain separate Owner review and source
+application as above. Stop **before** approving or running tests.
+
+```text
+node scripts/codex-live-acceptance.mjs checkpoint --dir ABS_NEW_RECOVERY_FIXTURE
+node scripts/codex-live-acceptance.mjs preflight-recovery --dir ABS_NEW_RECOVERY_FIXTURE
+```
+
+`checkpoint` requires one settled applied Task in `AWAIT_TEST_REVIEW`, no
+verification Attempt, and no active or unreconciled lease. It records existing
+contract/profile/revision, candidate, control, budget, event and Run digests
+beside the runner's evidence; Task State remains authoritative. It never
+replaces an existing checkpoint. Changed runtime, files, approvals, control,
+budget, materialization evidence or State block recovery admission.
+
+Only after **separate approval for the second unmeasured model Turn**, invoke:
+
+```text
+node scripts/codex-live-acceptance.mjs run-recovery --dir ABS_NEW_RECOVERY_FIXTURE --allow-model-turn --acknowledge-unknown-cost
+```
+
+This starts a fresh ephemeral Codex conversation using the same existing
+login, with no prior conversation or Task ID in its prompt. MCP is launched
+with `--work-profile WORK_REVIEW_V1 --status-only`: only `codefleet_goal_status`
+is advertised and accepted, and its Store is read-only. The model must first
+discover the Task, reread it, and report the current revision, phase, next
+action and used Attempts. The runner compares the persisted checkpoint before
+and after, requires a different provider-reported Thread ID, and rejects
+unexpected tools or a false completion. A fresh conversation is distinct from
+resuming an existing Thread in the [official Codex documentation](https://learn.chatgpt.com/docs/app-server).
+
+`recovery-turn-intent.json` and `recovery-turn-receipt.json` are separate,
+exclusive one-shot records. An uncertain or failed recovery consumes that
+intent permanently; never delete, reset or replay it. The success indicator
+is `CODEX_NEW_SESSION_CHECKPOINT_RECOVERED_AWAIT_OWNER_TEST_REVIEW`. Only then
+does runner `review` offer the separate exact Owner test review. Finalization
+also requires current-tree Local verification; session discovery alone is not
+Objective completion. `status` includes `newSessionRecovery` for this scenario.
+The selected Windows Codex CLI `0.167.0` scenario has been observed through
+new-session recovery and final Local acceptance; see [current evidence and limits](../project/PROGRESS.md).
+This does not accept the entire Host profile. The current runner still leaves
+some earlier-stage `next` and recovery labels after a completed verdict; use
+the current-tree acceptance and final verdict, and retain this display issue
+as remaining work. Real Compaction remains `NOT_RUN`; Host observation remains
+`PROVIDER_REPORTED_ONLY`, Owner identity `NOT_ESTABLISHED`, and protection
+`UNSATISFIED`.
 
 `finalize` requires **both** one completed Codex-reported proposal Turn
 and CodeFleet's independent current-tree `COMPLETE_LOCAL` based on the

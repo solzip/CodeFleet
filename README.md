@@ -4,7 +4,7 @@ Codex CLI·Claude Code의 기존 모델·인증·세션을 활용하는 **Host-N
 
 **현재는 개발·수용 검증 단계입니다.** 계획·검토, 감독형 Local 변경, 별도 프로세스 복구를 구현했습니다. 제한된 Windows Codex 감독형 실행 관측은 있지만 공개 인증 위임·보호 실행·전체 OS 수용·외부 사용자 생산성은 아직 검증이 끝나지 않았습니다. 최신 결과와 한계는 [진행 현황](project/PROGRESS.md)을 따릅니다.
 
-현재 Live 후보는 실제 호환 시험을 통과한 Codex CLI `0.167.0`과 CI 고정 `0.167.1`만 허용합니다. `0.167.0`에서 공식 MCP 등록·발견, 제안 전용 도구 7개, Goal 영속화와 소스 불변을 모델 호출 없이 확인했습니다. 이후 실제 모델 Turn 1회를 관측했지만 첫 Goal MCP 호출이 실패해 `HUMAN_RECONCILIATION_REQUIRED`로 종결했고 소스·Owner 권한·Protected Evidence는 생성되지 않았습니다. Host Live 수용과 Compaction은 여전히 미완료입니다.
+Live runner는 실제 호환 시험을 통과한 Codex CLI `0.167.0`과 CI 고정 `0.167.1`만 허용합니다. Windows의 `0.167.0`에서 기존 Node 프로젝트의 제안 → 별도 Owner 소스 적용 → 새 세션의 기존 Task 재발견 → 별도 Owner 고정 테스트 → `COMPLETE_LOCAL`을 실제로 관측했습니다. 이전 MCP 실패와 미해결 기록은 [진행 현황](project/PROGRESS.md)에 보존합니다. 이는 선택한 감독형 Local 경로의 수용이며 전체 Host 프로필·실제 Compaction·Protected Evidence·독립 Owner 인증·비용 상한·다른 OS 수용을 뜻하지 않습니다.
 
 [문서 안내](docs/README.md) · [제품 원칙](docs/PRODUCT_VISION.md) · [로드맵](docs/product-completion/roadmap.md) · [아키텍처](docs/product-completion/architecture.md) · [English](README.en.md)
 
@@ -15,7 +15,7 @@ Codex CLI·Claude Code의 기존 모델·인증·세션을 활용하는 **Host-N
 | 개발 목표 정리 | Draft·완료 기준·파일 범위·Validator·Workflow/DAG 검토 |
 | 기존 프로젝트 개선 | 제안 검토, 정확한 Fileset 승인·적용, Local 테스트와 완료 판정 |
 | 신규 프로젝트 Bootstrap | 승인된 파일 생성·검증·Repair·재개 구현. 실제 Host 전체 수용은 미완료 |
-| 중단 후 재개 | 영속 Goal·계약·Work Log·Evidence 조회와 별도 프로세스 Recovery |
+| 중단 후 재개 | 영속 Goal·계약·Work Log·Evidence 조회와 별도 프로세스 Recovery. 선택한 Codex 새 세션의 확정 체크포인트 재개 관측 |
 | 실패 후 수정 | 실패 근거와 별도 승인에 결합된 제한적 Repair·재검증 |
 
 기본 흐름은 `목표 → Draft → Validator → DAG → 승인 → 실행 → Evidence → Judge`입니다. 계획 통과는 실행 승인이 아니며, AI의 성공 보고는 독립 검증 증거가 아닙니다. 완료한 뒤 소스가 바뀌면 기존 Local 완료도 다시 확인해야 합니다.

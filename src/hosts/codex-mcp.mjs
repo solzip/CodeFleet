@@ -28,6 +28,8 @@ function exact(value,keys,label){
     fail('Invalid '+label+' fields');
 }
 function configured(argv){
+  const statusOnly=argv.at(-1)==='--status-only';
+  if(statusOnly)argv=argv.slice(0,-1);
   let workProfile;
   if(argv.length===8&&argv[6]==='--work-profile'){workProfile=argv[7];argv=argv.slice(0,6);if(workProfile!==WORK_PROFILE||argv[5]!=='LOCAL_ONLY')fail('Explicit LOCAL_ONLY work profile required');}
   if(argv.length!==4&&argv.length!==6)fail(
@@ -43,7 +45,8 @@ function configured(argv){
   const acceptance=argv.length===6?argv[5]:'PROTECTED_REQUIRED';
   if(!['LOCAL_ONLY','PROTECTED_REQUIRED'].includes(acceptance))
     fail('Invalid acceptance policy');
-  return {state:resolve(state),repository:resolve(repository),acceptance,workProfile};
+  if(statusOnly&&!workProfile)fail('Status-only mode requires explicit work profile');
+  return {state:resolve(state),repository:resolve(repository),acceptance,workProfile,statusOnly};
 }
 const inside=(root,candidate)=>{
   const rel=relative(root,candidate);
@@ -223,6 +226,7 @@ function argsFor(name,value,config){
   }else fail('Unsupported CodeFleet MCP tool');
 }
 async function invokeTool(config,name,value){
+  if(config.statusOnly&&name!=='codefleet_goal_status')fail('Status-only MCP refuses mutation and review creation');
   argsFor(name,value,config);
   if(name==='codefleet_goal_start')
     return useStore(config,false,async(store,ctx)=>{
@@ -347,7 +351,7 @@ async function handle(message,config){
   }
   if(message.method==='ping')return {jsonrpc:'2.0',id,result:{}};
   if(message.method==='tools/list')
-    return {jsonrpc:'2.0',id,result:{tools:config.workProfile?toolDefinitions.map(d=>{const v=structuredClone(d);if(v.name==='codefleet_goal_start'){v.inputSchema.required.push('mode');v.inputSchema.properties.mode={type:'string',enum:['CHANGE','VERIFY_CURRENT']};}if(v.name==='codefleet_goal_status'){v.inputSchema.required=[];v.inputSchema.properties.offset={type:'integer',minimum:0};}return v;}):toolDefinitions}};
+    return {jsonrpc:'2.0',id,result:{tools:config.workProfile?toolDefinitions.filter(d=>!config.statusOnly||d.name==='codefleet_goal_status').map(d=>{const v=structuredClone(d);if(v.name==='codefleet_goal_start'){v.inputSchema.required.push('mode');v.inputSchema.properties.mode={type:'string',enum:['CHANGE','VERIFY_CURRENT']};}if(v.name==='codefleet_goal_status'){v.inputSchema.required=[];v.inputSchema.properties.offset={type:'integer',minimum:0};}return v;}):toolDefinitions}};
   if(message.method!=='tools/call')
     return rpcError(id,-32601,'Unsupported MCP method');
   if(!plain(message.params)||typeof message.params.name!=='string'||

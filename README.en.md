@@ -4,7 +4,7 @@ CodeFleet is a **Host-Native development orchestration extension for Codex CLI a
 
 **The product is under development and acceptance testing.** Planning, review, supervised Local changes and recovery across processes are implemented. Limited supervised Windows Codex runs have been observed. Public authenticated delegation, protected execution, full platform acceptance and external-user productivity remain incomplete. [Current status](project/PROGRESS.md) owns the latest results and limits.
 
-The current Live candidate allowlists only Codex CLI `0.167.0`, which passed an actual compatibility exercise, and the CI-pinned `0.167.1`. On `0.167.0`, official MCP registration and discovery, all seven proposal-only tools, Goal persistence and unchanged source were verified without a model call. One real model Turn was later observed, but its first Goal MCP call failed and ended as `HUMAN_RECONCILIATION_REQUIRED`; no source change, Owner authority or Protected Evidence was created. Host Live acceptance and compaction remain incomplete.
+The Live runner allowlists only Codex CLI `0.167.0`, which passed an actual compatibility exercise, and the CI-pinned `0.167.1`. On Windows with `0.167.0`, an existing Node project completed proposal → separate Owner source application → rediscovery of the same Task in a new session → separate Owner approval of fixed tests → `COMPLETE_LOCAL`. Earlier MCP failures and unresolved records remain in [current status](project/PROGRESS.md). This accepts the selected supervised Local path; it does not establish full Host-profile acceptance, actual Compaction recovery, Protected Evidence, independent Owner identity, a spending cap or acceptance on other operating systems.
 
 [Documentation](docs/README.md) · [Product principles](docs/PRODUCT_VISION.md) · [Roadmap](docs/product-completion/roadmap.md) · [Architecture](docs/product-completion/architecture.md) · [한국어](README.md)
 
@@ -15,7 +15,7 @@ The current Live candidate allowlists only Codex CLI `0.167.0`, which passed an 
 | Review a development goal | Draft, acceptance criteria, file scope, Validator and Workflow/DAG review |
 | Improve an existing project | Proposal review, exact Fileset approval and application, Local tests and acceptance |
 | Bootstrap a new project | Approved file creation, verification, Repair and recovery implemented; full real-Host acceptance pending |
-| Resume interrupted work | Persisted Goal, contract, Work Log and Evidence discovery; recovery across processes |
+| Resume interrupted work | Persisted Goal, contract, Work Log and Evidence discovery; process recovery and observed recovery of a settled checkpoint in the selected Codex new-session path |
 | Repair a failed change | Bounded Repair and re-verification tied to failure evidence and separate approval |
 
 The flow is `Goal → Draft → Validator → DAG → Approval → Execution → Evidence → Judge`. A valid plan does not authorize execution. An AI success report is not independent evidence. Local completion must be reobserved if the source changes afterwards.

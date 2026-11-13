@@ -70,9 +70,15 @@ test('public delivered-status rejects flags and does not begin Host or mutate St
   } finally { checked.close(); }
 });
 
-test('delivered-status dispatch exits without loading Task or workflow execution state', async () => {
+test('delivered-status dispatch exits without loading Task or workflow execution state', async t => {
+  const directory=await mkdtemp(join(tmpdir(),'codefleet-delivered-dispatch-'));
+  const backing=new Store(directory);
+  t.after(async()=>{backing.close();await rm(directory,{recursive:true,force:true});});
   let calls=0;
   const store={
+    // The shared Work guard inspects the real legacy schema. Keep the
+    // execution seam strict: no Task/artifact reads or execution are allowed.
+    db:backing.db,
     get(id) {
       calls++;
       assert.equal(id,'accepted-workflow');

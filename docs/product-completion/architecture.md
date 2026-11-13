@@ -10,6 +10,8 @@
 
 선택된 구현 후보는 `src/product/work-review.mjs`의 제한·기록·종료, `work-report.mjs`의 읽기 투영, `work-owner.mjs`의 대화형 승인으로 구성한다. 기존 tasks/native-local/reservations 경계와 명시 opt-in MCP에 연결하며 별도 scheduler나 DB를 만들지 않는다. 소유자가 구현·검증을 요청한 범위의 상태와 남은 Host Live 조건은 진행 현황을 따른다.
 
+`src/hosts/codex-mcp.mjs`의 `WORK_REVIEW_V1 --status-only`는 읽기 전용 Store를 사용해 Task 발견·상태 조회만 허용하고, 변경·리뷰 생성 호출을 거절한다. `scripts/codex-live-acceptance.mjs`는 선택된 실제 Codex 수용을 위한 도구로, 별도 승인된 제안/새 세션 Turn의 one-shot intent·receipt와 확정 체크포인트를 기록한다. 이 수용 artifact는 기존 Task·Run·Event·예산·Lease의 권한을 대체하지 않는다. 실제 새 세션 관측과 실제 Compaction, Local과 Protected의 수용 근거는 각각 구분한다.
+
 ## 현재 Host-Native 구조
 
 ```text

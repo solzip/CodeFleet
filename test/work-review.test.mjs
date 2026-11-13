@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,readdir,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -13,7 +13,7 @@ import {enableTasks,createTask,task,submitTaskDraft,prepareTask,submitBootstrapF
 import {prepareNativeFilesReview,acceptNativeFilesReview,prepareNativeLocalReview,acceptNativeLocalReview} from '../src/product/native-local.mjs';
 import {workControl,workEffects,prepareWorkClose,acceptWorkClose,declineWorkReview,guardWorkCli} from '../src/product/work-review.mjs';
 import {validateBootstrapDraft} from '../src/intent/bootstrap.mjs';
-import {workReport,selectWorkPhase} from '../src/product/work-report.mjs';
+import {workReport,workList,selectWorkPhase} from '../src/product/work-report.mjs';
 import {productCli} from '../src/product/cli.mjs';
 import {ownerReview,renderOwnerCommand} from '../src/product/work-owner.mjs';
 import {installHost,manageHost} from '../src/hosts/install.mjs';
@@ -49,6 +49,57 @@ test('work CHANGE: exact separate approvals, evidence and read-only report',asyn
   assert.equal((await f.verify()).execution.status,'LOCAL_PASSED');
   const r=await workReport(f.store,f.id);assert.equal(r.phase,'COMPLETE_LOCAL',JSON.stringify(r));assert.equal(r.budget.attemptsUsed,1);
   const before=f.store.events(f.id);assert.equal((await productCli(['status',f.id],f.state)).data.phase,'COMPLETE_LOCAL');assert.deepEqual(f.store.events(f.id),before);
+});
+
+// A fresh process has no in-memory Task, approval or budget context.
+function restartedReport(f){
+  const script=`import {Store} from ${JSON.stringify(pathToFileURL(path.resolve('src/alpha/store.mjs')).href)};
+import {workReport,workList} from ${JSON.stringify(pathToFileURL(path.resolve('src/product/work-report.mjs')).href)};
+const s=new Store(process.argv[1],{readOnly:true});
+try{console.log(JSON.stringify({list:workList(s,process.argv[2]),report:await workReport(s,process.argv[3])}));}finally{s.close();}`;
+  const child=spawnSync(process.execPath,['--input-type=module','-e',script,f.state,f.repo,f.id],{encoding:'utf8',timeout:20000,windowsHide:true});
+  assert.equal(child.status,0,child.stderr);return JSON.parse(child.stdout);
+}
+
+test('fresh-process recovery discovers failed work without resetting evidence or budget',async t=>{
+  const f=await fixture(t);await f.propose('export const answer=0;\n');await f.apply();
+  const failed=await f.verify();assert.equal(failed.execution.status,'LOCAL_FAILED');
+  const before=await workReport(f.store,f.id),events=f.store.events(f.id),runs=f.store.list();
+  const recovered=restartedReport(f);
+  assert.equal(recovered.list.tasks.find(row=>row.taskId===f.id).taskId,f.id);
+  assert.equal(recovered.list.executionGranted,false);
+  assert.equal(recovered.report.phase,'FAILED_REVIEW');assert.equal(recovered.report.nextAction.kind,'PROPOSE');
+  assert.deepEqual(recovered.report.evidenceRefs,before.evidenceRefs);
+  assert.ok(recovered.report.evidenceRefs.includes(failed.execution.evidenceRef));
+  assert.deepEqual(recovered.report.budget,before.budget);assert.equal(before.budget.attemptsUsed,1);
+  assert.deepEqual(f.store.events(f.id),events);assert.deepEqual(f.store.list(),runs);
+  await f.propose('export const answer=2;\n',{verificationItem:'verify',evidenceRef:failed.execution.evidenceRef});
+  await f.apply();assert.equal((await f.verify()).execution.status,'LOCAL_PASSED');
+  const complete=restartedReport(f).report;assert.equal(complete.phase,'COMPLETE_LOCAL');
+  assert.equal(complete.budget.attemptsUsed,2);assert.equal(complete.budget.attemptsRemaining,0);
+});
+
+test('fresh-process recovery preserves pause epoch and rejects old approval',async t=>{
+  const f=await fixture(t);await f.propose();const review=await prepareNativeFilesReview(f.store,f.id,'implement');
+  const paused=workControl(f.store,f.id,{action:'PAUSE',requestId:randomUUID(),expectedControlSeq:0});
+  assert.equal(restartedReport(f).report.phase,'PAUSED');
+  workControl(f.store,f.id,{action:'UNPAUSE',requestId:randomUUID(),expectedControlSeq:paused.seq});
+  assert.equal(restartedReport(f).report.phase,'AWAIT_FILE_REVIEW');
+  await assert.rejects(acceptNativeFilesReview(f.store,review.reviewRef,{trust:review.reviewHash,acknowledgeUnisolated:true}),/CONTEXT_STALE/);
+  assert.equal(await readFile(path.join(f.repo,'src/app.mjs'),'utf8'),'export const answer=1;\n');
+  assert.equal((await workReport(f.store,f.id)).budget.attemptsUsed,0);
+});
+
+test('fresh-process recovery refuses stale completion and damaged evidence',async t=>{
+  const f=await fixture(t);await f.propose();await f.apply();await f.verify();
+  const complete=restartedReport(f).report;assert.equal(complete.phase,'COMPLETE_LOCAL');
+  await writeFile(path.join(f.repo,'src/app.mjs'),'export const answer=9;\n');
+  const stale=restartedReport(f).report;assert.equal(stale.phase,'STALE');assert.equal(stale.verification.localComplete,false);
+  assert.deepEqual(stale.budget,complete.budget);
+  await writeFile(path.join(f.state,'artifacts',complete.evidenceRefs[0]+'.json'),'{}');
+  const damaged=restartedReport(f).report;assert.equal(damaged.phase,'READ_ERROR');
+  assert.deepEqual(damaged.allowedNextActions,['READ_ONLY_INSPECT','STOP']);
+  assert.equal(workList(f.store,f.repo).executionGranted,false);
 });
 test('work VERIFY_CURRENT failure stops without repair',async t=>{
   const f=await fixture(t,'VERIFY_CURRENT');assert.equal((await f.verify()).execution.status,'LOCAL_FAILED');
@@ -106,6 +157,9 @@ test('work cancel between Run commit and Task attachment prevents stale publicat
 test('work Run-completed/Task-attachment gap stays unknown with no replay',async t=>{
   const f=await fixture(t);await f.propose();const r=await prepareNativeFilesReview(f.store,f.id,'implement');await assert.rejects(acceptNativeFilesReview(f.store,r.reviewRef,{trust:r.reviewHash,acknowledgeUnisolated:true,hooks:{afterRunCommit:()=>{throw Error('Injected interruption after Run commit');}}}),/Injected interruption/);
   assert.equal(workEffects(f.store,task(f.store,f.id)).certainty,'UNKNOWN');
+  const recovered=restartedReport(f).report;
+  assert.equal(recovered.phase,'UNRESOLVED');assert.equal(recovered.nextAction.kind,'READ_ONLY');
+  assert.equal(recovered.effectCertainty,'UNKNOWN');
   await assert.rejects(acceptNativeFilesReview(f.store,r.reviewRef,{trust:r.reviewHash,acknowledgeUnisolated:true}),/UNRESOLVED/);
   assert.equal((await workReport(f.store,f.id)).phase,'UNRESOLVED');
 });
@@ -156,6 +210,25 @@ test('work MCP exposes mode, discovers Tasks and returns complete Owner command'
   assert.equal(started.workReport.phase,'NEEDS_INPUT');
   assert.ok(started.taskId);
   assert.equal(started.executionGranted,false);
+});
+
+test('status-only MCP advertises only discovery and rejects every mutation before State writes',async t=>{
+  const f=await fixture(t,'VERIFY_CURRENT'),events=f.store.events(f.id),runs=f.store.list();
+  const artifacts=await readdir(path.join(f.state,'artifacts'));
+  const forbidden=['codefleet_goal_start','codefleet_draft_submit','codefleet_goal_prepare','codefleet_fileset_propose','codefleet_fileset_review','codefleet_local_test_review'];
+  const messages=[{jsonrpc:'2.0',id:1,method:'tools/list'},
+    ...[['codefleet_goal_status',{}],['codefleet_goal_status',{taskId:f.id}],
+      ...forbidden.map(name=>[name,{goal:'Do not create another Task',mode:'CHANGE',taskId:f.id}])]
+      .map(([name,args],i)=>({jsonrpc:'2.0',id:i+2,method:'tools/call',params:{name,arguments:args}}))];
+  const child=spawnSync(process.execPath,[path.resolve('src/hosts/codex-mcp.mjs'),'--state',f.state,'--repository',f.repo,'--acceptance','LOCAL_ONLY','--work-profile','WORK_REVIEW_V1','--status-only'],
+    {encoding:'utf8',input:messages.map(m=>JSON.stringify(m)).join('\n')+'\n',timeout:20000,windowsHide:true});
+  assert.equal(child.status,0,child.stderr);const replies=child.stdout.trim().split('\n').map(JSON.parse);
+  assert.deepEqual(replies[0].result.tools.map(t=>t.name),['codefleet_goal_status']);
+  assert.equal(JSON.parse(replies[1].result.content[0].text).tasks[0].taskId,f.id);
+  assert.equal(JSON.parse(replies[2].result.content[0].text).workReport.phase,'AWAIT_TEST_REVIEW');
+  for(const reply of replies.slice(3))assert.equal(reply.result.isError,true);
+  assert.equal(replies.length,9);assert.deepEqual(f.store.events(f.id),events);assert.deepEqual(f.store.list(),runs);
+  assert.deepEqual(await readdir(path.join(f.state,'artifacts')),artifacts);
 });
 
 test('installed work runtime completes CHANGE with its own inventory and preserves modified installation',async t=>{
