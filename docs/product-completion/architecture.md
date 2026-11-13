@@ -2,9 +2,9 @@
 
 현재 제품 정의는 [제품 원칙](../PRODUCT_VISION.md)을 따른다. CodeFleet은 기존 Codex CLI·Claude Code의 모델·인증·세션을 활용하는 Host-Native AI 개발 오케스트레이션 확장 도구다. 이 문서가 현재 구조의 기준이며 초기 Alpha 설계는 별도 회귀 계약으로 보존한다. 구현·검증 상태는 [진행 현황](../../project/PROGRESS.md)에서 관리한다.
 
-## 검토 중인 제품 집중 설계
+## 구현 후보인 제품 집중 설계
 
-[개발 작업 검증과 재개 전체 설계](../implementation/work-verification-resume.md)는 기존 Task·Workflow·Controller·Store·Evidence/Judge를 재사용하면서 시작·진행/재개·결과 확인을 주 경로로 정리하는 검토안이다. 정상·실패·불명 상황별 변경·보존·중단·재개와 기존 경로 영향을 정의한다. Host 직접 변경의 관측과 관리된 Fileset 적용을 구분하며, 새 Agent 엔진·DB·권한 issuer를 추가하지 않는다. 검토 전에는 아래 현행 구조와 실행 경계를 변경하지 않는다.
+[개발 작업 검증과 재개 전체 설계](../implementation/work-verification-resume.md)는 기존 Task·Workflow·Controller·Store·Evidence/Judge를 재사용하면서 시작·진행/재개·결과 확인을 주 경로로 정리한 revision 3 계약이다. 정상·실패·불명 상황별 변경·보존·중단·재개와 기존 경로 영향을 정의하며, 현재 구현 후보는 이 계약의 감독형 Local 범위를 연결한다. Host 직접 변경의 관측과 관리된 Fileset 적용을 구분하고 새 Agent 엔진·DB·권한 issuer를 추가하지 않는다. Host Live·보호 실행·운영 수용 상태는 진행 현황의 별도 근거를 따른다.
 
 설계 revision 3는 `WORK_REVIEW_V1`의 고정 profile·request artifact, 기존 Task 필드·event·extension을 사용하는 기록 계약, 순서가 있는 상태 판정, 동시 사건과 종료 규칙을 명시한다. phase는 기존 기록에서 도출하고 기존 admission에 추가 제한을 적용한다. 불명 효과는 미해결 종료와 차단으로 닫으며, 기존 Task 자동 이관·강제 조정·새 완료 Judge는 도입하지 않는다.
 

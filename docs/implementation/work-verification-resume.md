@@ -1,12 +1,12 @@
 # CodeFleet 개발 작업 검증과 재개 전체 설계
 
-상태: **IMPLEMENTED_CANDIDATE / NOT_ACCEPTED**. 설계 revision: **3**. 작성일: 2026-11-13. 검토·구현 기준 커밋: `b3f8b985a903fd255983da01d6f284df3dea14aa`. 구현과 시험의 실제 범위는 진행 현황을 따른다. Host Live·운영 수용을 뜻하지 않는다.
+상태: **IMPLEMENTED_CANDIDATE / NOT_ACCEPTED**. 설계 revision: **3**. 작성일: 2026-11-13. 설계 기준 커밋: `b3f8b985a903fd255983da01d6f284df3dea14aa`. 구현 후보: `875182f`. 구현과 시험의 실제 범위는 진행 현황을 따른다. Host Live·운영 수용을 뜻하지 않는다.
 
 ## 제품 방향과 설계의 효력
 
 첫 제품 경험을 **기존 Host에 맡긴 개발 작업의 변경·검증·남은 일을 확인하고, 중단 후 실제 상태에서 이어가는 것**에 집중한다. 사용자는 작업 시작, 진행·재개, 결과 확인을 중심으로 사용한다. 내부 Task·DAG·revision·lease·Evidence는 유지하면서 사용자가 식별자와 명령을 직접 조립하는 부담을 줄인다.
 
-이 설계는 [제품 원칙](../PRODUCT_VISION.md), [아키텍처](../product-completion/architecture.md), [로드맵](../product-completion/roadmap.md)에 연결된 **검토 제안**이다. 승인 전에는 현행 동작·기존 Task 계약·보호 게이트를 변경하지 않는다. 아래의 새 표시·연결·관측 처리는 구현 완료 선언이 아니다. 실제 구현·검증 상태는 [진행 현황](../../project/PROGRESS.md)에서 관리한다.
+이 설계는 [제품 원칙](../PRODUCT_VISION.md), [아키텍처](../product-completion/architecture.md), [로드맵](../product-completion/roadmap.md)에 연결된 revision 3 구현 계약이다. 승인된 운영 전 범위에서 구현 후보를 마련했으며 기존 Task 계약과 보호 게이트는 유지한다. 아래의 새 표시·연결·관측 처리는 Host Live·보호 실행·운영 수용 완료 선언이 아니다. 실제 구현·검증 상태는 [진행 현황](../../project/PROGRESS.md)에서 관리한다.
 
 설계 검토와 구현 승인은 분리한다. 소유자는 2026-11-13 운영 전 작업 2~7 구현과 이어지는 8~10 검증을 요청했다. 이 승인은 기존 운영 Task의 임의 재개·이관·권한 확대나 공개 배포를 허용하지 않는다. 구현 후보·시험·Host Live의 실제 상태는 진행 현황에 기록한다.
 
@@ -600,7 +600,7 @@ Host가 CodeFleet 밖에서 직접 편집하면 파일 관측만으로 변경 �
 
 ## Revision 3: 세 가지 설계 검토와 보완 계약
 
-이 절은 revision 2에 대한 실행 진입점 추적, transaction 순서 검토, 역할별 탁상 시뮬레이션의 결과다. 기준은 문서 첫머리의 커밋이며 새 프로필은 아직 구현하지 않았다. 아래 결정은 앞 절의 일반 규칙을 구체화한다. 기존 Task 계약을 소급 변경하지 않는다.
+이 절은 revision 2에 대한 실행 진입점 추적, transaction 순서 검토, 역할별 탁상 시뮬레이션의 당시 결과다. 검토 기준은 문서 첫머리의 설계 기준 커밋이며, 당시 새 프로필은 구현 전이었다. 아래 결정은 앞 절의 일반 규칙을 구체화하며 이후 구현 후보의 계약으로 사용됐다. 기존 Task 계약을 소급 변경하지 않는다.
 
 ### 1. 실행 진입점과 우회 경로
 
@@ -693,7 +693,7 @@ WR-REVIEW-05: Native review의 `workContext`를 review hash에만 넣으면 충�
 
 ### 검토 결과의 수락 조건
 
-7건은 모두 위 계약에 설계 결정을 반영했다. 구현 완료 판정은 별개다. 다음 부정 시험을 기존 시험에 추가해야 한다: 모든 64개 CLI 이름의 신규 Task 처리와 하위 API 우회, readOnly 조회의 DB 미생성·무변경, MCP 구/신규 schema와 고정 한도, VERIFY_CURRENT의 legacy 예외 차단, 적용 두 commit 사이 중단과 중복 accept, PAUSE/UNPAUSE 후 오래된 Decision, 종료/시작 양방향 경합과 하위 행 변화, TTY 없는 Owner 수락·거절·인자 인용. 독립 검증과 실제 Host/Owner 흐름이 없으면 DOCUMENTED를 넘지 않는다.
+7건은 모두 위 계약에 설계 결정을 반영했다. 구현 완료 판정은 별개다. 구현 후보에는 다음 부정 시험이 요구된다: 모든 64개 CLI 이름의 신규 Task 처리와 하위 API 우회, readOnly 조회의 DB 미생성·무변경, MCP 구/신규 schema와 고정 한도, VERIFY_CURRENT의 legacy 예외 차단, 적용 두 commit 사이 중단과 중복 accept, PAUSE/UNPAUSE 후 오래된 Decision, 종료/시작 양방향 경합과 하위 행 변화, TTY 없는 Owner 수락·거절·인자 인용. 현재 오프라인 시험의 실행 결과와 한계는 진행 현황에 기록하며, 독립 검증과 실제 Host/Owner 흐름 없이는 수용 완료로 승격하지 않는다.
 
 검토 중 기존 경계만 확인하기 위해 Windows x64 / PowerShell 5.1 / Node 24.14.1에서 `node --test test/time-safety.test.mjs test/native-local.test.mjs test/bootstrap-reservations.test.mjs`를 실행했다. exit 0, 85 PASS / 0 FAIL / 0 SKIP. 이 시험은 현재 Native/lease/예약/복구 경계의 근거이며 신규 프로필·새 명령·MCP 변경·Host Live의 통과 근거가 아니다.
 
