@@ -376,7 +376,7 @@ async function liveRun(dir,binary){
         const report=await taskReport(store,matches[0].id);
         pendingReviewInStore=report.contractKind==='EXISTING_LOCAL'&&
           report.complete===false&&report.nextActions?.some(a=>
-            a.kind==='AWAIT_FILESET_APPROVAL'&&a.items.includes('todo'))===true;
+            a.kind==='AWAIT_FILESET_APPROVAL'&&a.items.includes('implement'))===true;
       }
     }finally{store.close();}
   }catch{/* Missing or uncertain Store never passes. */}
@@ -412,8 +412,8 @@ async function ownerReview(dir){
     const files=report.nextActions?.find(a=>a.kind==='AWAIT_FILESET_APPROVAL');
     const local=report.nextActions?.find(a=>a.kind==='RUN_LOCAL_VERIFICATION');
     let review,action,scope;
-    if(files?.items?.includes('todo')){
-      review=await prepareNativeFilesReview(store,taskId,'todo');
+    if(files?.items?.includes('implement')){
+      review=await prepareNativeFilesReview(store,taskId,'implement');
       action='local-files-accept';
       scope=review.files;
     }else if(local?.items?.includes('verify')){
