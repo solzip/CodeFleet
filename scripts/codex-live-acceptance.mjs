@@ -260,8 +260,32 @@ async function liveRun(dir,binary){
     const errorCode=(typeof item.error?.code==='number'||
       (typeof item.error?.code==='string'&&/^[A-Za-z0-9_.-]{1,64}$/.test(item.error.code)))?
       item.error.code:null;
+    const errorValueType=item.error===null?'null':Array.isArray(item.error)?'array':typeof item.error;
+    const errorKeys=item.error&&typeof item.error==='object'&&!Array.isArray(item.error)?
+      Object.keys(item.error).sort().slice(0,20):[];
+    const errorSerialized=item.error===undefined?null:JSON.stringify(item.error);
+    const errorMessage=typeof item.error==='string'?item.error:
+      typeof item.error?.message==='string'?item.error.message:null;
+    const signalSource=errorSerialized??'';
+    const errorSignals=[
+      [/dubious ownership|safe\.directory/i,'GIT_OWNERSHIP'],
+      [/\b(?:EPERM|EACCES)\b|permission denied|access denied/i,'FILESYSTEM_PERMISSION'],
+      [/(?:^|[^0-9])-32602(?![0-9])/,'JSON_RPC_INVALID_PARAMS'],
+      [/(?:^|[^0-9])-32603(?![0-9])/,'JSON_RPC_INTERNAL_ERROR'],
+      [/(?:^|[^0-9])-32601(?![0-9])/,'JSON_RPC_METHOD_NOT_FOUND'],
+      [/server[^\n]{0,80}(?:closed|disconnected)|connection closed/i,'MCP_CONNECTION_CLOSED'],
+      [/\b(?:ENOENT|not found)\b|cannot find module/i,'EXECUTABLE_OR_MODULE_NOT_FOUND'],
+      [/\bSQLITE_[A-Z_]+\b|SQLiteError/i,'SQLITE_FAILURE'],
+      [/\b(?:CODEFLEET|WORK)_[A-Z0-9_]{2,64}\b/,'CODEFLEET_CONTRACT_ERROR']
+    ].filter(([pattern])=>pattern.test(signalSource)).map(([,name])=>name);
+    const contractCodes=[...new Set((signalSource.match(/\b(?:CODEFLEET|WORK)_[A-Z0-9_]{2,64}\b/g)??[]))]
+      .sort().slice(0,10);
     return {failureClass,detailSha256:hash(serialized),
       detailKeys:Object.keys(item).sort().slice(0,20),argumentKeys,errorCode,
+      errorValueType,errorKeys,
+      errorDetailSha256:errorSerialized===null?null:hash(errorSerialized),
+      errorMessageLength:errorMessage===null?null:errorMessage.length,
+      errorSignals,contractCodes,
       resultIsError:item.result?.isError===true,
       resultContentCount:Array.isArray(item.result?.content)?item.result.content.length:null};
   };

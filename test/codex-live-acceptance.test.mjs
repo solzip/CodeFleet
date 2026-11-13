@@ -144,7 +144,7 @@ test('failed MCP call records bounded classification and digest without raw deta
     "if(process.argv.includes('exec')){",
     "console.log(JSON.stringify({type:'thread.started',thread_id:'SYNTHETIC-MCP-FAIL'}));",
     "console.log(JSON.stringify({type:'turn.started'}));",
-    "console.log(JSON.stringify({type:'item.completed',item:{type:'mcp_tool_call',server:'codefleet_live',tool:'codefleet_goal_start',status:'failed',error:{message:'fatal: detected dubious ownership; safe.directory refused'}}}));",
+    "console.log(JSON.stringify({type:'item.completed',item:{type:'mcp_tool_call',server:'codefleet_live',tool:'codefleet_goal_start',status:'failed',error:{message:'MCP error: -32603: fatal: detected dubious ownership; safe.directory refused'}}}));",
     "console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:2,output_tokens:1}}));",
     "}"
   ].join('\n'));
@@ -156,6 +156,13 @@ test('failed MCP call records bounded classification and digest without raw deta
   assert.equal(result.observedMcpCalls[0].failureClass,'GIT_OWNERSHIP');
   assert.deepEqual(result.observedMcpCalls[0].argumentKeys,[]);
   assert.equal(result.observedMcpCalls[0].errorCode,null);
+  assert.equal(result.observedMcpCalls[0].errorValueType,'object');
+  assert.deepEqual(result.observedMcpCalls[0].errorKeys,['message']);
+  assert.match(result.observedMcpCalls[0].errorDetailSha256,/^[a-f0-9]{64}$/);
+  assert.ok(result.observedMcpCalls[0].errorMessageLength>0);
+  assert.deepEqual(result.observedMcpCalls[0].errorSignals,
+    ['GIT_OWNERSHIP','JSON_RPC_INTERNAL_ERROR']);
+  assert.deepEqual(result.observedMcpCalls[0].contractCodes,[]);
   assert.equal(result.observedMcpCalls[0].resultIsError,false);
   assert.equal(result.observedMcpCalls[0].resultContentCount,null);
   assert.match(result.observedMcpCalls[0].detailSha256,/^[a-f0-9]{64}$/);
