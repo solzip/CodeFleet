@@ -318,6 +318,19 @@ only an acceptance tool, not an arbitrary-task or production autonomous
 executor. CI tests its safety gates with an explicitly synthetic executable
 and **never invokes a real billable model Turn**.
 
+## Moving to another local workspace
+
+Use the [2026-11-13 handoff record](../project/records/2026-11-13-local-work-handoff.md)
+for the accepted implementation commit, remaining work and startup steps.
+Git transfers code and sanitized documentation, not `.codefleet` databases,
+one-shot intents, approvals or cost records. A new checkout cannot resume a
+missing Task or inherit its approvals. Existing records bind repository/State
+paths, runtime and execution identity; copying them to a new path does not
+authorize execution. Preserve the original records and prepare a fresh,
+separately approved scenario for new work. Do not repeat completed Live runs
+just to populate the new checkout. Obtain Host authentication through the
+Host's normal setup on the new machine; do not copy credential files.
+
 ## Install and manage
 
 Use a trusted CodeFleet checkout with Node 24.14.1 or newer. No npm install or API key is required. From that checkout:

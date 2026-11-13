@@ -8,6 +8,8 @@ Live runner는 실제 호환 시험을 통과한 Codex CLI `0.167.0`과 CI 고�
 
 [문서 안내](docs/README.md) · [제품 원칙](docs/PRODUCT_VISION.md) · [로드맵](docs/product-completion/roadmap.md) · [아키텍처](docs/product-completion/architecture.md) · [English](README.en.md)
 
+자리 이동 후 이어서 작업할 때는 [2026-11-13 로컬 인계 기록](project/records/2026-11-13-local-work-handoff.md)을 참고하세요. 새 로컬의 시작 절차, Git에 없는 실행 기록과 다음 우선순위를 정리했습니다. 현재 상태는 진행 현황을 우선합니다.
+
 ## 무엇을 할 수 있나요?
 
 | 작업 | 현재 제공하는 범위 |

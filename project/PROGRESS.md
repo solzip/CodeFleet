@@ -1,7 +1,11 @@
 # 구현·검증 진행 현황
 
-갱신: 2026-11-13 · 현재 결과: `d0327c4` 기준 VERIFY_CURRENT의 실제 Codex 제안 → 별도 Owner 검증 → 소스 무변경 Local 완료를 관측했다. 앞선 Git 소유권 실패와 수정·재검증 근거를 보존한다. 이전 승인 UX 구현은 `29dcd46`, 새 세션 통합 Local 수용 구현은 `96bdfc7`이다.
+갱신: 2026-11-13 · 현재 구현: `b53ce4f` (`d0327c4` 기준). VERIFY_CURRENT의 실제 Codex 제안 → 별도 Owner 검증 → 소스 무변경 Local 완료를 관측했다. 앞선 Git 소유권 실패와 수정·재검증 근거를 보존한다. 이전 승인 UX 구현은 `29dcd46`, 새 세션 통합 Local 수용 구현은 `96bdfc7`이다.
 제품 목적은 [제품 원칙](../docs/PRODUCT_VISION.md), 구조는 [아키텍처](../docs/product-completion/architecture.md), 수락 조건과 순서는 [로드맵](../docs/product-completion/roadmap.md)에서 관리한다.
+
+자리 이동 인계는 [2026-11-13 로컬 작업 인계](records/2026-11-13-local-work-handoff.md)를 따른다. 사용자가 현재 작업의 commit·push와 인계 문서 작성을 승인했다. 코드·정제된 문서는 Git으로 전달하지만 `.codefleet` 실행 DB·승인·비용 기록은 복사·이동·공개하지 않았다. 인계 전 원래 계정의 읽기 조회는 최종 Task COMPLETE_LOCAL / SETTLED, 검증 시도 1건, 활성 lease/PID가 있는 Run 행 0건을 확인했다. 새 자리의 코드 개발과 기존 실행 State의 이관을 구분하며, 기록 없는 clone에서 기존 Task를 재생성하거나 소모된 승인을 갱신하지 않는다.
+
+인계 문서·README 양언어·Host 안내 갱신의 `node --test test/doc-layout.test.ts`는 exit 0, 3 PASS였고 `npm.cmd run posttest`는 exit 0, Markdown 38개·링크 254개·인용 4건·선언 사실 42건 오류 0이었다. staged diff 검사도 exit 0이다. 코드·수용 runner는 `b53ce4f`와 동일하며 완료된 Live나 테스트 효과를 다시 실행하지 않았다.
 
 ## 현재 결과: VERIFY_CURRENT 감독형 Host Live Local 수용 완료
 

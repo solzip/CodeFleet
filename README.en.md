@@ -8,6 +8,8 @@ The Live runner allowlists only Codex CLI `0.167.0`, which passed an actual comp
 
 [Documentation](docs/README.md) · [Product principles](docs/PRODUCT_VISION.md) · [Roadmap](docs/product-completion/roadmap.md) · [Architecture](docs/product-completion/architecture.md) · [한국어](README.md)
 
+For a move to another local workspace, use the [2026-11-13 handoff record](project/records/2026-11-13-local-work-handoff.md). It covers startup, local evidence excluded from Git and the next priorities. Current status remains authoritative.
+
 ## What can it do?
 
 | Task | Current scope |
