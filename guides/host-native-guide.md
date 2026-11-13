@@ -192,6 +192,52 @@ node scripts/codex-live-acceptance.mjs status --dir ABS_NEW_FIXTURE
 node scripts/codex-live-acceptance.mjs finalize --dir ABS_NEW_FIXTURE
 ```
 
+For a separate **verification-only (`VERIFY_CURRENT`)** scenario, create a
+new fixture with `prepare-verify`. Its current implementation and immutable
+tests are already committed; the Task may only verify that snapshot.
+
+```text
+node scripts/codex-live-acceptance.mjs prepare-verify --dir ABS_NEW_VERIFY_FIXTURE
+node scripts/codex-live-acceptance.mjs preflight --dir ABS_NEW_VERIFY_FIXTURE
+```
+
+`verification-plan.json` binds the manifest, runner and runtime. Preparation
+starts no model Turn, creates no Task and grants no effects. The plan permits
+one separately approved planning Turn of at most 300 seconds, with unknown
+cost, no enforceable USD cap and no replay. Only after explicit approval use
+`run` with both model/cost flags as above. The model must use
+`mode:"VERIFY_CURRENT"`, a source-free Draft, the single `verify` WorkItem and
+`codefleet_local_test_review`; it must not propose Filesets or execute commands.
+The runner checks actual persisted Task/profile/DAG state as well as reported
+MCP calls. Synthetic JSONL alone is insufficient.
+
+Prepare the fixture and run its MCP under the same actual OS execution
+identity. A fixture created by a Windows sandbox account may be unreadable
+to Native Git under the Owner account even when ordinary Git commands pass.
+For this verification-only scenario, preflight and run also require the
+existing Native Probe to observe the pinned clean HEAD under the current
+execution identity, before any model intent. Parent `safe.directory` settings
+do not establish Native readiness. Preserve a blocked or consumed fixture;
+do not change ownership, weaken the Native environment, reset its approval
+or replay it. A future fixture requires a fresh plan and model approval.
+
+After the Turn, `review --dir ABS_NEW_VERIFY_FIXTURE` prepares the exact fixed
+Node test command. Use the complete Owner TTY command returned by the MCP and
+type uppercase `VERIFY` in that terminal. There is one verification approval
+and no `APPLY` step. The independent test has a 30-second timeout. A failed
+verification stops without Repair or another attempt, even if the generic
+budget still shows capacity. Keep its evidence; fixing code requires a new
+explicit CHANGE request. After a pass, `status` and `finalize` require current
+Local evidence, the verification-only binding and an unchanged, clean Git
+project. Source drift revokes current completion. Existing control, expiry,
+TTY and unprotected Local limitations still apply. This scenario has offline
+coverage and one observed Windows Codex CLI `0.167.0` supervised Local
+acceptance: one planning Turn, one separate Owner verification approval,
+passing fixed tests and unchanged source. An earlier Git-ownership failure
+and its spent approval remain preserved in [current evidence](../project/PROGRESS.md).
+This does not accept Protected verification, other Hosts/platforms or the
+whole Work profile. Preserve all fixtures and never reuse model/cost approvals.
+
 For the separate **new-session checkpoint recovery** scenario, create an
 entirely new fixture with `prepare-recovery` instead of `prepare`. Never attach
 this scenario to an earlier completed, failed or cost-approved fixture.

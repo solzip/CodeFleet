@@ -16,6 +16,10 @@ const supportedCodexVersions=new Set(['0.167.0','0.167.1']);
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const goal='Implement normalizeTitle in src/todo.mjs: trim nonempty text, reject empty or nonstring input, and pass the immutable Node tests.';
 const initialSource="export function normalizeTitle(value) { throw Error('NOT_IMPLEMENTED'); }\n";
+const verifiedSource="export function normalizeTitle(value) { if(typeof value!=='string'||!value.trim())throw Error('invalid title'); return value.trim(); }\n";
+const verifyGoal='Verify the current normalizeTitle implementation with the immutable Node tests, without changing source or tests.';
+const verifyKind='CODEFLEET_CODEX_VERIFY_CURRENT_ACCEPTANCE_V1';
+const isVerify=m=>m?.kind===verifyKind;
 const testSource=[
   "import test from 'node:test';",
   "import assert from 'node:assert/strict';",
@@ -37,10 +41,11 @@ const fixtureContract=Object.freeze({
 });
 const manifestKeys=new Set(['kind','directory','project','state','goal','gitHead',
   ...Object.keys(fixtureContract)]);
+const contractFor=m=>isVerify(m)?{...fixtureContract,sourceSha256:hash(verifiedSource),sourcePaths:[]}:fixtureContract;
 const samePaths=(actual,expected)=>Array.isArray(actual)&&
   actual.length===expected.length&&actual.every((path,i)=>path===expected[i]);
 const fail=text=>{throw Error(text);};
-const commands=new Set(['prepare','prepare-recovery','checkpoint','preflight','preflight-recovery','run','run-recovery','status','review','finalize']);
+const commands=new Set(['prepare','prepare-verify','prepare-recovery','checkpoint','preflight','preflight-recovery','run','run-recovery','status','review','finalize']);
 function opts(argv){
   const [action,...rest]=argv;
   if(!commands.has(action))fail('Usage: node scripts/codex-live-acceptance.mjs '+[...commands].join('|')+' --dir ABSOLUTE_PATH [--codex PATH] [--allow-model-turn --acknowledge-unknown-cost]');
@@ -82,17 +87,18 @@ const paths=dir=>({project:join(dir,'project'),state:join(dir,'state'),
   receipt:join(dir,'turn-receipt.json')});
 async function checked(dir){
   const pp=paths(dir),m=await json(pp.manifest);
+  const contract=contractFor(m);
   if(!m||typeof m!=='object'||Array.isArray(m)||
-    !['CODEFLEET_CODEX_LIVE_ACCEPTANCE_V1','CODEFLEET_CODEX_NEW_SESSION_ACCEPTANCE_V1'].includes(m.kind)||m.directory!==dir||
-    m.project!==pp.project||m.state!==pp.state||m.goal!==goal||
+    !['CODEFLEET_CODEX_LIVE_ACCEPTANCE_V1','CODEFLEET_CODEX_NEW_SESSION_ACCEPTANCE_V1',verifyKind].includes(m.kind)||m.directory!==dir||
+    m.project!==pp.project||m.state!==pp.state||m.goal!==(isVerify(m)?verifyGoal:goal)||
     typeof m.gitHead!=='string'||!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(m.gitHead))
     fail('Acceptance manifest identity invalid');
   if(Object.keys(m).length!==manifestKeys.size||
     Object.keys(m).some(key=>!manifestKeys.has(key))||
-    m.sourceSha256!==fixtureContract.sourceSha256||
+    m.sourceSha256!==contract.sourceSha256||
     m.testSha256!==fixtureContract.testSha256||
     !samePaths(m.testPaths,fixtureContract.testPaths)||
-    !samePaths(m.sourcePaths,fixtureContract.sourcePaths)||
+    !samePaths(m.sourcePaths,contract.sourcePaths)||
     m.acceptancePolicy!==fixtureContract.acceptancePolicy||
     m.modelTurnExecuted!==false||m.ownerGrantIssued!==false)
     fail('Pinned acceptance contract changed');
@@ -108,32 +114,64 @@ async function checked(dir){
   if(hash(await readFile(join(pp.project,'test','todo.test.mjs')))!==fixtureContract.testSha256)
     fail('Immutable test source changed');
   // Do not trim Git blob output: whitespace is part of the pinned bytes.
-  if(hash(cmd('git',['show','HEAD:src/todo.mjs'],pp.project,true))!==fixtureContract.sourceSha256)
+  if(hash(cmd('git',['show','HEAD:src/todo.mjs'],pp.project,true))!==contract.sourceSha256)
     fail('Pinned baseline source changed');
   if(hash(cmd('git',['show','HEAD:test/todo.test.mjs'],pp.project,true))!==fixtureContract.testSha256)
     fail('Pinned baseline test changed');
   return {pp,m};
 }
-async function prepare(dir,recovery=false){
+async function prepare(dir,recovery=false,verify=false){
   // Exclusive NEW fixture creation. No writes to an existing user project.
   await mkdir(dir);
   const pp=paths(dir);
   await mkdir(join(pp.project,'src'),{recursive:true});
   await mkdir(join(pp.project,'test'),{recursive:true});
-  await writeFile(join(pp.project,'src','todo.mjs'),initialSource,{flag:'wx'});
+  await writeFile(join(pp.project,'src','todo.mjs'),verify?verifiedSource:initialSource,{flag:'wx'});
   await writeFile(join(pp.project,'test','todo.test.mjs'),testSource,{flag:'wx'});
   cmd('git',['init'],pp.project);
   cmd('git',['add','.'],pp.project);
   cmd('git',['-c','user.name=CodeFleet Live Fixture','-c','user.email=fixture@example.invalid',
     'commit','-m','Pinned independent acceptance'],pp.project);
-  const m={kind:recovery?'CODEFLEET_CODEX_NEW_SESSION_ACCEPTANCE_V1':'CODEFLEET_CODEX_LIVE_ACCEPTANCE_V1',directory:dir,project:pp.project,
-    state:pp.state,goal,gitHead:cmd('git',['rev-parse','HEAD'],pp.project),
-    ...fixtureContract};
+  const kind=verify?verifyKind:recovery?'CODEFLEET_CODEX_NEW_SESSION_ACCEPTANCE_V1':'CODEFLEET_CODEX_LIVE_ACCEPTANCE_V1';
+  const m={kind,directory:dir,project:pp.project,
+    state:pp.state,goal:verify?verifyGoal:goal,gitHead:cmd('git',['rev-parse','HEAD'],pp.project),
+    ...contractFor({kind})};
   await writeFile(pp.manifest,JSON.stringify(m,null,2)+'\n',{flag:'wx'});
   return {status:'READY_FOR_EXPLICIT_CODEX_LIVE_TURN',repository:pp.project,
-    state:pp.state,goal,immutableTests:m.testPaths,modelTurns:0,ownerGrantIssued:false,
+    state:pp.state,goal:m.goal,immutableTests:m.testPaths,modelTurns:0,ownerGrantIssued:false,
     next:'run --dir '+dir+' --allow-model-turn --acknowledge-unknown-cost (requires authenticated supported Codex CLI)',
     warning:'This invokes the authenticated Codex host. ChatGPT sign-in normally uses included Codex allowance first and may use enabled credits; API-key sessions use API billing. This runner cannot inspect or cap either path. Owner grants source/test effects separately.'};
+}
+
+async function verificationPlan(dir){
+  const {pp,m}=await checked(dir);
+  if(!isVerify(m))fail('Verification-only acceptance requires a fresh prepare-verify fixture');
+  const {runtimeIdentity}=await import('../src/product/work-review.mjs');
+  return {kind:'CODEFLEET_VERIFY_CURRENT_PLAN_V1',manifestSha256:hash(await readFile(pp.manifest)),
+    runnerSha256:hash(await readFile(fileURLToPath(import.meta.url))),runtimeSha256:hash(JSON.stringify(runtimeIdentity())),
+    mode:'VERIFY_CURRENT',maxModelTurns:1,maxSecondsPerTurn:300,automaticRetry:false,
+    ownerVerificationApprovals:1,sourceEffectsAllowed:false,verificationTimeoutMs:30000,
+    failureAction:'STOPPED_FAILED_NO_REPAIR_OR_RETRY',costStatus:'UNKNOWN',usdCostCapEnforced:false,
+    ownerEffectsApproved:false,protectedVerification:'UNSATISFIED'};
+}
+async function checkedVerificationPlan(dir){
+  const actual=await json(join(dir,'verification-plan.json'));
+  if(hash(JSON.stringify(actual))!==hash(JSON.stringify(await verificationPlan(dir))))
+    fail('Verification plan binding changed; preserve records, do not reset approval');
+  return actual;
+}
+async function prepareVerify(dir){
+  const prepared=await prepare(dir,false,true),plan=await verificationPlan(dir);
+  await writeFile(join(dir,'verification-plan.json'),JSON.stringify(plan,null,2)+'\n',{flag:'wx'});
+  return {...prepared,status:'READY_FOR_VERIFY_CURRENT_APPROVAL',plan,
+    next:'Separately approve one verification-planning model Turn, then review the fixed test command in the Owner terminal. No source application, Repair or replay.'};
+}
+async function verifyTaskBinding(store,t,m){
+  const {workProfile}=await import('../src/product/work-review.mjs');
+  const p=workProfile(store,t);
+  return p?.mode==='VERIFY_CURRENT'&&p.base===m.gitHead&&p.sourcePaths.length===0&&
+    samePaths(p.testPaths,m.testPaths)&&store.readArtifact(t.planRef)?.intent?.original===m.goal&&
+    Object.keys(t.bootstrap?.filesets??{}).length===0&&store.list().every(r=>!r.materializationRef);
 }
 
 // Acceptance artifacts live beside existing runner intents/receipts. They do
@@ -235,7 +273,22 @@ async function observedRecovery(dir){
     receipt.recovery?.checkpointPreserved===true&&receipt.recovery?.newThread===true&&
     receipt.recovery?.taskRediscovered===true&&receipt.recovery?.nextActionReported===true;
 }
-const prompt=m=>[
+const verifyPrompt=m=>[
+  'Use only the codefleet_live proposal-only MCP tools in THIS session. Do not modify files, run tests, use shell tools, start nested agents or grant approval.',
+  'Exact user goal: '+m.goal,
+  'Call codefleet_goal_start with that exact goal and mode:"VERIFY_CURRENT"; call codefleet_goal_status for the current draft, probeRef and revision.',
+  'Submit codefleet_draft_submit with the exact current revision and the following proposal, substituting ONLY probeRef:',
+  JSON.stringify({schemaVersion:1,kind:'ExistingLocalDraft',objective:m.goal,probeRef:'<EXACT probeRef FROM STATUS>',
+    requirements:['Verify existing title normalization without changes'],openQuestions:[],
+    decisions:[{topic:'mode',choice:'VERIFY_CURRENT',alternatives:[],rationale:'Observe current source, no managed change'}],
+    plannedFiles:[],plannedTests:[{path:'test/todo.test.mjs',criteria:['todo-title']}],
+    criteria:[{id:'todo-title',description:'Immutable Todo tests pass',tests:['test/todo.test.mjs']}],
+    scope:{includes:[],excludes:['src/todo.mjs']},risks:['Local evidence is unprotected'],
+    workItems:[{id:'verify',kind:'local-verification',dependencies:[],acceptanceCriteria:['Pinned tests pass'],files:[]}]}),
+  'Call codefleet_goal_prepare, then codefleet_local_test_review for the Task. STOP and report taskId, reviewRef, reviewHash; no Fileset, no execution, no completion claim.',
+  'Only the separate human Owner may accept the fixed Node test command. Never retry or propose Repair if verification fails.'
+].join('\n');
+const prompt=m=>isVerify(m)?verifyPrompt(m):[
   'Work on this disposable CodeFleet acceptance project, without modifying any project source or test yourself.',
   'Use the codefleet_live MCP tools in THIS Codex model session. No nested codex, no API key, no changes outside MCP proposal-only tools.',
   'Exact user goal: '+m.goal,
@@ -297,8 +350,19 @@ function inspectCodexLogin(binary,directory){
     shell:false,windowsHide:true,timeout:15000,maxBuffer:256*1024});
   return !result.error&&result.status===0;
 }
+export function nativeProbeReadiness(probe,expectedBase){
+  const ready=probe?.state==='EXISTING_SOURCE'&&probe.base===expectedBase&&
+    probe.dirty===false&&!probe.error;
+  return {ready,state:probe?.state??'UNAVAILABLE',baseMatches:probe?.base===expectedBase,
+    errorKind:probe?.error?.kind??null,authority:'CODEFLEET_NATIVE_PROBE_CURRENT_EXECUTION_IDENTITY'};
+}
+async function inspectNativeRepository(pp,m){
+  const {probeRepository}=await import('../src/intent/probe.mjs');
+  return nativeProbeReadiness(await probeRepository(pp.project),m.gitHead);
+}
 async function preflight(dir,binary,recovery=false){
   const {pp,m}=await checked(dir);
+  if(isVerify(m))await checkedVerificationPlan(dir);
   const intentPath=recovery?join(dir,'recovery-turn-intent.json'):pp.intent;
   const receiptPath=recovery?join(dir,'recovery-turn-receipt.json'):pp.receipt;
   if(await recordExists(intentPath)||await recordExists(receiptPath))
@@ -310,12 +374,16 @@ async function preflight(dir,binary,recovery=false){
   if(!recovery&&cmd('git',['status','--porcelain'],pp.project))
     return {status:'BLOCKED_DIRTY_FIXTURE',readyForLiveTurn:false,
       modelTurnsStarted:0,reason:'Pinned fixture must be clean'};
+  const nativeProbe=isVerify(m)?await inspectNativeRepository(pp,m):null;
+  if(nativeProbe&&!nativeProbe.ready)return {status:'BLOCKED_NATIVE_REPOSITORY_PROBE',readyForLiveTurn:false,
+    nativeProbe,modelTurnsStarted:0,ownerGrantIssued:false,automaticReplay:false,
+    reason:'Native Probe cannot read the pinned clean repository under this execution identity. Preserve the fixture; do not bypass Git ownership or start a model Turn.'};
   const version=inspectCodexVersion(binary,pp.project);
   const loginReported=inspectCodexLogin(binary,pp.project);
   return {
     status:loginReported?'READY_FOR_EXPLICIT_OWNER_MODEL_APPROVAL':
       'BLOCKED_CODEX_LOGIN_UNAVAILABLE',
-    readyForLiveTurn:loginReported,codexVersion:version,
+    readyForLiveTurn:loginReported,codexVersion:version,...(nativeProbe?{nativeProbe}:{}),
     loginAuthority:'CODEX_CLI_EXIT_STATUS_ONLY_NOT_INDEPENDENT_IDENTITY',
     modelTurnsStarted:0,ownerGrantIssued:false,
     costStatus:'UNKNOWN',usdCostCapEnforced:false,automaticReplay:false,
@@ -325,6 +393,7 @@ async function preflight(dir,binary,recovery=false){
 }
 async function liveRun(dir,binary,recovery=false){
   const {pp,m}=await checked(dir);
+  if(isVerify(m))await checkedVerificationPlan(dir);
   const intentPath=recovery?join(dir,'recovery-turn-intent.json'):pp.intent;
   const receiptPath=recovery?join(dir,'recovery-turn-receipt.json'):pp.receipt;
   if(await recordExists(intentPath)||await recordExists(receiptPath))
@@ -333,6 +402,10 @@ async function liveRun(dir,binary,recovery=false){
   if(!recovery&&m.kind==='CODEFLEET_CODEX_NEW_SESSION_ACCEPTANCE_V1')await checkedRecoveryPlan(dir);
   if(!recovery&&cmd('git',['status','--porcelain'],pp.project))
     fail('Fixture must be clean before any Codex Turn');
+  if(isVerify(m)){
+    const nativeProbe=await inspectNativeRepository(pp,m);
+    if(!nativeProbe.ready)fail('Native repository probe blocked: '+nativeProbe.state+'; no model Turn reserved');
+  }
   const version=inspectCodexVersion(binary,pp.project);
   if(!inspectCodexLogin(binary,pp.project))
     fail('Codex login status unavailable: authenticate Codex CLI before spending approval; no Turn reserved');
@@ -430,6 +503,7 @@ async function liveRun(dir,binary,recovery=false){
     if(v.type==='turn.failed'||v.type==='error')metadata.turnFailed++;
     if(v.type==='item.completed'&&v.item?.type==='mcp_tool_call'){
       const item=v.item;
+      if(isVerify(m)&&(item.server!=='codefleet_live'||item.status!=='completed'))invalid=true;
       if(recovery){
         let args=item.arguments;
         try{if(typeof args==='string')args=JSON.parse(args);}catch{args=null;}
@@ -444,9 +518,9 @@ async function liveRun(dir,binary,recovery=false){
         metadata.observedMcpCalls.push(item.status==='failed'?{...call,...mcpFailure(v)}:call);
       }
     }
-    if(recovery&&v.type==='item.completed'){
+    if((recovery||isVerify(m))&&v.type==='item.completed'){
       if(!['mcp_tool_call','reasoning','agent_message'].includes(v.item?.type))invalid=true;
-      if(v.item?.type==='agent_message'){
+      if(recovery&&v.item?.type==='agent_message'){
         try{recoveryAnswer=JSON.parse(v.item.text);}catch{invalid=true;}
       }
     }
@@ -482,7 +556,7 @@ async function liveRun(dir,binary,recovery=false){
   metadata.stderrSha256=errHash.digest('hex');
   metadata.completedAt=new Date().toISOString();
   const required=['codefleet_goal_start','codefleet_draft_submit',
-    'codefleet_goal_prepare','codefleet_fileset_propose','codefleet_fileset_review'];
+    'codefleet_goal_prepare',...(isVerify(m)?['codefleet_local_test_review']:['codefleet_fileset_propose','codefleet_fileset_review'])];
   const calls=new Set(metadata.observedMcpCalls
     .filter(c=>c.status==='completed').map(c=>c.tool));
   const cleanProject=cmd('git',['status','--porcelain'],pp.project)==='';
@@ -490,23 +564,31 @@ async function liveRun(dir,binary,recovery=false){
   // CodeFleet Contract/DAG/Fileset records. Fake JSONL alone never passes.
   let pendingReviewInStore=false;
   try{
-    const [{Store},{tasks},{taskReport}]=await Promise.all([
+    const [{Store},{tasks},{taskReport},{workReport}]=await Promise.all([
       import('../src/alpha/store.mjs'),import('../src/product/tasks.mjs'),
-      import('../src/product/report.mjs')]);
+      import('../src/product/report.mjs'),import('../src/product/work-report.mjs')]);
     const store=new Store(pp.state,{readOnly:true});
     try{
       const matches=tasks(store).filter(row=>row.repo===pp.project&&
         row.acceptanceMode==='LOCAL_ONLY'&&
-        store.readArtifact(row.planRef)?.intent?.original===goal);
+        store.readArtifact(row.planRef)?.intent?.original===m.goal);
       if(matches.length===1){
         const report=await taskReport(store,matches[0].id);
         pendingReviewInStore=report.contractKind==='EXISTING_LOCAL'&&
           report.complete===false&&report.nextActions?.some(a=>
-            a.kind==='AWAIT_FILESET_APPROVAL'&&a.items.includes('implement'))===true;
+            a.kind===(isVerify(m)?'RUN_LOCAL_VERIFICATION':'AWAIT_FILESET_APPROVAL')&&a.items.includes(isVerify(m)?'verify':'implement'))===true;
+        if(isVerify(m)){
+          const work=await workReport(store,matches[0].id);
+          pendingReviewInStore &&= await verifyTaskBinding(store,matches[0],m)&&
+            work.phase==='AWAIT_TEST_REVIEW'&&work.budget.attemptsUsed===0&&
+            work.effectCertainty==='NONE'&&store.list().length===0;
+        }
       }
     }finally{store.close();}
   }catch{/* Missing or uncertain Store never passes. */}
-  metadata.pendingExactFilesetReviewObserved=pendingReviewInStore;
+  if(isVerify(m))metadata.pendingExactTestReviewObserved=pendingReviewInStore;
+  else metadata.pendingExactFilesetReviewObserved=pendingReviewInStore;
+  if(isVerify(m)&&metadata.observedMcpCalls.some(c=>!['codefleet_goal_start','codefleet_goal_status','codefleet_draft_submit','codefleet_goal_prepare','codefleet_local_test_review'].includes(c.tool)))invalid=true;
   metadata.status=!invalid&&!metadata.timedOut&&metadata.exitCode===0&&
     metadata.turnStarted===1&&metadata.turnCompleted===1&&
     metadata.turnFailed===0&&metadata.threadIds.length===1&&
@@ -538,11 +620,15 @@ async function liveRun(dir,binary,recovery=false){
     costStatus:metadata.costStatus,ownerApproval:'REQUIRED_OUTSIDE_CODEX_MCP',
     automaticReplay:false,
     ...(recovery?{recovery:metadata.recovery}:{}),
-    next:recovery?'Stop; inspect recovery receipt. Owner test review remains separate; never replay this Turn.':
+    next:isVerify(m)&&metadata.status==='HUMAN_RECONCILIATION_REQUIRED'?
+      'Stop. Inspect the persisted Task and receipt; do not approve effects or replay this Turn.':
+      recovery?'Stop; inspect recovery receipt. Owner test review remains separate; never replay this Turn.':isVerify(m)?
+      'Inspect the exact test review; one separate Owner verification approval remains. Do not change source, propose Repair or replay this Turn.':
       'Inspect exact codefleet_fileset_review result in Codex; use separate trusted owner CLI to apply and verify, then run finalize --dir '+dir};
 }
 async function ownerReview(dir){
   const {pp,m}=await checked(dir);
+  if(isVerify(m))await checkedVerificationPlan(dir);
   const recoveryRequired=m.kind==='CODEFLEET_CODEX_NEW_SESSION_ACCEPTANCE_V1';
   if(recoveryRequired)await checkedRecoveryPlan(dir);
   const receipt=await json(pp.receipt).catch(()=>null);
@@ -554,8 +640,9 @@ async function ownerReview(dir){
   const store=new Store(pp.state);
   try{
     const matches=tasks(store).filter(t=>t.repo===pp.project&&t.acceptanceMode==='LOCAL_ONLY'&&
-      store.readArtifact(t.planRef)?.intent?.original===goal);
+      store.readArtifact(t.planRef)?.intent?.original===m.goal);
     if(matches.length!==1)fail('Expected precisely one model-created Objective');
+    if(isVerify(m)&&!await verifyTaskBinding(store,matches[0],m))fail('Verification-only Task binding changed');
     const taskId=matches[0].id,report=await taskReport(store,taskId);
     if(report.complete===true)return {status:'COMPLETE_LOCAL_ALREADY',taskId,ownerAction:null};
     const files=report.nextActions?.find(a=>a.kind==='AWAIT_FILESET_APPROVAL');
@@ -589,11 +676,12 @@ async function ownerReview(dir){
 }
 async function inspect(dir,finalize=false){
   const {pp,m}=await checked(dir);
+  if(isVerify(m))await checkedVerificationPlan(dir);
   // A partial/corrupt record is an uncertain effect, never a fresh start.
   const receiptPresent=await recordExists(pp.receipt);
   const intentPresent=await recordExists(pp.intent);
   const receipt=receiptPresent?await json(pp.receipt).catch(()=>null):null;
-  let report=null,taskId=null,work=null;
+  let report=null,taskId=null,work=null,verifyBinding=false;
   if(await lstat(pp.state).then(()=>true,()=>false)){
     const [{Store},{tasks},{taskReport},{workReport},{isWork}]=await Promise.all([
       import('../src/alpha/store.mjs'),import('../src/product/tasks.mjs'),
@@ -607,6 +695,7 @@ async function inspect(dir,finalize=false){
         taskId=matching[0].id;
         report=await taskReport(store,taskId);
         if(isWork(matching[0]))work=await workReport(store,taskId);
+        if(isVerify(m))verifyBinding=await verifyTaskBinding(store,matching[0],m).catch(()=>false);
       }else if(matching.length>1)fail(
         'Ambiguous persisted Objectives: manual reconciliation required');
     }finally{store.close();}
@@ -640,6 +729,7 @@ async function inspect(dir,finalize=false){
       automaticReplay:false,compaction:'NOT_RUN',costStatus:'UNKNOWN'};
   }
   const reasons=[];
+  if(isVerify(m)&&!verifyBinding)reasons.push('Verification-only Task binding missing or changed');
   if(recoveryRequired&&!recovered)
     reasons.push('Separate new-session checkpoint recovery not observed');
   if(!receipt||receipt.status!=='CODEX_TURN_OBSERVED_AWAIT_OWNER_REVIEW')
@@ -652,9 +742,10 @@ async function inspect(dir,finalize=false){
   if(report?.protectedVerification!=='UNSATISFIED')
     reasons.push('Local trust classification changed');
   const source=await readFile(join(pp.project,'src','todo.mjs'));
-  if(hash(source)===m.sourceSha256)reasons.push('Code source not modified');
+  if(isVerify(m)?hash(source)!==m.sourceSha256:hash(source)===m.sourceSha256)
+    reasons.push(isVerify(m)?'Verification-only source changed':'Code source not modified');
   const gitStatus=cmd('git',['status','--porcelain'],pp.project).split('\n').filter(Boolean);
-  if(gitStatus.length!==1||!gitStatus[0].endsWith(' src/todo.mjs'))
+  if(isVerify(m)?gitStatus.length!==0:gitStatus.length!==1||!gitStatus[0].endsWith(' src/todo.mjs'))
     reasons.push('Unexpected or missing modified source path');
   if(!reasons.length){
     state.status='COMPLETE_LOCAL';
@@ -687,6 +778,7 @@ async function inspect(dir,finalize=false){
 async function main(){
   const o=opts(process.argv.slice(2));
   const result=o.action==='prepare'?await prepare(o.directory):
+    o.action==='prepare-verify'?await prepareVerify(o.directory):
     o.action==='prepare-recovery'?await prepareRecovery(o.directory):
     o.action==='checkpoint'?await recoveryCheckpoint(o.directory,true):
     o.action==='preflight'?await preflight(o.directory,o.codex):
@@ -699,7 +791,7 @@ async function main(){
   if(o.action==='finalize'&&result.reasons.length)process.exitCode=2;
   if(['preflight','preflight-recovery'].includes(o.action)&&!result.readyForLiveTurn)process.exitCode=2;
 }
-main().catch(error=>{
+if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))main().catch(error=>{
   console.error('CODEFLEET_LIVE_ACCEPTANCE_BLOCKED: '+error.message);
   process.exitCode=1;
 });

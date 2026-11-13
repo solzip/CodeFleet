@@ -1,9 +1,45 @@
 # 구현·검증 진행 현황
 
-갱신: 2026-11-13 · 현재 구현: `29dcd46` (`28ab9ec` 기준 승인 안내·완료 표시 개선, 오프라인 검증 완료). 이전 통합 Local 수용 구현은 `96bdfc7`이며, 과거 기록은 당시 후보와 범위의 근거로 보존한다.
+갱신: 2026-11-13 · 현재 결과: `d0327c4` 기준 VERIFY_CURRENT의 실제 Codex 제안 → 별도 Owner 검증 → 소스 무변경 Local 완료를 관측했다. 앞선 Git 소유권 실패와 수정·재검증 근거를 보존한다. 이전 승인 UX 구현은 `29dcd46`, 새 세션 통합 Local 수용 구현은 `96bdfc7`이다.
 제품 목적은 [제품 원칙](../docs/PRODUCT_VISION.md), 구조는 [아키텍처](../docs/product-completion/architecture.md), 수락 조건과 순서는 [로드맵](../docs/product-completion/roadmap.md)에서 관리한다.
 
-## 현재 결과: 승인 안내·완료 표시 개선 구현·오프라인 검증 완료
+## 현재 결과: VERIFY_CURRENT 감독형 Host Live Local 수용 완료
+
+최종 후보의 새 fixture에서 별도 승인된 Codex 모델 Turn 1회와 별도 Owner TTY 검증 1회를 연결했다. 최종 `finalize`는 exit 0, `CODEX_TURN_OBSERVED_AND_OBJECTIVE_COMPLETE_LOCAL`, reasons 0건, `status=COMPLETE_LOCAL`, `currentTreeComplete=true`였다. 소스와 테스트는 준비 기준에서 변경되지 않았고 Fileset 적용·Repair는 0건이다. 이는 선택한 Windows / PowerShell / Node v24.14.1 / Codex CLI 0.167.0의 감독형 VERIFY_CURRENT Local 수용이며 전체 프로필·Protected·실제 Compaction 수용은 아니다. 다음 우선순위는 실패/Repair·미해결 종료의 별도 Host 시나리오 준비이며 새로운 모델 실행은 새 계획·한도·별도 승인이 필요하다.
+
+사용자의 다음 우선순위 진행 요청에 따라 검증 전용 경로를 선정했다(UX-03/UX-05). 기준은 로컬·원격 main에서 확인한 `d0327c4`다. 핵심 런타임·Validator·Native 승인·실패 후 중단 규칙은 기존 구현을 재사용하며 새 상태 저장소·scheduler·권한 issuer를 만들지 않는다. WorkItem 범위는 기존 수용 runner, 새 검증 전용 회귀, 기존 Work 회귀 보강, npm 회귀 명령과 계약·Host 안내·이 상태 문서이며 수용 후 양언어 README도 갱신했다. 완료 기준은 소스 없는 Draft/DAG → 실제 MCP 준비 → 별도 Owner 검증 1회 → 소스 무변경 Local 완료 및 실패 후 재시도/Repair 거부다. 실제 모델 실행과 Owner 효과는 아래 별도 승인을 받았으며 commit/push는 이번 진행 요청에서 추론하지 않는다.
+
+`prepare-verify`는 기존 CHANGE fixture와 별개인 새 디렉터리에 고정 구현·불변 테스트·Git 기준과 `verification-plan.json`을 준비한다. 계획은 runner/runtime/manifest와 최대 모델 Turn 1회·300초, Owner 검증 1회·30초, 소스 효과 없음·자동 재시도 없음·비용 UNKNOWN/USD 상한 미집행을 결합한다. 준비는 모델·Task·승인을 만들지 않는다. 모델은 VERIFY_CURRENT의 단일 verify DAG와 검증 리뷰만 제안하며 기존 one-shot intent/receipt 및 Native Owner 경계를 사용한다. runner는 실제 profile·기준·고정 테스트·효과 NONE·Run/검증 시도 0건을 확인한다. 성공 후에도 현재 WorkReport·Local Judge와 깨끗한 소스/Git 상태가 모두 필요하다.
+
+신규 오프라인 회귀는 실제 MCP 프로세스로 계획을 준비하고 모의 TTY의 VERIFY 한 번으로 독립 Node 검증을 실행해 Local 완료를 확인했다. JSONL 성공만 위조한 사례·Fileset 호출·셸 이벤트·다른 MCP 서버·계획 변조·불변 테스트 변조·소스 drift와 재실행을 거부한다. 실패 후 증거·시도 1건·소스·event/Run 보존과 새 리뷰 미발급도 기존 Work 회귀에 추가했다. 최초 `node --test test/codex-verify-current.test.mjs`는 효과 없음 상태를 SETTLED로 잘못 해석한 runner 때문에 exit 1, 4 PASS / 1 FAIL이었다. `--test-name-pattern="one Owner"` 표적 재현·진단 2회도 각각 exit 1, 0 PASS / 1 FAIL이었다. 실제 WorkReport의 NONE과 Run 0건을 함께 검사하도록 수정한 뒤 5 PASS, 셸 이벤트 부정 사례와 Task 결합 검사를 추가한 재실행은 exit 0, 6 PASS였다. `node --test --test-name-pattern="VERIFY_CURRENT failure" test/work-review.test.mjs`는 예외를 예상했으나 기존 API가 HUMAN_HANDOFF를 반환해 exit 1, 0 PASS / 1 FAIL이었다. 실제 반환의 정확한 사유·reviewRef 없음·retryAllowed=false와 무변경을 직접 검사하도록 시험을 정정했다. 제품 gate는 완화하지 않았다.
+
+`node --test test/codex-live-acceptance.test.mjs test/codex-verify-current.test.mjs test/work-review.test.mjs test/codex-mcp.test.mjs`는 exit 0, 77 PASS / 0 FAIL / 0 SKIP이었다. 마지막 검토에서 검증 전용 분기의 다른 MCP 서버·실패 호출을 추가 차단하고 `node --test test/codex-verify-current.test.mjs test/codex-mcp.test.mjs`로 영향 범위를 재검증해 exit 0, 10 PASS / 0 FAIL / 0 SKIP을 확인했다. 앞선 통합 수치는 이 최종 보강 후 전체 재실행으로 표현하지 않는다. `npm.cmd run pretest`와 `npm.cmd run test:legacy`는 각각 exit 0, Legacy 327 PASS / 0 FAIL / 0 SKIP이었고 `npm.cmd run test:host-core`는 exit 0, 135 PASS / 0 FAIL / 0 SKIP이었다. `node --test test/doc-layout.test.ts`는 exit 0, 3 PASS였다. 기존 `test:codex-live-acceptance` npm 명령에 신규 회귀 파일을 연결해 CI에서도 빠지지 않게 했다. 문서 검사 `npm.cmd run posttest`는 exit 0, Markdown 37개·링크 240개·인용 4건·선언 사실 42건 오류 0이며 `git diff --check`도 exit 0이다. coverage/anchor 기준선은 변경하지 않았다.
+
+실행 전 준비한 비공개 fixture는 `.codefleet/codex-verify-current-20261113-1a1d401c373/`다. `prepare-verify`는 exit 0, `READY_FOR_VERIFY_CURRENT_APPROVAL`이며 manifest·verification-plan과 고정 Git 기준만 생성했다. 당시 runner SHA-256은 `00e65d8038363ed4a242490f848f4302c936d7c1c0d675151abdd6d2b5fd2ce2`다. 공식 npm Codex CLI 0.167.0의 비과금 preflight는 sandbox 계정에서 로그인 조회 불가로 exit 2였다. 원래 계정 재실행은 새 fixture Git 소유권 검사로 exit 1, backslash 경로의 프로세스 한정 safe.directory 설정도 exit 1이었다. 정규화된 정확한 프로젝트 경로의 읽기를 확인한 뒤 해당 프로세스에만 추가한 safe.directory로 재실행해 exit 0, READY_FOR_EXPLICIT_OWNER_MODEL_APPROVAL을 확인했다. 이 당시 사전 점검은 Native 준비를 확인하지 못했으며 아래 실제 Turn에서 결함이 드러났다. 전역 Git·Codex·인증 설정은 변경하지 않았다. 실행 전 `status`는 exit 0, NOT_STARTED였고 Task·모델 Turn·Owner 승인·intent/receipt·검증 Evidence는 0건이었다.
+
+이후 사용자가 위 새 계획의 모델 Turn 최대 1회/300초·비용 UNKNOWN/USD 상한 미집행을 승인했다. 2026-11-13 08:30:29~08:30:47 UTC에 Codex CLI 0.167.0의 실제 Thread 1개·Turn 시작/완료 각 1회·Provider 실패 0회, 프로세스와 runner exit 0을 관측했지만 결과는 HUMAN_RECONCILIATION_REQUIRED였다. goal_start·goal_status만 완료됐으며 Draft/DAG·검증 리뷰·Owner 승인·검증 Evidence는 없었다. Provider 보고 토큰은 input 72,772 / output 316, 금액·잔여 한도는 UNKNOWN이다. Task `task-9b0ff92e-3ba2-4c0a-a28c-c72238ed21e2`는 revision 2, BLOCKED, Work phase UNSUPPORTED, PLAN_RECORDED의 error WORK_HEAD_REQUIRED와 WORK_START_REJECTED를 보존했다. 검증 시도·Run은 0건이고 소스·테스트는 변경되지 않았다. status는 exit 0, HUMAN_RECONCILIATION_REQUIRED, finalize는 exit 2, BLOCKED_OR_INCOMPLETE였다. 이 fixture와 비용 승인은 소모됐으며 리뷰/재실행하지 않는다.
+
+원래 사용자 계정의 읽기 전용 Native Probe로 GIT_OWNERSHIP / base=null / Git exit 128을 독립 재현했다(진단 프로세스 exit 0). fixture를 만든 sandbox 계정과 모델/MCP를 실행한 원래 계정의 Git 소유권이 달랐다. runner의 일반 Git은 프로세스 한정 safe.directory로 읽혔지만 Native Probe는 기존 제한 환경에서 그 설정을 전달하지 않으므로 사전 점검의 READY가 실제 Native 준비를 보장하지 못했다. 기존 Native 환경·Git 소유권 gate를 완화하지 않고, 모델 호출/intent 생성 전에 동일 Native Probe의 현재 기준·소유권·예상 변경 상태를 검사하도록 runner를 보완한다. 이전 receipt의 원문·hash·예산·Task는 수정하지 않는다. 새 모델 실행은 새 후보·새 fixture와 별도 승인이 필요하다.
+
+실패 당시 runner 소스는 같은 fixture의 `observed-runner.mjs`에 감사용으로 보존했다. 수정 후보에서 사전 점검 추가분을 제거해 복원한 바이트의 SHA-256이 당시 계획의 runnerSha256과 정확히 일치함을 확인한 뒤 새 파일로 저장했다(exit 0). 사본을 실행하거나 과거 계획·receipt·Task·비용 승인을 수정하지 않았다.
+
+Native 사전 점검 보완의 신규·MCP 시험은 exit 0, 11 PASS였다. 기존 runner 회귀는 exit 1, 32 PASS / 9 FAIL / 0 SKIP이었다. 새 clean 조건이 이미 소스를 적용한 새 세션 복구까지 차단한 범위 오류를 확인했다. 검증 전용 분기에만 추가 사전 점검을 적용하도록 수정했으며 기존 새 세션의 체크포인트·후보 결합·승인 검사는 유지했다. `node --test test/codex-live-acceptance.test.mjs test/codex-verify-current.test.mjs test/codex-mcp.test.mjs` 재실행은 exit 0, 52 PASS / 0 FAIL / 0 SKIP이었다. 마지막으로 검증 전용 Turn 미수용 시 남은 Owner 승인을 안내하던 문구를 효과 승인·재실행 금지로 수정하고, 네 실패 사례의 안내 단언을 추가했다. `node --test test/codex-verify-current.test.mjs test/codex-mcp.test.mjs`는 exit 0, 11 PASS / 0 FAIL / 0 SKIP이었다. 최종 문구 변경 후 전체 52건을 다시 실행했다고 표현하지 않는다. 핵심 Native·Work 런타임은 변경하지 않았다.
+
+실패 fixture를 변경하지 않고 원래 사용자 계정으로 `.codefleet/codex-verify-current-owner-20261113-1a1d40e2f41/`를 새로 준비했다(prepare-verify exit 0). 새 runner SHA-256은 `cbd5534615b6e46de8c8331124ffa647a79d5df8c67df69347e49f037285c25c`다. 동일 계정의 preflight는 별도 safe.directory 설정 없이 Native EXISTING_SOURCE·고정 HEAD 일치·깨끗한 기준과 Codex CLI 0.167.0 로그인을 확인해 exit 0, READY_FOR_EXPLICIT_OWNER_MODEL_APPROVAL이었다. 반대 계정인 sandbox에서 일반 Git의 해당 정확한 경로만 프로세스 한정으로 허용하고 실행한 부정 preflight는 exit 2, BLOCKED_NATIVE_REPOSITORY_PROBE / GIT_OWNERSHIP이었다. 선택한 실행 파일은 존재하지 않는 MUST_NOT_START.mjs였고 Native 차단이 그 파일을 호출하기 전에 반환됐으므로 실제 Codex 호출이 없었다. 새 fixture의 모델 Turn·Task·Owner 승인·intent/receipt·검증 Evidence는 0건이다. 소모한 이전 승인으로 실행하지 않으며 다음 모델 Turn은 이 새 계획의 최대 1회/300초·비용 UNKNOWN/USD 상한 미집행을 별도 승인받아야 한다.
+
+이 계정 경계 확인 fixture는 마지막 실패 안내 수정 전 후보이므로 모델 0건 상태로 보존하고 사용하지 않는다. 최종 검증 후보는 동일 원래 사용자 계정에서 새로 준비한 `.codefleet/codex-verify-current-ready-20261113-1a1d4136844/`다. runner SHA-256은 `307b123a9c6b63f573ff8c50b9aadc2dc581f7ea40a9c0df9f0e4316f1a062d9`, manifest SHA-256은 `afedd06c453b8aa3889946c657e2c5b0f8acbd00c72a01f2c74e3a8dcf05a3dc`다. 실행 전 prepare-verify·Native preflight·status는 각각 exit 0, READY_FOR_EXPLICIT_OWNER_MODEL_APPROVAL / NOT_STARTED였고 Task·모델 Turn·Owner 승인·intent/receipt·Evidence는 0건이었다. 최종 계획은 모델 최대 1회/300초·검증 승인 1회/30초·비용 UNKNOWN/USD 상한 미집행·자동 재시도 없음으로 고정했다. 이후 아래 별도 승인을 받고 실행했으며 기존 실패 및 미실행 후보의 계획·비용 기록은 수정하거나 이전하지 않았다.
+
+사용자의 새 승인 뒤 2026-11-13 08:45:41~08:46:32 UTC에 실제 Codex Turn을 실행했다. runner·Provider 프로세스 exit 0, Thread 1개·Turn 시작/완료 각 1회·실패 0회였고, goal_start → goal_status → draft_submit → goal_status → goal_prepare → goal_status → local_test_review → goal_status의 MCP 호출 8건이 모두 완료됐다. 실제 profile·고정 verify DAG·AWAIT_TEST_REVIEW·검증 시도 0건·Run 0건·프로젝트 무변경을 대조해 CODEX_TURN_OBSERVED_AWAIT_OWNER_REVIEW를 수락했다. Provider 보고 토큰은 input 227,930 / output 1,012, 금액·잔여 한도는 UNKNOWN이다. 앞선 실패 Turn과 합치면 이번 검증 전용 작업의 실제 모델 호출은 각각 별도 승인된 2회, input 300,702 / output 1,328이며 금액 상한 집행이나 생산성 개선 근거는 아니다.
+
+모델이 준비한 Task는 `task-2bb5b4c5-1a74-4de3-82b4-4935a6c9c4b4`, workflowHash는 `dd9d281cdff6fd8227eb299ca0ae1e3e44ecfc8cadaca6a9701cb3273d166ef9`다. 별도 Owner 창은 같은 fixture의 `owner-verify.ps1`로 현재 테스트 리뷰를 준비한 뒤 기존 work-owner-review TTY에 연결했다(launcher PowerShell 구문 검사 exit 0). Owner가 대문자 VERIFY로 직접 수락한 NATIVE_LOCAL_REVIEW_ACCEPTED와 WORK_PROFILE_ACKNOWLEDGED, 검증 예약·시작·Evidence·결과 연결을 관측했다. 확인 단어를 대신 입력하거나 채팅 승인을 전달하지 않았다. 고정 명령 `node --test --test-reporter=tap test/todo.test.mjs`는 2026-11-13 08:49:25 UTC에 exit 0, 1 PASS / 0 FAIL / 0 SKIP이었다.
+
+Evidence ref는 `f0896323e0c6a9992acd0cb479ab5751888a0b924c1ff30839b8886fcb49e77c`, candidateTreeHash는 `8a6468264546430f42f2aae2844023603786b87bdd6796d89921f4c9868828c1`이며 Task revision 5·같은 Workflow에 결합돼 있다. 최종 Task는 revision 6, phase COMPLETE_LOCAL, sourceChanges 0건, attemptsUsed 1, reservedTimeMs 30,000, repairUsed 0이다. 현재 후보 재관측과 runner finalize 모두 완료를 확인했고 다음 행동은 READ_ONLY다. LOCAL_ONLY_UNPROTECTED / PROVIDER_REPORTED_ONLY / Owner 인증 NOT_ESTABLISHED / Protected UNSATISFIED를 유지한다. 모델·Owner 승인 추가 실행이 필요하지 않으며 소모된 one-shot·승인·receipt·Task/Run/Event·Evidence를 보존한다.
+
+성공 후보도 같은 fixture의 감사용 `observed-runner.mjs`에 현재 runner 바이트를 새 파일로 보존했고 계획의 SHA-256과 일치를 확인했다(exit 0). 이 사본은 실행하지 않았다. 수용 결과를 반영한 README 양언어·Host 안내·진행 현황의 `node --test test/doc-layout.test.ts`는 exit 0, 3 PASS였고 `npm.cmd run posttest`는 exit 0, Markdown 37개·링크 241개·인용 4건·선언 사실 42건 오류 0이었다. `git diff --check`도 exit 0이다. 실제 수용 뒤 runtime·runner 코드는 변경하지 않았다.
+
+환경은 Windows x64 / PowerShell / Node v24.14.1이다. 합성 Codex·모의 TTY의 오프라인 성공, 비과금 사전 점검, 실제 실패 Turn과 이번 감독형 Local 성공을 구분한다. Protected·다른 OS·전체 Alpha 보안 회귀는 NOT_RUN이다. 완료된 `afe4cbe`/`96bdfc7` Live와 기존 one-shot fixture·비용 승인·DB는 재사용·재실행·초기화하지 않는다. 실패/Repair·미해결 종료·실제 Compaction 및 전체 제품 수용은 계속 남아 있다.
+
+## 이전 결과: 승인 안내·완료 표시 개선 구현·오프라인 검증 완료
 
 사용자가 이전 통합 시험에서 드러난 승인 입력·만료 안내와 완료 후 상태 문구 개선을 요청했다. WorkItem 범위는 `src/product/work-owner.mjs`, `scripts/codex-live-acceptance.mjs`, 관련 두 회귀 파일과 기존 계약·Host 안내·이 상태 문서다. 기존 Owner/Native 승인·WorkReport·Task/Run/Event·완료 판정을 재사용하며 새 승인 전달 채널이나 상태 저장소는 만들지 않는다. 대문자 확인 단어·실제 TTY·기존 TTL·별도 효과 승인·완료 기준을 유지한다. 추가 Host 모델 실행, 기존 fixture/비용 승인 재사용·초기화, 공개 작업은 이번 구현 범위에 포함하지 않았다.
 
@@ -17,7 +53,7 @@ Owner 화면에 대문자 확인 단어, 입력할 별도 터미널과 채팅의
 
 구현·회귀·계약·Host 안내·진행 현황은 `29dcd46`에 커밋했다. 사용자가 후속 문서 정리와 push를 승인했다. 공개 대상은 소스·테스트·정제된 문서이며 기존 비공개 실행 기록은 포함하지 않는다. 계약과 Host 안내에는 현재 동작을 반영했으며, 로드맵은 수락 조건을 유지하고 실제 완료/미검증 상태는 이 문서에서 관리한다.
 
-다음 우선순위는 단일 Codex 경로의 남은 VERIFY_CURRENT·실패/Repair·미해결 종료 시나리오에서 실행 범위·고정 검증·중단 기준·예산을 먼저 준비하는 것이다. 실제 Compaction은 별도 관측이 필요하다. 새 모델 Turn과 Owner 효과는 각각 해당 승인 경계를 따라야 하며 기존 one-shot 승인으로 실행하지 않는다. Claude·Protected·macOS/Linux·6쌍 가치 비교와 전체 제품 수용은 미완료다.
+당시 다음 우선순위였던 VERIFY_CURRENT는 상단의 별도 후보에서 감독형 Local 수용을 관측했다. 남은 단일 Codex 실패/Repair·미해결 종료 시나리오는 실행 범위·고정 검증·중단 기준·예산을 먼저 준비해야 한다. 실제 Compaction은 별도 관측이 필요하다. 새 모델 Turn과 Owner 효과는 각각 해당 승인 경계를 따라야 하며 기존 one-shot 승인으로 실행하지 않는다. Claude·Protected·macOS/Linux·6쌍 가치 비교와 전체 제품 수용은 미완료다.
 
 ## 이전 수용 근거: Codex 새 세션 통합 Local 완료 (`96bdfc7`)
 
@@ -149,8 +185,8 @@ Local 완료는 `COMPLETE_LOCAL`이며 보호 검증은 `UNSATISFIED`다. 설치
 | UX-01 요청·질문·계획 | 목표·Draft·Validator·DAG와 설치 Skill 안내 구현 | 실제 자연어 요청에서 필요한 질문만 하고, 내부 계약을 사용자 대신 준비하는 전체 흐름은 미검증 |
 | UX-02 필요한 결정·진행 | 승인·범위·예산 검사, 적격 작업 선택과 감독형 Local 경로 근거 있음 | 유효한 승인 안의 연속 진행, 필수 결정만 묶어 요청하고 답변을 연결하는 실제 Host 경험은 미완료 |
 | UX-03 실패·수정·차단 | 실패 Evidence 기반 제한적 Repair·재검증과 별도 프로세스 Recovery 근거 있음 | 실제 Host가 승인 한도 안에서 수정하고, 한도 도달 시 선택지·영향을 설명하는 전체 수용은 미검증 |
-| UX-04 다음 세션 재개 | 영속 Goal 탐색·설치 CLI 재발견·프로세스 복구와 소스 변경 감지 시험 통과 | 실제 Host 새 세션/Compaction 뒤 재설명 없는 재개, 지침 전달·미확정 인계의 독립 관측은 미검증 |
-| UX-05 결과·검증·한계 | Local 완료·현재 대상 재관측·변조 거부 시험 근거 있음 | 실제 작업 결과를 완료 기준별로 사용자에게 전달하는 전체 수용, 브라우저·주관적 기준·Protected 근거는 미완료 |
+| UX-04 다음 세션 재개 | 영속 Goal 탐색·설치 CLI 재발견·프로세스 복구·소스 변경 감지 시험과 선택한 Codex의 실제 새 세션 체크포인트 재개 관측 | 실제 Compaction, 지침 전달·미확정 인계의 독립 관측과 다른 Host의 전체 수용은 미검증 |
+| UX-05 결과·검증·한계 | Local 완료·현재 대상 재관측·변조 거부 시험과 선택한 Codex CHANGE/VERIFY_CURRENT의 실제 Local 판정·한계 보고 | 다양한 실제 작업·브라우저·주관적 기준·Protected 근거의 전체 수용은 미완료 |
 
 구현 책임은 [아키텍처](../docs/product-completion/architecture.md#사용자-경험과-구현-책임), 개별 시험 결과와 한계는 아래 검증 표에서 확인한다. 문서에 추가한 수락 시나리오를 기존 시험 결과로 소급 통과시키지 않는다.
 
@@ -162,6 +198,7 @@ Local 완료는 `COMPLETE_LOCAL`이며 보호 검증은 `UNSATISFIED`다. 설치
 | Codex Goal·MCP·재개 안내 | 영속 Goal 탐색, 계약 리뷰, 미승인 Workflow 준비와 설치 CLI 재발견 구현 | 인증된 운영 연결과 기존 설치물 업그레이드 수용 |
 | 신규 프로젝트 Bootstrap | Fileset 승인·생성·Local 검증·Repair·재개 구현, 합성·설치 회귀 근거 있음 | 실제 모델을 연결한 신규 프로젝트 전체 수용·보호 검증 |
 | 기존 프로젝트 변경 | 감독형 Fileset 승인·적용·Local 완료·프로세스 복구 관측 있음 | 범용 무인 실행과 독립 사용자 수용 |
+| 현재 소스 검증 VERIFY_CURRENT | 선택한 Windows Codex의 실제 계획·별도 Owner 검증 1회·소스 무변경 COMPLETE_LOCAL 관측 | 실패 후 중단의 별도 Host 실증·다른 환경·보호 검증은 미완료 |
 | 계약 변경·Repair·Work Log | 기존 Store·Event·Lease·Recovery에 연결, Local 회귀 근거 있음 | 실제 인계의 독립 인증·Host Compaction·장기 실행 수용 |
 | 역할 협업 | 제한된 자식 제안·감독형 통합·비교 관측 있음 | 공개 인증 위임은 BLOCKED, Multi-Agent 성능 이점 미입증 |
 | 검증 Backend | Local·Container 경로 구현 | Host Sandbox NOT_VERIFIED, Local 결과로 Protected 수용 불가 |

@@ -4,7 +4,7 @@ Codex CLI·Claude Code의 기존 모델·인증·세션을 활용하는 **Host-N
 
 **현재는 개발·수용 검증 단계입니다.** 계획·검토, 감독형 Local 변경, 별도 프로세스 복구를 구현했습니다. 제한된 Windows Codex 감독형 실행 관측은 있지만 공개 인증 위임·보호 실행·전체 OS 수용·외부 사용자 생산성은 아직 검증이 끝나지 않았습니다. 최신 결과와 한계는 [진행 현황](project/PROGRESS.md)을 따릅니다.
 
-Live runner는 실제 호환 시험을 통과한 Codex CLI `0.167.0`과 CI 고정 `0.167.1`만 허용합니다. Windows의 `0.167.0`에서 기존 Node 프로젝트의 제안 → 별도 Owner 소스 적용 → 새 세션의 기존 Task 재발견 → 별도 Owner 고정 테스트 → `COMPLETE_LOCAL`을 실제로 관측했습니다. 이전 MCP 실패와 미해결 기록은 [진행 현황](project/PROGRESS.md)에 보존합니다. 이는 선택한 감독형 Local 경로의 수용이며 전체 Host 프로필·실제 Compaction·Protected Evidence·독립 Owner 인증·비용 상한·다른 OS 수용을 뜻하지 않습니다.
+Live runner는 실제 호환 시험을 통과한 Codex CLI `0.167.0`과 CI 고정 `0.167.1`만 허용합니다. Windows의 `0.167.0`에서 기존 Node 프로젝트의 제안 → 별도 Owner 소스 적용 → 새 세션의 기존 Task 재발견 → 별도 Owner 고정 테스트 → `COMPLETE_LOCAL`을 실제로 관측했습니다. 별도 `VERIFY_CURRENT` 경로에서도 실제 모델의 검증 계획 → Owner 검증 1회 → 소스 무변경 `COMPLETE_LOCAL`을 관측했습니다. 이전 MCP·Git 소유권 실패와 미해결 기록은 [진행 현황](project/PROGRESS.md)에 보존합니다. 이는 선택한 감독형 Local 경로의 수용이며 전체 Host 프로필·실제 Compaction·Protected Evidence·독립 Owner 인증·비용 상한·다른 OS 수용을 뜻하지 않습니다.
 
 [문서 안내](docs/README.md) · [제품 원칙](docs/PRODUCT_VISION.md) · [로드맵](docs/product-completion/roadmap.md) · [아키텍처](docs/product-completion/architecture.md) · [English](README.en.md)
 

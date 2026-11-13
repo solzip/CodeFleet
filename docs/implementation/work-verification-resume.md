@@ -135,6 +135,10 @@ snapshot 대상에 민감 파일이 포함돼 안전한 취급을 확정할 수 
 
 `VERIFY_CURRENT`의 검증 실패는 잔여 예산이 있어도 STOPPED_FAILED다. 이 모드에는 수정할 소스 WorkItem이 없으므로 Repair를 제안하거나 같은 검증을 재시도하지 않는다. 수정을 원하면 확정 상태를 ABANDONED로 닫고 명시한 새 CHANGE 요청을 시작한다.
 
+검증 전용 수용 도구는 기존 `scripts/codex-live-acceptance.mjs`의 `prepare-verify → 별도 승인 run → Owner VERIFY → finalize` 경로를 사용한다. 새 fixture는 이미 구현된 고정 소스·불변 테스트와 깨끗한 Git 기준에서 시작한다. `verification-plan.json`은 manifest·runner·runtime, 모델 Turn 최대 1회/300초, 검증 승인 1회/30초, 소스 효과 없음·실패 후 Repair/재시도 없음·비용 UNKNOWN/USD 상한 미집행을 결합한다. 준비는 Task·모델 실행·효과 승인을 만들지 않는다. 제안 Turn은 소스 없는 고정 DAG와 현재 검증 리뷰만 준비하며, 보고된 도구 호출 외에도 실제 WorkProfile·기준·테스트 경로·AWAIT_TEST_REVIEW·시도 0건·효과 NONE·Run 0건을 확인한다. Fileset·셸 실행 이벤트·실제 기록 없는 성공 보고는 수락하지 않는다. 최종 완료는 현재 WorkReport와 기존 Local Judge에 더해 검증 전용 결합 및 소스·Git 무변경을 요구한다. 기존 CHANGE·새 세션 경로와 one-shot 기록은 유지하며 이 도구의 오프라인 성공은 별도 Host Live 수용을 대신하지 않는다.
+
+검증 전용 경로의 preflight/run은 모델 intent를 생성하기 전에 기존 Native Probe로 현재 실행 계정의 EXISTING_SOURCE·고정 HEAD·깨끗한 기준을 확인한다. 일반 Git에 전달된 safe.directory와 로그인 성공만으로 Native 준비를 판단하지 않는다. fixture 준비와 Host/MCP 실행 계정이 달라 Native Git이 거부하면 모델 호출 없이 차단하며, 기존 제한 환경·Git 소유권 gate를 완화하거나 자동으로 실행 계정을 전환하지 않는다. 이 추가 사전 점검은 소스 무변경 검증 경로에 한정한다. 이미 적용된 후보가 있는 기존 새 세션 경로의 체크포인트·현재 소스 결합 검사를 깨끗한 Git 요구로 대체하지 않는다.
+
 CHANGE의 고정 DAG는 `implement:local-edit` → `verify:local-verification`이다. implement가 허용 소스 전부를 소유하고 verify는 파일을 소유하지 않는다. VERIFY_CURRENT는 의존성 없는 `verify:local-verification` 하나다. 승인 종류와 Capability는 기존 kind에서 도출하며 모델이 지정하지 않는다. 다른 item ID·kind·의존성·소유권을 제안하면 거부한다. 원요청 해석은 Host가 하되 시스템이 이 고정 구조를 준비한다.
 
 ### 사용자가 실제로 수행하는 일

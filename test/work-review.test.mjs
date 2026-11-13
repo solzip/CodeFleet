@@ -102,8 +102,18 @@ test('fresh-process recovery refuses stale completion and damaged evidence',asyn
   assert.equal(workList(f.store,f.repo).executionGranted,false);
 });
 test('work VERIFY_CURRENT failure stops without repair',async t=>{
-  const f=await fixture(t,'VERIFY_CURRENT');assert.equal((await f.verify()).execution.status,'LOCAL_FAILED');
-  assert.equal((await workReport(f.store,f.id)).phase,'STOPPED_FAILED');await assert.rejects(f.propose(),/UNSUPPORTED/);
+  const f=await fixture(t,'VERIFY_CURRENT'),source=await readFile(path.join(f.repo,'src/app.mjs'),'utf8');
+  const failed=await f.verify();assert.equal(failed.execution.status,'LOCAL_FAILED');
+  const report=await workReport(f.store,f.id);assert.equal(report.phase,'STOPPED_FAILED');
+  assert.equal(report.budget.attemptsUsed,1);assert.equal(report.budget.repairUsed,0);
+  assert.ok(report.evidenceRefs.includes(failed.execution.evidenceRef));
+  const events=f.store.events(f.id),runs=f.store.list();
+  await assert.rejects(f.propose(),/UNSUPPORTED/);
+  const retry=await prepareNativeLocalReview(f.store,f.id,{request:f.request});
+  assert.equal(retry.action,'HUMAN_HANDOFF');assert.equal(retry.reason,'FAILURE_REVIEW_REQUIRED_NO_AUTOMATIC_RETRY');
+  assert.equal(retry.reviewRef,undefined);assert.equal(retry.snapshot.budget.retryAllowed,false);
+  assert.deepEqual(f.store.events(f.id),events);assert.deepEqual(f.store.list(),runs);
+  assert.equal(await readFile(path.join(f.repo,'src/app.mjs'),'utf8'),source);
 });
 test('work stale consent after pause/unpause, direct APIs and declined review refuse effects',async t=>{
   const f=await fixture(t);await f.propose();const r=await prepareNativeFilesReview(f.store,f.id,'implement');

@@ -51,7 +51,7 @@
     "test:work-review": "node --test test/work-review.test.mjs",
     "test:codex-mcp": "node --test test/codex-mcp.test.mjs",
     "test:codex-real-cli": "node scripts/codex-cli-client-acceptance.mjs",
-    "test:codex-live-acceptance": "node --test test/codex-live-acceptance.test.mjs",
+    "test:codex-live-acceptance": "node --test test/codex-live-acceptance.test.mjs test/codex-verify-current.test.mjs",
     "test:installed-goal-loop": "node --test test/installed-goal-loop.test.mjs",
     "test:todo-fixture": "node --test --test-reporter=tap test/fixtures/todo-calendar-vertical/test/todo.test.js test/fixtures/todo-calendar-vertical/test/calendar.test.js",
     "test:codex-todo-vertical": "node --test test/codex-todo-calendar-vertical.test.mjs",
