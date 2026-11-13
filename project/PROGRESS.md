@@ -1,9 +1,9 @@
 # 구현·검증 진행 현황
 
-갱신: 2026-11-13 · 현재 구현: `28ab9ec` 기준 승인 안내·완료 표시 개선(오프라인 검증 완료). 이전 통합 Local 수용 구현은 `96bdfc7`이며, 과거 기록은 당시 후보와 범위의 근거로 보존한다.
+갱신: 2026-11-13 · 현재 구현: `29dcd46` (`28ab9ec` 기준 승인 안내·완료 표시 개선, 오프라인 검증 완료). 이전 통합 Local 수용 구현은 `96bdfc7`이며, 과거 기록은 당시 후보와 범위의 근거로 보존한다.
 제품 목적은 [제품 원칙](../docs/PRODUCT_VISION.md), 구조는 [아키텍처](../docs/product-completion/architecture.md), 수락 조건과 순서는 [로드맵](../docs/product-completion/roadmap.md)에서 관리한다.
 
-## 현재 작업: 승인 안내·완료 표시 개선
+## 현재 결과: 승인 안내·완료 표시 개선 구현·오프라인 검증 완료
 
 사용자가 이전 통합 시험에서 드러난 승인 입력·만료 안내와 완료 후 상태 문구 개선을 요청했다. WorkItem 범위는 `src/product/work-owner.mjs`, `scripts/codex-live-acceptance.mjs`, 관련 두 회귀 파일과 기존 계약·Host 안내·이 상태 문서다. 기존 Owner/Native 승인·WorkReport·Task/Run/Event·완료 판정을 재사용하며 새 승인 전달 채널이나 상태 저장소는 만들지 않는다. 대문자 확인 단어·실제 TTY·기존 TTL·별도 효과 승인·완료 기준을 유지한다. 추가 Host 모델 실행, 기존 fixture/비용 승인 재사용·초기화, 공개 작업은 이번 구현 범위에 포함하지 않았다.
 
@@ -14,6 +14,10 @@ Owner 화면에 대문자 확인 단어, 입력할 별도 터미널과 채팅의
 검증 환경은 Windows x64 / PowerShell / Node v24.14.1이며 합성 TTY·합성 Codex와 임시 Local 프로젝트만 사용했다. `node --test test/work-review.test.mjs test/codex-live-acceptance.test.mjs test/codex-mcp.test.mjs`는 exit 0, 69 PASS였다. `npm.cmd run test:legacy` 327 PASS, `npm.cmd run test:host-core` 135 PASS, `npm.cmd run test:installed-goal-loop` 3 PASS, `npm.cmd run test:codex-mvp` 319 PASS / 4 SKIP(기존 Windows POSIX mode·symlink 조건)로 각각 exit 0이었다. pretest와 문서 layout 3건도 통과했다. 추가 CANCEL 부정 검사는 과거 Local pass 뒤 취소에도 완료를 표시하는 결함을 재현해 exit 1, 0 PASS / 1 FAIL이었다. 기존 WorkReport의 현재 phase를 공유 완료 조건에 추가하는 제한 수정 후 `node --test test/codex-live-acceptance.test.mjs test/codex-mcp.test.mjs`를 재실행해 PAUSE/CANCEL을 포함한 44 PASS / 0 FAIL / 0 SKIP, exit 0을 확인했다. 마지막 runner 수정의 영향 범위를 재검증했으며 앞선 기본 회귀 수치를 수정 후 전체 재실행으로 표현하지 않는다. `npm.cmd run posttest`는 Markdown 37개·링크 240개·인용 4건·선언 사실 42건을 검사해 exit 0이었고, `git diff --check`도 exit 0이다. 커버리지·anchor 기준선은 변경하지 않았다.
 
 이번 후보의 실제 Host Live·Docker Protected 검증은 NOT_RUN이다. 이전 `96bdfc7` Live 수용을 새 후보의 수용으로 자동 승계하지 않고, 기존 one-shot fixture·예산·비용 승인·DB를 보존한다.
+
+구현·회귀·계약·Host 안내·진행 현황은 `29dcd46`에 커밋했다. 사용자가 후속 문서 정리와 push를 승인했다. 공개 대상은 소스·테스트·정제된 문서이며 기존 비공개 실행 기록은 포함하지 않는다. 계약과 Host 안내에는 현재 동작을 반영했으며, 로드맵은 수락 조건을 유지하고 실제 완료/미검증 상태는 이 문서에서 관리한다.
+
+다음 우선순위는 단일 Codex 경로의 남은 VERIFY_CURRENT·실패/Repair·미해결 종료 시나리오에서 실행 범위·고정 검증·중단 기준·예산을 먼저 준비하는 것이다. 실제 Compaction은 별도 관측이 필요하다. 새 모델 Turn과 Owner 효과는 각각 해당 승인 경계를 따라야 하며 기존 one-shot 승인으로 실행하지 않는다. Claude·Protected·macOS/Linux·6쌍 가치 비교와 전체 제품 수용은 미완료다.
 
 ## 이전 수용 근거: Codex 새 세션 통합 Local 완료 (`96bdfc7`)
 
@@ -37,7 +41,7 @@ Owner 화면에 대문자 확인 단어, 입력할 별도 터미널과 채팅의
 
 `npm.cmd run test:codex-mvp` 최초 실행은 exit 1, 318 PASS / 1 FAIL / 4 SKIP이었다. 실패한 `delivered-status` 시험은 `afe4cbe`와 동일한 경로에서 가짜 Store의 `db` 누락으로 공통 Work guard가 중단된 것이다. 제품 guard나 기존 단언을 완화하지 않고 시험 seam에 실제 임시 Store DB를 연결했다. 해당 파일 재검증은 exit 0, 8 PASS / 0 FAIL / 0 SKIP, 전체 동일 명령 재검증은 exit 0, 319 PASS / 0 FAIL / 4 SKIP이었다. 제외 4건은 Windows에서 비이식적인 POSIX 실행 비트와 두 predecessor symlink 경계 시험이다. `npm.cmd run posttest`는 exit 0, Markdown 37개·링크 236개·인용 4개·선언 사실 42건 오류 0이며 `git diff --check`도 exit 0이다. 기존 coverage/anchor 기준선은 변경하지 않았다. 전체 Docker/보호 보안 회귀는 NOT_RUN이며 위 기본 회귀를 보호 수용으로 승격하지 않는다.
 
-이 통합 시나리오의 소스·재개·검증·Local 완료 조건은 충족했다. 남은 우선 개선은 위 승인 전달·입력/만료 안내와 완료 후 상태 문구다. 현재 runner와 runtime은 Live 후보 결합을 보존하므로 후속 변경은 새 후보로 오프라인 검증하고, 이 과거 결과를 새 후보의 Live 수용으로 자동 승계하지 않는다. 실제 Compaction, VERIFY_CURRENT·실패/Repair·미해결 종료의 별도 Host 실증, Claude·Protected·macOS/Linux·6쌍 가치 비교는 여전히 미검증이며 추가 모델 실행은 새 범위와 별도 승인이 필요하다.
+이 통합 시나리오의 소스·재개·검증·Local 완료 조건은 충족했다. 당시 후속 과제였던 입력/만료 안내와 완료 후 상태 문구는 이후 `29dcd46`에서 구현·오프라인 검증했다. 채팅 승인을 Owner TTY로 전달하는 기능은 추가하지 않았다. 과거 fixture의 runner/runtime 결합을 보존하며 이 결과를 새 후보의 Live 수용으로 자동 승계하지 않는다. 실제 Compaction, VERIFY_CURRENT·실패/Repair·미해결 종료의 별도 Host 실증, Claude·Protected·macOS/Linux·6쌍 가치 비교는 여전히 미검증이며 추가 모델 실행은 새 범위와 별도 승인이 필요하다.
 
 공개 전 양언어 README·Host 안내·로드맵·아키텍처를 위 선택된 수용 범위와 일치시켰다. 문서 배치 검사는 exit 0, 3 PASS / 0 FAIL / 0 SKIP이고, 갱신 후 `npm.cmd run posttest`는 exit 0, Markdown 37개·링크 240개·인용 4개·선언 사실 42건 오류 0이었다. `git diff --check`도 exit 0이다. 이 공개 작업은 추가 Live 실행이나 runtime 변경을 포함하지 않으며 기존 비공개 fixture·비용 승인·실행 DB는 Git에 포함하지 않는다.
 
