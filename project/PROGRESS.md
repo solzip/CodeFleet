@@ -1,11 +1,11 @@
 # 구현·검증 진행 현황
 
-갱신: 2026-11-13 · 현재 기준: `afe4cbe` + 미커밋 새 세션 수용 도구 후보. 이전 구현 후보 `875182f` (`b3f8b985a903fd255983da01d6f284df3dea14aa` 기준 구현)의 기록은 당시 범위의 근거로 보존한다.
+갱신: 2026-11-13 · 현재 구현: `96bdfc7` (`afe4cbe` 기준 새 세션 수용 도구와 회귀). 이전 구현 후보 `875182f` (`b3f8b985a903fd255983da01d6f284df3dea14aa` 기준 구현)의 기록은 당시 범위의 근거로 보존한다.
 제품 목적은 [제품 원칙](../docs/PRODUCT_VISION.md), 구조는 [아키텍처](../docs/product-completion/architecture.md), 수락 조건과 순서는 [로드맵](../docs/product-completion/roadmap.md)에서 관리한다.
 
 ## 현재 결과: Codex 새 세션 통합 Local 수용 완료
 
-기준은 `afe4cbe`와 아래 미커밋 재개 회귀 후보다. 기존 정상 CHANGE 수용과 one-shot/비용 승인 기록은 재실행·재사용·초기화하지 않았다. 준비 이후 사용자가 기능 단위 통합 검증 진행을 요청하여, 동일한 새 Task의 제안 → Owner 소스 적용 → 새 세션 재개 → Owner 검증 → Local 완료를 하나의 수용 흐름으로 관측했다. 최종 `finalize`는 exit 0, `CODEX_TURN_OBSERVED_AND_OBJECTIVE_COMPLETE_LOCAL` / reasons 0건 / `currentTreeComplete=true`였다. 이는 선택한 단일 Codex 경로의 감독형 Local 수용이며 전체 제품·Protected·실제 Compaction 수용이 아니다.
+구현·회귀·문서는 `96bdfc7`에 커밋했으며 작업 기준은 `afe4cbe`다. 기존 정상 CHANGE 수용과 one-shot/비용 승인 기록은 재실행·재사용·초기화하지 않았다. 준비 이후 사용자가 기능 단위 통합 검증 진행을 요청하여, 동일한 새 Task의 제안 → Owner 소스 적용 → 새 세션 재개 → Owner 검증 → Local 완료를 하나의 수용 흐름으로 관측했다. 최종 `finalize`는 exit 0, `CODEX_TURN_OBSERVED_AND_OBJECTIVE_COMPLETE_LOCAL` / reasons 0건 / `currentTreeComplete=true`였다. 이는 선택한 단일 Codex 경로의 감독형 Local 수용이며 전체 제품·Protected·실제 Compaction 수용이 아니다.
 
 새 fixture `a08a006e`의 첫 proposal-only Codex CLI 0.167.0 Turn은 별도 승인된 실행으로 exit 0, `CODEX_TURN_OBSERVED_AWAIT_OWNER_REVIEW`였다. 2026-11-13 06:47:59~06:48:49 UTC에 Thread 1개·Turn 시작/완료 각 1회·실패 0회가 관측됐으며 필수 MCP와 중간 상태 조회가 모두 성공했다. Provider 보고 토큰은 input 214,231 / output 1,138이고 금액·잔여 한도는 UNKNOWN이다. 모델은 프로젝트 소스와 테스트를 변경하지 않았다. Task `task-d21b395a-af22-4c1a-9f61-adbfd36053e7`는 이때 revision 6, `implement=FILESET_PROPOSED`, `verify=PENDING_VERIFICATION`이었으며 아래 후속 효과·검증까지 같은 Task로 연결했다.
 
@@ -26,6 +26,8 @@
 `npm.cmd run test:codex-mvp` 최초 실행은 exit 1, 318 PASS / 1 FAIL / 4 SKIP이었다. 실패한 `delivered-status` 시험은 `afe4cbe`와 동일한 경로에서 가짜 Store의 `db` 누락으로 공통 Work guard가 중단된 것이다. 제품 guard나 기존 단언을 완화하지 않고 시험 seam에 실제 임시 Store DB를 연결했다. 해당 파일 재검증은 exit 0, 8 PASS / 0 FAIL / 0 SKIP, 전체 동일 명령 재검증은 exit 0, 319 PASS / 0 FAIL / 4 SKIP이었다. 제외 4건은 Windows에서 비이식적인 POSIX 실행 비트와 두 predecessor symlink 경계 시험이다. `npm.cmd run posttest`는 exit 0, Markdown 37개·링크 236개·인용 4개·선언 사실 42건 오류 0이며 `git diff --check`도 exit 0이다. 기존 coverage/anchor 기준선은 변경하지 않았다. 전체 Docker/보호 보안 회귀는 NOT_RUN이며 위 기본 회귀를 보호 수용으로 승격하지 않는다.
 
 이 통합 시나리오의 소스·재개·검증·Local 완료 조건은 충족했다. 남은 우선 개선은 위 승인 전달·입력/만료 안내와 완료 후 상태 문구다. 현재 runner와 runtime은 Live 후보 결합을 보존하므로 후속 변경은 새 후보로 오프라인 검증하고, 이 과거 결과를 새 후보의 Live 수용으로 자동 승계하지 않는다. 실제 Compaction, VERIFY_CURRENT·실패/Repair·미해결 종료의 별도 Host 실증, Claude·Protected·macOS/Linux·6쌍 가치 비교는 여전히 미검증이며 추가 모델 실행은 새 범위와 별도 승인이 필요하다.
+
+공개 전 양언어 README·Host 안내·로드맵·아키텍처를 위 선택된 수용 범위와 일치시켰다. 문서 배치 검사는 exit 0, 3 PASS / 0 FAIL / 0 SKIP이고, 갱신 후 `npm.cmd run posttest`는 exit 0, Markdown 37개·링크 240개·인용 4개·선언 사실 42건 오류 0이었다. `git diff --check`도 exit 0이다. 이 공개 작업은 추가 Live 실행이나 runtime 변경을 포함하지 않으며 기존 비공개 fixture·비용 승인·실행 DB는 Git에 포함하지 않는다.
 
 ## 재개 안전성 회귀 근거
 
