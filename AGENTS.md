@@ -12,10 +12,10 @@ keys to perform the normal Host workflow.
 | --- | --- |
 | [Product principles](docs/PRODUCT_VISION.md) | Product purpose and invariants |
 | [Architecture](docs/product-completion/architecture.md) | Current structure, responsibility boundaries and design limits |
-| [Progress](docs/product-completion/progress.md) | Implemented, verified, blocked and unverified scope |
+| [Progress](project/PROGRESS.md) | Implemented, verified, blocked and unverified scope |
 | [Roadmap](docs/product-completion/roadmap.md) | Dependencies and acceptance criteria for next work |
-| [Implementation contracts](docs/implementation/) | Detailed contracts for the selected path |
-| [Working rules](CLAUDE.md) and [recording conventions](docs/CONVENTIONS.md) | Shared verification, publication and evidence discipline |
+| [Implementation contracts](docs/implementation) | Detailed contracts for the selected path |
+| [Working rules](CLAUDE.md) and [recording conventions](CONTRIBUTING.md) | Shared verification, publication and evidence discipline |
 
 Check Git status, branch, target baseline and relevant instructions before edits.
 Preserve staged, unstaged and untracked work, other worktrees and existing run

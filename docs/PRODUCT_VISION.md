@@ -2,7 +2,7 @@
 
 CodeFleet은 Codex CLI·Claude Code 안에서 사용하는 **Host-Native AI 개발 오케스트레이션 확장 도구**다. 사용자가 자연어로 표현한 목표를 검토 가능한 작업으로 만들고, 허용된 실행과 독립적인 완료 판정을 연결한다. 신규 프로젝트 Bootstrap과 기존 프로젝트 개선을 모두 제품의 목표로 둔다.
 
-이 문서는 유지할 제품 원칙을 정의한다. 현재 구조는 [공식 아키텍처](product-completion/architecture.md), 구현·검증 범위는 [진행 현황](product-completion/progress.md), 다음 작업과 완료 기준은 [로드맵](product-completion/roadmap.md)이 관리한다. 제품 원칙에 포함됐다는 사실은 구현 완료를 뜻하지 않는다.
+이 문서는 유지할 제품 원칙을 정의한다. 현재 구조는 [공식 아키텍처](product-completion/architecture.md), 구현·검증 범위는 [진행 현황](../project/PROGRESS.md), 다음 작업과 완료 기준은 [로드맵](product-completion/roadmap.md)이 관리한다. 제품 원칙에 포함됐다는 사실은 구현 완료를 뜻하지 않는다.
 
 ## 핵심 사용자 경험
 
@@ -16,7 +16,7 @@ CodeFleet은 Codex CLI·Claude Code 안에서 사용하는 **Host-Native AI 개�
 | UX-04 | “다음 날 이어서 해 줘” | 저장된 목표·계약·완료·미완료 작업·승인·예산·증거와 실제 파일 상태를 대조해 재개한다. 사용자가 전체 맥락을 다시 작성하지 않아도 현재 상태와 다음 행동을 알 수 있게 한다. |
 | UX-05 | “무엇이 끝났는지 보여줘” | 실제 대상에 반영된 변경과 완료 기준별 검증 결과·미실행 항목·남은 한계를 함께 제시한다. 검증이 부족한 부분 완료·차단·취소를 성공으로 표시하지 않는다. |
 
-이 표는 목표 사용자 경험이며 현재 기능의 제공·수용 완료 선언이 아니다. ID별 수락 조건은 [로드맵](product-completion/roadmap.md#사용자-경험-수락-기준), 현재 구현과 검증 수준은 [진행 현황](product-completion/progress.md#사용자-경험별-진행도)에 둔다.
+이 표는 목표 사용자 경험이며 현재 기능의 제공·수용 완료 선언이 아니다. ID별 수락 조건은 [로드맵](product-completion/roadmap.md#사용자-경험-수락-기준), 현재 구현과 검증 수준은 [진행 현황](../project/PROGRESS.md#사용자-경험별-진행도)에 둔다.
 
 ### 사용자와 시스템의 역할
 
@@ -34,7 +34,7 @@ CodeFleet은 Codex CLI·Claude Code 안에서 사용하는 **Host-Native AI 개�
 
 기존 Host의 모델·인증·세션과 허용된 도구·Agent/Subagent 기능을 우선 활용한다. CodeFleet은 별도의 Agent 엔진이나 실행 플랫폼을 만드는 것이 아니라 기존 Host에 작업 조정과 검증 규율을 연결한다. 별도의 모델 로그인이나 세션 복제를 기본 경로로 요구하지 않는다. Host 간 세션 이식이나 인증 토큰 추출을 전제로 하지 않으며, 직접 모델 API는 선택적 연동이다.
 
-기본 계획·분석·Draft·Workflow/DAG 사용에 Docker·WSL·별도 OS 계정·직접 모델 API Key를 요구하지 않는다. 현재 로컬 준비 환경과 설치 방법은 [Host Core 안내](product-completion/host-core-guide.md)를 따른다. 보호된 실행에 필요한 조건은 해당 Backend와 계약의 요구 사항으로 구분한다.
+기본 계획·분석·Draft·Workflow/DAG 사용에 Docker·WSL·별도 OS 계정·직접 모델 API Key를 요구하지 않는다. 현재 로컬 준비 환경과 설치 방법은 [Host Core 안내](../guides/host-core-guide.md)를 따른다. 보호된 실행에 필요한 조건은 해당 Backend와 계약의 요구 사항으로 구분한다.
 
 ## 목표에서 실행 계약까지
 

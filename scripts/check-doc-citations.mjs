@@ -4,7 +4,7 @@
 // This is the third checker of the same family, and the reason it exists is the
 // second one's blind spot. check-links.mjs proves a link target exists;
 // check-doc-facts.mjs proves a declared number matches a measured one. A
-// judgment in docs/REGISTER.md is neither -- it is a path and a line number,
+// judgment in test/contracts/legacy/REGISTER.md is neither -- it is a path and a line number,
 // and nothing looked at it. Three of them had drifted, and one had already
 // drifted on the day the register was written:
 //
@@ -51,10 +51,10 @@ export const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)),
 export const LIVING_DOCS = new Set([
   "README.md",
   "README.en.md",
-  "docs/REGISTER.md",
-  "docs/INDEX.md",
-  "docs/CONVENTIONS.md",
-  "docs/archive/2026-08-13/ARCHIVE.md",
+  "test/contracts/legacy/REGISTER.md",
+  "test/contracts/legacy/INDEX.md",
+  "CONTRIBUTING.md",
+  "test/contracts/legacy/archive/2026-08-13/ARCHIVE.md",
   "docs/archive/2026-08-13/LESSONS.md",
   "docs/archive/2026-08-13/DESIGN-NOTES.md",
   "docs/archive/2026-08-13/ENVIRONMENT.md",

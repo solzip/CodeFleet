@@ -1,7 +1,7 @@
 // Reproductions for two defects found in the 2026-08-10 audit.
 //
 // These two are not unimplemented rules. Every other P0 from that audit has a
-// NOT_IMPLEMENTED entry in docs/rule-implementation-status.json, so the status
+// NOT_IMPLEMENTED entry in test/contracts/legacy/rule-implementation-status.json, so the status
 // file already says the code is not there. These two have no entry at all: the
 // code exists, is believed to work, and is broken. Nothing in the suite fails
 // because of them, which is exactly the problem this file fixes.

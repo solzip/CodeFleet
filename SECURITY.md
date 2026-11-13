@@ -1,6 +1,6 @@
 # Security reporting
 
-CodeFleet development builds and alpha packages are under development. They are not a security boundary against hostile operators or compromised local tools. Host-Native planning, supervised Local execution and the protected Container verifier have different guarantees; see the [current status](docs/product-completion/progress.md) and [backend contracts](docs/product-completion/host-core-guide.md).
+CodeFleet development builds and alpha packages are under development. They are not a security boundary against hostile operators or compromised local tools. Host-Native planning, supervised Local execution and the protected Container verifier have different guarantees; see the [current status](project/PROGRESS.md) and [backend contracts](guides/host-core-guide.md).
 
 Local verification runs explicitly approved commands with local user permissions. It does not provide OS isolation or Protected Evidence. The Container verifier requires its reviewed isolation and immutable verification inputs. Host Sandbox remains unverified. Local state and exported evidence may contain source and logs.
 

@@ -6,6 +6,10 @@
   "files": [
     "src/",
     "docs/",
+    "guides/",
+    "project/PROGRESS.md",
+    "test/contracts/legacy/",
+    "CONTRIBUTING.md",
     "examples/",
     "scripts/host-install.mjs",
     "scripts/codex-live-acceptance.mjs",

@@ -1,6 +1,6 @@
 # 문서 색인
 
-공개 문서 진입점은 [docs 안내](README.md)다. 현재 상태는 [진행 현황](product-completion/progress.md), 다음 수락 기준은 [로드맵](product-completion/roadmap.md)을 따른다.
+공개 문서 진입점은 [docs 안내](../../../docs/README.md)다. 현재 상태는 [진행 현황](../../../project/PROGRESS.md), 다음 수락 기준은 [로드맵](../../../docs/product-completion/roadmap.md)을 따른다.
 
 ## 과거 기록
 
@@ -8,7 +8,7 @@
 
 ## Legacy 검사에 필요한 보존본
 
-현재 트리의 역사 보존 Markdown은 1개다. <!-- fact: docs-indexed = 1 --> <!-- fact: docs-on-disk = 1 -->
+기존 archive/audits/runs 집계 계약에 해당하는 역사 보존 Markdown은 1개다. <!-- fact: docs-indexed = 1 --> <!-- fact: docs-on-disk = 1 -->
 
 | 문서 | 역할 |
 | --- | --- |

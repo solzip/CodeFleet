@@ -81,7 +81,7 @@ AB1 후속 [로컬 수정](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9
 > **[미확인] 27건은 미확인으로 종료됐다.** 확인하지 않은 것이며, 유효한지 아닌지에 대한
 > 근거가 없다. 해소된 것으로 읽지 마라 — 아무도 보지 않았다는 뜻이다.
 >
-> 종료 사유와 통계는 `docs/archive/2026-08-13/ARCHIVE.md`,
+> 종료 사유와 통계는 `test/contracts/legacy/archive/2026-08-13/ARCHIVE.md`,
 > 결함 유형은 `docs/archive/2026-08-13/LESSONS.md`.
 
 작성 기준: 2026-08-13, 커밋 `097681b` 이후. 번호 실측 최대값 **P0-16 / P1-61**.

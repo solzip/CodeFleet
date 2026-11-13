@@ -5,7 +5,7 @@
 | 작업 일시 | 2026-08-13 16:10 (KST) |
 | 대상 커밋 해시 | `cd353d19d22eba55ae108ce58edb421160146b94` |
 | 작업 유형 | **결정** (아카이브 동결. 코드 변경 없음) |
-| 선행 문서 | `docs/runs/2026-08-13/stranded-findings-triage.md`, `docs/REGISTER.md`, `docs/INDEX.md` |
+| 선행 문서 | `docs/runs/2026-08-13/stranded-findings-triage.md`, `test/contracts/legacy/REGISTER.md`, `test/contracts/legacy/INDEX.md` |
 | 번호 실측 최대값 | **P0-16 / P1-61** (동결 시점 기준, 신규 등재 없음) |
 
 이 문서는 CodeFleet 저장소를 닫으면서 **무엇이 사실이었는지**만 남긴다. 이번 작업에서 `src/`와 `test/`는 한 줄도 바뀌지 않았다.
@@ -16,7 +16,7 @@
 
 ### 결함 등재부
 
-`docs/REGISTER.md`의 표를 파싱해 센 값이다. `P0-17`(미사용 ID)은 결함이 아니므로 제외한다.
+`test/contracts/legacy/REGISTER.md`의 표를 파싱해 센 값이다. `P0-17`(미사용 ID)은 결함이 아니므로 제외한다.
 
 | 상태 | 건수 |
 | --- | --- |
@@ -55,7 +55,7 @@ $ npm test > /dev/null 2>&1; echo $?
 
 | 항목 | 값 |
 | --- | --- |
-| 테스트 | **324 통과 / 0 실패** <!-- fact: tests-passing = 324 --> <!-- fact: tests-failing = 0 --> *(동결 시점 257. 링크 체커 16건 — `runs/2026-08-13/link-checker-in-repo.md` — 과 산문 검사기 18건 — `runs/2026-08-13/prose-fact-check.md` — 이 뒤에 추가됐다. 이 줄은 273에서 멈춰 있었고 2026-08-14에 재측정해 고쳤다)* |
+| 현재 Legacy 회귀 테스트 | **327 통과 / 0 실패** <!-- fact: tests-passing = 327 --> <!-- fact: tests-failing = 0 --> *(동결 시점 257. 링크 체커 16건 — `runs/2026-08-13/link-checker-in-repo.md` — 과 산문 검사기 18건 — `runs/2026-08-13/prose-fact-check.md` — 이 뒤에 추가됐다. 이 줄은 273에서 멈춰 있었고 2026-08-14에 재측정해 고쳤다. 현재 수치는 문서 위치 회귀 3건 추가 후 재측정한 값이며 동결 시점의 실적을 바꾸지 않는다)* |
 | FINAL RULE | 83개 / 조건 줄 545개 | <!-- fact: rules-total = 83 --> <!-- fact: condition-lines = 545 -->
 | 조건 커버리지 | **345 (63.3%)** |
 | 주장(claims) | 352 | <!-- fact: claims-recorded = 352 -->
@@ -191,11 +191,11 @@ $ npm test > /dev/null 2>&1; echo $?
 | **결함 유형 정리** | `docs/archive/2026-08-13/LESSONS.md` | 판정된 50건을 유형 7개로 묶은 것([미확인] 27건은 분류하지 않았다). 새 프로젝트가 같은 유형을 반복하지 않게 하는 유일한 산출물 |
 | **설계 결과** | `docs/archive/2026-08-13/DESIGN-NOTES.md` | 이 프로젝트가 알아낸 백엔드 설계 결론 10건. 각각 구현 위치와 **검증 상태**(실행 검증 8 / 코드만 1 / 부분 검증 1)를 붙였다. 코드는 버리되 결론은 버리지 않는다 |
 | **환경 지식** | `docs/archive/2026-08-13/ENVIRONMENT.md` | Windows·git·spawn에서 실측된 사실. 코드를 버려도 환경은 그대로다 |
-| **작업 기록 규약** | `docs/CONVENTIONS.md` | 규칙 12개, 각각 그것이 필요해진 실제 사건과 함께 |
-| **정의 문서** | `docs/concept-foundation.md` | FINAL RULE 83개. **새 제품에서는 새로 작성되며, 이 파일은 아카이브 시점의 정의다** |
+| **작업 기록 규약** | `CONTRIBUTING.md` | 규칙 12개, 각각 그것이 필요해진 실제 사건과 함께 |
+| **정의 문서** | `test/contracts/legacy/concept-foundation.md` | FINAL RULE 83개. **새 제품에서는 새로 작성되며, 이 파일은 아카이브 시점의 정의다** |
 | **감사·실행 기록** | `docs/audits/`, `docs/runs/` | **52개 문서**(감사 36 · 실행 16). 판정의 근거가 전부 파일:라인으로 남아 있다. *동결 후 실행 기록 9건이 추가돼 43 → 52가 됐다 — `ci-first-run.md`, `readme-language-swap.md`, `link-audit-full.md`, `link-checker-in-repo.md`, `full-review-v2.md`, `prose-fact-check.md`, `2026-08-14/unchecked-27-adjudication.md`, `2026-08-14/citation-and-denominator-checks.md`, `2026-08-14/freeze-notice.md`.* **다만 2026-08-10 감사 7편의 인용은 그 대상 커밋(`70fa598`)이 2026-08-11 히스토리 재작성으로 사라져 대조할 수 없다** |
 | **문서 검사기 3종** | `scripts/check-links.mjs`, `scripts/check-doc-facts.mjs`, `scripts/check-doc-citations.mjs` | *동결 이후 추가.* 링크가 가리키는 곳이 실재하는지, 산문이 인용한 숫자가 아직 맞는지, **파일:라인 인용이 그 문서의 대상 커밋에서 여전히 그 코드를 가리키는지**를 `npm test`가 검사한다. 각각 실패 테스트를 갖는다. 세 번째 것은 살아 있는 문서의 인용 248건을 검사하고 **2026-08-10 감사의 인용 242건은 대상 커밋이 히스토리 재작성으로 사라져 검증 불가임을 보고한다** — `runs/2026-08-14/citation-and-denominator-checks.md` |
-| 결함 등재부 | `docs/REGISTER.md` | 동결 상태로 |
+| 결함 등재부 | `test/contracts/legacy/REGISTER.md` | 동결 상태로 |
 | 종료 전 README (한·영) | `docs/archive/2026-08-13/README.original.md`, `README.en.original.md` | 동작하는 제품으로서 이 프로젝트를 어떻게 설명했는지의 기록. 루트 README는 아카이브 표지로 교체됐다 |
 
 ### 폐기
@@ -205,7 +205,7 @@ $ npm test > /dev/null 2>&1; echo $?
 | `src/` 29파일 13,308줄 | 종료 사유 3-2가 구조에 관한 것이므로 재사용이 아니라 재설계 대상이다 |
 | `test/` 34파일 10,430줄 | 위 코드에 묶여 있다. 다만 **테스트가 잡아낸 실패 시나리오 자체는 `LESSONS.md`로 이관**된다 |
 | `.github/workflows/test.yml` | 작성 시점에는 미실행·미검증이었다. 푸시 후 실행됐고 양쪽 플랫폼에서 실패했으며(ubuntu 6건, windows 2건), **파일은 제거했다** — 아카이브에는 빨간 체크를 읽을 사람이 없다. 실패는 run id와 함께 `docs/runs/2026-08-13/ci-first-run.md`에 남는다 |
-| `docs/rule-coverage-baseline.json` | 폐기되는 테스트의 커버리지 기준선 |
+| `test/contracts/legacy/rule-coverage-baseline.json` | 폐기되는 테스트의 커버리지 기준선 |
 | `.codefleet/` 런타임 산출물 | 추적되지 않는다 |
 
 ### 이관도 폐기도 아닌 것
@@ -233,4 +233,4 @@ $ npm test > /dev/null 2>&1; echo $?
 - **오염 구간의 판정 6건** — `npm test`가 빨간 동안 "테스트 통과"를 근거로 내려진 판정들. 재판정하지 않았다
 - **미푸시** — `cd353d1` 시점 기준 로컬이 6커밋 앞섰고, 아카이브 커밋이 그 뒤에 더해졌다. origin/main에 반영되지 않은 상태로 남는다
 - **CI 워크플로** — 푸시 후 실행됐고 양쪽 플랫폼에서 실패했다(ubuntu 6건, windows 2건). 고치지 않고 **워크플로 파일을 제거**했다. 그 결과 종료 코드를 읽는 자동 소비자는 다시 0개이며, 후속 개발이 없으므로 감수한다. 상세는 `docs/runs/2026-08-13/ci-first-run.md`
-- **`docs/model/definition.md` 부재** — 종료 지시가 이 경로에 한 줄 추가를 지시했으나 **그 파일도 `docs/model/` 디렉터리도 존재하지 않는다.** 없는 파일을 만들지 않았다. 대신 `CLAUDE.md`가 "`docs/concept-foundation.md` — the design. FINAL RULEs are canonical"이라고 명시하는 근거로 그 파일을 정의 문서로 보고 한 줄을 추가했다. **이 대응은 추론이므로 여기 적어 둔다**
+- **`docs/model/definition.md` 부재** — 종료 지시가 이 경로에 한 줄 추가를 지시했으나 **그 파일도 `docs/model/` 디렉터리도 존재하지 않는다.** 없는 파일을 만들지 않았다. 대신 `CLAUDE.md`가 "`test/contracts/legacy/concept-foundation.md` — the design. FINAL RULEs are canonical"이라고 명시하는 근거로 그 파일을 정의 문서로 보고 한 줄을 추가했다. **이 대응은 추론이므로 여기 적어 둔다**

@@ -2,7 +2,7 @@
 
 CodeFleet extends the existing Codex CLI and Claude Code Host. Product boundaries
 are defined in the [architecture](../docs/product-completion/architecture.md);
-implementation and acceptance status are in [progress](../docs/product-completion/progress.md).
+implementation and acceptance status are in [progress](../project/PROGRESS.md).
 
 | Location | Responsibility |
 | --- | --- |
@@ -27,5 +27,5 @@ their separate acceptance levels.
 
 The large Legacy `run.ts` still combines planning, adapter launch, observation,
 policy and gate calculation. A structural extraction needs a scoped design and
-regression evidence. The [Legacy account](../docs/archive/2026-08-13/ARCHIVE.md)
+regression evidence. The [Legacy account](../test/contracts/legacy/archive/2026-08-13/ARCHIVE.md)
 preserves its original findings and measurements.

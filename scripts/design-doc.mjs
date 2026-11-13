@@ -8,11 +8,11 @@ import { fileURLToPath } from "node:url";
 
 export const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const COVERAGE_DIR = path.join(REPO_ROOT, ".rule-coverage");
-export const BASELINE_PATH = path.join(REPO_ROOT, "docs", "rule-coverage-baseline.json");
-export const STATUS_PATH = path.join(REPO_ROOT, "docs", "rule-implementation-status.json");
+export const BASELINE_PATH = path.join(REPO_ROOT, "test", "contracts", "legacy", "rule-coverage-baseline.json");
+export const STATUS_PATH = path.join(REPO_ROOT, "test", "contracts", "legacy", "rule-implementation-status.json");
 
 export async function readDesignDoc() {
-  const raw = await readFile(path.join(REPO_ROOT, "docs", "concept-foundation.md"), "utf8");
+  const raw = await readFile(path.join(REPO_ROOT, "test", "contracts", "legacy", "concept-foundation.md"), "utf8");
   // The working copy carries CRLF on Windows, so every \n below would miss.
   return raw.split("\r\n").join("\n");
 }

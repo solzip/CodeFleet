@@ -35,17 +35,17 @@
     },
     "IMPLEMENTATION_SLICING_MUST_PRESERVE_FINAL_BOUNDARIES": {
       "status": "NOT_CODE_VERIFIABLE",
-      "evidence": "docs/product-completion/roadmap.md",
+      "evidence": "test/contracts/legacy/alpha-roadmap.md",
       "detail": "a rule about how implementation slices are chosen, not about runtime behaviour. The current roadmap constrains each slice through ordered acceptance gates and verification evidence."
     },
     "MANUAL_SPINE_PASS_IS_EVIDENCE_CHECKLIST": {
       "status": "NOT_CODE_VERIFIABLE",
-      "evidence": "docs/spine-pass-2026-08-07.md",
+      "evidence": "test/contracts/legacy/spine-pass-2026-08-07.md",
       "detail": "a rule about how a manual verification pass is recorded. Its artifact is the dated pass document."
     },
     "V0_2_CODEX_SLICE_MUST_NOT_WEAKEN_FINAL_S2_CONTRACT": {
       "status": "NOT_CODE_VERIFIABLE",
-      "evidence": "docs/concept-foundation.md",
+      "evidence": "test/contracts/legacy/concept-foundation.md",
       "detail": "a constraint on what the v0.2 slice is allowed to change in the design, enforced by review of the design document rather than at runtime."
     }
   }

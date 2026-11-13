@@ -1,7 +1,7 @@
 # 구현·검증 진행 현황
 
-갱신: 2026-11-12 · 검토 기준: `3fdeeafe0fa4987c62b18d91b9fe85d136eed358` + 사용자 경험 문서화. 런타임과 기존 실행 계약·승인은 변경하지 않았다.
-제품 목적은 [제품 원칙](../PRODUCT_VISION.md), 구조는 [아키텍처](architecture.md), 수락 조건과 순서는 [로드맵](roadmap.md)에서 관리한다.
+갱신: 2026-11-13 · 검토 기준: `f7441d1551ce296b721ce102f315e7b03ba0ee67` + 문서 역할 분리. 런타임과 기존 실행 계약·승인은 변경하지 않았다.
+제품 목적은 [제품 원칙](../docs/PRODUCT_VISION.md), 구조는 [아키텍처](../docs/product-completion/architecture.md), 수락 조건과 순서는 [로드맵](../docs/product-completion/roadmap.md)에서 관리한다.
 
 ## 현재 상태 요약
 
@@ -11,7 +11,7 @@ Local 완료는 `COMPLETE_LOCAL`이며 보호 검증은 `UNSATISFIED`다. 설치
 
 ## 사용자 경험별 진행도
 
-[제품 원칙](../PRODUCT_VISION.md#핵심-사용자-경험)의 기본 경험과 [로드맵의 수락 기준](roadmap.md#사용자-경험-수락-기준)을 대조한다. 아래는 기존 부품·시험 근거의 연결이며 새 사용자 경험 전체의 수용 완료 선언이 아니다. 이번 기준 명시의 상태는 DOCUMENTED다.
+[제품 원칙](../docs/PRODUCT_VISION.md#핵심-사용자-경험)의 기본 경험과 [로드맵의 수락 기준](../docs/product-completion/roadmap.md#사용자-경험-수락-기준)을 대조한다. 아래는 기존 부품·시험 근거의 연결이며 새 사용자 경험 전체의 수용 완료 선언이 아니다. 이번 기준 명시의 상태는 DOCUMENTED다.
 
 | ID | 기존 구현·검증 근거 | 남은 사용자 경험 수용 |
 | --- | --- | --- |
@@ -21,7 +21,7 @@ Local 완료는 `COMPLETE_LOCAL`이며 보호 검증은 `UNSATISFIED`다. 설치
 | UX-04 다음 세션 재개 | 영속 Goal 탐색·설치 CLI 재발견·프로세스 복구와 소스 변경 감지 시험 통과 | 실제 Host 새 세션/Compaction 뒤 재설명 없는 재개, 지침 전달·미확정 인계의 독립 관측은 미검증 |
 | UX-05 결과·검증·한계 | Local 완료·현재 대상 재관측·변조 거부 시험 근거 있음 | 실제 작업 결과를 완료 기준별로 사용자에게 전달하는 전체 수용, 브라우저·주관적 기준·Protected 근거는 미완료 |
 
-구현 책임은 [아키텍처](architecture.md#사용자-경험과-구현-책임), 개별 시험 결과와 한계는 아래 검증 표에서 확인한다. 문서에 추가한 수락 시나리오를 기존 시험 결과로 소급 통과시키지 않는다.
+구현 책임은 [아키텍처](../docs/product-completion/architecture.md#사용자-경험과-구현-책임), 개별 시험 결과와 한계는 아래 검증 표에서 확인한다. 문서에 추가한 수락 시나리오를 기존 시험 결과로 소급 통과시키지 않는다.
 
 ## 기능별 상태
 
@@ -36,7 +36,7 @@ Local 완료는 `COMPLETE_LOCAL`이며 보호 검증은 `UNSATISFIED`다. 설치
 | 검증 Backend | Local·Container 경로 구현 | Host Sandbox NOT_VERIFIED, Local 결과로 Protected 수용 불가 |
 | 플랫폼·실사용·출시 | 제한된 Windows 관측과 과거 Linux 시험 이력 있음 | 전체 OS 수용·브라우저 E2E·외부 파일럿·생산성/비용 개선·M5 미완료 |
 
-구현 근거: [Core 안내](host-core-guide.md), [Local 수용 계약](../implementation/local-only-acceptance.md), [복구 계약](../implementation/objective-recovery.md).
+구현 근거: [Core 안내](../guides/host-core-guide.md), [Local 수용 계약](../docs/implementation/local-only-acceptance.md), [복구 계약](../docs/implementation/objective-recovery.md).
 과거 관측: [감독형 Local 수용](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-28/public-existing-local-v2.md), [Repair 연결](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-30/supervised-adoption-repair.md), [인계 신뢰 경계](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-30/undelivered-handoff-recovery-v2.md), [협업 비교](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-28/manager-proposal-handoff.md).
 
 ## 최근 검증
@@ -69,8 +69,12 @@ Local 완료는 `COMPLETE_LOCAL`이며 보호 검증은 `UNSATISFIED`다. 설치
 
 ## 기록 관리
 
-이 문서는 현재 상태를 갱신하며 작업 일지를 누적하지 않는다. 과거 기록은 [고정 커밋 안내](../INDEX.md)에서 조회한다. 제품 상태 변경에는 계약·후보·환경과 검증 근거를 연결하고, 문서 정리는 DOCUMENTED로 기록한다.
+이 문서는 현재 상태를 갱신하며 작업 일지를 누적하지 않는다. 과거 기록은 [고정 커밋 안내](../test/contracts/legacy/INDEX.md)에서 조회한다. 제품 상태 변경에는 계약·후보·환경과 검증 근거를 연결하고, 문서 정리는 DOCUMENTED로 기록한다.
 
-이번 변경은 제품 원칙을 뼈대로 UX-01~UX-05의 사용자 경험·수락 기준·구현 책임·현재 검증 범위를 기존 공식 문서에 연결한 문서화다. 선행 문서는 제품 원칙·로드맵·아키텍처이며 신규 결함 ID·런타임 변경·기능 수용 승격은 없다. 이전 저장소 정리와 실패·제외를 포함한 시험 기록은 Git 이력에 보존한다. 다음 작업과 미충족 조건은 위 실사용 시험과 상태표를 따른다.
+이번 변경은 DOCUMENTED다. `docs/`는 현재 설계·수락 계약 14개로 줄이고, 사용 안내는 `guides/`, 현재 상태는 이 문서, 검사에 필요한 Legacy/Alpha 계약은 `test/contracts/legacy/`로 이전했다. 중복 제품 안내를 제거하고 Host 준비 실행 이력은 고정 Git 이력으로 연결했다. 기록 규칙은 `CONTRIBUTING.md`와 `CLAUDE.md`에 통합해 `docs/audits`·`docs/runs` 및 매 작업 INDEX/REGISTER 갱신을 중단했다. 신규 결함 ID·런타임 변경·기능 수용 승격은 없다. 이전 UX 문서화·실행 실패·제외 기록은 Git 이력에 보존한다.
 
-이번 문서 검증: Windows / PowerShell / Node v24.14.1에서 `npm.cmd run posttest`와 `git diff --check` 각각 exit 0. Markdown 33개·링크 202개에서 대상·대소문자·anchor 오류 0, 선언 사실 42건 불일치 0. 공식 문서의 UX 표 네 개에 UX-01~UX-05가 중복·누락 없이 연결되고 코드 블록이 닫혀 있음을 확인했다. 기존 커버리지·anchor 기준선은 유지했고 런타임·Host Live 시험은 이번 문서 변경에서 재실행하지 않았다.
+이번 검증 환경은 Windows / PowerShell / Node v24.14.1이다. `npm.cmd run pretest` exit 0 후 `npm.cmd run test:legacy` 최종 exit 0, 327 PASS / 0 FAIL. 새 문서 위치 테스트의 반환값 해석 오류로 최초 실행은 exit 1, 326 PASS / 1 FAIL이었으며 해당 테스트만 수정한 뒤 전체를 재실행했다. 경로·비대상 파일 거부 회귀 3건을 추가했고 FINAL RULE 본문·커버리지 기준선과 anchor 임계값은 기준 커밋과 대조해 보존을 확인했다. `npm.cmd run posttest`는 이전한 anchor 참조 1건 및 새 테스트 수를 반영하지 않은 선언 3건을 발견해 실패했고, 참조와 실제 측정값을 수정한 뒤 exit 0을 확인했다. 기존 동결 시점 수치는 변경하지 않았다.
+
+`npm.cmd pack --dry-run --json`은 기본 캐시 접근 EPERM으로 실패한 뒤 승인된 재실행에서 exit 0, 이전한 안내·상태·보존 계약의 패키지 포함을 확인했다. 패키지를 발행하거나 설치하지 않았다. Host Live·전체 Alpha/보호 검증·macOS/Linux 검증은 이번 정리에서 NOT_RUN이며 기존 미수용 상태를 유지한다. 다음 작업과 미충족 조건은 위 실사용 시험과 상태표를 따른다.
+
+`npm.cmd run test:host-core`는 exit 0, 135 PASS / 0 FAIL / 0 SKIP이다. `npm.cmd run posttest`는 저장소 Markdown 36개와 링크·인용·선언 사실 42건을 검사해 오류 없이 종료했다. `git diff --check`도 exit 0이다. 이 결과는 문서·검사 자산 이전에 대한 기본 회귀이며 전체 보안·보호 검증이나 실제 Host 기능 수용을 의미하지 않는다.

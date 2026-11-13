@@ -2,7 +2,7 @@
 
 Codex CLI·Claude Code의 기존 모델·인증·세션을 활용하는 **Host-Native 개발 오케스트레이션 확장 도구**입니다. 자연어 목표를 검토 가능한 작업으로 만들고, 승인된 변경과 검증·복구·완료 판정을 연결합니다. 단일 Agent가 기본이며 필요한 경우 Host의 Agent/Subagent 기능을 활용합니다.
 
-**현재는 개발·수용 검증 단계입니다.** 계획·검토, 감독형 Local 변경, 별도 프로세스 복구를 구현했습니다. 제한된 Windows Codex 감독형 실행 관측은 있지만 공개 인증 위임·보호 실행·전체 OS 수용·외부 사용자 생산성은 아직 검증이 끝나지 않았습니다. 최신 결과와 한계는 [진행 현황](docs/product-completion/progress.md)을 따릅니다.
+**현재는 개발·수용 검증 단계입니다.** 계획·검토, 감독형 Local 변경, 별도 프로세스 복구를 구현했습니다. 제한된 Windows Codex 감독형 실행 관측은 있지만 공개 인증 위임·보호 실행·전체 OS 수용·외부 사용자 생산성은 아직 검증이 끝나지 않았습니다. 최신 결과와 한계는 [진행 현황](project/PROGRESS.md)을 따릅니다.
 
 [문서 안내](docs/README.md) · [제품 원칙](docs/PRODUCT_VISION.md) · [로드맵](docs/product-completion/roadmap.md) · [아키텍처](docs/product-completion/architecture.md) · [English](README.en.md)
 
@@ -41,7 +41,7 @@ node scripts/host-install.mjs install claude PROJECT
 | Codex CLI | `.agents/skills/codefleet/` | `$codefleet` |
 | Claude Code | `.claude/skills/codefleet/` | `/codefleet` |
 
-설치기는 Skill·런타임 snapshot·라이선스를 추가합니다. 기존 설치는 덮어쓰지 않으며 자동 업데이트되지 않습니다. 관리 명령은 `status`, `disable`, `enable`, `remove`입니다. 설치·발견과 실제 모델 수행은 별도입니다. [설치·사용 안내](docs/product-completion/host-native-guide.md)를 확인하세요.
+설치기는 Skill·런타임 snapshot·라이선스를 추가합니다. 기존 설치는 덮어쓰지 않으며 자동 업데이트되지 않습니다. 관리 명령은 `status`, `disable`, `enable`, `remove`입니다. 설치·발견과 실제 모델 수행은 별도입니다. [설치·사용 안내](guides/host-native-guide.md)를 확인하세요.
 
 처음에는 작은 작업의 계획만 검토하세요.
 
@@ -56,7 +56,7 @@ node scripts/host-install.mjs install claude PROJECT
 node src/alpha/cli.mjs --state STATE host codex plan "Fix duplicate event handling" REPO
 ```
 
-후속 Draft·계약 검토·승인 요청은 [Core 안내](docs/product-completion/host-core-guide.md)를 따릅니다. 기존 프로젝트는 검토한 Git 기준선을, 신규 프로젝트는 Bootstrap 계약을 사용합니다. 인증정보나 세션을 복사하지 않습니다.
+후속 Draft·계약 검토·승인 요청은 [Core 안내](guides/host-core-guide.md)를 따릅니다. 기존 프로젝트는 검토한 Git 기준선을, 신규 프로젝트는 Bootstrap 계약을 사용합니다. 인증정보나 세션을 복사하지 않습니다.
 
 ## 검증 수준과 제한
 
@@ -64,7 +64,7 @@ Local Verification은 사용자가 신뢰한 정확한 명령을 로컬 권한�
 
 Container Verification은 Docker와 고정 검증 입력·격리 조건이 필요한 별도 Backend입니다. 해당 Backend가 필수인 계약은 Local 성공으로 대체하지 않습니다. Host Sandbox는 `NOT_VERIFIED`, 공개 인증 위임은 `PUBLIC_DELEGATION_BLOCKED`입니다. 완전 무인 Repair, Host Compaction과 장기 실행의 전체 수용, Multi-Agent의 시간·비용 이점은 미입증입니다.
 
-기존 Node·Java Alpha 경로는 [Alpha 안내](docs/product-completion/alpha-quickstart.md), Backend별 보장은 [Core 안내](docs/product-completion/host-core-guide.md)에서 확인합니다. main의 코드와 기존 공개 Alpha 패키지의 지원 범위는 같다고 가정하지 않습니다.
+기존 Node·Java Alpha 경로는 [Alpha 안내](guides/alpha-quickstart.md), Backend별 보장은 [Core 안내](guides/host-core-guide.md)에서 확인합니다. main의 코드와 기존 공개 Alpha 패키지의 지원 범위는 같다고 가정하지 않습니다.
 
 ## 개발·저장소 구조
 
@@ -92,7 +92,7 @@ npm run posttest
 <details>
 <summary>Legacy 자동 검사 수치</summary>
 
-동결된 등재부의 77건은 현재 제품의 미해결 결함 수가 아닙니다. <!-- fact: registered-findings = 77 --> [과거 기록](docs/INDEX.md)의 범위와 함께 읽습니다.
+동결된 등재부의 77건은 현재 제품의 미해결 결함 수가 아닙니다. <!-- fact: registered-findings = 77 --> [과거 기록](test/contracts/legacy/INDEX.md)의 범위와 함께 읽습니다.
 
 | 검사 대상 | 수치와 범위 |
 | --- | --- |
@@ -100,7 +100,7 @@ npm run posttest
 | 당시 해소 / 부분해소 | 25 / 8건 <!-- fact: findings-resolved = 25 --> <!-- fact: findings-partial = 8 --> |
 | 당시 재현 안 됨 / 미해소 | 1 / 15건 <!-- fact: findings-not-reproduced = 1 --> <!-- fact: findings-open = 15 --> |
 | 당시 수용된 한계 / 미확인 | 1 / 27건 <!-- fact: findings-accepted-limit = 1 --> <!-- fact: findings-unchecked = 27 --> |
-| Legacy 테스트 | 통과 324 / 실패 0 <!-- fact: tests-passing = 324 --> <!-- fact: tests-failing = 0 --> |
+| 현재 Legacy 테스트 | 통과 327 / 실패 0 <!-- fact: tests-passing = 327 --> <!-- fact: tests-failing = 0 --> |
 | 규칙 조건 인용 커버리지 | 545줄 중 345줄, 63.3%. 구현 완성률이 아님 <!-- fact: condition-lines = 545 --> <!-- fact: conditions-covered = 345 --> <!-- fact: coverage-percent = 63.3 --> |
 | 현재 트리의 감사·실행 기록 | 0편. 원본은 Git 이력에 보존 <!-- fact: audit-run-records = 0 --> |
 

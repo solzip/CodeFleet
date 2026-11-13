@@ -38,7 +38,7 @@ import { stripCode } from "./check-links.mjs";
 import { LIVING_DOCS } from "./check-doc-citations.mjs";
 
 export const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-export const ANCHOR_BASELINE_PATH = path.join(REPO_ROOT, "docs", "doc-anchor-baseline.json");
+export const ANCHOR_BASELINE_PATH = path.join(REPO_ROOT, "test", "contracts", "legacy", "doc-anchor-baseline.json");
 
 // ---------------------------------------------------------------------------
 // Declarations
@@ -218,11 +218,15 @@ async function readClaims() {
   return claims;
 }
 
-async function measureAll(root, files) {
-  const register = parseRegister(await readFile(path.join(root, "docs", "REGISTER.md"), "utf8"));
-  const indexRows = countIndexRows(await readFile(path.join(root, "docs", "INDEX.md"), "utf8"));
+export function historicalRecordFiles(files) {
+  return files.filter((f) => /^(?:docs\/(?:audits|runs|archive)|test\/contracts\/legacy\/archive)\//.test(f));
+}
 
-  const docs = files.filter((f) => /^docs\/(audits|runs|archive)\//.test(f));
+async function measureAll(root, files) {
+  const register = parseRegister(await readFile(path.join(root, "test", "contracts", "legacy", "REGISTER.md"), "utf8"));
+  const indexRows = countIndexRows(await readFile(path.join(root, "test", "contracts", "legacy", "INDEX.md"), "utf8"));
+
+  const docs = historicalRecordFiles(files);
   const auditRun = docs.filter((f) => /^docs\/(audits|runs)\//.test(f)).length;
 
   const measured = {

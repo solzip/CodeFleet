@@ -6,7 +6,7 @@ CodeFleet is a Host-Native AI development orchestration extension for Codex CLI
 and Claude Code, using the existing Host's models, authentication and session.
 [Product principles](docs/PRODUCT_VISION.md) define the product invariants;
 [architecture](docs/product-completion/architecture.md) owns current structure,
-[progress](docs/product-completion/progress.md) owns implementation and verification
+[progress](project/PROGRESS.md) owns implementation and verification
 status, and [roadmap](docs/product-completion/roadmap.md) owns next work and acceptance.
 The freeze notes below describe the legacy engine only.
 
@@ -157,8 +157,8 @@ status; no test command here grants Live execution or external-write approval.
 ## Where to start reading
 
 Start with the current product documents linked above and the
-[Host guide](docs/product-completion/host-native-guide.md) and
-[Core guide](docs/product-completion/host-core-guide.md).
+[Host guide](guides/host-native-guide.md) and
+[Core guide](guides/host-core-guide.md).
 
 The legacy engine was frozen on 2026-08-13. The map below describes that historical
 baseline, not the resumed product's work queue. Legacy FINAL RULEs remain the
@@ -166,18 +166,18 @@ machine-checked contract for that engine, not the current product architecture.
 
 ```
 README.md                             what this was, and what it actually measured
-docs/archive/2026-08-13/ARCHIVE.md    why it stopped; the source of every figure on the cover
-docs/INDEX.md                         every audit and run record, newest first
-docs/REGISTER.md                      the findings, frozen at 2026-08-13
-docs/concept-foundation.md            the design. FINAL RULEs are canonical
-docs/CONVENTIONS.md                   the recording rules, each with the incident that produced it
-docs/rule-implementation-status.json  why each unclaimed rule is unclaimed
+test/contracts/legacy/archive/2026-08-13/ARCHIVE.md    why it stopped; the source of every figure on the cover
+test/contracts/legacy/INDEX.md                         every audit and run record, newest first
+test/contracts/legacy/REGISTER.md                      the findings, frozen at 2026-08-13
+test/contracts/legacy/concept-foundation.md            the design. FINAL RULEs are canonical
+CONTRIBUTING.md                   the recording rules, each with the incident that produced it
+test/contracts/legacy/rule-implementation-status.json  why each unclaimed rule is unclaimed
 npm run coverage:uncovered            rules with unclaimed conditions, right now
 ```
 
 The obsolete 2026-08 design handoff and progress documents were removed during the
-2026-11-12 documentation consolidation. Use `docs/product-completion/progress.md` for
-current state and `docs/INDEX.md` for preserved historical evidence.
+2026-11-12 documentation consolidation. Use `project/PROGRESS.md` for
+current state and `test/contracts/legacy/INDEX.md` for preserved historical evidence.
 
 Never trust a count written in prose here. Run the command and read the number it prints.
 
@@ -191,7 +191,7 @@ A check that quantifies over a set must report what it scanned, not only its ver
 
 **Report the denominator, not only the numerator.** `check-doc-facts.mjs` said "34 declarations checked, 0 mismatches" and was read as "every number here is right" — while 533 numbers in the same documents carried no anchor and were never looked at. It now prints the ratio and the unchecked remainder. A checker that names only what it covered is making the claim its subject is not allowed to make.
 
-Naming an exposure does not stop it growing, so the ratio has a baseline the way rule coverage does — `npm run anchors:baseline`, `docs/doc-anchor-baseline.json`. It guards both directions: removing an anchor lowers `declared`, and adding an unanchored number to a living document raises `unchecked` while `declared` sits still. Guarding only the first lets the exposure grow forever as long as nobody deletes anything.
+Naming an exposure does not stop it growing, so the ratio has a baseline the way rule coverage does — `npm run anchors:baseline`, `test/contracts/legacy/doc-anchor-baseline.json`. It guards both directions: removing an anchor lowers `declared`, and adding an unanchored number to a living document raises `unchecked` while `declared` sits still. Guarding only the first lets the exposure grow forever as long as nobody deletes anything.
 
 When one number would blend two different things, split it. Mixing "no code exists" with "code exists but was never labelled" made the remaining work look larger than it was.
 
@@ -217,7 +217,7 @@ This matters because it already went wrong: a regex sweep missed `assert.rejects
 
 ### The design fixes the shape; the implementation conforms
 
-For the legacy engine, when `docs/concept-foundation.md` already fixes field names, phase order, or matcher syntax, match it rather than inventing a variant. The HarnessWorkspaceSnapshot field grouping was written differently once and had to be rewritten. Current Host architecture is maintained in `docs/product-completion/architecture.md`; detailed implementation contracts remain under `docs/implementation/`.
+For the legacy engine, when `test/contracts/legacy/concept-foundation.md` already fixes field names, phase order, or matcher syntax, match it rather than inventing a variant. The HarnessWorkspaceSnapshot field grouping was written differently once and had to be rewritten. Current Host architecture is maintained in `docs/product-completion/architecture.md`; detailed implementation contracts remain under `docs/implementation/`.
 
 If the design is wrong, change the design first and say so. Do not diverge silently.
 
@@ -234,7 +234,7 @@ A provider claim is neither. It is recorded at `PROVIDER_REPORTED_ONLY` and cann
 ## Coverage workflow
 
 ```bash
-npm test                      # fails if coverage falls below docs/rule-coverage-baseline.json
+npm test                      # fails if coverage falls below test/contracts/legacy/rule-coverage-baseline.json
 npm run coverage:uncovered    # list rules with unclaimed conditions
 npm run coverage:baseline     # raise the baseline after adding claims
 ```
@@ -250,9 +250,9 @@ npm run check:facts           # declared numbers against measured ones
 npm run anchors:baseline      # after anchoring figures, or after deciding to let the ratio slip
 ```
 
-Living documents — both READMEs, `INDEX.md`, `REGISTER.md`, `CONVENTIONS.md`, the four archive covers — are read as current truth, so their citations are checked against the working tree and their figures against `docs/doc-anchor-baseline.json`. Dated audit and run records are checked at the commit they declare, and anything wrong there is reported without failing the suite: no edit made today fixes a citation that was wrong when it was written. `docs/audits/2026-08-10/` names a commit the 2026-08-11 history rewrite destroyed, so its 242 citations are unverifiable rather than broken, and the report says which.
+The checkers retain the legacy living-document set (both READMEs, the relocated INDEX, REGISTER and archive cover, plus CONTRIBUTING) so relocation does not hide existing claims. Their figures retain the unchanged thresholds in `test/contracts/legacy/doc-anchor-baseline.json`. Historical findings are not current product acceptance; `project/PROGRESS.md` owns current status. Dated records are checked at their declared commits; historical unverifiable citations remain reported rather than being rewritten as current evidence.
 
-After adding claims, the status entry for that rule must be removed from `docs/rule-implementation-status.json` — the run tells you which ones.
+After adding claims, the status entry for that rule must be removed from `test/contracts/legacy/rule-implementation-status.json` — the run tells you which ones.
 
 ## Publication constraints
 
@@ -303,46 +303,6 @@ not commit a file whose line endings an editor converted.
 
 State the measured before/after. Name the defect the change exposed, if any. Do not claim a rule is implemented without a claim proving a passing test checks it.
 
-## 작업 기록 규약 (지시 없이도 항상 적용)
+## 작업 기록 규약
 
-감사·수정·실행 작업을 하면 채팅 응답과 별개로 반드시 파일에 기록한다.
-채팅에만 답하고 끝내는 것은 작업 미완료다.
-
-**위치**
-- 감사(읽기 전용 판정): `docs/audits/YYYY-MM-DD/NN-slug.md`
-- 실행·수정 작업: `docs/runs/YYYY-MM-DD/slug.md`
-- 같은 날 재실행은 덮어쓰지 않고 `-v2`, `-v3`
-
-**상단 메타데이터 (예외 없음)**
-작업 일시 / 대상 커밋 해시 / 작업 유형 [감사·수정·실행·결정] /
-선행 문서 경로 / 번호 실측 최대값
-
-**하단 필수 절**
-- 결론 — 3줄 이내, 판정 결과만
-- 다음 작업 — 없으면 "없음" 명시
-- 미해소로 남긴 것 — 없으면 "없음" 명시
-
-**매 작업 갱신 대상**
-- `docs/INDEX.md` 에 이 문서를 추가
-- 등재·등급·상태 변경 시 `docs/REGISTER.md` 갱신
-
-**번호**
-- 프롬프트에 박힌 번호를 그대로 쓰지 않는다.
-  `grep -rhoE "P[01]-[0-9]+"` 로 실측 최대값을 확인하고 그 다음부터 부여한다
-- 등급이 바뀌어도 ID는 유지한다
-- 등급·상태 변경은 원 문서를 고치지 않고 새 문서에 정정 사실을 기록한다
-
-**판정**
-- 판정 기준은 제품 정의 문서이지 코드 주석이 아니다
-- 근거 없는 판정 금지. 파일:라인 필수
-- 테스트가 없으면 코드가 맞아 보여도 [부분해소]까지만
-- 산출물이 거짓 문장을 만드는 결함은 미구현보다 무겁게 등급한다
-
-**테스트 근거**
-- 통과 건수가 아니라 **커맨드 종료 코드**로 적는다.
-  "255 pass / 0 fail"은 참이면서도 불충분하다 — posttest 실패가 그 뒤에 온다
-- 형식: `npm test > /dev/null 2>&1; echo $?` → `0`
-- 파이프를 거치면 `$?`가 마지막 명령(`tail` 등)의 것이 되므로,
-  **출력을 버리고 재야 한다**
-
-전문: `docs/CONVENTIONS.md`
+[CONTRIBUTING.md](CONTRIBUTING.md)가 현재 기록 규칙이다. `docs/`에는 현재 설계·수락 계약만 둔다. 사용 안내는 `guides/`, 현재 상태는 `project/PROGRESS.md`, 의도적으로 공개할 상세 증거는 `project/records/`에 둔다. 기존 실행 상태와 Work Log는 기존 저장소를 사용한다. `docs/audits`, `docs/runs`와 작업별 INDEX/REGISTER 갱신 규칙은 폐기한다. 과거 사건은 고정 Git 이력으로 보존하며 최신 상태로 재해석하지 않는다.

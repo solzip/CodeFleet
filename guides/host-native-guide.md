@@ -8,9 +8,9 @@ for basic preparation and mandatory only for its strict profile.
 
 CodeFleet's default integration direction is Host-Native. Use the AI in your existing authenticated host to prepare proposals; CodeFleet owns contracts, scheduling and independent verification. The staged integration is offline tested, not live certified. Automated host tools and automatic delegation remain blocked/unverified.
 
-**H2 gate:** public Host `requests`, `submit`, `run` and `resume` now return BLOCKED before opening state. The trusted Operator broker has no supported production OS/IPC deployment. Neither `--actor` nor a fake signed approval enables execution. The examples below describe the staged protocol; its execution portion is currently available only to internal offline fixtures. Do not invoke legacy commands or import internal modules to bypass this gate. See the [authorization boundary](../implementation/operator-authorization.md).
+**H2 gate:** public Host `requests`, `submit`, `run` and `resume` now return BLOCKED before opening state. The trusted Operator broker has no supported production OS/IPC deployment. Neither `--actor` nor a fake signed approval enables execution. The examples below describe the staged protocol; its execution portion is currently available only to internal offline fixtures. Do not invoke legacy commands or import internal modules to bypass this gate. See the [authorization boundary](../docs/implementation/operator-authorization.md).
 
-H4 adds the [Linux IPC client and restricted Harness connection](../implementation/host-ipc.md). Installed Skills now use that versioned client for provisioned fixed-scope runs. The legacy commands below remain blocked preparation/protocol examples. Actual human input, live Host confinement and arbitrary new scope activation remain BLOCKED. H3 assignment and authorization history is preserved.
+H4 adds the [Linux IPC client and restricted Harness connection](../docs/implementation/host-ipc.md). Installed Skills now use that versioned client for provisioned fixed-scope runs. The legacy commands below remain blocked preparation/protocol examples. Actual human input, live Host confinement and arbitrary new scope activation remain BLOCKED. H3 assignment and authorization history is preserved.
 
 ## Codex MCP direct proposals (optional, without nested model calls)
 
@@ -235,7 +235,7 @@ used exact-command Host approvals; status/workflow queries ran in the sandbox.
 No operator executed those commands on Codex's behalf. The final proposal was
 `REQUEST_ONLY`, with 0 approvals, 0 attempts, verification `NOT_RUN` and no target
 files created. The existing Todo project's 120 files remained identical.
-See the [measured recovery and regression results](../implementation/host-native.md#windows-codex-preparation-recovery).
+See the [historical measured recovery and regression results](https://github.com/solzip/CodeFleet/blob/f7441d1551ce296b721ce102f315e7b03ba0ee67/docs/implementation/host-native.md#windows-codex-preparation-recovery). These observations describe their original baseline, not current Host acceptance.
 
 This verifies preparation with Host approval, not unrestricted execution inside
 the sandbox or protected Host execution. The installed Todo Skill is an older
@@ -299,6 +299,6 @@ Node verification requires the pinned Docker image; Java verification retains th
 
 Obtain separate authorization naming the host, repository fixture, permissions, model/account limits and allowed actions. Verify skill discovery in the actual session and enforce operator/state separation. Perform goal → review → approval → proposal → Harness → report, plus denial/cancellation/stale-result checks in both hosts. Save sanitized evidence without credentials or transcripts. Only then assign HOST_LIVE_VERIFIED to the tested host/environment. The current offline tests cannot establish that status.
 
-See [architecture and official sources](../implementation/host-native.md) and the [transition record](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-20/alpha-host-native-transition.md).
+See [architecture and official sources](../docs/implementation/host-native.md) and the [transition record](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-20/alpha-host-native-transition.md).
 
 For the prepared temporary repositories, fixed scope and outstanding authorization/security gates, use the [H1 acceptance packet](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/product-completion/host-live-acceptance.md).

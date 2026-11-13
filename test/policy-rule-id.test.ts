@@ -27,7 +27,7 @@ const CORRECTIVE = "CORRECTIVE_EVENT_REQUIRES_VALID_LEDGER_AND_WRONG_DECISION";
 const DESIGN = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
-  "docs",
+  "test", "contracts", "legacy",
   "concept-foundation.md"
 );
 

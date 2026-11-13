@@ -227,7 +227,7 @@ test("removing an anchor fails", () => {
 });
 
 test("an anchor removed from one document fails even if the total holds", () => {
-  const moved = now({ perDoc: { "README.md": 12, "docs/INDEX.md": 1 } });
+  const moved = now({ perDoc: { "README.md": 12, "test/contracts/legacy/INDEX.md": 1 } });
   const { errors } = evaluateAnchors(moved, BASE);
   assert.match(errors.join("\n"), /anchors fell in README\.md: 12, baseline is 13/);
 });

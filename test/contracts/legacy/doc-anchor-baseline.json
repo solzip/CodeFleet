@@ -6,10 +6,10 @@
   "perDoc": {
     "README.en.md": 14,
     "README.md": 14,
-    "docs/CONVENTIONS.md": 0,
-    "docs/INDEX.md": 2,
-    "docs/REGISTER.md": 7,
-    "docs/archive/2026-08-13/ARCHIVE.md": 5,
+    "CONTRIBUTING.md": 0,
+    "test/contracts/legacy/INDEX.md": 2,
+    "test/contracts/legacy/REGISTER.md": 7,
+    "test/contracts/legacy/archive/2026-08-13/ARCHIVE.md": 5,
     "docs/archive/2026-08-13/DESIGN-NOTES.md": 0,
     "docs/archive/2026-08-13/ENVIRONMENT.md": 0,
     "docs/archive/2026-08-13/LESSONS.md": 0

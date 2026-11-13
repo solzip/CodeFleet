@@ -215,13 +215,13 @@ async function runChecker(claims: { ruleId: string; conditionQuote: string }[]):
 
   const root = await mkdtemp(path.join(os.tmpdir(), "codefleet-checker-"));
   await mkdir(path.join(root, "scripts"), { recursive: true });
-  await mkdir(path.join(root, "docs"), { recursive: true });
+  await mkdir(path.join(root, "test", "contracts", "legacy"), { recursive: true });
   await mkdir(path.join(root, ".rule-coverage"), { recursive: true });
 
   for (const name of ["design-doc.mjs", "check-rule-coverage.mjs"]) {
     await copyFile(path.join(process.cwd(), "scripts", name), path.join(root, "scripts", name));
   }
-  await writeFile(path.join(root, "docs", "concept-foundation.md"), FIXTURE_RULE_DOC, "utf8");
+  await writeFile(path.join(root, "test", "contracts", "legacy", "concept-foundation.md"), FIXTURE_RULE_DOC, "utf8");
   await writeFile(
     path.join(root, ".rule-coverage", "claims.jsonl"),
     `${claims.map((claim) => JSON.stringify(claim)).join("\n")}\n`,

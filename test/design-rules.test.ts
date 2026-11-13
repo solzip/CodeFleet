@@ -50,7 +50,7 @@ const DECLARED_DIVERGENCES = [
 
 async function designDoc(): Promise<string> {
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const raw = await readFile(path.join(here, "..", "docs", "concept-foundation.md"), "utf8");
+  const raw = await readFile(path.join(here, "contracts", "legacy", "concept-foundation.md"), "utf8");
   // The working copy carries CRLF on Windows, so every \n in the patterns below
   // would miss. Normalising here is what makes the counts platform-independent.
   return raw.split("\r\n").join("\n");

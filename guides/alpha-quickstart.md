@@ -96,7 +96,7 @@ node src/alpha/cli.mjs export RUN_ID /path/to/new-output-directory
 
 패키지 제거는 해당 설치 디렉터리에서 `npm uninstall codefleet`로 수행한다. 상태·후보 임시 디렉터리는 자동 삭제하지 않으며, 보존이 필요 없는지 확인한 후 운영자가 제거한다. 업데이트 전 worker를 멈추고 상태 디렉터리를 백업한다. 향후 schema migration은 검증 전까지 지원하지 않는다.
 
-설치 패키지의 실제 모델·Docker 작업, Windows 전체 검사, Linux 알파 검사·컨테이너 경계를 확인했다. 강제 종료 복구와 원격 응답 유실은 자동 테스트로, 실제 PR 생성·재조회는 전용 브랜치에서 확인했다. Linux의 실제 모델 인증부터 PR까지와 외부 사용자 파일럿은 아직 검증하지 않았다. 최신 범위는 [진행 현황](progress.md)을 따른다. 기존 `codefleet` CLI와 새 `codefleet-alpha`는 실행 모델이 다르며 상태를 상호 이관하지 않는다.
+설치 패키지의 실제 모델·Docker 작업, Windows 전체 검사, Linux 알파 검사·컨테이너 경계를 확인했다. 강제 종료 복구와 원격 응답 유실은 자동 테스트로, 실제 PR 생성·재조회는 전용 브랜치에서 확인했다. Linux의 실제 모델 인증부터 PR까지와 외부 사용자 파일럿은 아직 검증하지 않았다. 최신 범위는 [진행 현황](../project/PROGRESS.md)을 따른다. 기존 `codefleet` CLI와 새 `codefleet-alpha`는 실행 모델이 다르며 상태를 상호 이관하지 않는다.
 
 ## Java Gradle/Maven
 
@@ -128,6 +128,6 @@ node src/alpha/cli.mjs run /path/to/contract.json /path/to/repository --state /p
 
 실제 후보 검증은 이미지 ID를 고정하고 네트워크를 차단한다. Gradle 9가 요구하는 쓰기 가능한 모듈 디렉터리를 tmpfs에 만들되 Java 소스·테스트 디렉터리와 빌드 설정은 읽기 전용으로 마운트한다. 매번 새 빌드 출력·캐시 사본을 사용한다. JUnit XML에서 모든 선언 클래스의 실행과 수정 전후 테스트 이름을 확인하며 제외·미실행·보고서 불일치·빌드 자체의 flaky rerun은 수락하지 않는다. Gradle은 `test` 태스크, Maven은 Surefire `test`를 검증하며 프로젝트 전체 `check`/`verify`나 Failsafe 종단 검증을 대신하지 않는다.
 
-실행 예시용 Maven 프로젝트는 [examples/java-maven](../../examples/java-maven/pom.xml)에 있다. 해당 디렉터리를 별도 폴더로 복사해 **독립 Git 저장소**로 초기화·커밋하고 계약 파일은 저장소 밖에 복사한다. 샘플은 의도적으로 경계값 테스트가 실패한다. Windows 복제 시 `git -c core.autocrlf=false clone ...`로 LF 기준선을 유지한다. 원본 저장소의 하위 디렉터리만 지정하면 Git 루트로 정규화되므로 독립 저장소가 필요하다.
+실행 예시용 Maven 프로젝트는 [examples/java-maven](../examples/java-maven/pom.xml)에 있다. 해당 디렉터리를 별도 폴더로 복사해 **독립 Git 저장소**로 초기화·커밋하고 계약 파일은 저장소 밖에 복사한다. 샘플은 의도적으로 경계값 테스트가 실패한다. Windows 복제 시 `git -c core.autocrlf=false clone ...`로 LF 기준선을 유지한다. 원본 저장소의 하위 디렉터리만 지정하면 Git 루트로 정규화되므로 독립 저장소가 필요하다.
 
 완료된 Java 실행을 모델 재호출 없이 다시 검증하는 개발용 도구는 소스 체크아웃의 `node scripts/alpha-java-verifier-smoke.mjs STATE RUN_ID`다(설치 패키지에는 scripts 디렉터리를 포함하지 않는다). 새 스냅샷에서 실패 기준선→기존 AI 수정 결과의 통과와 소스·테스트 쓰기 차단을 확인한다. 선택 테스트 통과만으로 악성 JVM 코드의 모든 보고서 위조나 업무 요구사항 충족을 보증하지 않으며 독립 리뷰를 유지한다.
