@@ -2,7 +2,7 @@ import test from 'node:test';
 import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdtemp,writeFile,readFile,lstat,rm} from 'node:fs/promises';
+import {mkdir,mkdtemp,writeFile,readFile,lstat,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
@@ -95,6 +95,31 @@ test('real Codex Turn requires both owner flags; uncertain effect is durable one
   const result=call(['finalize','--dir',f.dir],2);
   assert.equal(result.verdict,'BLOCKED_OR_INCOMPLETE');
   assert.equal(result.protectedVerified,false);
+});
+test('official Windows npm cmd shim resolves without shell execution',async t=>{
+  const f=await fixture(t);
+  const shim=join(f.parent,'npm bin','codex.cmd');
+  const entry=join(f.parent,'npm bin','node_modules','@openai','codex','bin','codex.js');
+  await mkdir(join(f.parent,'npm bin','node_modules','@openai','codex','bin'),{recursive:true});
+  await writeFile(shim,'@echo SYNTHETIC_SHIM_MUST_NOT_EXECUTE\r\n');
+  await writeFile(entry,[
+    "if(process.argv.includes('--version')){console.log('codex-cli 0.167.1');process.exit(0)}",
+    "if(process.argv.includes('login'))process.exit(1)",
+    "process.exit(2)"
+  ].join('\n'));
+  const result=call(['preflight','--dir',f.dir,'--codex',shim],2);
+  assert.equal(result.status,'BLOCKED_CODEX_LOGIN_UNAVAILABLE');
+  assert.equal(result.codexVersion,'codex-cli 0.167.1');
+  assert.equal(result.modelTurnsStarted,0);
+  assert.equal(await lstat(join(f.dir,'turn-intent.json')).catch(()=>null),null);
+});
+test('unrecognized cmd shim fails closed before any model intent',async t=>{
+  const f=await fixture(t);
+  const shim=join(f.parent,'not-official','codex.cmd');
+  await mkdir(join(f.parent,'not-official'),{recursive:true});
+  await writeFile(shim,'@echo codex-cli 0.167.1\r\n');
+  call(['preflight','--dir',f.dir,'--codex',shim],1);
+  assert.equal(await lstat(join(f.dir,'turn-intent.json')).catch(()=>null),null);
 });
 test('tampered immutable tests refuse inspection and completion before model spawn',async t=>{
   const f=await fixture(t);

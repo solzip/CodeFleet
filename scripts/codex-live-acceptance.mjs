@@ -4,8 +4,9 @@
 // This is not a trusted Owner identity broker or USD spending-cap enforcer.
 import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile, lstat } from 'node:fs/promises';
-import { isAbsolute, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { StringDecoder } from 'node:string_decoder';
 
@@ -151,8 +152,28 @@ const modelConfig=pp=>[
     [mcpServer,'--state',pp.state,'--repository',pp.project,'--acceptance','LOCAL_ONLY']),
   'mcp_servers.codefleet_live.enabled=true'
 ];
-const codexInvoke=(binary,args)=>/\.m?js$/i.test(binary)?
-  {exe:process.execPath,args:[binary,...args]}:{exe:binary,args};
+function resolveCodexBinary(binary){
+  if(process.platform!=='win32'||binary!=='codex')return binary;
+  const found=spawnSync('where.exe',['codex'],{
+    encoding:'utf8',windowsHide:true,shell:false,timeout:5000
+  });
+  if(found.error||found.status!==0)fail('Supported Codex executable not found on PATH');
+  const candidates=found.stdout.split(/\r?\n/).map(value=>value.trim()).filter(Boolean);
+  return candidates.find(value=>/\.(?:exe|cmd|m?js)$/i.test(value))??
+    fail('Supported Codex executable not found on PATH');
+}
+function codexInvoke(selected,args){
+  const binary=resolveCodexBinary(selected);
+  if(/\.cmd$/i.test(binary)){
+    // npm's Windows shim cannot be spawned safely with shell:false. Resolve
+    // only the fixed official package layout; never parse or execute shim text.
+    const entry=join(dirname(binary),'node_modules','@openai','codex','bin','codex.js');
+    if(!existsSync(entry))fail('Official Codex npm shim target not found');
+    return {exe:process.execPath,args:[entry,...args]};
+  }
+  return /\.m?js$/i.test(binary)?
+    {exe:process.execPath,args:[binary,...args]}:{exe:binary,args};
+}
 function inspectCodexVersion(binary,directory){
   const invocation=codexInvoke(binary,['--version']);
   const version=cmd(invocation.exe,invocation.args,directory);

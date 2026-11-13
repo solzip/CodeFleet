@@ -42,6 +42,8 @@ Host Core 첫 실행은 exit 1이었다. readOnly Host 조회에서 초기화를
 
 8번은 위 선택된 Local 회귀의 근거를 확보했으며 전체 보안/보호 회귀는 NOT_RUN이다. 9번은 설치본과 패키지의 오프라인 근거를 확보했으며 실제 Host의 Skill 발견은 NOT_RUN이다. 10번은 PATH의 Codex CLI 0.167.0과 목표 0.167.1 차이, 현재 세션의 CodeFleet MCP 직접 도구 미노출(도구 목록 검색 0개), 별도 Owner 직접 승인·실제 Compaction 미관측으로 BLOCKED / NOT_RUN이다. 다음 허용 행동은 목표 Host 환경에 설치본 MCP를 연결하고 별도 Owner가 정확한 효과를 승인한 실제 세션에서 정상·실패·새 세션·Compaction·미해결 종료를 관측하는 것이다. 기존 실패·기록·예산을 초기화하거나 다른 버전의 결과로 대체하지 않는다. 생산성 6쌍 비교는 요청 범위 뒤의 미실행 항목으로 남긴다.
 
+후속 실제 Host 사전 점검에서도 PATH의 Codex CLI는 0.167.0, 로그인 상태는 미인증, 등록 MCP 1개 중 CodeFleet MCP는 0개였다. 새 일회용 Live fixture의 `prepare`와 `status`는 각각 exit 0이었고 모델 Turn·Owner 승인·Local Evidence는 0건/NOT_RUN으로 유지됐다. Windows npm의 `codex.cmd`를 명시한 최초 preflight는 버전 판정 전 `EINVAL`로 exit 1이었다. runner가 셸이나 shim 내용을 실행하지 않고 공식 npm 패키지의 고정 JavaScript 진입점만 해석하도록 수정하고 임의 shim 거부 시험을 추가했다. 이후 안전 게이트 회귀는 23 PASS / 0 FAIL / 0 SKIP이었고 실제 `codex.cmd` preflight는 관측 버전 불일치에서 exit 1로 정확히 차단됐다. MCP 회귀는 3 PASS / 0 FAIL / 0 SKIP이었다. 승인된 0.167.1 전역 업그레이드는 실행 중인 `codex.exe` 파일 잠금으로 `EBUSY` exit 1이었으며 기존 0.167.0 설치와 미로그인 상태는 유지됐다. MCP 설정·비용 발생 모델 Turn은 수행하지 않았다. 다음 행동에는 현재 Codex 프로세스 종료 뒤 0.167.1 설치와 로그인, CodeFleet MCP 확인, 알 수 없는 구독 사용량에 대한 별도 Owner 승인 각각이 필요하다.
+
 ## 이전 설계 검토 기록
 
 2026-11-13 revision 3 검토: 실행 진입점, 실제 저장 순서·경합, 사용자/Host/Owner 전체 절차를 검토했다. 기준 커밋은 설계에 명시한 `b3f8b985a903fd255983da01d6f284df3dea14aa`다. product CLI 이름 64개(help 포함, dispatch 전 authorize-local 포함)를 분류했고 정적 목록 대조에서 누락·초과 0개를 확인했다. MCP 7개 도구와 Host forwarding, 하위 Task/Native/reservation/repair 호출 및 Task 없는 외부 실행의 경계를 구분했다. readOnly Store, 하위 우회 guard, MCP 연결, 파일 적용 두 commit, controlSeq의 Decision 전달, Owner 조작, 종료의 하위 행 검사 등 7건을 설계에 반영했다. 당시 탁상 시나리오 8개는 TABLETOP_ONLY였으며, 이후 구현 후보와 오프라인 시험 결과는 위 표에 기록했다. 실제 Host 실행 수용은 여전히 미완료다.
