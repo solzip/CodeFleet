@@ -1,3 +1,4 @@
+import {isWork} from './work-review.mjs';
 // Objective coordination records in the existing event/artifact ledger.
 // No execution authority, scheduler, transport or second database lives here.
 import { randomUUID } from 'node:crypto';
@@ -131,6 +132,7 @@ export function requireCoordinatedWorkItem(store, taskId, itemId, { preparedProp
 
 // Assignment is a manager's scope declaration, not Host delegation or capability.
 export function assignWorkItem(store, taskId, input) {
+  if(isWork(task(store,taskId)))throw Error('WORK_COORDINATION_UNSUPPORTED');
   exact(input, ['revision','itemId','agentId','reason']);
   if (!identity(input.agentId) || !text(input.reason)) throw Error('Agent identity and assignment reason required');
   return atomic(store, () => {
@@ -144,6 +146,7 @@ export function assignWorkItem(store, taskId, input) {
 }
 
 export function recordDirective(store, taskId, input) {
+  if(isWork(task(store,taskId)))throw Error('WORK_COORDINATION_UNSUPPORTED');
   exact(input, ['directiveId','revision','text','reason']);
   if (!identity(input.directiveId) || !text(input.text) || !text(input.reason)) throw Error('Directive identity, text and reason required');
   return atomic(store, () => {
@@ -161,6 +164,7 @@ export function recordDirective(store, taskId, input) {
 }
 
 export function decideDirective(store, taskId, input) {
+  if(isWork(task(store,taskId)))throw Error('WORK_COORDINATION_UNSUPPORTED');
   exact(input, ['directiveId','revision','status','reason']);
   if (!['DEFERRED','REJECTED','RETAINED_WITHOUT_CONTRACT_CHANGE'].includes(input.status) || !text(input.reason))
     throw Error('Explicit directive disposition and reason required');
@@ -211,6 +215,7 @@ function prepareHandoffRecord(store, current, itemId, agentId, reason, receiptRe
 }
 
 export function prepareAgentHandoff(store, taskId, input) {
+  if(isWork(task(store,taskId)))throw Error('WORK_COORDINATION_UNSUPPORTED');
   exact(input, ['revision','itemId','reason']);
   if (!text(input.reason)) throw Error('Handoff reason required');
   return atomic(store, () => {
@@ -226,6 +231,7 @@ export function prepareAgentHandoff(store, taskId, input) {
 // No supported independent Host event verifier exists. Historical authority
 // labels and same-user embedding reports cannot authorize closure.
 export function closeUndeliveredHandoff(store, taskId, input) {
+  if(isWork(task(store,taskId)))throw Error('WORK_COORDINATION_UNSUPPORTED');
   exact(input, ['revision','handoffId','reason']);
   if (!text(input.reason)) throw Error('Handoff closure reason required');
   return atomic(store, () => {
@@ -239,6 +245,7 @@ export function closeUndeliveredHandoff(store, taskId, input) {
 // Reconcile an interrupted delivery from actual Host transport records. Never
 // invoke the transport again or infer success from the mere existence of a packet.
 export function reconcileAgentHandoff(store, taskId, handoffId, receipt, { observed = false } = {}) {
+  if(isWork(task(store,taskId)))throw Error('WORK_COORDINATION_UNSUPPORTED');
   if (observed !== true) throw Error('Trusted Host transport observation required; caller reports are not evidence');
   return atomic(store, () => {
     const h = coordinationLog(store, taskId).handoffs.find(h => h.handoffId === handoffId);
@@ -260,6 +267,7 @@ function observe(store, taskId, handoff, status, details, authority) {
 // Trusted Host embedding seam only: no CLI/JSON can supply the transport.
 // The embedding must separately authorize messaging. A receipt never grants work.
 export async function deliverAgentHandoff(store, taskId, handoffId, transport) {
+  if(isWork(task(store,taskId)))throw Error('WORK_COORDINATION_UNSUPPORTED');
   if (typeof transport !== 'function') throw Error('Authorized Host transport required');
   const handoff = atomic(store, () => {
     const log = coordinationLog(store, taskId), h = log.handoffs.find(h => h.handoffId === handoffId);
@@ -288,6 +296,7 @@ export async function deliverAgentHandoff(store, taskId, handoffId, transport) {
 
 // Receipt must be observed through the same trusted Host embedding, not Agent JSON.
 export function acknowledgeAgentHandoff(store, taskId, handoffId, receipt, { observed = false } = {}) {
+  if(isWork(task(store,taskId)))throw Error('WORK_COORDINATION_UNSUPPORTED');
   if (observed !== true) throw Error('Trusted Host receipt observation required');
   return atomic(store, () => {
     const h = coordinationLog(store, taskId).handoffs.find(h => h.handoffId === handoffId);

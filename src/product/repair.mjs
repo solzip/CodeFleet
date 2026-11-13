@@ -1,3 +1,4 @@
+import {isWork} from './work-review.mjs';
 // Trusted offline bounded repair. Proposals are data; only the embedding
 // Operator may approve Filesets and issue a fresh exact verification decision.
 import { hash } from '../alpha/contract.mjs';
@@ -104,6 +105,7 @@ export async function triageFailure(store, taskId, { proposal, request, cancelle
 // trusted dependency, not serialized Agent input or a public authentication API.
 export async function repairOfflineWorkItem(store, taskId, { proposal, request, operator,
   cancelled = () => false, hooks = {} } = {}) {
+  if(isWork(task(store,taskId)))throw Error('WORK_SEPARATE_REPAIR_APPROVAL_REQUIRED');
   const triage = await triageFailure(store, taskId, { proposal, request, cancelled });
   if (!triage.repairable) return triage;
   if (typeof operator?.approveRepair !== 'function' || typeof operator?.issueVerification !== 'function') return triage;

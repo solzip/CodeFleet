@@ -1,3 +1,7 @@
+import {guardWorkCli,isWork,workControl,prepareWorkClose,acceptWorkClose} from './work-review.mjs';
+import {workReport} from './work-report.mjs';
+import {ownerReview} from './work-owner.mjs';
+import {randomUUID} from 'node:crypto';
 import path from 'node:path';
 import { hash } from '../alpha/contract.mjs';
 import { Store } from '../alpha/store.mjs';
@@ -89,6 +93,10 @@ codefleet-alpha objective local-step <task-id> REQUEST.json [REPAIR.json] --revi
   [--trust <reviewHash> --acknowledge-unisolated]
   (without trust: review only; with exact trust: one supervised Local verification or one bounded source repair + verification;
    same-user UNPROTECTED, no independent Operator authentication, no model calls; duplicate request only reads state)
+codefleet-alpha objective work-owner-review <review-ref> --hash <review-hash>
+codefleet-alpha objective work-control <task-id> --action PAUSE|CANCEL|UNPAUSE --request-id UUID --control-seq N
+codefleet-alpha objective work-close-review <task-id> --outcome OUTCOME --reason TEXT
+codefleet-alpha objective work-close-accept <review-ref> --trust <review-hash> --acknowledge-unisolated
 codefleet-alpha objective local-files-review <task-id> <item-id>
 codefleet-alpha objective local-files-accept <review-ref> --trust <reviewHash> --acknowledge-unisolated
 codefleet-alpha objective local-review <task-id> REQUEST.json [REPAIR.json]
@@ -276,6 +284,14 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
   const [action, ...rest] = argv;
   if (!action || ['help', '--help'].includes(action)) return { exitCode: 0, data: { schemaVersion: 1, help } };
   const { positional: args, options: o } = parse(rest);
+  const work=guardWorkCli(store,action,args[0]);
+  if(work&&isWork(work)&&['status','report'].includes(action)){if(args.length!==1||Object.keys(o).length)throw Error('Work status accepts Task only');const data=await workReport(store,work.id);return {exitCode:data.kind==='WorkReadError'?1:0,data};}
+  if(work&&isWork(work)&&['pause','cancel'].includes(action)){if(args.length!==1||Object.keys(o).length)throw Error('Work control accepts Task only');const data=await workReport(store,work.id);if(data.kind==='WorkReadError')throw Error('WORK_READ_ERROR');return {exitCode:0,data:workControl(store,work.id,{action:action.toUpperCase(),requestId:randomUUID(),expectedControlSeq:data.control.sequence})};}
+  if(action==='work-control'){if(args.length!==1||Object.keys(o).some(k=>!['action','request-id','control-seq'].includes(k)))throw Error('Exact work control required');return {exitCode:0,data:workControl(store,args[0],{action:o.action,requestId:o['request-id'],expectedControlSeq:Number(o['control-seq'])})};}
+  if(action==='work-close-review'){if(args.length!==1||Object.keys(o).some(k=>!['outcome','reason'].includes(k)))throw Error('Exact work close required');return {exitCode:2,data:await prepareWorkClose(store,args[0],{outcome:o.outcome,reason:o.reason,expectedRevision:task(store,args[0]).revision})};}
+  if(action==='work-close-accept'){if(args.length!==1||Object.keys(o).some(k=>!['trust','acknowledge-unisolated'].includes(k)))throw Error('Exact close consent required');return {exitCode:0,data:await acceptWorkClose(store,args[0],{trust:o.trust,acknowledgeUnisolated:o['acknowledge-unisolated']===true})};}
+  if(action==='work-owner-review'){if(args.length!==1||Object.keys(o).join(',')!=='hash')throw Error('Exact Owner review required');return {exitCode:0,data:await ownerReview(store,args[0],o.hash)};}
+
   if (o.repository !== undefined && !['plan-codex-goal', 'codex-planning-status', 'codex-goal-progress', 'review-codex-plan', 'review-codex-workflow', 'prepare-codex-workflow'].includes(action))
     throw Error('--repository is only valid for Codex planning/Workflow review or pending Workflow creation');
   if (action === 'codex-bootstraps') {
@@ -898,7 +914,7 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     if (args.length !== 1 || Object.keys(o).length) throw Error('repair-proposal-request accepts only a Task ID');
     return { exitCode: 0, data: await repairProposalRequest(store,args[0]) };
   }
-  enableTasks(store);
+  if(!store.readOnly)enableTasks(store);
   if (action === 'revision-review') {
     if(args.length!==2||Object.keys(o).length)throw Error('revision-review requires Task and proposal only');
     return {exitCode:2,data:await prepareContractRevision(store,args[0],await readResponse(args[1]))};
@@ -983,7 +999,7 @@ export async function dispatchProduct(argv, { store, execution = {}, plannerRegi
     id = created.id;
     const result = await report(); result.exitCode = created.state === 'VALIDATED' ? 0 : 2; return result;
   }
-  if (action === 'status' && !id) return { exitCode: 0, data: { schemaVersion: 1, tasks: await Promise.all(tasks(store).map(t => taskReport(store, t.id))) } };
+  if (action === 'status' && !id) return { exitCode: 0, data: { schemaVersion: 1, tasks: await Promise.all(tasks(store).map(t => isWork(t)?workReport(store,t.id):taskReport(store, t.id))) } };
   if (action === 'materialize') {
     if (args.length !== 2) throw Error('materialize requires task id and WorkItem id');
     const result = await materializeTask(store, args[0], args[1], { freshOnly: true });
@@ -1097,7 +1113,7 @@ export async function productCli(argv, directory, { createCodexAdmission } = {})
             ? positional[2] : options['verification-request']));
     }
     if (!argv[0] || ['help', '--help'].includes(argv[0])) return await dispatchProduct(argv);
-    store = new Store(directory, { readOnly: ['recover', 'work-log', 'proposal-batch', 'repair-proposal-request', 'supervised-proposal-review', 'delivered-status', 'workflow-progress', 'codex-planning-status', 'codex-goal-progress', 'review-codex-plan', 'review-codex-workflow', 'codex-goals', 'codex-bootstraps', 'codex-bootstrap-progress'].includes(argv[0]) });
+    store = new Store(directory, { readOnly: ['status','report','unknowns','proposal-request','reservation','readiness','recover', 'work-log', 'proposal-batch', 'repair-proposal-request', 'supervised-proposal-review', 'delivered-status', 'workflow-progress', 'codex-planning-status', 'codex-goal-progress', 'review-codex-plan', 'review-codex-workflow', 'codex-goals', 'codex-bootstraps', 'codex-bootstrap-progress'].includes(argv[0]) });
     if (codexTrusted) {
       const codexAdmission = await createCodexAdmission(store);
       // dispatchProduct still checks authentic facade identity, current Store

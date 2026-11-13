@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+import {isWork,WORK_PROFILE,workMutable} from '../product/work-review.mjs';
+import {renderOwnerCommand} from '../product/work-owner.mjs';
+import {workReport,workList} from '../product/work-report.mjs';
+import {continuationSnapshot} from '../product/continuation.mjs';
 // Codex-session-native MCP adapter for CodeFleet preparation/proposals.
 // This stdio server is NOT a trusted Operator, a model launcher, or a Host
 // execution sandbox. It never approves, applies, tests, deploys or bills.
@@ -24,6 +28,8 @@ function exact(value,keys,label){
     fail('Invalid '+label+' fields');
 }
 function configured(argv){
+  let workProfile;
+  if(argv.length===8&&argv[6]==='--work-profile'){workProfile=argv[7];argv=argv.slice(0,6);if(workProfile!==WORK_PROFILE||argv[5]!=='LOCAL_ONLY')fail('Explicit LOCAL_ONLY work profile required');}
   if(argv.length!==4&&argv.length!==6)fail(
     'Usage: node codex-mcp.mjs --state ABS_PATH --repository ABS_PATH [--acceptance LOCAL_ONLY|PROTECTED_REQUIRED]');
   if(argv[0]!=='--state'||argv[2]!=='--repository'||
@@ -37,7 +43,7 @@ function configured(argv){
   const acceptance=argv.length===6?argv[5]:'PROTECTED_REQUIRED';
   if(!['LOCAL_ONLY','PROTECTED_REQUIRED'].includes(acceptance))
     fail('Invalid acceptance policy');
-  return {state:resolve(state),repository:resolve(repository),acceptance};
+  return {state:resolve(state),repository:resolve(repository),acceptance,workProfile};
 }
 const inside=(root,candidate)=>{
   const rel=relative(root,candidate);
@@ -93,7 +99,8 @@ const toolDefinitions=Object.freeze([
 
 ]);
 
-const ownerReviewCommand=(ctx,kind,ref,hash)=>Object.freeze({
+const workOwnerCommand=(ctx,ref,hash)=>{const executable=process.execPath,args=[fileURLToPath(new URL('../alpha/cli.mjs',import.meta.url)),'--state',ctx.state,'objective','work-owner-review',ref,'--hash',hash];return Object.freeze({executable,args,command:renderOwnerCommand(executable,args),shell:'PowerShell',ownerMustReviewAndRunSeparately:true,executionGranted:false});};
+const ownerReviewCommand=(ctx,kind,ref,hash)=>ctx.workProfile?workOwnerCommand(ctx,ref,hash):Object.freeze({
   // Display-only exact argv. The MCP has no apply/exec capability.
   // This command deliberately lacks --acknowledge-unisolated so copying
   // an unreviewed model response cannot be treated as Local owner consent.
@@ -164,7 +171,8 @@ const summarize=report=>({
 async function show(store,id){
   const report=await taskReport(store,id);
   const persisted=task(store,id);
-  return {...summarize(report),
+  const work=isWork(persisted)?await workReport(store,id):null;
+  return {...summarize(report),...(work?{workReport:work,status:work.phase,complete:work.verification?.localComplete===true}:{}),
     acceptancePolicy:persisted.acceptanceMode??'PROTECTED_REQUIRED'};
 }
 async function useStore(config,readOnly,action){
@@ -183,9 +191,11 @@ async function scoped(store,ctx,taskId){
     fail('Task is outside the bound Codex MCP repository');
   return current;
 }
-function argsFor(name,value){
+function argsFor(name,value,config){
+  if(config.workProfile&&name==='codefleet_goal_status'){exact(value,['taskId','offset'],'work status');if(value.taskId!==undefined&&value.offset!==undefined)fail('Choose task or offset');if(value.offset!==undefined&&(!Number.isSafeInteger(value.offset)||value.offset<0))fail('Invalid offset');return;}
   if(name==='codefleet_goal_start'){
-    exact(value,['goal'],'goal');
+    exact(value,config.workProfile?['goal','mode']:['goal'],'goal');
+    if(config.workProfile&&!['CHANGE','VERIFY_CURRENT'].includes(value.mode))fail('Explicit work mode required');
     if(typeof value.goal!=='string'||value.goal.trim().length<10||
        value.goal.length>4000)fail('Bounded natural-language Goal required');
   }else if(['codefleet_goal_status','codefleet_goal_prepare',
@@ -213,19 +223,21 @@ function argsFor(name,value){
   }else fail('Unsupported CodeFleet MCP tool');
 }
 async function invokeTool(config,name,value){
-  argsFor(name,value);
+  argsFor(name,value,config);
   if(name==='codefleet_goal_start')
     return useStore(config,false,async(store,ctx)=>{
       enableTasks(store);
       const record=await createTask(store,ctx.root,value.goal,{
         localExisting:true,acceptanceMode:ctx.acceptance,
-        maxAttempts:3,timeoutSeconds:300,attemptBudgetUsd:1
+        maxAttempts:3,timeoutSeconds:300,attemptBudgetUsd:1,...(ctx.workProfile?{workProfile:ctx.workProfile,mode:value.mode}:{})
       });
       return show(store,record.id);
     });
   const readOnly=name==='codefleet_goal_status';
   return useStore(config,readOnly,async(store,ctx)=>{
-    await scoped(store,ctx,value.taskId);
+    if(ctx.workProfile&&name==='codefleet_goal_status'&&value.taskId===undefined)return workList(store,ctx.root,value.offset??0);
+    const scopedTask=await scoped(store,ctx,value.taskId);
+    if(ctx.workProfile&&!isWork(scopedTask)&&name!=='codefleet_goal_status')fail('Legacy Task is read-only in work profile');
     if(name==='codefleet_goal_status')
       return show(store,value.taskId);
     if(name==='codefleet_draft_submit'){
@@ -270,6 +282,7 @@ async function invokeTool(config,name,value){
       if(!Array.isArray(declared)||!declared.length||declared.length>20)
         fail('Current plan has no bounded declared Node tests');
       const testPaths=declared.map(entry=>entry?.path);
+      if(isWork(current))testPaths.sort();
       if(testPaths.some(p=>typeof p!=='string'||
             !/^(test|tests)\/[A-Za-z0-9_./-]+\.test\.(mjs|cjs|js|ts)$/.test(p)||
             p.split('/').some(s=>s==='..'||!s||s.startsWith('.')))||
@@ -279,7 +292,7 @@ async function invokeTool(config,name,value){
         executable:process.execPath,
         args:['--test','--test-reporter=tap',...testPaths],
         directory:ctx.root,
-        timeoutMs:Math.min(current.settings?.timeoutSeconds*1000||30000,120000)
+        timeoutMs:isWork(current)?30000:Math.min(current.settings?.timeoutSeconds*1000||30000,120000)
       };
       const review=await prepareNativeLocalReview(store,value.taskId,{request});
       if(!review.reviewRef||!review.reviewHash)
@@ -296,8 +309,10 @@ async function invokeTool(config,name,value){
         protectedVerified:false
       };
     }
+    const snapshot=isWork(scopedTask)?await continuationSnapshot(store,value.taskId):null;
+    const repair=snapshot?.reason==='FAILURE_REVIEW_REQUIRED_NO_AUTOMATIC_RETRY'?{verificationItem:snapshot.repair.verificationItem,evidenceRef:snapshot.repair.evidenceRef}:null;
     const proposal=await submitBootstrapFiles(store,value.taskId,{
-      revision:value.revision,itemId:value.itemId,files:value.files});
+      revision:value.revision,itemId:value.itemId,files:value.files,...(repair?{repair}:{})});
     return {...(await show(store,value.taskId)),
       approvalRequest:proposal.approvalRequest??null,
       applicationPerformed:false,executionGranted:false};
@@ -332,7 +347,7 @@ async function handle(message,config){
   }
   if(message.method==='ping')return {jsonrpc:'2.0',id,result:{}};
   if(message.method==='tools/list')
-    return {jsonrpc:'2.0',id,result:{tools:toolDefinitions}};
+    return {jsonrpc:'2.0',id,result:{tools:config.workProfile?toolDefinitions.map(d=>{const v=structuredClone(d);if(v.name==='codefleet_goal_start'){v.inputSchema.required.push('mode');v.inputSchema.properties.mode={type:'string',enum:['CHANGE','VERIFY_CURRENT']};}if(v.name==='codefleet_goal_status'){v.inputSchema.required=[];v.inputSchema.properties.offset={type:'integer',minimum:0};}return v;}):toolDefinitions}};
   if(message.method!=='tools/call')
     return rpcError(id,-32601,'Unsupported MCP method');
   if(!plain(message.params)||typeof message.params.name!=='string'||

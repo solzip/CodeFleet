@@ -12,6 +12,20 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
+// These public contracts moved with the documentation consolidation. Fixtures,
+// executable tests and arbitrary new test/contracts files still must not ship.
+const publicContracts=new Set([
+  'alpha-design.md','alpha-roadmap.md','archive/2026-08-13/ARCHIVE.md',
+  'concept-foundation.md','doc-anchor-baseline.json','INDEX.md','README.md',
+  'REGISTER.md','rule-coverage-baseline.json','rule-implementation-status.json',
+  'spine-pass-2026-08-07.md'
+].map(p=>'test/contracts/legacy/'+p));
+const safeDistributionPath=p=>! /^(test|\.git|\.codefleet|node_modules)\//.test(p)||publicContracts.has(p);
+test('packaging excludes fixtures and State while allowing only pinned public contracts',()=>{
+  for(const p of ['test/fixtures/private.json','test/work-review.test.mjs','test/contracts/legacy/private.json','.git/config','.codefleet/state.sqlite','node_modules/private/index.js'])assert.equal(safeDistributionPath(p),false,p);
+  for(const p of publicContracts)assert.equal(safeDistributionPath(p),true,p);
+});
+
 // Exercise what actually ships to a user: pack and install the release
 // candidate into a disposable tools directory before installing either Skill.
 // Neither installed code nor its runtime may import the source checkout.
@@ -28,8 +42,8 @@ async function packagedRuntime(root){
   assert.ok(manifest[0].filename.endsWith('.tgz'));
   assert.ok(manifest[0].files.some(f=>f.path==='scripts/host-install.mjs'));
   assert.ok(manifest[0].files.some(f=>f.path==='src/product/codex-mvp-facade.mjs'));
-  assert.ok(manifest[0].files.every(f=>
-    !/^(test|\.git|\.codefleet|node_modules)\//.test(f.path)),
+  for(const name of ['work-review','work-report','work-owner'])assert.ok(manifest[0].files.some(f=>f.path===`src/product/${name}.mjs`),'Work runtime must ship: '+name);
+  assert.ok(manifest[0].files.every(f=>safeDistributionPath(f.path)),
     'Private fixtures and State must not ship');
   const installed=path.join(root,'installed-package');
   await mkdir(installed);

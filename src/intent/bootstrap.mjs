@@ -63,7 +63,7 @@ export function bootstrapSkeleton(probe, objective) {
 // async caller measures it with existingPaths so validation itself stays pure.
 // `clarifications` are records the task layer has already bound to this task and
 // read through hash-checked artifacts; here they must also match objective and subject.
-export function validateBootstrapDraft(draft, probe, original, existing = [], clarifications = [], existingLocal = false) {
+export function validateBootstrapDraft(draft, probe, original, existing = [], clarifications = [], existingLocal = false, workContext = null) {
   if (existingLocal ? !['UNBORN_HEAD','BOOTSTRAP_CANDIDATE','EXISTING_SOURCE'].includes(probe?.state) : probe?.contract !== 'NEW_PROJECT') return { status: 'CAPABILITY_GAP', gaps: [`NOT_A_NEW_PROJECT: ${probe?.state ?? 'UNPROBED'}`], unknowns: [], provenance: PROVENANCE, executable: false, approved: false, complete: false };
   exact(draft, ['schemaVersion', 'kind', 'objective', 'probeRef', 'requirements', 'openQuestions', 'decisions', 'plannedFiles', 'plannedTests', 'criteria', 'scope', 'risks', 'workItems'], 'BootstrapDraft');
   if (!(existingLocal?[1,2]:[1]).includes(draft.schemaVersion) || draft.kind !== (existingLocal ? 'ExistingLocalDraft' : 'BootstrapDraft')) throw Error('BootstrapDraft version mismatch');
@@ -98,7 +98,7 @@ export function validateBootstrapDraft(draft, probe, original, existing = [], cl
   if (criterionIds.size !== draft.criteria.length) throw Error('Duplicate criterion id');
   if (!draft.requirements.length) unknowns.push('State requirements');
   if (!draft.decisions.length) unknowns.push('Record the technology and design decisions');
-  if (!draft.plannedFiles.length) unknowns.push('Plan at least one file');
+  if (!draft.plannedFiles.length && !(existingLocal && workContext?.mode==='VERIFY_CURRENT' && /^task-/.test(workContext.taskId??'') && /^[a-f0-9]{64}$/.test(workContext.workRequestRef??''))) unknowns.push('Plan at least one file');
   if (!draft.criteria.length) unknowns.push('Define acceptance criteria');
   if (!draft.workItems.length) unknowns.push('Propose bootstrap WorkItems');
   if (draft.openQuestions.length) unknowns.push('Open questions require an answer before authorization');

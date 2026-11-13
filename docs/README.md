@@ -15,6 +15,7 @@ UX-01~UX-05를 제품 원칙 → 로드맵의 수락 기준 → 아키텍처의 
 
 | 구현 영역 | 읽을 계약 |
 | --- | --- |
+| 검토 중인 초기 제품 집중안 | [개발 작업 검증과 재개 전체 설계](implementation/work-verification-resume.md): 고정 프로필, 상태 전이·종결, 데이터·호환성, 정상·실패·불명과 수치 수락 기준 |
 | Host 제안·계획 경계 | [Host 연동](implementation/host-native.md), [계획 전용 경로](implementation/host-planning.md) |
 | 권한과 보호 실행 경계 | [승인](implementation/operator-authorization.md), [Operator Runtime](implementation/operator-runtime.md), [IPC](implementation/host-ipc.md) |
 | 승인된 실행과 제한된 진행 | [Bootstrap 예약](implementation/bootstrap-reservations.md), [Continuation](implementation/bounded-continuation.md), [다중 WorkItem](implementation/multi-workitem-development.md) |

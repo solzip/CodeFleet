@@ -1,3 +1,4 @@
+import {isWork} from './work-review.mjs';
 // WorkItem continuation for trusted offline embedding. No scheduler, issuer,
 // model call or public Operator route. All execution stays in PR9 reservations.
 import { hash } from '../alpha/contract.mjs';
@@ -313,6 +314,7 @@ export async function reviewDevelopmentResults(store, taskId, batch, results) {
 // dependency completes; this coordinator has no issuer, signer or public route.
 // Persisted Attempts remain the budget source across calls/restarts.
 export async function continueOfflineWorkflow(store, taskId, { scope, obtainDecision, cancelled = () => false } = {}) {
+  if(isWork(task(store,taskId)))throw Error('WORK_COMBINED_CONTINUATION_UNSUPPORTED');
   const executions = [];
   let scopeRef;
   let snapshot = await continuationSnapshot(store, taskId);

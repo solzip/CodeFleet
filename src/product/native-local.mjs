@@ -1,5 +1,6 @@
 // Supervised same-user Local development. Host tool permission is external;
 // exact review is mandatory here. No claim of Agent-resistant authentication.
+import {isWork,acknowledgeWorkProfile,workMutable,nativeWorkAdmission,requireWorkAdmission,attachmentComplete,workRequest} from './work-review.mjs';
 import {randomUUID} from 'node:crypto';
 import {hash} from '../alpha/contract.mjs';
 import {task,verifyTask,approveTask,materializeTask,bootstrapContext,bootstrapDrift} from './tasks.mjs';
@@ -17,7 +18,7 @@ const present = result => ({...result,...label,complete:result.snapshot?.complet
 // Product-owned review identity: callers review scope, not manually assembled
 // revision/request/expiry fields. This creates no execution authority.
 export async function prepareNativeLocalReview(store,taskId,{request,proposal=null}={}) {
-  const options={request,proposal,revision:task(store,taskId).revision,requestId:randomUUID(),expiresAt:Date.now()+3600000};
+  const options={request,proposal,revision:task(store,taskId).revision,requestId:randomUUID(),expiresAt:Date.now()+(isWork(task(store,taskId))?600000:3600000)};
   const review=await nativeLocalStep(store,taskId,options);
   if(!review.reviewHash)return review;
   const packet={kind:'NativeLocalReviewPacket',taskId,options,review};
@@ -29,7 +30,8 @@ export async function acceptNativeLocalReview(store,reviewRef,{trust,acknowledge
   const packet=store.readArtifact(reviewRef);
   if(packet.kind!=='NativeLocalReviewPacket'||!trust||trust!==packet.review?.reviewHash||hash(packet.review.review)!==trust)
     throw Error('Exact prepared Local review required');
-  return nativeLocalStep(store,packet.taskId,{...packet.options,trust,acknowledgeUnisolated,cancelled});
+  const workAdmission=isWork(task(store,packet.taskId))?nativeWorkAdmission(store,packet.taskId,packet.review.review.workContext,reviewRef,'TESTS'):undefined;
+  return nativeLocalStep(store,packet.taskId,{...packet.options,trust,acknowledgeUnisolated,cancelled,workAdmission});
 }
 
 // Environment-only recovery: the JSON is a review proposal, never a capability.
@@ -37,6 +39,7 @@ export async function acceptNativeLocalReview(store,reviewRef,{trust,acknowledge
 // no isolation claim and instead records the existing runner's process context.
 export async function nativeEnvironmentStep(store,taskId,{request,environment,revision,requestId,expiresAt,trust,
   acknowledgeUnisolated=false,cancelled=()=>false}, {observePolicy} = {}) {
+  if(isWork(task(store,taskId)))throw Error('WORK_ENVIRONMENT_RECOVERY_UNSUPPORTED');
   enableReservations(store);
   if (!Number.isSafeInteger(revision) || !Number.isSafeInteger(expiresAt) || !/^[a-zA-Z0-9_-]{1,120}$/.test(requestId??''))
     throw Error('Exact revision, unique request ID and expiry required');
@@ -80,7 +83,9 @@ export async function nativeEnvironmentStep(store,taskId,{request,environment,re
   store.event(taskId,'NATIVE_ENVIRONMENT_REVIEW_ACCEPTED',{reviewHash,reviewRef,requestId,trust:'SAME_USER_UNPROTECTED'});
   return present(await continueOfflineWorkItem(store,taskId,{...decision,request,cancelled,observePolicy}));
 }
-export async function nativeLocalStep(store,taskId,{request,proposal,revision,requestId,expiresAt,trust,acknowledgeUnisolated=false,cancelled=()=>false}) {
+export async function nativeLocalStep(store,taskId,{request,proposal,revision,requestId,expiresAt,trust,acknowledgeUnisolated=false,cancelled=()=>false,workAdmission}) {
+  const wt=task(store,taskId),workContext=isWork(wt)?workMutable(store,taskId):null;
+  if(workContext){if(proposal)throw Error('WORK_SEPARATE_REPAIR_APPROVAL_REQUIRED');if(trust||acknowledgeUnisolated)requireWorkAdmission(store,taskId,workAdmission,'TESTS');}
   enableReservations(store);
   if(!task(store,taskId).bootstrap) return {...label,action:'BLOCKED_CAPABILITY',reason:'Native Local requires existing Bootstrap WorkItems; other workflow execution retains its current protected contract'};
   if(!Number.isSafeInteger(revision)||!Number.isSafeInteger(expiresAt)||!/^[a-zA-Z0-9_-]{1,120}$/.test(requestId??'')) throw Error('Exact revision, unique request ID and expiry required');
@@ -111,22 +116,23 @@ export async function nativeLocalStep(store,taskId,{request,proposal,revision,re
   const afterCommand=proposal?await previewLocalCommand(request,proposal.files):inspected.command;
   const repair=proposal?null:inspectCompletedRepair(store,taskId,itemId,inspected);
   const review={taskId,revision,taskHash:hash(current),workflowHash:snapshot.workflowHash,itemId,requestId,expiresAt,
-    requestHash,proposalHash,beforeCommand:inspected.command,afterCommand,proposal:proposal??null,
+    requestHash,proposalHash,...(workContext?{workContext}:{}),beforeCommand:inspected.command,afterCommand,proposal:proposal??null,
     ...(repair?{repair}:{}),budget:snapshot.budget,...label};
   const reviewHash=hash(review);
   if(!trust&&!acknowledgeUnisolated) return {...label,action:'AWAIT_APPROVAL',reviewHash,review};
   if(!acknowledgeUnisolated||trust!==reviewHash) throw Error('Explicit trust of exact Local review required');
   if(hash(task(store,taskId))!==review.taskHash) throw Error('Local review contract changed during inspection');
-  const proof={reviewHash,revision,requestHash,proposalHash};
+  if(workContext)acknowledgeWorkProfile(store,taskId,workAdmission.reviewRef);
+  const proof={reviewHash,revision,requestHash,proposalHash,...(workContext?{workContext,reviewRef:workAdmission.reviewRef}:{})};
   const issue=async(runId=null,expectedRevision=revision)=>{
     const fresh=await verifyTask(store,taskId,itemId,request);
     if(cancelled()) throw Error('RECONCILE: cancellation before Local decision');
     if(fresh.commandHash!==afterCommand.commandHash) throw Error('AWAIT_APPROVAL: actual candidate differs from reviewed projection');
     return issueLocalTrustDecision(store,taskId,itemId,request,{decisionId:randomUUID(),requestId,actor:'explicit-local-trust',
       revision:expectedRevision,commandHash:fresh.commandHash,acknowledgeUnisolated:true,expiresAt,maxExecutions:1,
-      timeBudgetMs:request.timeoutMs,maxConsecutiveFailures:1},proof,runId);
+      timeBudgetMs:request.timeoutMs,maxConsecutiveFailures:1},proof,runId,workAdmission);
   };
-  store.event(taskId,'NATIVE_LOCAL_REVIEW_ACCEPTED',{reviewHash,reviewRef:store.artifact(review),requestId,trust:'SAME_USER_UNPROTECTED'});
+  store.event(taskId,'NATIVE_LOCAL_REVIEW_ACCEPTED',{reviewHash,reviewRef:workContext?workAdmission.reviewRef:store.artifact(review),requestId,trust:'SAME_USER_UNPROTECTED'});
   if(!proposal) {
     const decision=await issue(repair?.runId);
     return present(await continueOfflineWorkItem(store,taskId,{...decision,request,cancelled}));
@@ -148,6 +154,7 @@ export async function nativeLocalStep(store,taskId,{request,proposal,revision,re
 export async function prepareNativeFilesReview(store,taskId,itemId) {
   requireCoordinatedWorkItem(store,taskId,itemId);
   const {current,workflow}=bootstrapContext(store,taskId);
+  const workContext=isWork(current)?workMutable(store,taskId):null;
   const snapshot=await continuationSnapshot(store,taskId);
   const run=store.get(current.bootstrap.filesets[itemId]);
   const ordinary=snapshot.next?.itemId===itemId&&['AWAIT_FILESET_APPROVAL','MATERIALIZE'].includes(snapshot.next?.kind);
@@ -161,18 +168,19 @@ export async function prepareNativeFilesReview(store,taskId,itemId) {
   const review={kind:'NativeFilesReview',taskId,itemId,revision:current.revision,taskHash:hash(current),
     workflowHash:workflow.workflowHash,runId:run.id,filesetHash:run.contractHash,contentRef:run.contentRef,
     ...(run.supervisedProposal ? {proposalProvenance:run.supervisedProposal,hostHandoffObservation:'NOT_ESTABLISHED_BY_REVIEW'} : {}),
-    candidateHash:await localTree(current.repo),createdAt:Date.now(),expiresAt:Date.now()+3600000,maxMaterializations:1,
+    candidateHash:await localTree(current.repo),createdAt:Date.now(),expiresAt:Date.now()+(workContext?600000:3600000),maxMaterializations:1,...(workContext?{workContext}:{}),
     publicDelegation:'PUBLIC_DELEGATION_BLOCKED',...label};
   const reviewHash=hash(review),reviewRef=store.artifact({review,reviewHash});
   store.event(taskId,'NATIVE_FILESET_REVIEW_PREPARED',{reviewRef,reviewHash,executionGranted:false});
   return {reviewRef,reviewHash,review,files:store.readArtifact(run.contentRef).files,executionGranted:false};
 }
-export async function acceptNativeFilesReview(store,reviewRef,{trust,acknowledgeUnisolated=false,cancelled=()=>false}={}) {
+export async function acceptNativeFilesReview(store,reviewRef,{trust,acknowledgeUnisolated=false,cancelled=()=>false,hooks={}}={}) {
   const packet=store.readArtifact(reviewRef),r=packet.review;
   if(r?.kind!=='NativeFilesReview'||!trust||trust!==packet.reviewHash||hash(r)!==trust||!acknowledgeUnisolated)throw Error('Explicit exact Fileset review consent required');
   const current=task(store,r.taskId),run=store.get(r.runId);
   if(run.state==='COMPLETED'&&store.events(r.taskId).some(e=>e.type==='NATIVE_FILESET_REVIEW_ACCEPTED'&&e.body.reviewRef===reviewRef))
-    return {...label,status:'RECORDED_NO_REPLAY',materializationRef:run.materializationRef};
+    {if(isWork(current)&&!attachmentComplete(store,current,run))throw Error('WORK_UNRESOLVED_ATTACHMENT');return {...label,status:'RECORDED_NO_REPLAY',materializationRef:run.materializationRef};}
+  const workAdmission=isWork(current)?nativeWorkAdmission(store,r.taskId,r.workContext,reviewRef,'FILES',r.runId):undefined;
   const expired=store.events(r.taskId).some(e=>e.type==='NATIVE_FILESET_REVIEW_EXPIRED'&&e.body.reviewRef===reviewRef);
   const revoked=store.events(r.taskId).some(e=>e.type==='NATIVE_FILESET_REVIEW_REVOKED'&&e.body.reviewRef===reviewRef);
   if(Date.now()>=r.expiresAt&&!expired)store.event(r.taskId,'NATIVE_FILESET_REVIEW_EXPIRED',{reviewRef});
@@ -182,7 +190,8 @@ export async function acceptNativeFilesReview(store,reviewRef,{trust,acknowledge
     throw Error('Fileset review expired, revoked or task/candidate changed');
   if(!['WAITING_APPROVAL','READY'].includes(run.state)||Object.keys(run.results??{}).length)throw Error('RECONCILE: Fileset already started');
   requireCoordinatedWorkItem(store,r.taskId,r.itemId);
-  approveTask(store,r.taskId,{actor:'explicit-local-trust',workflowHash:r.filesetHash,expiresAt:r.expiresAt});
+  if(workAdmission)acknowledgeWorkProfile(store,r.taskId,reviewRef);
+  approveTask(store,r.taskId,{actor:'explicit-local-trust',workflowHash:r.filesetHash,expiresAt:r.expiresAt},workAdmission);
   store.event(r.taskId,'NATIVE_FILESET_REVIEW_ACCEPTED',{reviewRef,reviewHash:trust,trust:'SAME_USER_UNPROTECTED'});
-  return {...await materializeTask(store,r.taskId,r.itemId,{freshOnly:true,cancelled}),...label};
+  return {...await materializeTask(store,r.taskId,r.itemId,{freshOnly:true,cancelled,workAdmission,hooks}),...label};
 }

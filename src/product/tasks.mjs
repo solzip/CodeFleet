@@ -1,3 +1,4 @@
+import {isWork,WORK_PROFILE,createWorkRequest,workRequest,workMutable,validateWorkDraft,bindWorkProfile,requireWorkAdmission,checkWorkFiles,checkWorkCommand} from './work-review.mjs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { hash, validateContract } from '../alpha/contract.mjs';
@@ -33,17 +34,19 @@ export function task(store, id) {
   return JSON.parse(row.body);
 }
 export function tasks(store) { return store.db.prepare('SELECT body FROM product_tasks ORDER BY rowid DESC').all().map(r => JSON.parse(r.body)); }
-function update(store, current, next, event, detail = {}) {
+function update(store, current, next, event, detail = {}, fence=()=>{}) {
   store.db.exec('BEGIN IMMEDIATE');
   try {
+    fence();
     if (store.db.prepare('UPDATE product_tasks SET body=?,revision=? WHERE id=? AND revision=?').run(JSON.stringify(next), next.revision, current.id, current.revision).changes !== 1) throw Error('Task revision conflict');
-    store.event(current.id, event, { ...detail, revision: next.revision, planRef: next.planRef, runId: next.runId ?? null });
+    store.event(current.id, event, { ...detail, revision: next.revision, planRef: next.planRef, runId: detail.runId ?? next.runId ?? null });
     store.db.exec('COMMIT'); return next;
   } catch (e) { store.db.exec('ROLLBACK'); throw e; }
 }
 export async function createTask(store, repo, objective, options = {}) {
   if (typeof objective !== 'string' || !objective.trim() || objective.length > 4000 || objective.includes('\0')) throw Error('Intent requires 1..4000 characters');
   // Creation-only limits; execution still requires approval and reservations.
+  if(options.workProfile!==undefined){if(options.workProfile!==WORK_PROFILE||options.acceptanceMode!=='LOCAL_ONLY'||!options.localExisting)throw Error('UNSUPPORTED_PROFILE');options={...options,maxAttempts:2,timeoutSeconds:60};}
   const { maxAttempts = 1, timeoutSeconds = 300, attemptBudgetUsd = 1, acceptanceMode = 'PROTECTED_REQUIRED' } = options;
   if (!['PROTECTED_REQUIRED', 'LOCAL_ONLY'].includes(acceptanceMode)) throw Error('Unknown acceptance mode');
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 5) throw Error('maxAttempts must be 1..5');
@@ -51,6 +54,7 @@ export async function createTask(store, repo, objective, options = {}) {
   if (!Number.isFinite(attemptBudgetUsd) || attemptBudgetUsd <= 0 || attemptBudgetUsd > 10) throw Error('attemptBudgetUsd must be >0 and <=10');
   const original = { kind: 'IntentPlan', intent: { original: objective, authority: 'USER_REQUEST_ONLY' }, executable: false, status: 'PLANNING' };
   const value = { id: 'task-' + randomUUID(), revision: 1, repo: path.resolve(repo), planRef: store.artifact(original), state: 'PLANNING', runId: null, acceptanceMode, settings: { maxParallel: 1, maxAttempts, timeoutSeconds, attemptBudgetUsd }, plannerAttempt: options.registry ? { status: 'RESERVED', cost: null, automaticRetry: false } : null };
+  if(options.workProfile)Object.assign(value,createWorkRequest(store,value,options));
   store.db.exec('BEGIN IMMEDIATE');
   try {
     store.db.prepare('INSERT INTO product_tasks VALUES (?,?,?)').run(value.id, value.revision, JSON.stringify(value));
@@ -60,6 +64,7 @@ export async function createTask(store, repo, objective, options = {}) {
   try {
     // The trusted probe, never Draft input, chooses the contract.
     const probe = await probeRepository(value.repo);
+    if(options.workProfile&&!probe.base)throw Error('WORK_HEAD_REQUIRED');
     if(options.localExisting && probe.contract===null) plan={...original,status:'BLOCKED',probe,error:probe.error?.kind};
     else if (options.localExisting) {
       if(!['UNBORN_HEAD','BOOTSTRAP_CANDIDATE','EXISTING_SOURCE'].includes(probe.state)) throw Error('Existing Local requires a Git repository; no automatic initialization');
@@ -73,7 +78,9 @@ export async function createTask(store, repo, objective, options = {}) {
     else plan = await semanticPlan(value.repo, objective, options);
   } catch (e) { plan = { ...original, status: 'BLOCKED', error: e.message, providerResult: e.providerResult ?? null }; }
   const plannerAttempt = !value.plannerAttempt ? null : plan.contractKind === 'NEW_PROJECT' ? { status: 'NOT_INVOKED_NEW_PROJECT', cost: null, automaticRetry: false } : { status: plan.providerResult ? 'RESULT_RECORDED' : 'UNCONFIRMED_OR_BLOCKED', cost: plan.providerResult?.cost ?? null, automaticRetry: false };
-  return update(store, value, { ...value, revision: 2, planRef: store.artifact(plan), state: plan.validation?.status ?? 'BLOCKED', plannerAttempt }, 'PLAN_RECORDED');
+  const recorded=update(store, value, { ...value, revision: 2, planRef: store.artifact(plan), state: plan.validation?.status ?? 'BLOCKED', plannerAttempt }, 'PLAN_RECORDED');
+  if(isWork(recorded)&&recorded.state==='BLOCKED')store.event(recorded.id,'WORK_START_REJECTED',{code:'UNSUPPORTED_PROFILE',reason:plan.error??'Repository unavailable'});
+  return recorded;
 }
 function bootstrapPlan(probe, objective) {
   const draft = bootstrapSkeleton(probe, objective);
@@ -116,6 +123,7 @@ export async function reviewTask(store, id, { files, tests, criterion, items, ma
 export async function submitTaskDraft(store, id, input) {
   exact(input, ['revision', 'proposal'], 'Host draft');
   const current = task(store, id), old = store.readArtifact(current.planRef);
+  if(isWork(current))workMutable(store,id,{unbound:true});
   if (current.runId || current.state === 'REJECTED' || input.revision !== current.revision)
     throw Error('Draft revision closed or stale; create a new task');
   if(current.bootstrap){await currentProbe(old);throw Error('Draft revision closed or stale; create a new task');}
@@ -136,7 +144,8 @@ export async function prepareTask(store, id) {
   if (current.state === 'REJECTED') throw Error('Task rejected');
   if (['PLANNING', 'BLOCKED'].includes(current.state)) throw Error('Planning incomplete; create a new plan, no automatic planner replay');
   if (current.runId) return current;
-  if (isBootstrap(store.readArtifact(current.planRef))) return prepareBootstrap(store, current);
+  if(isWork(current))workMutable(store,id,{unbound:!current.workProfileRef});
+  if (isBootstrap(store.readArtifact(current.planRef))) return bindWorkProfile(store,await prepareBootstrap(store, current));
   const plan = store.readArtifact(current.planRef), compiled = compile(plan);
   const source = current.sourceRef ? store.readArtifact(current.sourceRef) : compiled.alpha;
   if (hash({ ...source, maxAttempts: 1, timeoutSeconds: 300, attemptBudgetUsd: 1 }) !== hash(compiled.alpha)) throw Error('Reviewed source mismatch');
@@ -146,7 +155,8 @@ export async function prepareTask(store, id) {
   const run = await createWorkflow(store, current.repo, workflow, source, current.id + '-r' + current.revision);
   return update(store, current, { ...current, revision: current.revision + 1, runId: run.id, state: 'WAITING_APPROVAL' }, 'TASK_WORKFLOW_ATTACHED');
 }
-export function approveTask(store, id, decision) {
+export function approveTask(store, id, decision, workAdmission) {
+  requireWorkAdmission(store,id,workAdmission,'FILES');
   const current = task(store, id);
   if (current.bootstrap && current.state !== 'REJECTED') {
     // The digest names one proposed fileset; approval reuses the workflow approval record.
@@ -158,6 +168,7 @@ export function approveTask(store, id, decision) {
   approveWorkflow(store, current.runId, decision); return current;
 }
 export function rejectTask(store, id, actor) {
+  if(isWork(task(store,id)))throw Error('WORK_USE_CONTROL_OR_CLOSE');
   const current = task(store, id);
   if (!actor?.trim()) throw Error('Explicit actor required');
   if (current.runId) { revokeWorkflow(store, current.runId, actor); store.control(current.runId, 'cancel'); }
@@ -178,7 +189,9 @@ function clarificationsFor(store, current) {
 }
 async function revalidateBootstrap(store, current, old, draft, clarifications, analysis = old.analysis) {
   const probe = await currentProbe(old);
-  const validation = validateBootstrapDraft(draft, probe, old.intent.original, await existingPaths(probe.root, draftPaths(draft)), clarifications, old.contractKind==='EXISTING_LOCAL');
+  const wr=workRequest(store,current);
+  if(wr)validateWorkDraft(store,current,draft,old);
+  const validation = validateBootstrapDraft(draft, probe, old.intent.original, await existingPaths(probe.root, draftPaths(draft)), clarifications, old.contractKind==='EXISTING_LOCAL',wr?{taskId:current.id,mode:wr.mode,workRequestRef:current.workRequestRef}:null);
   const plan = { ...old, draft, validation, executable: false, stages: ['INTENT_RECEIVED', 'PROBED', 'DRAFTED', ...(validation.status === 'VALIDATED' ? ['VALIDATED'] : [])], analysis };
   delete plan.workflowPreview;
   // A VALIDATED draft must also form a valid bootstrap DAG.
@@ -411,6 +424,7 @@ export async function submitBootstrapFiles(store, id, input, { supervisedProposa
   if (supervised && hash(input) !== hash(supervised.input)) throw Error('Supervised Fileset differs from reviewed proposal');
   requireCoordinatedWorkItem(store, id, input?.itemId, { preparedProposalItem: supervised?.input.itemId });
   const { current, plan, workflow } = bootstrapContext(store, id);
+  checkWorkFiles(store,current,input);
   if (input?.revision !== current.revision) throw Error('Fileset revision stale; read status first');
   if (input && Object.hasOwn(input, 'repair')) return submitRepairFiles(store, current, plan, workflow, input);
   const existing=plan.contractKind==='EXISTING_LOCAL';
@@ -496,7 +510,8 @@ async function submitRepairFiles(store, current, plan, workflow, input) {
   return { task: next, approvalRequest: { taskId: current.id, itemId, runId: run.id, operation: 'modify', filesetHash, files: manifest.files, repairOf: manifest.repairOf, authority: 'REQUEST_ONLY' } };
 }
 const OUTCOMES = { MATERIALIZED: ['COMPLETED', 'MATERIALIZED'], CONFLICT: ['WAITING_HUMAN', 'CONFLICT'], FAILED: ['WAITING_HUMAN', 'MATERIALIZATION_FAILED'], INTERRUPTED: ['WAITING_HUMAN', 'INTERRUPTED'] };
-export async function materializeTask(store, id, itemId, { now = Date.now(), guard, hooks = {}, cancelled = () => false, freshOnly = false } = {}) {
+export async function materializeTask(store, id, itemId, { now = Date.now(), guard, hooks = {}, cancelled = () => false, freshOnly = false, workAdmission } = {}) {
+  requireWorkAdmission(store,id,workAdmission,'FILES');
   requireCoordinatedWorkItem(store, id, itemId);
   const { current, plan, workflow } = bootstrapContext(store, id);
   const runId = current.bootstrap.filesets[itemId];
@@ -522,6 +537,7 @@ export async function materializeTask(store, id, itemId, { now = Date.now(), gua
   const probe = await repositoryPreflight(current, plan, workflow);
   const owner = store.claim(runId);
   const fence = () => {
+    requireWorkAdmission(store,id,workAdmission,'FILES');
     requireCoordinatedWorkItem(store, id, itemId);
     const lease = store.db.prepare('SELECT owner,leaseUntil,control FROM runs WHERE id=?').get(runId);
     const live = store.db.prepare('SELECT * FROM workflow_approvals WHERE runId=? AND revision=?').get(runId, run.revision);
@@ -546,6 +562,7 @@ export async function materializeTask(store, id, itemId, { now = Date.now(), gua
       status: outcome.status, results: outcome.results, dependencyEvidence, verification: 'NOT_RUN', complete: false });
     await hooks.beforeCommit?.({ runId, owner }); fence();
     run.state = runState; run.reason = outcome.status; store.save(run, owner, 'BOOTSTRAP_MATERIALIZATION_' + outcome.status, fence);
+    await hooks.afterRunCommit?.({runId,owner});
     const latest = task(store, id);
     // Record what this process wrote, then invalidate every local result that ran
     // against the previous bytes: changed files need a new trusted verification.
@@ -556,7 +573,7 @@ export async function materializeTask(store, id, itemId, { now = Date.now(), gua
       const node = workflow.items.find(n => n.id === d);
       if (node.kind === 'local-verification' && ['LOCAL_PASSED', 'LOCAL_FAILED', 'INCONCLUSIVE'].includes(states[d])) { states[d] = 'VERIFICATION_STALE'; stale.push(d); }
     }
-    update(store, latest, { ...latest, revision: latest.revision + 1, bootstrap: { ...latest.bootstrap, digests: sorted(digests), states } }, 'BOOTSTRAP_ITEM_' + itemState, { itemId, staleVerifications: stale });
+    update(store, latest, { ...latest, revision: latest.revision + 1, bootstrap: { ...latest.bootstrap, digests: sorted(digests), states } }, 'BOOTSTRAP_ITEM_' + itemState, { itemId, staleVerifications: stale,...(isWork(latest)?{runId,materializationRef:run.materializationRef,workContext:{profileRef:workAdmission.profileRef,controlSeq:workAdmission.controlSeq}}:{}) },isWork(latest)?()=>requireWorkAdmission(store,id,workAdmission,'FILES'):undefined);
     return { status: outcome.status, itemId, runId, operation: repair ? 'modify' : 'create', results: outcome.results, materializationRef: run.materializationRef, staleVerifications: stale, authority: 'CODEFLEET_DIRECT_WRITE', verification: 'NOT_RUN', complete: false };
   } finally { store.release(runId, owner); }
 }
@@ -566,6 +583,7 @@ export async function materializeTask(store, id, itemId, { now = Date.now(), gua
 // any file changed can never authorize a run against the changed files.
 export async function verifyTask(store, id, itemId, request, { trust, acknowledgeUnisolated = false, cancelled = () => false, backend = localBackend() } = {}) {
   requireCoordinatedWorkItem(store, id, itemId);
+  if(isWork(task(store,id))){workMutable(store,id);checkWorkCommand(store,task(store,id),request);if(trust!==undefined)throw Error('WORK_DURABLE_NATIVE_REVIEW_REQUIRED');}
   if (trust !== undefined && store.db.prepare("SELECT 1 FROM sqlite_master WHERE name='bootstrap_decisions'").get() &&
       store.db.prepare('SELECT 1 FROM bootstrap_decisions WHERE taskId=?').get(id)) throw Error('Durable decision required for this task; command hash is not an execution grant');
   const { current, plan, workflow } = bootstrapContext(store, id);

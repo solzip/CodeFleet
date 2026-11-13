@@ -1,7 +1,64 @@
 # 구현·검증 진행 현황
 
-갱신: 2026-11-13 · 검토 기준: `f7441d1551ce296b721ce102f315e7b03ba0ee67` + 문서 역할 분리. 런타임과 기존 실행 계약·승인은 변경하지 않았다.
+갱신: 2026-11-13 · 신규 구현 기준: `b3f8b985a903fd255983da01d6f284df3dea14aa` + 작업 트리. 아래 이전 기록은 당시 범위의 근거로 보존한다.
 제품 목적은 [제품 원칙](../docs/PRODUCT_VISION.md), 구조는 [아키텍처](../docs/product-completion/architecture.md), 수락 조건과 순서는 [로드맵](../docs/product-completion/roadmap.md)에서 관리한다.
+
+## Work review 구현 후보와 운영 전 검증
+
+소유자가 운영 전 작업 2~7 구현과 이어지는 8~10 검증을 요청했다. 범위는 revision 3의 기존 Git/Node 프로젝트·단일 Agent·감독형 LOCAL_ONLY다. 기존 Controller·Task·Store/Event·예약·Lease·Recovery·Evidence/Judge를 재사용한다. Git 공개 작업, 전역 설치/설정 변경, 기존 Task 이관, 별도 모델 프로세스는 범위에 넣지 않았다.
+
+| WorkItem | 파일 범위·의존성 | 수락 조건과 현재 수준 |
+| --- | --- | --- |
+| 2 프로필·기록 | tasks, work-review. 기존 Task 생성/준비에 의존 | 불변 요청·profile 결합, 기존 event/extension 사용. IMPLEMENTED_CANDIDATE |
+| 3 권한 경계 | Native, reservations, CLI, repair, revision, coordination. 2에 의존 | Native 승인 context·controlSeq가 시작/실행/확정 guard까지 전달, raw 효과 우회 차단. IMPLEMENTED_CANDIDATE |
+| 4 읽기 보고 | work-report, CLI. 2와 기존 Judge에 의존 | 읽기 전용 상태·현재 후보·P01~P14 우선순위·실패/불명/잔여 예산. IMPLEMENTED_CANDIDATE |
+| 5 MCP·Validator | codex-mcp, bootstrap Validator. 2~4에 의존 | 명시 opt-in·고정 한도·Task 탐색·검증 전용 예외, legacy 기본값/거부 보존. IMPLEMENTED_CANDIDATE |
+| 6 Owner UX | work-owner, Native, install Skill 안내. 3~5에 의존 | 별도 TTY 검토·확인, 비TTY/거절 차단, 완성 argv. IMPLEMENTED_CANDIDATE |
+| 7 중단·종료 | work-review, materializer, reservations. 2~6에 의존 | 두 commit 연결, 제어 epoch, 하위 행 종료 검사·불명 포기. IMPLEMENTED_CANDIDATE |
+| 8 시험·회귀 | work-review 및 관련 기존 suite. 2~7에 의존 | 정상/실패/불명과 기존 경계 검증 진행. 보호 전체 수용과 구분 |
+| 9 설치·안내 | installer, 설치/패키지 시험, Host guide. 2~8에 의존 | 설치본 CHANGE Local 완료와 수정 설치물 보존 확인. 실제 Host 발견과 구분 |
+| 10 Host Live | 실제 Host·Owner·고정 환경. 8~9에 의존 | 사전 확인: 실제 CLI 0.167.0, 설계 대상 0.167.1. 목표 환경의 Live는 BLOCKED / NOT_RUN. Owner 직접 확인·실제 Compaction도 NOT_RUN |
+
+실행 환경은 Windows x64 / PowerShell 5.1 / Node 24.14.1이다. 시험은 임시 저장소와 State를 사용하며 테스트용 승인은 SYNTHETIC/OFFLINE이다. 자동 시험이 Owner를 인증하거나 실제 Host 전체 수용을 입증하지 않는다. Docker 사전 조회는 설정 파일 접근 거부로 exit 1이었다. 선택한 Local 기본 경로의 선행 조건은 아니며 보호 수용으로 전환하지 않는다.
+
+개발 중 신규 시험 최초 7개는 5 PASS / 2 FAIL이었다. Task event의 runId 덮어쓰기로 적용 연결이 누락된 원인을 수정한 뒤 7 PASS, 추가 중단 시험 포함 10 PASS를 확인했다. 이어 Native/예약/시간/MCP/신규 시험 통합은 exit 0, 99 PASS / 0 FAIL / 0 SKIP이었다. 이후 설치 경로와 추가 검증 변경은 아래 최종 결과를 별도로 따른다.
+
+Host Core 첫 실행은 exit 1이었다. readOnly Host 조회에서 초기화를 호출하는 회귀 4건을 확인하고 수정했으며 관련 파일 재실행은 exit 0, 6 PASS였다. 전체 Host Core 재실행을 수행한다. 패키지 시험 최초 실행은 npm 캐시 EPERM으로 2 FAIL, 승인된 재실행은 공개 계약 문서 오분류로 2 FAIL이었다. 배포에 이미 명시된 공개 계약 11개만 허용하고 비공개 경로 부정 시험을 추가한 뒤, 작업별 캐시를 사용하는 오프라인 패키징/임시 설치 시험은 exit 0, 3 PASS였다. 배포 파일 제한·보호 gate·기준선은 낮추지 않았다.
+
+최종 변경에는 Owner의 목표·전체 profile·변경 전후 소스 표시와 복사 가능한 PowerShell 명령, repair 제안 이후 REVIEW_FILES 안내를 포함했다. 모의 TTY는 오프라인 UI 시험이며 실제 Owner 신원이나 Host 승인을 입증하지 않는다. 상태 정책 시험은 P01~P14와 순서가 있는 조건 13개의 모든 쌍 78개를 검사한다. 이는 정책 함수의 우선순위 근거이며 모든 실제 장애 조합을 실행했다는 뜻은 아니다.
+
+| 검증 명령·범위 | 관측 결과 | 한계 |
+| --- | --- | --- |
+| `npm.cmd run pretest` → `npm.cmd run test:legacy` | 각각 exit 0, Legacy 327 PASS / 0 FAIL / 0 SKIP | Legacy 기준선·계약 유지. 새 프로필 수용 아님 |
+| `npm.cmd run test:host-core` 최종 재실행 | exit 0, 135 PASS / 0 FAIL / 0 SKIP | Docker-free 기본/Local 경로. 보호 전체 회귀 아님 |
+| `node --test test/work-review.test.mjs test/native-local.test.mjs` | exit 0, 43 PASS / 0 FAIL / 0 SKIP | 당시 신규 15개와 Native 경계. 후속 Owner 표시·MCP 명령 변경은 별도 확인 |
+| `node --test test/work-review.test.mjs test/codex-mcp.test.mjs` 최종 재실행 | exit 0, 19 PASS / 0 FAIL / 0 SKIP | 신규 16개·기존 MCP 3개. 실제 Host MCP 도구 호출/Owner 승인은 아님 |
+| Repair 안내·상태 정책·설치본 관련 재실행 | exit 0, 3 PASS / 0 FAIL / 0 SKIP | 영향 범위 확인 |
+| 모의 Owner TTY·설치본 CHANGE 관련 재실행 | exit 0, 2 PASS / 0 FAIL / 0 SKIP | 실제 Owner/Host Live 아님 |
+| `npm.cmd run test:installed-goal-loop` 최종 재실행 | exit 0, 3 PASS / 0 FAIL / 0 SKIP | 실제 tarball·오프라인 임시 설치·Codex/Claude Skill runtime. 모델 호출 없음 |
+| `.mjs` 구문 검사 | exit 0, src의 84개 오류 0 | TypeScript 전체 구문 검사와 구분 |
+| `node --test test/doc-layout.test.ts` | exit 0, 3 PASS | 문서 배치 검사 |
+| `npm.cmd run posttest`, `git diff --check` 최종 확인 | 각각 exit 0. Markdown 37개·링크 233개·인용 4개·선언 사실 42건 오류 0 | 외부 링크 내용·실제 Host·보호 검증을 증명하지 않음. coverage/anchor 기준선 변경 없음 |
+
+8번은 위 선택된 Local 회귀의 근거를 확보했으며 전체 보안/보호 회귀는 NOT_RUN이다. 9번은 설치본과 패키지의 오프라인 근거를 확보했으며 실제 Host의 Skill 발견은 NOT_RUN이다. 10번은 PATH의 Codex CLI 0.167.0과 목표 0.167.1 차이, 현재 세션의 CodeFleet MCP 직접 도구 미노출(도구 목록 검색 0개), 별도 Owner 직접 승인·실제 Compaction 미관측으로 BLOCKED / NOT_RUN이다. 다음 허용 행동은 목표 Host 환경에 설치본 MCP를 연결하고 별도 Owner가 정확한 효과를 승인한 실제 세션에서 정상·실패·새 세션·Compaction·미해결 종료를 관측하는 것이다. 기존 실패·기록·예산을 초기화하거나 다른 버전의 결과로 대체하지 않는다. 생산성 6쌍 비교는 요청 범위 뒤의 미실행 항목으로 남긴다.
+
+## 이전 설계 검토 기록
+
+2026-11-13 revision 3 검토: 실행 진입점, 실제 저장 순서·경합, 사용자/Host/Owner 전체 절차를 검토했다. 기준 커밋은 설계에 명시한 `b3f8b985a903fd255983da01d6f284df3dea14aa`다. product CLI 이름 64개(help 포함, dispatch 전 authorize-local 포함)를 분류했고 정적 목록 대조에서 누락·초과 0개를 확인했다. MCP 7개 도구와 Host forwarding, 하위 Task/Native/reservation/repair 호출 및 Task 없는 외부 실행의 경계를 구분했다. readOnly Store, 하위 우회 guard, MCP 연결, 파일 적용 두 commit, controlSeq의 Decision 전달, Owner 조작, 종료의 하위 행 검사 등 7건을 설계에 반영했다. 탁상 시나리오 8개는 TABLETOP_ONLY이며 새 프로필·명령·Host 실행은 아직 구현·수용하지 않았다.
+
+이 검토에서 `node --test test/time-safety.test.mjs test/native-local.test.mjs test/bootstrap-reservations.test.mjs` exit 0, 85 PASS / 0 FAIL / 0 SKIP을 확인했다(Windows x64 / PowerShell 5.1 / Node 24.14.1). 기존 경계의 회귀 근거이며 신규 프로필 통과를 뜻하지 않는다. 런타임 변경·설치·모델 호출·기존 Task 이관·Git 공개 작업은 하지 않았다. 후속 신규 부정 시험과 실제 Host/Owner 검증은 NOT_RUN이다.
+
+revision 3 문서 검증: `npm.cmd run posttest` exit 0(37 Markdown·231 링크·4 인용·42 선언 사실, 오류 0), `node --test test/doc-layout.test.ts` exit 0(3 PASS), `git diff --check` exit 0. 별도 구조 확인에서 revision 3·검토 ID 7개·P01~P14 순서·LF·코드 블록 균형을 확인했다. 기존 coverage/anchor 기준선은 변경하지 않았다. 최초 정적 목록 확인 스크립트는 PowerShell의 한글 파이프 인코딩 때문에 exit 1이었으며 ASCII 구분자로 수정한 뒤 64개 전체 대응을 확인했다. 이는 도구 실행 오류이며 제품 테스트 실패로 대체 기록하지 않는다.
+
+[개발 작업 검증과 재개 전체 설계](../docs/implementation/work-verification-resume.md)를 소유자 검토용으로 작성했다. 상태는 REVIEW_REQUIRED / DOCUMENTED다. 기존 프로젝트·단일 Agent·감독형 Local을 초기 주 경로로 좁히는 안이며, 기능별 정상·실패·불명의 변경·보존·중단·재개와 전체 영향, 수락 시험, 기존 구현 재사용 범위를 정의한다. 런타임·기존 Task·승인·검증 기준선은 변경하지 않았다. 다음 허용 작업은 설계 검토와 수정이며 구현·이관·실제 Host 실행은 이번 문서화 범위에 포함하지 않는다.
+
+설계 revision 2에서는 초안에 남았던 제품 조작·상태 전이·불명 종결·수동 조건·데이터/호환성·가치 수락의 결정을 고정했다. `WORK_REVIEW_V1`의 CHANGE와 VERIFY_CURRENT, 기존 Store 안의 profile/request/종료 기록, 사건 우선순위와 충돌 처리, 미해결 포기 후 차단, 구 Task 읽기 전용, 기술 게이트와 수치 비교 기준을 정의했다. 이는 초기 범위에 대한 설계 결정 완료이며 런타임 구현·실제 Host 수용·생산성 개선의 증거가 아니다.
+
+revision 2의 문서 검증은 Windows x64 / PowerShell 5.1 / Node v24.14.1에서 수행했다. `npm.cmd run posttest` exit 0: Markdown 37개·링크 231개·인용 4개·선언 사실 42건 검사 오류 없음. `node --test test/doc-layout.test.ts` exit 0, 3 PASS / 0 FAIL / 0 SKIP. 별도 구조 확인 exit 0: 기능 11개 모두 정상·실패·불명 표 포함, P01~P14 순서·필수 결정 항목·LF·코드 블록 균형 확인. `git diff --check` exit 0. 기존 Legacy 측정 자료를 재사용했으며 runtime suite·Host Live·새 프로필 실행·비교 실험은 이번 revision 작업에서 NOT_RUN이다. 현행 Validator가 소스 0개를 거부하는 연결 차이는 설계에 명시했고, 신규 검증 전용 context와 기존 거부 보존을 구현 수락 조건으로 고정했다.
+
+앞선 초안 확인 기준은 `b3f8b985a903fd255983da01d6f284df3dea14aa` + 당시 문서 변경이며, 환경은 Windows / PowerShell / Node v24.14.1이다. `npm.cmd run pretest` exit 0 → `npm.cmd run test:legacy` exit 0, 327 PASS / 0 FAIL / 0 SKIP → `npm.cmd run posttest` exit 0을 확인했다. 당시 문서 검사는 Markdown 37개, 링크 231개, 인용 4개, 선언 사실 42건을 검사했고 오류는 없었다. 별도 구조 확인은 기능 11개 모두 정상·실패·불명 표를 포함하고 LF를 유지함을 확인했다. 이 확인은 설계 내용의 실제 Host 수용을 뜻하지 않는다.
+
+초기 `npm.cmd run check:links`와 `npm.cmd run check:citations`는 각각 exit 1이었다. 검사기의 Git 파일 목록 조회가 실패했으며, 해당 프로세스의 저장소 경로 표기를 정규화한 뒤 각각 exit 0으로 재실행했다. 전역 Git 설정과 검사 기준은 변경하지 않았다. 보조 구조 확인도 최초 PowerShell stdin 한글 인코딩 문제로 exit 1, 검사 표현 수정 후 exit 0이었다. Host Live·보호 검증·macOS/Linux 검증은 이번 문서 작업에서 NOT_RUN이다.
 
 ## 현재 상태 요약
 

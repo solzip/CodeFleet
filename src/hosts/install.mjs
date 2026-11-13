@@ -48,6 +48,13 @@ codefleet_fileset_review and codefleet_local_test_review tools. These let this
 Codex model advance the existing CodeFleet Task without writing intermediary
 JSON files or starting a second Codex model process. Follow the Goal loop
 below and read goal_status after every accepted proposal.
+With an explicit WORK_REVIEW_V1 MCP launch, goal_start requires CHANGE or
+VERIFY_CURRENT mode; goal_status with no Task ID lists persisted work. Use
+workReport for current status. Reviews return a complete work-owner-review
+command: the Owner reads scope in a separate interactive terminal and types
+APPLY or VERIFY. Never type that confirmation on the Owner's behalf. This
+profile does not require appending flags or transcribing hashes. Legacy MCP
+configuration retains the following legacy Owner command procedure.
 After a proposed Fileset, call codefleet_fileset_review to obtain its
 current exact reviewRef, reviewHash, file bytes and ownerAction with the
 absolute executable, argv and external --state. The argv is intentionally

@@ -1,3 +1,4 @@
+import {guardWorkCli,isWork} from '../product/work-review.mjs';
 import path from 'node:path';
 import { open } from 'node:fs/promises';
 import { Store } from '../alpha/store.mjs';
@@ -49,6 +50,7 @@ export async function dispatchHost(argv, { store, execution = {} } = {}) {
   const [host, action, ...args] = argv;
   if (!host || ['help', '--help'].includes(host)) return { exitCode: 0, data: { help: hostHelp } };
   const identity = hostIdentity(host);
+  if(store){const work=guardWorkCli(store,['draft','files','prepare','approval-request','workflow','explain'].includes(action)?'plan':action,args[0]);if(work&&isWork(work)&&!['plan','review','status','report','pause','cancel','reject','draft','files','prepare','approval-request','workflow','explain'].includes(action))throw Error('WORK_UNSUPPORTED_HOST_ENTRY');}
   const present = result => {
     const data = { ...result.data, host: identity };
     const failure = data.plan?.probe?.error;
@@ -80,7 +82,7 @@ export async function dispatchHost(argv, { store, execution = {} } = {}) {
     const data = await hostDoctor(host, { probeContainer, repository });
     return { exitCode: data.status === 'AVAILABLE' ? 0 : 1, data };
   }
-  enableTasks(store);
+  if(!store.readOnly)enableTasks(store);
   // Allowlist excludes approval, model flags, provider selection and arbitrary commands.
   if (args.some(v => ['--allow-model', '--planner', '--codex-executable', '--claude-executable'].includes(v))) throw Error('Host path cannot launch a model or select a provider');
   if (action === 'draft') {
@@ -151,7 +153,7 @@ export async function hostCli(argv, directory) {
     try { requireProductionHostIsolation(); }
     catch (error) { return { exitCode: 1, data: { status: 'BLOCKED', error: error.message } }; }
   }
-  const store = new Store(directory);
+  const store = new Store(directory,{readOnly:['status','report','workflow','explain'].includes(argv[1])});
   try { return await dispatchHost(argv, { store }); }
   catch (error) { return { exitCode: 1, data: { status: 'BLOCKED', error: error.message } }; }
   finally { store.close(); }

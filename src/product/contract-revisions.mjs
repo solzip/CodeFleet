@@ -1,3 +1,4 @@
+import {isWork,workTaskForReference} from './work-review.mjs';
 // Supervised contract changes, using the existing Store/artifacts and one atomic
 // Task transition. This is not an issuer, execution grant or second scheduler.
 import { randomUUID } from 'node:crypto';
@@ -142,6 +143,7 @@ async function inspectRevision(store, taskId, draft) {
 }
 
 export async function prepareContractRevision(store,taskId,input) {
+  if(isWork(task(store,taskId)??{}))throw Error('WORK_USE_SUPERSEDED_NEW_TASK');
   if (!input || typeof input!=='object' || !Object.hasOwn(input,'revision') ||
       !Object.hasOwn(input,'draft') || Object.keys(input).some(k=>!['revision','draft','additionalAttempts','additionalTimeSeconds'].includes(k)))
     throw Error('Invalid Contract revision proposal fields');
@@ -166,6 +168,7 @@ export async function prepareContractRevision(store,taskId,input) {
 }
 
 export async function acceptContractRevision(store,reviewRef,{trust,acknowledgeUnisolated=false}={}) {
+  if(isWork(workTaskForReference(store,reviewRef)??{}))throw Error('WORK_USE_SUPERSEDED_NEW_TASK');
   const packet=store.readArtifact(reviewRef),r=packet.review;
   if(packet.kind!=='ContractRevisionReviewPacket'||!trust||trust!==hash(r)||!acknowledgeUnisolated)
     throw Error('Explicit exact supervised contract review required');
@@ -234,6 +237,7 @@ export async function acceptContractRevision(store,reviewRef,{trust,acknowledgeU
 }
 
 export function revokeContractRevision(store,reviewRef) {
+  if(isWork(workTaskForReference(store,reviewRef)??{}))throw Error('WORK_USE_SUPERSEDED_NEW_TASK');
   const packet=store.readArtifact(reviewRef);if(packet.kind!=='ContractRevisionReviewPacket')throw Error('Contract review required');
   store.event(packet.review.taskId,'CONTRACT_REVISION_REVIEW_REVOKED',{reviewRef});
   return {status:'REVOKED',reviewRef,executionGranted:false};

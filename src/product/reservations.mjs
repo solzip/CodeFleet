@@ -1,3 +1,4 @@
+import {checkWorkDecision,requireWorkAdmission} from './work-review.mjs';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { hash } from '../alpha/contract.mjs';
@@ -44,6 +45,7 @@ function decision(store, id) {
   return { ...row, binding: JSON.parse(row.body) };
 }
 function currentBinding(store, binding) {
+  checkWorkDecision(store,binding);
   const { current, plan, workflow } = bootstrapContext(store, binding.taskId);
   if (current.revision !== binding.revision || hash(current) !== binding.taskHash ||
       workflow.workflowHash !== binding.workflowHash || plan.probe.repositoryId !== binding.repositoryId ||
@@ -145,7 +147,8 @@ export async function issueOfflineRepairDecision(store, taskId, itemId, request,
 // Explicit same-user Local trust, NOT an authenticated Operator grant. The
 // Native coordinator checks the complete review before calling this adapter.
 // Signed/protected enrollment still invokes its guard and rejects this proof.
-export async function issueLocalTrustDecision(store, taskId, itemId, request, input, review, repairRunId = null) {
+export async function issueLocalTrustDecision(store, taskId, itemId, request, input, review, repairRunId = null, workAdmission) {
+  requireWorkAdmission(store,taskId,workAdmission,'TESTS');
   const authorization = { kind: 'EXPLICIT_LOCAL_TRUST', ...structuredClone(review) };
   const result = repairRunId ? await issueRepair(store, taskId, itemId, request, input, repairRunId, authorization)
     : await issue(store, taskId, itemId, request, input, undefined, authorization);

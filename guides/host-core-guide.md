@@ -6,6 +6,40 @@ Workflow/DAG, roles, policy, recovery and evidence-bound completion.
 No direct model API, Docker, WSL or separate OS account is required to prepare
 work. The current local runtime requires Node 24.14.1 or newer and Git.
 
+## Work review candidate
+
+The opt-in `WORK_REVIEW_V1` candidate is for one existing Git repository,
+one cooperative writer, existing source replacements and pinned Node tests.
+Its implementation is not Host Live acceptance or production certification.
+See the [work review contract](../docs/implementation/work-verification-resume.md)
+and [current verification status](../project/PROGRESS.md).
+
+Launch the installed MCP entry with `--state ABS_STATE --repository ABS_REPO
+--acceptance LOCAL_ONLY --work-profile WORK_REVIEW_V1`. State must be outside
+the target repository. Without that explicit profile, existing MCP contracts
+and the PROTECTED_REQUIRED default remain unchanged. Start with a goal and
+`mode: CHANGE` or `mode: VERIFY_CURRENT`. Empty `codefleet_goal_status` input
+lists persisted Tasks; select the intended Task before preparing new effects.
+
+The MCP prepares an exact Owner command. The Owner runs that complete command
+in a separate interactive terminal, reviews the source contents or test command
+and the Local warning, then types APPLY or VERIFY. The Host must not supply
+the confirmation on the Owner's behalf. Noninteractive input cannot accept.
+File application and verification require separate consent. Failed CHANGE
+allows one separately approved repair; failed VERIFY_CURRENT stops.
+
+Use `objective status TASK` to inspect current evidence, effects and budgets.
+PAUSE/CANCEL prevent new effects; UNPAUSE needs the current control sequence
+and a new review. UNKNOWN effects require inspection, never replay. An Owner's
+ABANDONED_UNRESOLVED close preserves the repository admission block within
+the designated State. Do not clear the DB, release leases manually or choose
+another State to evade it. Local results remain UNPROTECTED.
+
+Runtime or Node changes invalidate old profile bindings. Preserve the old
+installation and State; settle and close work before starting a newly reviewed
+Task on the new runtime. Installation removal must retain modified files.
+Neither upgrade nor removal rolls source files back or deletes evidence.
+
 This is an unreleased implementation. [Windows supervised Codex Live acceptance](https://github.com/solzip/CodeFleet/blob/5ae49a0d64d9a4b2c3f3ee8f5842c2cd033275a6/docs/runs/2026-10-28/public-existing-local-v2.md)
 covers installed Skill invocation, two implementation WorkItems, Local verification
 and Recovery. Authenticated public delegation remains blocked; this does not
