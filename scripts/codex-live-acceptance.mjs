@@ -62,7 +62,7 @@ function opts(argv){
   if(action!=='run'&&(options['--allow-model-turn']||options['--acknowledge-unknown-cost']))
     fail('Model spending flags are run-only; preflight never grants execution');
   if(action==='run'&&(!options['--allow-model-turn']||!options['--acknowledge-unknown-cost']))
-    fail('Actual billable Codex Turn requires --allow-model-turn and --acknowledge-unknown-cost; subscription USD cap is NOT enforceable');
+    fail('Actual Codex Turn requires --allow-model-turn and --acknowledge-unknown-cost; this runner cannot inspect or cap ChatGPT plan allowance, enabled credits, or API billing');
   if(options['--codex']&&(!isAbsolute(options['--codex'])||options['--codex'].includes('\0')))
     fail('Selected Codex executable must be an absolute path');
   return {action,directory:resolve(options['--dir']),codex:options['--codex']??'codex'};
@@ -133,15 +133,15 @@ async function prepare(dir){
   return {status:'READY_FOR_EXPLICIT_CODEX_LIVE_TURN',repository:pp.project,
     state:pp.state,goal,immutableTests:m.testPaths,modelTurns:0,ownerGrantIssued:false,
     next:'run --dir '+dir+' --allow-model-turn --acknowledge-unknown-cost (requires authenticated supported Codex CLI)',
-    warning:'Real model usage may be billed and subscription USD spending cannot be capped here; owner grants source/test effects separately'};
+    warning:'This invokes the authenticated Codex host. ChatGPT sign-in normally uses included Codex allowance first and may use enabled credits; API-key sessions use API billing. This runner cannot inspect or cap either path. Owner grants source/test effects separately.'};
 }
 const prompt=m=>[
   'Work on this disposable CodeFleet acceptance project, without modifying any project source or test yourself.',
   'Use the codefleet_live MCP tools in THIS Codex model session. No nested codex, no API key, no changes outside MCP proposal-only tools.',
   'Exact user goal: '+m.goal,
   '1. Call codefleet_goal_start with the EXACT goal text above and mode:"CHANGE". 2. Call codefleet_goal_status to get the plan/draft and current Task revision.',
-  '3. Submit a valid ExistingLocalDraft with current plan.draft fields preserved and scoped requirements/decisions; plannedFiles=[{path:"src/todo.mjs",purpose:"normalize input title"}]; plannedTests=[{path:"test/todo.test.mjs",criteria:["todo-title"]}]; criteria=[{id:"todo-title",description:"Immutable Todo tests pass",tests:["test/todo.test.mjs"]}]; scope includes src/todo.mjs and excludes test/todo.test.mjs.',
-  'Set workItems=[{id:"implement",kind:"local-edit",dependencies:[],acceptanceCriteria:["normalize titles"],files:["src/todo.mjs"]},{id:"verify",kind:"local-verification",dependencies:["implement"],acceptanceCriteria:["pinned tests pass"],files:[]}].',
+  '3. Call codefleet_draft_submit with proposal set to EXACTLY the following Draft object (substitute only the probeRef copied byte-for-byte from status; add no fields):',
+  '{"schemaVersion":1,"kind":"ExistingLocalDraft","objective":"'+m.goal+'","probeRef":"<EXACT probeRef FROM STATUS>","requirements":["normalizeTitle trims nonempty string input and rejects empty or nonstring input"],"openQuestions":[],"decisions":[{"topic":"implementation","choice":"change only src/todo.mjs","alternatives":["change tests"],"rationale":"tests are immutable acceptance evidence"}],"plannedFiles":[{"path":"src/todo.mjs","purpose":"normalize input title"}],"plannedTests":[{"path":"test/todo.test.mjs","criteria":["todo-title"]}],"criteria":[{"id":"todo-title","description":"Immutable Todo tests pass","tests":["test/todo.test.mjs"]}],"scope":{"includes":["src/todo.mjs"],"excludes":["test/todo.test.mjs"]},"risks":["invalid input behavior must remain explicit"],"workItems":[{"id":"implement","kind":"local-edit","dependencies":[],"acceptanceCriteria":["normalize titles"],"files":["src/todo.mjs"]},{"id":"verify","kind":"local-verification","dependencies":["implement"],"acceptanceCriteria":["pinned tests pass"],"files":[]}]}',
   '4. Call codefleet_draft_submit with EXACT Task revision and proposal. 5. Call codefleet_goal_prepare, read resulting revision. 6. Read src/todo.mjs without changing it; produce a complete replacement implementing the specified behavior.',
   '7. Call codefleet_fileset_propose with only the implement WorkItem, exact revision, old file sha256 (provided by status as sourceDigests if available; otherwise compute from read-only bytes using Node crypto).',
   '8. Call codefleet_fileset_review and STOP. Report only Task ID, reviewRef and reviewHash. Do not apply the review, run tests, create commits, execute Local trust, or claim Objective complete.',
@@ -272,7 +272,14 @@ async function liveRun(dir,binary){
     const errorDetail=item.error===undefined?null:errorSerialized;
     const errorMessage=typeof item.error==='string'?item.error:
       typeof item.error?.message==='string'?item.error.message:null;
-    const signalSource=errorSerialized;
+    // Codex may report a failed MCP call with `error:null` while preserving the
+    // server's bounded diagnostic in result.content. Inspect only text for
+    // known, non-secret classifications; never copy the raw provider payload
+    // into the public receipt.
+    const resultText=Array.isArray(item.result?.content)?item.result.content
+      .filter(part=>part&&part.type==='text'&&typeof part.text==='string')
+      .map(part=>part.text).join('\n'):'';
+    const signalSource=[errorSerialized,resultText].join('\n');
     const errorSignals=[
       [/dubious ownership|safe\.directory/i,'GIT_OWNERSHIP'],
       [/\b(?:EPERM|EACCES)\b|permission denied|access denied/i,'FILESYSTEM_PERMISSION'],
@@ -294,7 +301,9 @@ async function liveRun(dir,binary){
       errorMessageLength:errorMessage===null?null:errorMessage.length,
       errorSignals,contractCodes,
       resultIsError:item.result?.isError===true,
-      resultContentCount:Array.isArray(item.result?.content)?item.result.content.length:null};
+      resultContentCount:Array.isArray(item.result?.content)?item.result.content.length:null,
+      resultTextSha256:resultText?hash(resultText):null,
+      resultTextLength:resultText?resultText.length:null};
   };
   const handleEvent=s=>{
     let v;try{v=JSON.parse(s);}catch{invalid=true;return;}

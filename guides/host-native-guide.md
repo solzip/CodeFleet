@@ -123,8 +123,11 @@ or a USD budget cap. The expected readiness indicator is
 `READY_FOR_EXPLICIT_OWNER_MODEL_APPROVAL`.
 
 Only if an authenticated allowlisted **Codex CLI 0.167.0 or 0.167.1** is accessible, the Owner
-explicitly chooses to spend an unknown amount of subscription usage, and
-accepts that this script **does not enforce a USD cap**, run **once**:
+explicitly chooses to consume an unmeasured Codex Turn, run **once**. With
+ChatGPT sign-in, Codex normally uses the plan's included allowance first and
+may use enabled credits after that; API-key sessions use API billing. This
+runner cannot inspect remaining allowance, credit settings or API spend, and
+cannot enforce a USD cap on any of those paths:
 
 
 ```text
