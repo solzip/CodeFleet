@@ -17,7 +17,7 @@
 | 7 중단·종료 | work-review, materializer, reservations. 2~6에 의존 | 두 commit 연결, 제어 epoch, 하위 행 종료 검사·불명 포기. IMPLEMENTED_CANDIDATE |
 | 8 시험·회귀 | work-review 및 관련 기존 suite. 2~7에 의존 | 정상/실패/불명과 기존 경계 검증 진행. 보호 전체 수용과 구분 |
 | 9 설치·안내 | installer, 설치/패키지 시험, Host guide. 2~8에 의존 | 설치본 CHANGE Local 완료와 수정 설치물 보존 확인. 실제 Host 발견과 구분 |
-| 10 Host Live | 실제 Host·Owner·고정 환경. 8~9에 의존 | 실제 CLI 0.167.0을 호환 대상에 추가. 로그인과 Live는 BLOCKED / NOT_RUN. Owner 직접 확인·실제 Compaction도 NOT_RUN |
+| 10 Host Live | 실제 Host·Owner·고정 환경. 8~9에 의존 | 실제 CLI 0.167.0 Turn 1회 관측. 첫 Goal MCP 실패로 HUMAN_RECONCILIATION_REQUIRED. Owner 직접 확인·실제 Compaction은 NOT_RUN |
 
 실행 환경은 Windows x64 / PowerShell 5.1 / Node 24.14.1이다. 시험은 임시 저장소와 State를 사용하며 테스트용 승인은 SYNTHETIC/OFFLINE이다. 자동 시험이 Owner를 인증하거나 실제 Host 전체 수용을 입증하지 않는다. Docker 사전 조회는 설정 파일 접근 거부로 exit 1이었다. 선택한 Local 기본 경로의 선행 조건은 아니며 보호 수용으로 전환하지 않는다.
 
@@ -40,11 +40,13 @@ Host Core 첫 실행은 exit 1이었다. readOnly Host 조회에서 초기화를
 | `node --test test/doc-layout.test.ts` | exit 0, 3 PASS | 문서 배치 검사 |
 | `npm.cmd run posttest`, `git diff --check` 최종 확인 | 각각 exit 0. Markdown 37개·링크 233개·인용 4개·선언 사실 42건 오류 0 | 외부 링크 내용·실제 Host·보호 검증을 증명하지 않음. coverage/anchor 기준선 변경 없음 |
 
-8번은 위 선택된 Local 회귀의 근거를 확보했으며 전체 보안/보호 회귀는 NOT_RUN이다. 9번은 설치본과 패키지의 오프라인 근거를 확보했으며 실제 Host의 Skill 발견은 NOT_RUN이다. 10번은 PATH의 Codex CLI 0.167.0을 호환 대상으로 검증했지만 현재 세션의 CodeFleet MCP 직접 도구 미노출(도구 목록 검색 0개), 미로그인, 별도 Owner 직접 승인·실제 Compaction 미관측으로 BLOCKED / NOT_RUN이다. 다음 허용 행동은 목표 Host 환경에 설치본 MCP를 연결하고 별도 Owner가 정확한 효과를 승인한 실제 세션에서 정상·실패·새 세션·Compaction·미해결 종료를 관측하는 것이다. 기존 실패·기록·예산을 초기화하거나 다른 버전의 결과로 대체하지 않는다. 생산성 6쌍 비교는 요청 범위 뒤의 미실행 항목으로 남긴다.
+8번은 위 선택된 Local 회귀의 근거를 확보했으며 전체 보안/보호 회귀는 NOT_RUN이다. 9번은 설치본과 패키지의 오프라인 근거를 확보했으며 실제 Host의 Skill 발견은 NOT_RUN이다. 10번은 Codex CLI 0.167.0의 호환과 로그인·preflight를 확인하고 실제 Turn 1회를 관측했지만 첫 Goal MCP 실패로 `HUMAN_RECONCILIATION_REQUIRED`다. 해당 one-shot intent는 재실행하지 않으며 Owner 직접 승인·실제 Compaction은 NOT_RUN이다. 다음 허용 행동은 실패 분류가 추가된 새 후보를 검증하고, 별도 승인된 새 fixture에서 정상·실패·새 세션·Compaction·미해결 종료를 관측하는 것이다. 기존 실패·기록·예산을 초기화하거나 다른 버전의 결과로 대체하지 않는다. 생산성 6쌍 비교는 요청 범위 뒤의 미실행 항목으로 남긴다.
 
 후속 실제 Host 사전 점검에서도 PATH의 Codex CLI는 0.167.0, 로그인 상태는 미인증, 등록 MCP 1개 중 CodeFleet MCP는 0개였다. 새 일회용 Live fixture의 `prepare`와 `status`는 각각 exit 0이었고 모델 Turn·Owner 승인·Local Evidence는 0건/NOT_RUN으로 유지됐다. Windows npm의 `codex.cmd`를 명시한 최초 preflight는 버전 판정 전 `EINVAL`로 exit 1이었다. runner가 셸이나 shim 내용을 실행하지 않고 공식 npm 패키지의 고정 JavaScript 진입점만 해석하도록 수정하고 임의 shim 거부 시험을 추가했다. 승인된 0.167.1 전역 업그레이드는 실행 중인 `codex.exe` 파일 잠금으로 `EBUSY` exit 1이었으며 기존 0.167.0 설치는 유지됐다.
 
 업그레이드 없이 현재 공식 Codex CLI 0.167.0을 임시 `CODEX_HOME`에서 다시 검증했다. 실제 `mcp add/get/list/remove`, ephemeral 설정, MCP 7개 도구, Goal 영속화, 소스 불변이 모두 확인돼 `OFFICIAL_CODEX_CLI_MCP_REGISTRATION_PASS` exit 0이었고 모델 Turn·인증 호출·Owner 승인은 0건이었다. Live runner는 실제 호환 시험을 통과한 0.167.0과 CI 고정 0.167.1만 허용하도록 변경했다. 안전 게이트 회귀는 24 PASS / 0 FAIL / 0 SKIP, MCP 회귀는 3 PASS / 0 FAIL / 0 SKIP이었다. 실제 `codex.cmd` preflight는 버전 검사를 통과하고 미로그인으로 `BLOCKED_CODEX_LOGIN_UNAVAILABLE` exit 2를 반환했으며 Turn intent를 만들지 않았다. 전역 MCP 설정·비용 발생 모델 Turn은 수행하지 않았다. 다음 행동은 Codex 로그인 후 같은 fixture의 preflight를 재실행하는 것이다.
+
+별도 Owner가 로그인과 preflight를 완료한 뒤 실제 Codex 0.167.0 Turn 1회를 실행했다. Provider는 Thread 1개, Turn 시작 1회·완료 1회·실패 0회, input 53,522·output 206 tokens와 exit 0을 보고했지만 첫 `codefleet_goal_start` MCP 호출이 실패했고 후속 호출·State·Task·review는 0건이었다. 대상 소스는 변경되지 않았고 Owner 권한·Protected Evidence는 생성되지 않아 `HUMAN_RECONCILIATION_REQUIRED`로 종결했다. 같은 one-shot intent는 재실행하지 않는다. 당시 runner는 실패 원문을 hash만 남겨 원인을 확정할 수 없었고 실제 MCP 시작 인자에 `WORK_REVIEW_V1`도 누락했다. 후속 후보는 profile과 `CHANGE` mode를 고정하고, 원문 대신 실패 분류·필드 목록·digest를 기록해 새 fixture의 별도 승인 시도에서만 원인을 판별하도록 보완한다.
 
 ## 이전 설계 검토 기록
 

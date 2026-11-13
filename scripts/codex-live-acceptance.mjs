@@ -139,7 +139,7 @@ const prompt=m=>[
   'Work on this disposable CodeFleet acceptance project, without modifying any project source or test yourself.',
   'Use the codefleet_live MCP tools in THIS Codex model session. No nested codex, no API key, no changes outside MCP proposal-only tools.',
   'Exact user goal: '+m.goal,
-  '1. Call codefleet_goal_start with the EXACT goal text above. 2. Call codefleet_goal_status to get the plan/draft and current Task revision.',
+  '1. Call codefleet_goal_start with the EXACT goal text above and mode:"CHANGE". 2. Call codefleet_goal_status to get the plan/draft and current Task revision.',
   '3. Submit a valid ExistingLocalDraft with current plan.draft fields preserved and scoped requirements/decisions; plannedFiles=[{path:"src/todo.mjs",purpose:"normalize input title"}]; plannedTests=[{path:"test/todo.test.mjs",criteria:["todo-title"]}]; criteria=[{id:"todo-title",description:"Immutable Todo tests pass",tests:["test/todo.test.mjs"]}]; scope includes src/todo.mjs and excludes test/todo.test.mjs.',
   'Set workItems=[{id:"todo",kind:"local-edit",dependencies:[],acceptanceCriteria:["normalize titles"],files:["src/todo.mjs"]},{id:"verify",kind:"local-verification",dependencies:["todo"],acceptanceCriteria:["pinned tests pass"],files:[]}].',
   '4. Call codefleet_draft_submit with EXACT Task revision and proposal. 5. Call codefleet_goal_prepare, read resulting revision. 6. Read src/todo.mjs without changing it; produce a complete replacement implementing the specified behavior.',
@@ -150,7 +150,8 @@ const prompt=m=>[
 const modelConfig=pp=>[
   'mcp_servers.codefleet_live.command='+JSON.stringify(process.execPath),
   'mcp_servers.codefleet_live.args='+JSON.stringify(
-    [mcpServer,'--state',pp.state,'--repository',pp.project,'--acceptance','LOCAL_ONLY']),
+    [mcpServer,'--state',pp.state,'--repository',pp.project,'--acceptance','LOCAL_ONLY',
+      '--work-profile','WORK_REVIEW_V1']),
   'mcp_servers.codefleet_live.enabled=true'
 ];
 function resolveCodexBinary(binary){
@@ -246,6 +247,17 @@ async function liveRun(dir,binary){
   const streamHash=createHash('sha256'),errHash=createHash('sha256');
   let received=0,carry='',invalid=false;
   const decoder=new StringDecoder('utf8');
+  const mcpFailure=v=>{
+    const item=v.item??{},serialized=JSON.stringify(item);
+    const failureClass=/dubious ownership|safe\.directory/i.test(serialized)?'GIT_OWNERSHIP':
+      /\b(?:EPERM|EACCES)\b|permission denied|access denied/i.test(serialized)?'FILESYSTEM_PERMISSION':
+      /state[^\n]{0,120}(?:outside|path|directory)|outside[^\n]{0,120}state/i.test(serialized)?'STATE_PATH':
+      /invalid[^\n]{0,120}(?:argument|field|goal)|bounded natural-language goal/i.test(serialized)?'INVALID_TOOL_ARGUMENTS':
+      /server[^\n]{0,120}(?:closed|failed)|mcp[^\n]{0,120}(?:error|failed)/i.test(serialized)?'MCP_SERVER_FAILURE':
+      'UNCLASSIFIED_PROVIDER_DETAIL';
+    return {failureClass,detailSha256:hash(serialized),
+      detailKeys:Object.keys(item).sort().slice(0,20)};
+  };
   const handleEvent=s=>{
     let v;try{v=JSON.parse(s);}catch{invalid=true;return;}
     if(v.type==='thread.started'&&typeof v.thread_id==='string')metadata.threadIds.push(v.thread_id);
@@ -259,9 +271,11 @@ async function liveRun(dir,binary){
     if(v.type==='turn.failed'||v.type==='error')metadata.turnFailed++;
     if(v.type==='item.completed'&&v.item?.type==='mcp_tool_call'){
       const item=v.item;
-      if(item.server==='codefleet_live')metadata.observedMcpCalls.push({
-        tool:typeof item.tool==='string'?item.tool.slice(0,80):'UNKNOWN',
-        status:typeof item.status==='string'?item.status:'UNKNOWN'});
+      if(item.server==='codefleet_live'){
+        const call={tool:typeof item.tool==='string'?item.tool.slice(0,80):'UNKNOWN',
+          status:typeof item.status==='string'?item.status:'UNKNOWN'};
+        metadata.observedMcpCalls.push(item.status==='failed'?{...call,...mcpFailure(v)}:call);
+      }
     }
   };
   let child;

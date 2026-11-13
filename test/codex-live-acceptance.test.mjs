@@ -135,6 +135,30 @@ test('unrecognized cmd shim fails closed before any model intent',async t=>{
   call(['preflight','--dir',f.dir,'--codex',shim],1);
   assert.equal(await lstat(join(f.dir,'turn-intent.json')).catch(()=>null),null);
 });
+test('failed MCP call records bounded classification and digest without raw detail',async t=>{
+  const f=await fixture(t);
+  const fake=join(f.parent,'synthetic-mcp-failure.mjs');
+  await writeFile(fake,[
+    "if(process.argv.includes('--version')){console.log('codex-cli 0.167.0');process.exit(0)}",
+    "if(process.argv.includes('login'))process.exit(0)",
+    "if(process.argv.includes('exec')){",
+    "console.log(JSON.stringify({type:'thread.started',thread_id:'SYNTHETIC-MCP-FAIL'}));",
+    "console.log(JSON.stringify({type:'turn.started'}));",
+    "console.log(JSON.stringify({type:'item.completed',item:{type:'mcp_tool_call',server:'codefleet_live',tool:'codefleet_goal_start',status:'failed',error:{message:'fatal: detected dubious ownership; safe.directory refused'}}}));",
+    "console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:2,output_tokens:1}}));",
+    "}"
+  ].join('\n'));
+  const result=call(['run','--dir',f.dir,'--codex',fake,
+    '--allow-model-turn','--acknowledge-unknown-cost']);
+  assert.equal(result.status,'HUMAN_RECONCILIATION_REQUIRED');
+  assert.deepEqual(result.observedMcpCalls[0].detailKeys,
+    ['error','server','status','tool','type']);
+  assert.equal(result.observedMcpCalls[0].failureClass,'GIT_OWNERSHIP');
+  assert.match(result.observedMcpCalls[0].detailSha256,/^[a-f0-9]{64}$/);
+  assert.equal(JSON.stringify(result).includes('safe.directory'),false);
+  const receipt=JSON.parse(await readFile(join(f.dir,'turn-receipt.json'),'utf8'));
+  assert.equal(JSON.stringify(receipt).includes('dubious ownership'),false);
+});
 test('tampered immutable tests refuse inspection and completion before model spawn',async t=>{
   const f=await fixture(t);
   await writeFile(join(f.dir,'project','test','todo.test.mjs'),'// changed test\n');

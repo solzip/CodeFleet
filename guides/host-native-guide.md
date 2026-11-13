@@ -133,12 +133,15 @@ node scripts/codex-live-acceptance.mjs run --dir ABS_NEW_FIXTURE --allow-model-t
 
 The runner constructs `codex exec --json --ephemeral --ignore-user-config
 --sandbox read-only` with per-command `-c mcp_servers.codefleet_live`
-overrides. Authentication is taken from the user's existing Codex CLI login; this starts a separate, explicitly authorized Codex process;
+overrides. The MCP is bound to `WORK_REVIEW_V1` and the fixed `CHANGE` mode;
+the model cannot select a broader profile. Authentication is taken from the user's existing Codex CLI login; this starts a separate, explicitly authorized Codex process;
 the runner neither copies nor saves tokens. It records a **durable one-shot
 intent before spawn**, hashes stdout/stderr without persisting raw transcripts,
 observes the Codex-reported Thread, Turn and successful CodeFleet MCP calls,
 and independently checks for an eligible Fileset proposal in CodeFleet
-State. Crashes, denied permissions, uncertain effects, rejected model
+State. Failed MCP calls retain only a bounded classification, field-name list
+and digest; raw provider details and transcripts are not persisted. Crashes,
+denied permissions, uncertain effects, rejected model
 proposals and nonzero exits are **HUMAN_RECONCILIATION_REQUIRED**. Re-running
 the same intent is refused, even after a failed call. Each new attempt
 requires a fresh fixture and deliberate Owner approval.
