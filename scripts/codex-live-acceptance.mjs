@@ -141,9 +141,9 @@ const prompt=m=>[
   'Exact user goal: '+m.goal,
   '1. Call codefleet_goal_start with the EXACT goal text above and mode:"CHANGE". 2. Call codefleet_goal_status to get the plan/draft and current Task revision.',
   '3. Submit a valid ExistingLocalDraft with current plan.draft fields preserved and scoped requirements/decisions; plannedFiles=[{path:"src/todo.mjs",purpose:"normalize input title"}]; plannedTests=[{path:"test/todo.test.mjs",criteria:["todo-title"]}]; criteria=[{id:"todo-title",description:"Immutable Todo tests pass",tests:["test/todo.test.mjs"]}]; scope includes src/todo.mjs and excludes test/todo.test.mjs.',
-  'Set workItems=[{id:"todo",kind:"local-edit",dependencies:[],acceptanceCriteria:["normalize titles"],files:["src/todo.mjs"]},{id:"verify",kind:"local-verification",dependencies:["todo"],acceptanceCriteria:["pinned tests pass"],files:[]}].',
+  'Set workItems=[{id:"implement",kind:"local-edit",dependencies:[],acceptanceCriteria:["normalize titles"],files:["src/todo.mjs"]},{id:"verify",kind:"local-verification",dependencies:["implement"],acceptanceCriteria:["pinned tests pass"],files:[]}].',
   '4. Call codefleet_draft_submit with EXACT Task revision and proposal. 5. Call codefleet_goal_prepare, read resulting revision. 6. Read src/todo.mjs without changing it; produce a complete replacement implementing the specified behavior.',
-  '7. Call codefleet_fileset_propose with only the todo WorkItem, exact revision, old file sha256 (provided by status as sourceDigests if available; otherwise compute from read-only bytes using Node crypto).',
+  '7. Call codefleet_fileset_propose with only the implement WorkItem, exact revision, old file sha256 (provided by status as sourceDigests if available; otherwise compute from read-only bytes using Node crypto).',
   '8. Call codefleet_fileset_review and STOP. Report only Task ID, reviewRef and reviewHash. Do not apply the review, run tests, create commits, execute Local trust, or claim Objective complete.',
   'Only separate human Owner approval may run the returned CLI action. Tests and final CodeFleet Judge run later, outside this model Turn.'
 ].join('\n');
@@ -152,6 +152,10 @@ const modelConfig=pp=>[
   'mcp_servers.codefleet_live.args='+JSON.stringify(
     [mcpServer,'--state',pp.state,'--repository',pp.project,'--acceptance','LOCAL_ONLY',
       '--work-profile','WORK_REVIEW_V1']),
+  // Codex 0.167 requires an interactive approval for unannotated custom MCP
+  // tools by default. exec is noninteractive, so explicitly approve calls to
+  // this proposal-only server; its tools still cannot apply, test or grant.
+  'mcp_servers.codefleet_live.default_tools_approval_mode="approve"',
   'mcp_servers.codefleet_live.enabled=true'
 ];
 function resolveCodexBinary(binary){
@@ -249,11 +253,13 @@ async function liveRun(dir,binary){
   const decoder=new StringDecoder('utf8');
   const mcpFailure=v=>{
     const item=v.item??{},serialized=JSON.stringify(item);
-    const failureClass=/dubious ownership|safe\.directory/i.test(serialized)?'GIT_OWNERSHIP':
-      /\b(?:EPERM|EACCES)\b|permission denied|access denied/i.test(serialized)?'FILESYSTEM_PERMISSION':
-      /state[^\n]{0,120}(?:outside|path|directory)|outside[^\n]{0,120}state/i.test(serialized)?'STATE_PATH':
-      /invalid[^\n]{0,120}(?:argument|field|goal)|bounded natural-language goal/i.test(serialized)?'INVALID_TOOL_ARGUMENTS':
-      /server[^\n]{0,120}(?:closed|failed)|mcp[^\n]{0,120}(?:error|failed)/i.test(serialized)?'MCP_SERVER_FAILURE':
+    const errorSerialized=item.error===undefined?'':JSON.stringify(item.error);
+    const failureClass=/dubious ownership|safe\.directory/i.test(errorSerialized)?'GIT_OWNERSHIP':
+      /\b(?:EPERM|EACCES)\b|permission denied|access denied/i.test(errorSerialized)?'FILESYSTEM_PERMISSION':
+      /state[^\n]{0,120}(?:outside|path|directory)|outside[^\n]{0,120}state/i.test(errorSerialized)?'STATE_PATH':
+      /invalid[^\n]{0,120}(?:argument|field|goal)|bounded natural-language goal/i.test(errorSerialized)?'INVALID_TOOL_ARGUMENTS':
+      /cancelled[^\n]{0,120}approval|approval[^\n]{0,120}(?:unavailable|required)/i.test(errorSerialized)?'MCP_APPROVAL_REQUIRED':
+      /server[^\n]{0,120}(?:closed|failed)|mcp[^\n]{0,120}(?:error|failed)/i.test(errorSerialized)?'MCP_SERVER_FAILURE':
       'UNCLASSIFIED_PROVIDER_DETAIL';
     const argumentKeys=item.arguments&&typeof item.arguments==='object'&&!Array.isArray(item.arguments)?
       Object.keys(item.arguments).sort().slice(0,20):[];
@@ -263,16 +269,17 @@ async function liveRun(dir,binary){
     const errorValueType=item.error===null?'null':Array.isArray(item.error)?'array':typeof item.error;
     const errorKeys=item.error&&typeof item.error==='object'&&!Array.isArray(item.error)?
       Object.keys(item.error).sort().slice(0,20):[];
-    const errorSerialized=item.error===undefined?null:JSON.stringify(item.error);
+    const errorDetail=item.error===undefined?null:errorSerialized;
     const errorMessage=typeof item.error==='string'?item.error:
       typeof item.error?.message==='string'?item.error.message:null;
-    const signalSource=errorSerialized??'';
+    const signalSource=errorSerialized;
     const errorSignals=[
       [/dubious ownership|safe\.directory/i,'GIT_OWNERSHIP'],
       [/\b(?:EPERM|EACCES)\b|permission denied|access denied/i,'FILESYSTEM_PERMISSION'],
       [/(?:^|[^0-9])-32602(?![0-9])/,'JSON_RPC_INVALID_PARAMS'],
       [/(?:^|[^0-9])-32603(?![0-9])/,'JSON_RPC_INTERNAL_ERROR'],
       [/(?:^|[^0-9])-32601(?![0-9])/,'JSON_RPC_METHOD_NOT_FOUND'],
+      [/cancelled[^\n]{0,120}approval|interactive approval|approval required/i,'MCP_APPROVAL_REQUIRED'],
       [/server[^\n]{0,80}(?:closed|disconnected)|connection closed/i,'MCP_CONNECTION_CLOSED'],
       [/\b(?:ENOENT|not found)\b|cannot find module/i,'EXECUTABLE_OR_MODULE_NOT_FOUND'],
       [/\bSQLITE_[A-Z_]+\b|SQLiteError/i,'SQLITE_FAILURE'],
@@ -283,7 +290,7 @@ async function liveRun(dir,binary){
     return {failureClass,detailSha256:hash(serialized),
       detailKeys:Object.keys(item).sort().slice(0,20),argumentKeys,errorCode,
       errorValueType,errorKeys,
-      errorDetailSha256:errorSerialized===null?null:hash(errorSerialized),
+      errorDetailSha256:errorDetail===null?null:hash(errorDetail),
       errorMessageLength:errorMessage===null?null:errorMessage.length,
       errorSignals,contractCodes,
       resultIsError:item.result?.isError===true,

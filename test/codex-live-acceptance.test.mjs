@@ -142,9 +142,12 @@ test('failed MCP call records bounded classification and digest without raw deta
     "if(process.argv.includes('--version')){console.log('codex-cli 0.167.0');process.exit(0)}",
     "if(process.argv.includes('login'))process.exit(0)",
     "if(process.argv.includes('exec')){",
+    "if(!process.argv.includes('mcp_servers.codefleet_live.default_tools_approval_mode=\"approve\"'))process.exit(3);",
+    "if(!process.argv.at(-1).includes('id:\"implement\"')||!process.argv.at(-1).includes('only the implement WorkItem'))process.exit(4);",
     "console.log(JSON.stringify({type:'thread.started',thread_id:'SYNTHETIC-MCP-FAIL'}));",
     "console.log(JSON.stringify({type:'turn.started'}));",
     "console.log(JSON.stringify({type:'item.completed',item:{type:'mcp_tool_call',server:'codefleet_live',tool:'codefleet_goal_start',status:'failed',error:{message:'MCP error: -32603: fatal: detected dubious ownership; safe.directory refused'}}}));",
+    "console.log(JSON.stringify({type:'item.completed',item:{type:'mcp_tool_call',server:'codefleet_live',tool:'codefleet_goal_status',status:'failed',error:{message:'opaque provider detail'}}}));",
     "console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:2,output_tokens:1}}));",
     "}"
   ].join('\n'));
@@ -166,6 +169,7 @@ test('failed MCP call records bounded classification and digest without raw deta
   assert.equal(result.observedMcpCalls[0].resultIsError,false);
   assert.equal(result.observedMcpCalls[0].resultContentCount,null);
   assert.match(result.observedMcpCalls[0].detailSha256,/^[a-f0-9]{64}$/);
+  assert.equal(result.observedMcpCalls[1].failureClass,'UNCLASSIFIED_PROVIDER_DETAIL');
   assert.equal(JSON.stringify(result).includes('safe.directory'),false);
   const receipt=JSON.parse(await readFile(join(f.dir,'turn-receipt.json'),'utf8'));
   assert.equal(JSON.stringify(receipt).includes('dubious ownership'),false);
