@@ -48,6 +48,8 @@ Host Core 첫 실행은 exit 1이었다. readOnly Host 조회에서 초기화를
 
 별도 Owner가 로그인과 preflight를 완료한 뒤 실제 Codex 0.167.0 Turn 1회를 실행했다. Provider는 Thread 1개, Turn 시작 1회·완료 1회·실패 0회, input 53,522·output 206 tokens와 exit 0을 보고했지만 첫 `codefleet_goal_start` MCP 호출이 실패했고 후속 호출·State·Task·review는 0건이었다. 대상 소스는 변경되지 않았고 Owner 권한·Protected Evidence는 생성되지 않아 `HUMAN_RECONCILIATION_REQUIRED`로 종결했다. 같은 one-shot intent는 재실행하지 않는다. 당시 runner는 실패 원문을 hash만 남겨 원인을 확정할 수 없었고 실제 MCP 시작 인자에 `WORK_REVIEW_V1`도 누락했다. 후속 후보는 profile과 `CHANGE` mode를 고정하고, 원문 대신 실패 분류·필드 목록·digest를 기록해 새 fixture의 별도 승인 시도에서만 원인을 판별하도록 보완한다.
 
+profile과 `CHANGE` mode를 고정한 새 fixture에서도 별도 승인된 Codex 0.167.0 Turn 1회를 관측했다. Provider는 Turn 시작 1회·완료 1회, input 57,203·output 210 tokens와 exit 0을 보고했다. `codefleet_goal_start`와 뒤이은 `codefleet_goal_status`는 모두 `MCP_SERVER_FAILURE`로 분류됐고 State·Task·review·소스 변경·Owner 권한은 생성되지 않았다. 따라서 결과는 다시 `HUMAN_RECONCILIATION_REQUIRED`이며 이 one-shot intent도 재실행하지 않는다. 두 실패의 bounded digest와 최상위 필드 목록은 남았지만 인자 키·안전한 오류 코드·result 형태가 기존 receipt에 없어 정확한 원인은 아직 확정할 수 없다. 후속 후보는 이 비밀 비포함 진단 필드를 추가하고, 오프라인 MCP에서 `{goal, mode:"CHANGE"}`가 `NEEDS_INPUT` Work Task를 만들되 실행 권한을 부여하지 않는 양성 회귀를 추가했다. 이 후보를 검증·배포하기 전 세 번째 실제 모델 Turn은 허용하지 않는다.
+
 ## 이전 설계 검토 기록
 
 2026-11-13 revision 3 검토: 실행 진입점, 실제 저장 순서·경합, 사용자/Host/Owner 전체 절차를 검토했다. 기준 커밋은 설계에 명시한 `b3f8b985a903fd255983da01d6f284df3dea14aa`다. product CLI 이름 64개(help 포함, dispatch 전 authorize-local 포함)를 분류했고 정적 목록 대조에서 누락·초과 0개를 확인했다. MCP 7개 도구와 Host forwarding, 하위 Task/Native/reservation/repair 호출 및 Task 없는 외부 실행의 경계를 구분했다. readOnly Store, 하위 우회 guard, MCP 연결, 파일 적용 두 commit, controlSeq의 Decision 전달, Owner 조작, 종료의 하위 행 검사 등 7건을 설계에 반영했다. 당시 탁상 시나리오 8개는 TABLETOP_ONLY였으며, 이후 구현 후보와 오프라인 시험 결과는 위 표에 기록했다. 실제 Host 실행 수용은 여전히 미완료다.

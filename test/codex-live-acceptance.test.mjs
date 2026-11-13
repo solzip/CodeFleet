@@ -154,6 +154,10 @@ test('failed MCP call records bounded classification and digest without raw deta
   assert.deepEqual(result.observedMcpCalls[0].detailKeys,
     ['error','server','status','tool','type']);
   assert.equal(result.observedMcpCalls[0].failureClass,'GIT_OWNERSHIP');
+  assert.deepEqual(result.observedMcpCalls[0].argumentKeys,[]);
+  assert.equal(result.observedMcpCalls[0].errorCode,null);
+  assert.equal(result.observedMcpCalls[0].resultIsError,false);
+  assert.equal(result.observedMcpCalls[0].resultContentCount,null);
   assert.match(result.observedMcpCalls[0].detailSha256,/^[a-f0-9]{64}$/);
   assert.equal(JSON.stringify(result).includes('safe.directory'),false);
   const receipt=JSON.parse(await readFile(join(f.dir,'turn-receipt.json'),'utf8'));

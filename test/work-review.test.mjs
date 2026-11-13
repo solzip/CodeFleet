@@ -141,7 +141,8 @@ test('work MCP exposes mode, discovers Tasks and returns complete Owner command'
   const f=await fixture(t,'VERIFY_CURRENT');
   const messages=[{jsonrpc:'2.0',id:1,method:'tools/list'},...[
     ['codefleet_goal_status',{}],['codefleet_local_test_review',{taskId:f.id}],
-    ['codefleet_goal_start',{goal:'Verify the existing answer implementation'}]
+    ['codefleet_goal_start',{goal:'Verify the existing answer implementation'}],
+    ['codefleet_goal_start',{goal:'Improve the existing answer implementation',mode:'CHANGE'}]
   ].map(([name,args],i)=>({jsonrpc:'2.0',id:i+2,method:'tools/call',params:{name,arguments:args}}))];
   const child=spawnSync(process.execPath,[path.resolve('src/hosts/codex-mcp.mjs'),'--state',f.state,'--repository',f.repo,'--acceptance','LOCAL_ONLY','--work-profile','WORK_REVIEW_V1'],{encoding:'utf8',input:messages.map(m=>JSON.stringify(m)).join('\n')+'\n',timeout:20000,windowsHide:true});
   assert.equal(child.status,0,child.stderr);const replies=child.stdout.trim().split('\n').map(l=>JSON.parse(l));
@@ -149,6 +150,12 @@ test('work MCP exposes mode, discovers Tasks and returns complete Owner command'
   const view=JSON.parse(replies[1].result.content[0].text);assert.equal(view.tasks[0].taskId,f.id);
   const review=JSON.parse(replies[2].result.content[0].text);assert.equal(review.command.timeoutMs,30000);assert.ok(review.ownerAction.args.includes('work-owner-review'));assert.ok(review.ownerAction.command.startsWith('& '));assert.ok(review.ownerAction.command.includes(review.reviewRef));assert.ok(!review.ownerAction.args.includes('--acknowledge-unisolated'));
   assert.equal(replies[3].result.isError,true);
+  const started=JSON.parse(replies[4].result.content[0].text);
+  assert.equal(replies[4].result.isError,undefined);
+  assert.equal(started.workReport.legacyReadOnly,false);
+  assert.equal(started.workReport.phase,'NEEDS_INPUT');
+  assert.ok(started.taskId);
+  assert.equal(started.executionGranted,false);
 });
 
 test('installed work runtime completes CHANGE with its own inventory and preserves modified installation',async t=>{

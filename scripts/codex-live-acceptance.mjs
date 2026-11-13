@@ -255,8 +255,15 @@ async function liveRun(dir,binary){
       /invalid[^\n]{0,120}(?:argument|field|goal)|bounded natural-language goal/i.test(serialized)?'INVALID_TOOL_ARGUMENTS':
       /server[^\n]{0,120}(?:closed|failed)|mcp[^\n]{0,120}(?:error|failed)/i.test(serialized)?'MCP_SERVER_FAILURE':
       'UNCLASSIFIED_PROVIDER_DETAIL';
+    const argumentKeys=item.arguments&&typeof item.arguments==='object'&&!Array.isArray(item.arguments)?
+      Object.keys(item.arguments).sort().slice(0,20):[];
+    const errorCode=(typeof item.error?.code==='number'||
+      (typeof item.error?.code==='string'&&/^[A-Za-z0-9_.-]{1,64}$/.test(item.error.code)))?
+      item.error.code:null;
     return {failureClass,detailSha256:hash(serialized),
-      detailKeys:Object.keys(item).sort().slice(0,20)};
+      detailKeys:Object.keys(item).sort().slice(0,20),argumentKeys,errorCode,
+      resultIsError:item.result?.isError===true,
+      resultContentCount:Array.isArray(item.result?.content)?item.result.content.length:null};
   };
   const handleEvent=s=>{
     let v;try{v=JSON.parse(s);}catch{invalid=true;return;}
