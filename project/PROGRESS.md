@@ -1,9 +1,21 @@
 # 구현·검증 진행 현황
 
-갱신: 2026-11-13 · 현재 구현: `96bdfc7` (`afe4cbe` 기준 새 세션 수용 도구와 회귀). 이전 구현 후보 `875182f` (`b3f8b985a903fd255983da01d6f284df3dea14aa` 기준 구현)의 기록은 당시 범위의 근거로 보존한다.
+갱신: 2026-11-13 · 현재 구현: `28ab9ec` 기준 승인 안내·완료 표시 개선(오프라인 검증 완료). 이전 통합 Local 수용 구현은 `96bdfc7`이며, 과거 기록은 당시 후보와 범위의 근거로 보존한다.
 제품 목적은 [제품 원칙](../docs/PRODUCT_VISION.md), 구조는 [아키텍처](../docs/product-completion/architecture.md), 수락 조건과 순서는 [로드맵](../docs/product-completion/roadmap.md)에서 관리한다.
 
-## 현재 결과: Codex 새 세션 통합 Local 수용 완료
+## 현재 작업: 승인 안내·완료 표시 개선
+
+사용자가 이전 통합 시험에서 드러난 승인 입력·만료 안내와 완료 후 상태 문구 개선을 요청했다. WorkItem 범위는 `src/product/work-owner.mjs`, `scripts/codex-live-acceptance.mjs`, 관련 두 회귀 파일과 기존 계약·Host 안내·이 상태 문서다. 기존 Owner/Native 승인·WorkReport·Task/Run/Event·완료 판정을 재사용하며 새 승인 전달 채널이나 상태 저장소는 만들지 않는다. 대문자 확인 단어·실제 TTY·기존 TTL·별도 효과 승인·완료 기준을 유지한다. 추가 Host 모델 실행, 기존 fixture/비용 승인 재사용·초기화, 공개 작업은 이번 구현 범위에 포함하지 않았다.
+
+Owner 화면에 대문자 확인 단어, 입력할 별도 터미널과 채팅의 차이, 절대 UTC 만료 시각·남은 시간을 표시한다. 소문자·EOF는 계속 거절하고, exit 0이 거절 기록 성공이며 적용/검증 성공이 아니라는 설명과 새 리뷰 준비 안내를 추가했다. EOF로 닫힌 TTY 질문은 AbortSignal로 종료해 거절 처리한다. 이미 만료됐거나 입력 대기 중 만료된 리뷰·손상 만료값은 효과 수락 전에 거절한다. Native 단계의 최종 검사는 유지하며 자동 갱신·시간 연장·소문자 자동 수락은 없다.
+
+수용 runner의 `status`와 `finalize`는 같은 기존 조건으로 완료를 도출한다. 현재 Local Evidence·후보·고정 파일/Git 범위·필요한 재개 증거가 모두 충족되면 `status=COMPLETE_LOCAL`과 추가 승인/모델 행동 불필요를 표시한다. 재개 경로의 최종 표시는 `OBSERVED_AND_OBJECTIVE_COMPLETE_LOCAL`, 재개만 관측한 과거 사실은 `OBSERVED_CHECKPOINT_RECOVERY`로 구분한다. 소스 drift나 재개 증거 누락 후에는 완료 안내를 유지하지 않는다. 읽기 조회는 기존 receipt·Task·예산을 변경하지 않는다.
+
+검증 환경은 Windows x64 / PowerShell / Node v24.14.1이며 합성 TTY·합성 Codex와 임시 Local 프로젝트만 사용했다. `node --test test/work-review.test.mjs test/codex-live-acceptance.test.mjs test/codex-mcp.test.mjs`는 exit 0, 69 PASS였다. `npm.cmd run test:legacy` 327 PASS, `npm.cmd run test:host-core` 135 PASS, `npm.cmd run test:installed-goal-loop` 3 PASS, `npm.cmd run test:codex-mvp` 319 PASS / 4 SKIP(기존 Windows POSIX mode·symlink 조건)로 각각 exit 0이었다. pretest와 문서 layout 3건도 통과했다. 추가 CANCEL 부정 검사는 과거 Local pass 뒤 취소에도 완료를 표시하는 결함을 재현해 exit 1, 0 PASS / 1 FAIL이었다. 기존 WorkReport의 현재 phase를 공유 완료 조건에 추가하는 제한 수정 후 `node --test test/codex-live-acceptance.test.mjs test/codex-mcp.test.mjs`를 재실행해 PAUSE/CANCEL을 포함한 44 PASS / 0 FAIL / 0 SKIP, exit 0을 확인했다. 마지막 runner 수정의 영향 범위를 재검증했으며 앞선 기본 회귀 수치를 수정 후 전체 재실행으로 표현하지 않는다. `npm.cmd run posttest`는 Markdown 37개·링크 240개·인용 4건·선언 사실 42건을 검사해 exit 0이었고, `git diff --check`도 exit 0이다. 커버리지·anchor 기준선은 변경하지 않았다.
+
+이번 후보의 실제 Host Live·Docker Protected 검증은 NOT_RUN이다. 이전 `96bdfc7` Live 수용을 새 후보의 수용으로 자동 승계하지 않고, 기존 one-shot fixture·예산·비용 승인·DB를 보존한다.
+
+## 이전 수용 근거: Codex 새 세션 통합 Local 완료 (`96bdfc7`)
 
 구현·회귀·문서는 `96bdfc7`에 커밋했으며 작업 기준은 `afe4cbe`다. 기존 정상 CHANGE 수용과 one-shot/비용 승인 기록은 재실행·재사용·초기화하지 않았다. 준비 이후 사용자가 기능 단위 통합 검증 진행을 요청하여, 동일한 새 Task의 제안 → Owner 소스 적용 → 새 세션 재개 → Owner 검증 → Local 완료를 하나의 수용 흐름으로 관측했다. 최종 `finalize`는 exit 0, `CODEX_TURN_OBSERVED_AND_OBJECTIVE_COMPLETE_LOCAL` / reasons 0건 / `currentTreeComplete=true`였다. 이는 선택한 단일 Codex 경로의 감독형 Local 수용이며 전체 제품·Protected·실제 Compaction 수용이 아니다.
 

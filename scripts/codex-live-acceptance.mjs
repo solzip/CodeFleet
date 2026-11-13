@@ -593,11 +593,12 @@ async function inspect(dir,finalize=false){
   const receiptPresent=await recordExists(pp.receipt);
   const intentPresent=await recordExists(pp.intent);
   const receipt=receiptPresent?await json(pp.receipt).catch(()=>null):null;
-  let report=null,taskId=null;
+  let report=null,taskId=null,work=null;
   if(await lstat(pp.state).then(()=>true,()=>false)){
-    const [{Store},{tasks},{taskReport}]=await Promise.all([
+    const [{Store},{tasks},{taskReport},{workReport},{isWork}]=await Promise.all([
       import('../src/alpha/store.mjs'),import('../src/product/tasks.mjs'),
-      import('../src/product/report.mjs')]);
+      import('../src/product/report.mjs'),import('../src/product/work-report.mjs'),
+      import('../src/product/work-review.mjs')]);
     const store=new Store(pp.state,{readOnly:true});
     try{
       const matching=tasks(store).filter(row=>
@@ -605,6 +606,7 @@ async function inspect(dir,finalize=false){
       if(matching.length===1){
         taskId=matching[0].id;
         report=await taskReport(store,taskId);
+        if(isWork(matching[0]))work=await workReport(store,taskId);
       }else if(matching.length>1)fail(
         'Ambiguous persisted Objectives: manual reconciliation required');
     }finally{store.close();}
@@ -626,25 +628,27 @@ async function inspect(dir,finalize=false){
         'Manual reconciliation required; do not rerun this fixture or approve effects from an uncertain Turn':
         'No model Turn recorded; owner must explicitly choose run'};
   const recoveryRequired=m.kind==='CODEFLEET_CODEX_NEW_SESSION_ACCEPTANCE_V1';
+  let recovered=false;
   if(recoveryRequired){
     await checkedRecoveryPlan(dir);
     const recoveryIntent=await recordExists(join(dir,'recovery-turn-intent.json'));
     const recoveryReceipt=await recordExists(join(dir,'recovery-turn-receipt.json'));
-    const recovered=await observedRecovery(dir).catch(()=>false);
-    state.newSessionRecovery={status:recovered?'OBSERVED_AWAIT_OWNER_TEST_REVIEW':
+    recovered=await observedRecovery(dir).catch(()=>false);
+    state.newSessionRecovery={status:recovered?'OBSERVED_CHECKPOINT_RECOVERY':
       recoveryIntent||recoveryReceipt?'HUMAN_RECONCILIATION_REQUIRED':'NOT_RUN',
       checkpointPresent:await recordExists(join(dir,'recovery-checkpoint.json')),
       automaticReplay:false,compaction:'NOT_RUN',costStatus:'UNKNOWN'};
   }
-  if(!finalize)return state;
   const reasons=[];
-  if(recoveryRequired&&!await observedRecovery(dir).catch(()=>false))
+  if(recoveryRequired&&!recovered)
     reasons.push('Separate new-session checkpoint recovery not observed');
   if(!receipt||receipt.status!=='CODEX_TURN_OBSERVED_AWAIT_OWNER_REVIEW')
     reasons.push('No successful single Codex Turn observation');
   if(!taskId||!report||!report.acceptance?.complete||
      report.continuation?.status!=='COMPLETE_LOCAL')
     reasons.push('CodeFleet current-tree independent Local acceptance incomplete');
+  if(work&&work.phase!=='COMPLETE_LOCAL')
+    reasons.push('Current Work phase is '+work.phase+'; Local completion is not current');
   if(report?.protectedVerification!=='UNSATISFIED')
     reasons.push('Local trust classification changed');
   const source=await readFile(join(pp.project,'src','todo.mjs'));
@@ -652,6 +656,26 @@ async function inspect(dir,finalize=false){
   const gitStatus=cmd('git',['status','--porcelain'],pp.project).split('\n').filter(Boolean);
   if(gitStatus.length!==1||!gitStatus[0].endsWith(' src/todo.mjs'))
     reasons.push('Unexpected or missing modified source path');
+  if(!reasons.length){
+    state.status='COMPLETE_LOCAL';
+    state.next='Local objective complete. No further Owner approval or model Turn is required for this fixture. Preserve its records; do not replay.';
+    if(recoveryRequired)state.newSessionRecovery.status='OBSERVED_AND_OBJECTIVE_COMPLETE_LOCAL';
+  }else if(observedTurn){
+    if(work&&!['COMPLETE_LOCAL','AWAIT_FILE_REVIEW','AWAIT_TEST_REVIEW'].includes(work.phase)){
+      state.status=work.phase;
+      state.next='Inspect the current Task, control, candidate and evidence before any further action; do not replay a Turn.';
+    }else if(recoveryRequired&&!recovered&&(state.newSessionRecovery.status==='HUMAN_RECONCILIATION_REQUIRED'||state.currentTreeComplete)){
+      state.status='HUMAN_RECONCILIATION_REQUIRED';
+      state.next='Inspect the incomplete or uncertain recovery evidence; do not replay a Turn or approve effects from it.';
+    }else if(report?.nextActions?.some(a=>a.kind==='AWAIT_FILESET_APPROVAL'&&a.items.includes('implement'))){
+      state.next='Owner must review the current source Fileset in a separate terminal. Do not repeat the proposal Turn.';
+    }else if(report?.nextActions?.some(a=>a.kind==='RUN_LOCAL_VERIFICATION'&&a.items.includes('verify'))){
+      state.next=recoveryRequired&&!recovered?
+        'Record the settled checkpoint and separately approve the new-session recovery Turn before Owner test review.':
+        'Owner must review the exact fixed test command in a separate terminal, then run finalize.';
+    }else state.next='Inspect the current Task, candidate and evidence before any further action; do not replay a Turn.';
+  }
+  if(!finalize)return state;
   return {...state,
     verdict:reasons.length?'BLOCKED_OR_INCOMPLETE':
       'CODEX_TURN_OBSERVED_AND_OBJECTIVE_COMPLETE_LOCAL',

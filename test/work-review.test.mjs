@@ -122,7 +122,73 @@ test('offline simulated TTY shows objective, full profile and before/after sourc
   const input=new PassThrough(),output=new PassThrough();input.isTTY=true;output.isTTY=true;let shown='',sent=false;
   output.on('data',chunk=>{shown+=chunk.toString();if(!sent&&shown.includes('Type APPLY')){sent=true;queueMicrotask(()=>input.end('APPLY\n'));}});
   const accepted=await ownerReview(f.store,r.reviewRef,r.reviewHash,{input,output});assert.equal(accepted.status,'MATERIALIZED');
-  for(const value of ['WORK_REVIEW_V1','Verify the answer implementation','"before"','"after"','totalReservedMs'])assert.ok(shown.includes(value),value);
+  for(const value of ['WORK_REVIEW_V1','Verify the answer implementation','"before"','"after"','totalReservedMs','THIS terminal, not in Host chat','uppercase APPLY','Lowercase input','Review expires at'])assert.ok(shown.includes(value),value);
+});
+
+// Simulated TTY only: no real Owner identity or live approval is established.
+function ownerTty(answer,onPrompt=()=>{}){
+  const input=new PassThrough(),output=new PassThrough();input.isTTY=true;output.isTTY=true;
+  let shown='',sent=false;
+  output.on('data',chunk=>{
+    shown+=chunk.toString();
+    if(!sent&&/Type (APPLY|VERIFY|CLOSE) \(UPPERCASE\)/.test(shown)){
+      sent=true;queueMicrotask(()=>{onPrompt();input.end(answer===null?'':answer+'\n');});
+    }
+  });
+  return {input,output,get shown(){return shown;}};
+}
+
+for(const kind of ['APPLY','VERIFY','CLOSE'])test('Owner '+kind+' lowercase still declines with no effect and explains exit success',async t=>{
+  const f=await fixture(t,kind==='VERIFY'?'VERIFY_CURRENT':'CHANGE');
+  let review;
+  if(kind==='APPLY'){await f.propose();review=await prepareNativeFilesReview(f.store,f.id,'implement');}
+  else if(kind==='VERIFY')review=await prepareNativeLocalReview(f.store,f.id,{request:f.request});
+  else review=await prepareWorkClose(f.store,f.id,{expectedRevision:task(f.store,f.id).revision,outcome:'ABANDONED',reason:'Synthetic close review'});
+  const io=ownerTty(kind.toLowerCase());
+  const result=await ownerReview(f.store,review.reviewRef,review.reviewHash,io);
+  assert.equal(result.status,'DECLINED');assert.equal(result.executionGranted,false);
+  assert.ok(io.shown.includes('uppercase '+kind));assert.match(io.shown,/successful command exit records the decline/);
+  assert.match(io.shown,/prepare a fresh review/);assert.match(io.shown,/do not repeat the model Turn/);
+  assert.equal(await readFile(path.join(f.repo,'src/app.mjs'),'utf8'),'export const answer=1;\n');
+  assert.equal((await workReport(f.store,f.id)).budget.attemptsUsed,0);
+  assert.equal(f.store.events(f.id).some(e=>e.type==='WORK_CLOSED'),false);
+});
+
+test('Owner EOF declines promptly without granting or executing effects',async t=>{
+  const f=await fixture(t);await f.propose();const review=await prepareNativeFilesReview(f.store,f.id,'implement');
+  const io=ownerTty(null),result=await ownerReview(f.store,review.reviewRef,review.reviewHash,io);
+  assert.equal(result.status,'DECLINED');assert.equal(result.executionGranted,false);
+  assert.equal(await readFile(path.join(f.repo,'src/app.mjs'),'utf8'),'export const answer=1;\n');
+  assert.equal((await workReport(f.store,f.id)).budget.attemptsUsed,0);
+});
+
+for(const when of ['before prompt','while waiting'])test('Owner expired review '+when+' explains renewal without executing',async t=>{
+  const f=await fixture(t);await f.propose();const review=await prepareNativeFilesReview(f.store,f.id,'implement');
+  const expiresAt=f.store.readArtifact(review.reviewRef).review.expiresAt,events=f.store.events(f.id);
+  const expire=()=>t.mock.method(Date,'now',()=>expiresAt);
+  if(when==='before prompt')expire();
+  const io=ownerTty('APPLY',when==='while waiting'?expire:()=>{});
+  await assert.rejects(ownerReview(f.store,review.reviewRef,review.reviewHash,io),/WORK_REVIEW_EXPIRED/);
+  t.mock.restoreAll();
+  assert.match(io.shown,/Review EXPIRED/);assert.match(io.shown,/No approval was issued/);
+  assert.match(io.shown,/Prepare a fresh review/);assert.match(io.shown,/do not repeat the model Turn/);
+  if(when==='before prompt')assert.doesNotMatch(io.shown,/Type APPLY/);
+  assert.deepEqual(f.store.events(f.id),events);
+  assert.equal(await readFile(path.join(f.repo,'src/app.mjs'),'utf8'),'export const answer=1;\n');
+  assert.equal((await workReport(f.store,f.id)).budget.attemptsUsed,0);
+});
+
+test('Owner malformed expiration fails closed before asking for consent',async t=>{
+  const f=await fixture(t);await f.propose();const prepared=await prepareNativeFilesReview(f.store,f.id,'implement');
+  const original=f.store.readArtifact(prepared.reviewRef),events=f.store.events(f.id);
+  for(const expiresAt of [undefined,'tomorrow',Number.MAX_SAFE_INTEGER]){
+    const review={...original.review,expiresAt},reviewHash=hash(review);
+    const ref=f.store.artifact({review,reviewHash}),io=ownerTty('APPLY');
+    await assert.rejects(ownerReview(f.store,ref,reviewHash,io),/WORK_REVIEW_EXPIRY_INVALID/);
+    assert.doesNotMatch(io.shown,/Type APPLY/);
+  }
+  assert.deepEqual(f.store.events(f.id),events);
+  assert.equal(await readFile(path.join(f.repo,'src/app.mjs'),'utf8'),'export const answer=1;\n');
 });
 test('work failed CHANGE permits one separately reviewed repair',async t=>{
   const f=await fixture(t);await f.propose('export const answer=0;\n');await f.apply();const first=await f.verify();assert.equal(first.execution.status,'LOCAL_FAILED');

@@ -644,6 +644,8 @@ WR-REVIEW-03: 현행 MCP는 생성 예산 3회/300초, 검증 timeout 계산, NE
 
 WR-REVIEW-06: 현행 OwnerAction은 acknowledge flag를 생략하여 사용자가 명령을 완성해야 한다. 초기 프로필은 새 UX wrapper `objective work-owner-review REF --hash H`를 완성된 argv와 복사 가능한 명령으로 제공한다. 이는 설계상 추가 명령이다. Owner 터미널에서 정확한 diff 또는 테스트 명령, profile·후보·Local 한계를 다시 보여준 뒤 실제 TTY에서 `APPLY` 또는 `VERIFY`를 입력받는다. 종료 review에서는 `CLOSE`를 입력받는다. 일치할 때만 기존 Native accept 또는 work-close-accept에 명시적 acknowledgement를 전달한다. EOF·비TTY·미응답·다른 입력은 수락하지 않는다. `--yes`나 MCP 대리 수락은 없다.
 
+안내에는 확인 단어의 대문자 일치 조건, 입력할 별도 터미널과 Host 채팅의 차이, 절대 만료 시각과 남은 시간을 표시한다. 대소문자 불일치·EOF는 기존 거절 기록을 유지하며, 거절의 exit 0은 효과 실행 성공이 아니라 거절 기록 성공이라고 설명한다. 이미 만료됐거나 입력 대기 중 만료된 리뷰는 효과 수락을 호출하지 않고 새 리뷰 준비를 안내한다. 만료 시각이 손상되면 거부한다. 자동 갱신·시간 연장·소문자 자동 수락·채팅 승인 전달은 추가하지 않으며, 최종 Native 승인 검사도 그대로 유지한다.
+
 거절하면 해당 reviewRef를 폐기하는 Task event `WORK_REVIEW_DECLINED`에 profileRef·reviewRef·controlSeq·reason을 기록하고, 모든 신규 accept guard가 이를 확인한다. 기존 파일 review 철회가 있으면 함께 준수한다. 거절은 Task 전체 취소가 아니며, 사용자 재요청으로 새 review를 준비한다. 기록 실패 시 거절 확정을 주장하지 않되 실행은 하지 않는다. Owner 터미널은 별도 사용자 신원이나 OS 격리의 증명이 아니다.
 
 argv가 원본이며 PowerShell 표시는 call operator와 인자별 single quote, 내부 quote 두 번 처리로 생성한다. NUL·개행 인자는 거부한다. 사용자가 ID·hash·flag를 전사하거나 명령을 재조립하지 않는다. 복사 1회와 확인 단어 입력은 사람 시간 측정에 포함한다. 고급 Native accept 명령은 정확한 신규 review와 명시적 Owner acknowledgement가 있을 때만 허용한다.
@@ -720,6 +722,8 @@ WR-REVIEW-05: Native review의 `workContext`를 review hash에만 넣으면 충�
 새 세션 실증 도구는 기존 `scripts/codex-live-acceptance.mjs`의 `prepare-recovery → run → Owner 소스 적용 → checkpoint → run-recovery → Owner 검증 → finalize` 경로를 사용한다. `prepare-recovery`는 과거 fixture와 독립된 새 Git/State와 runner/runtime-bound 계획을 만들며 첫 제안 Turn과 새 세션 조회 Turn을 각각 별도 비용 승인·one-shot intent/receipt로 구분한다. 각 Turn은 최대 300초, 합계 최대 2회이며 자동 재시도·USD 상한은 제공하지 않는다. 첫 번째 Turn의 승인은 두 번째 Turn이나 Owner 효과를 승인하지 않는다.
 
 체크포인트는 `AWAIT_TEST_REVIEW`·효과 확정·검증 시도 미소모·비활성 lease 조건에서 기존 계약/profile/revision·후보·제어·예산·event/Run과 증거 무결성을 재관측한 수용 artifact다. Task/Store가 계속 권한과 상태의 원본이며 체크포인트 자체는 복구 권한이나 새 상태 저장소가 아니다. 새 세션 MCP의 `--status-only`는 명시 `WORK_REVIEW_V1`에서만 지원하며 목록/Task 상태 조회 외 모든 도구를 거절하고 읽기 전용 Store만 연다. 새 세션은 대화 이력·Task ID를 전달받지 않고 기존 Task를 발견·재독해 현재 다음 행동을 보고해야 한다. 서로 다른 provider-reported Thread, 동일 체크포인트, 정확한 다음 행동과 효과·예산 무변경을 함께 확인하며, 실패·불명 intent는 재실행하지 않는다. 성공해도 다음 Owner 검증 승인이 남고 실제 Compaction·Protected·Owner 인증은 입증하지 않는다. 이 경로의 오프라인 시험은 Host Live 수용 증거가 아니다. 구체 명령은 [Host 안내](../../guides/host-native-guide.md)를 따른다.
+
+수용 runner의 `status`와 `finalize`는 같은 기존 완료 조건을 사용해 표시를 도출한다. 성공한 제안 Turn·현재 후보의 독립 Local 수용·고정 파일/Git 범위·필요한 새 세션 증거가 모두 충족된 경우에만 현재 `status=COMPLETE_LOCAL`, 추가 Owner/모델 행동 불필요를 표시한다. Work Task는 기존 WorkReport의 현재 phase도 `COMPLETE_LOCAL`이어야 한다. 과거 Local pass가 있어도 현재 PAUSED·CANCELLED·불명·구후보 상태를 완료로 표시하지 않는다. 새 세션을 포함하면 `newSessionRecovery.status=OBSERVED_AND_OBJECTIVE_COMPLETE_LOCAL`이다. 재개만 관측하고 검증이 남았으면 `OBSERVED_CHECKPOINT_RECOVERY`로 구분한다. 소스 drift나 재개 증거 누락 뒤에는 완료 안내를 유지하지 않는다. 이 표시는 기존 receipt·Task·예산을 변경하거나 새로운 완료 Judge를 만들지 않는다.
 
 대표 수락 시나리오 표의 모든 사례와 위 게이트를 같은 구현 후보에서 확인한다. 테스트 기준선·보호 게이트는 바꾸지 않는다. 환경이 없어 미실행한 경우와 실행해서 실패한 경우를 분리한다. 실제 Host 실증에 드는 모델 사용·설치·대상 변경은 별도로 명시 승인된 실행에 한한다.
 

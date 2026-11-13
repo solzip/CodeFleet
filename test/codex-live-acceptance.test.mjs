@@ -8,7 +8,7 @@ import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {Store} from '../src/alpha/store.mjs';
 import {enableTasks,createTask,task,submitTaskDraft,prepareTask,submitBootstrapFiles} from '../src/product/tasks.mjs';
-import {prepareNativeFilesReview,acceptNativeFilesReview} from '../src/product/native-local.mjs';
+import {prepareNativeFilesReview,acceptNativeFilesReview,acceptNativeLocalReview} from '../src/product/native-local.mjs';
 import {workControl} from '../src/product/work-review.mjs';
 import {randomUUID} from 'node:crypto';
 
@@ -29,12 +29,12 @@ async function fixture(t){
   return {parent,dir};
 }
 
-async function recoveryFixture(t){
+async function recoveryFixture(t,{recovery=true}={}){
   const parent=await mkdtemp(join(tmpdir(),'cf-new-session-'));
   t.after(()=>rm(parent,{recursive:true,force:true}));
   const dir=join(parent,'new session fixture');
-  const prepared=call(['prepare-recovery','--dir',dir]);
-  assert.equal(prepared.plan.maxModelTurns,2);assert.equal(prepared.plan.ownerEffectsApproved,false);
+  const prepared=call([recovery?'prepare-recovery':'prepare','--dir',dir]);
+  if(recovery){assert.equal(prepared.plan.maxModelTurns,2);assert.equal(prepared.plan.ownerEffectsApproved,false);}
   const m=await manifestOf({dir}),store=new Store(m.state);enableTasks(store);
   // SYNTHETIC/OFFLINE setup only. No Codex process, login or spending approval.
   try{
@@ -56,7 +56,8 @@ async function recoveryFixture(t){
   }finally{store.close();}
   await writeFile(join(dir,'turn-intent.json'),JSON.stringify({kind:'SYNTHETIC_OFFLINE_FIRST_INTENT'}));
   await writeFile(join(dir,'turn-receipt.json'),JSON.stringify({status:'CODEX_TURN_OBSERVED_AWAIT_OWNER_REVIEW',threadIds:['SYNTHETIC-FIRST']}));
-  const checkpoint=call(['checkpoint','--dir',dir]);assert.equal(checkpoint.snapshot.phase,'AWAIT_TEST_REVIEW');
+  const checkpoint=recovery?call(['checkpoint','--dir',dir]):null;
+  if(recovery)assert.equal(checkpoint.snapshot.phase,'AWAIT_TEST_REVIEW');
   return {parent,dir,m,checkpoint};
 }
 
@@ -82,6 +83,78 @@ async function recoveryCodex(f,variant='valid'){
   ].join('\n'));
   return fake;
 }
+
+async function completedFixture(t,recovery=true){
+  const f=await recoveryFixture(t,{recovery});
+  if(recovery){
+    const fake=await recoveryCodex(f);
+    const r=call(['run-recovery','--dir',f.dir,'--codex',fake,'--allow-model-turn','--acknowledge-unknown-cost']);
+    assert.equal(r.status,'CODEX_NEW_SESSION_CHECKPOINT_RECOVERED_AWAIT_OWNER_TEST_REVIEW');
+  }
+  const pending=call(['status','--dir',f.dir]);
+  assert.equal(pending.currentTreeComplete,false);assert.notEqual(pending.status,'COMPLETE_LOCAL');
+  assert.match(pending.next,/exact fixed test command/);
+  const review=call(['review','--dir',f.dir]),s=new Store(f.m.state);
+  try{
+    const accepted=await acceptNativeLocalReview(s,review.reviewRef,{trust:review.reviewHash,acknowledgeUnisolated:true});
+    assert.equal(accepted.execution.status,'LOCAL_PASSED');
+  }finally{s.close();}
+  return f;
+}
+function persisted(f){
+  const s=new Store(f.m.state,{readOnly:true});
+  try{
+    const rows=s.db.prepare('SELECT body FROM product_tasks ORDER BY id').all();
+    return {tasks:rows,events:rows.map(r=>s.events(JSON.parse(r.body).id)),runs:s.list()};
+  }finally{s.close();}
+}
+
+for(const recovery of [false,true])test('completed '+(recovery?'new-session':'default')+' fixture reports completion without more Owner work or writes',async t=>{
+  const f=await completedFixture(t,recovery),before=persisted(f);
+  const receipt=await readFile(join(f.dir,'turn-receipt.json'));
+  const recoveryReceipt=recovery?await readFile(join(f.dir,'recovery-turn-receipt.json')):null;
+  for(const action of ['status','finalize']){
+    const r=call([action,'--dir',f.dir]);
+    assert.equal(r.status,'COMPLETE_LOCAL');assert.equal(r.currentTreeComplete,true);
+    assert.equal(r.continuation,'COMPLETE_LOCAL');assert.match(r.next,/No further Owner approval or model Turn is required/);
+    if(recovery)assert.equal(r.newSessionRecovery.status,'OBSERVED_AND_OBJECTIVE_COMPLETE_LOCAL');
+    if(action==='finalize'){assert.equal(r.verdict,'CODEX_TURN_OBSERVED_AND_OBJECTIVE_COMPLETE_LOCAL');assert.deepEqual(r.reasons,[]);}
+  }
+  assert.deepEqual(persisted(f),before);
+  assert.deepEqual(await readFile(join(f.dir,'turn-receipt.json')),receipt);
+  if(recovery)assert.deepEqual(await readFile(join(f.dir,'recovery-turn-receipt.json')),recoveryReceipt);
+});
+
+test('former completed fixture with source drift never retains completion guidance',async t=>{
+  const f=await completedFixture(t);
+  await writeFile(join(f.m.project,'src','todo.mjs'),'export const externalChange=true;\n');
+  const status=call(['status','--dir',f.dir]);
+  assert.notEqual(status.status,'COMPLETE_LOCAL');assert.equal(status.currentTreeComplete,false);
+  assert.doesNotMatch(status.next,/Local objective complete/);
+  assert.equal(status.newSessionRecovery.status,'OBSERVED_CHECKPOINT_RECOVERY');
+  const final=call(['finalize','--dir',f.dir],2);assert.equal(final.verdict,'BLOCKED_OR_INCOMPLETE');
+});
+
+test('passing Local tests cannot hide missing recovery evidence in status or finalize',async t=>{
+  const f=await completedFixture(t),before=persisted(f);
+  await rm(join(f.dir,'recovery-turn-receipt.json'));
+  const status=call(['status','--dir',f.dir]);
+  assert.equal(status.currentTreeComplete,true);assert.equal(status.status,'HUMAN_RECONCILIATION_REQUIRED');
+  assert.match(status.next,/uncertain recovery evidence/);assert.doesNotMatch(status.next,/Local objective complete/);
+  const final=call(['finalize','--dir',f.dir],2);assert.equal(final.verdict,'BLOCKED_OR_INCOMPLETE');
+  assert.ok(final.reasons.includes('Separate new-session checkpoint recovery not observed'));
+  assert.deepEqual(persisted(f),before);
+});
+
+for(const action of ['PAUSE','CANCEL'])test('current '+action+' overrides former completion guidance without replay',async t=>{
+  const f=await completedFixture(t),s=new Store(f.m.state);
+  try{workControl(s,f.checkpoint.snapshot.taskId,{action,requestId:randomUUID(),expectedControlSeq:0});}finally{s.close();}
+  const before=persisted(f),status=call(['status','--dir',f.dir]);
+  assert.equal(status.currentTreeComplete,true,'Historical passing candidate evidence remains available');
+  assert.equal(status.status,action==='PAUSE'?'PAUSED':'CANCELLED');assert.doesNotMatch(status.next,/Local objective complete/);
+  const final=call(['finalize','--dir',f.dir],2);assert.equal(final.verdict,'BLOCKED_OR_INCOMPLETE');
+  assert.deepEqual(persisted(f),before);
+});
 
 test('new-session fixture is exclusive, has separate bounded approvals and no implicit Turn',async t=>{
   const parent=await mkdtemp(join(tmpdir(),'cf-new-plan-'));t.after(()=>rm(parent,{recursive:true,force:true}));

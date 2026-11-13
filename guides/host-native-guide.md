@@ -176,6 +176,14 @@ after ten minutes: prepare a fresh review of the current candidate after a
 decline or expiration, preserving the old record and never repeating the
 model Turn. The new-session scenario below pauses before test review.
 
+The Owner screen shows the absolute UTC expiration and remaining seconds,
+and explicitly says to enter confirmation in that terminal, not Host chat.
+An already expired review is rejected before asking for confirmation; expiry
+while waiting is checked again before issuing approval. Malformed expiration
+also fails closed. Decline output explains that a successful command exit
+records a decline and authorizes no new effect. These messages do not renew
+a review or change the exact-uppercase, TTY or Native approval requirements.
+
 Finally:
 
 
@@ -237,10 +245,19 @@ also requires current-tree Local verification; session discovery alone is not
 Objective completion. `status` includes `newSessionRecovery` for this scenario.
 The selected Windows Codex CLI `0.167.0` scenario has been observed through
 new-session recovery and final Local acceptance; see [current evidence and limits](../project/PROGRESS.md).
-This does not accept the entire Host profile. The current runner still leaves
-some earlier-stage `next` and recovery labels after a completed verdict; use
-the current-tree acceptance and final verdict, and retain this display issue
-as remaining work. Real Compaction remains `NOT_RUN`; Host observation remains
+This does not accept the entire Host profile. The updated runner uses the same
+completion gates for `status` and `finalize`: current completion is
+`status=COMPLETE_LOCAL`, with no further Owner approval or model Turn required.
+For this scenario, `newSessionRecovery.status` then becomes
+`OBSERVED_AND_OBJECTIVE_COMPLETE_LOCAL`. Recovery without completed current
+tests remains `OBSERVED_CHECKPOINT_RECOVERY`. Source drift or missing recovery
+evidence cannot retain completion guidance. Work Tasks must also have a current
+WorkReport phase of `COMPLETE_LOCAL`; historical Local passes cannot override
+pause, cancellation, unresolved effects or stale candidates. These are derived displays;
+historical receipts, Task State and budgets are unchanged. The display/Owner
+guidance update is covered offline; earlier Live evidence belongs to its
+recorded implementation. Do not reset an older fixture's runtime/runner
+binding to use an updated candidate. Real Compaction remains `NOT_RUN`; Host observation remains
 `PROVIDER_REPORTED_ONLY`, Owner identity `NOT_ESTABLISHED`, and protection
 `UNSATISFIED`.
 
