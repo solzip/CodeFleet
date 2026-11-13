@@ -71,6 +71,12 @@ and CodeFleet State are independent temporary paths (including spaces).
 No \`codex exec\`, authentication, nested model process, owner approval,
 host tool effects or subscription usage is performed.
 
+The Live runner also accepts Codex CLI `0.167.0` after the same nonbillable
+official-client compatibility exercise. This is an explicit allowlist, not a
+claim that arbitrary older or newer clients are compatible. To exercise an
+already installed client without changing global configuration, pass its
+absolute JavaScript entry to `scripts/codex-cli-client-acceptance.mjs --codex`.
+
 To verify a user installation manually, first install the reviewed CodeFleet
 Skill in the selected repository and register the server as above, then run:
 
@@ -89,7 +95,7 @@ model-authored Objective acceptance.
 ### Real Codex model Turn acceptance — explicit Owner opt-in
 
 CodeFleet includes a **one-turn, no-automatic-retry acceptance runner** for
-an authenticated Codex CLI **0.167.1** installation. This is intended to
+an authenticated allowlisted Codex CLI **0.167.0 or 0.167.1** installation. This is intended to
 cross the final boundary between a model-free MCP smoke and an actual
 model-authored, CodeFleet-reviewed development Objective.
 
@@ -116,7 +122,7 @@ credentials nor proves independent Owner identity, usable subscription quota
 or a USD budget cap. The expected readiness indicator is
 `READY_FOR_EXPLICIT_OWNER_MODEL_APPROVAL`.
 
-Only if an authenticated **Codex CLI 0.167.1** is accessible, the Owner
+Only if an authenticated allowlisted **Codex CLI 0.167.0 or 0.167.1** is accessible, the Owner
 explicitly chooses to spend an unknown amount of subscription usage, and
 accepts that this script **does not enforce a USD cap**, run **once**:
 

@@ -4,6 +4,8 @@ CodeFleet is a **Host-Native development orchestration extension for Codex CLI a
 
 **The product is under development and acceptance testing.** Planning, review, supervised Local changes and recovery across processes are implemented. Limited supervised Windows Codex runs have been observed. Public authenticated delegation, protected execution, full platform acceptance and external-user productivity remain incomplete. [Current status](project/PROGRESS.md) owns the latest results and limits.
 
+The current Live candidate allowlists only Codex CLI `0.167.0`, which passed an actual compatibility exercise, and the CI-pinned `0.167.1`. On `0.167.0`, official MCP registration and discovery, all seven proposal-only tools, Goal persistence and unchanged source were verified without a model call. A real model Turn, Owner approval and Host compaction remain unexecuted; Live preflight is currently blocked before Codex login.
+
 [Documentation](docs/README.md) · [Product principles](docs/PRODUCT_VISION.md) · [Roadmap](docs/product-completion/roadmap.md) · [Architecture](docs/product-completion/architecture.md) · [한국어](README.md)
 
 ## What can it do?

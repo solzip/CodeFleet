@@ -96,6 +96,20 @@ test('real Codex Turn requires both owner flags; uncertain effect is durable one
   assert.equal(result.verdict,'BLOCKED_OR_INCOMPLETE');
   assert.equal(result.protectedVerified,false);
 });
+test('verified Codex CLI 0.167.0 is accepted without starting a model Turn',async t=>{
+  const f=await fixture(t);
+  const supported=join(f.parent,'synthetic-0.167.0.mjs');
+  await writeFile(supported,[
+    "if(process.argv.includes('--version')){console.log('codex-cli 0.167.0');process.exit(0)}",
+    "if(process.argv.includes('login'))process.exit(1)",
+    "process.exit(2)"
+  ].join('\n'));
+  const result=call(['preflight','--dir',f.dir,'--codex',supported],2);
+  assert.equal(result.status,'BLOCKED_CODEX_LOGIN_UNAVAILABLE');
+  assert.equal(result.codexVersion,'codex-cli 0.167.0');
+  assert.equal(result.modelTurnsStarted,0);
+  assert.equal(await lstat(join(f.dir,'turn-intent.json')).catch(()=>null),null);
+});
 test('official Windows npm cmd shim resolves without shell execution',async t=>{
   const f=await fixture(t);
   const shim=join(f.parent,'npm bin','codex.cmd');

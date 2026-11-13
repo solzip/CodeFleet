@@ -6,12 +6,17 @@ import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {mkdtemp,mkdir,writeFile,readFile,rm,lstat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join,resolve} from 'node:path';
+import {isAbsolute,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-const CLI_VERSION='0.167.1';
+const SUPPORTED_CLI_VERSIONS=new Set(['0.167.0','0.167.1']);
 const repoRoot=fileURLToPath(new URL('../',import.meta.url));
-const codexEntry=join(repoRoot,'node_modules','@openai','codex','bin','codex.js');
+const selectedIndex=process.argv.indexOf('--codex');
+if(selectedIndex!==-1&&(selectedIndex!==2||process.argv.length!==4||
+  !isAbsolute(process.argv[3])))throw Error('Usage: node scripts/codex-cli-client-acceptance.mjs [--codex ABS_JS_ENTRY]');
+const codexEntry=selectedIndex===-1?
+  join(repoRoot,'node_modules','@openai','codex','bin','codex.js'):
+  resolve(process.argv[3]);
 const mcpEntry=join(repoRoot,'src','hosts','codex-mcp.mjs');
 const jsonRpc=(id,method,params)=>({jsonrpc:'2.0',id,method,...(params?{params}:{})});
 const run=(executable,args,{cwd=repoRoot,env=process.env,input=null,allowed=[0],timeout=60000}={})=>{
@@ -65,7 +70,10 @@ try{
   const codex=args=>run(process.execPath,[codexEntry,...args],{
     cwd:project,env:codexEnv,timeout:60000
   });
-  assert.match(codex(['--version']).stdout,/\b0\.167\.1\b/);
+  const versionOutput=codex(['--version']).stdout;
+  const cliVersion=/\bcodex-cli\s+(\d+\.\d+\.\d+)\b/.exec(versionOutput)?.[1];
+  assert.ok(SUPPORTED_CLI_VERSIONS.has(cliVersion),
+    'Unsupported official Codex CLI version: '+(cliVersion??'UNPARSEABLE'));
   const serverName='codefleet-acceptance';
   const serverArgs=[
     mcpEntry,'--state',state,'--repository',project,
@@ -162,7 +170,7 @@ try{
     .some(item=>item.name===serverName),false);
   console.log(JSON.stringify({
     acceptance:'OFFICIAL_CODEX_CLI_MCP_REGISTRATION_PASS',
-    codexVersion:CLI_VERSION,registered:true,discovered:true,
+    codexVersion:cliVersion,registered:true,discovered:true,
     toolCount:tools.length,goalPersisted:true,sourceUnchanged:true,
     codexHomeIsolated:true,modelTurnsActuallyRun:0,
     codexModelAuthInvoked:false,codexHostLiveAcceptance:'NOT_VERIFIED',

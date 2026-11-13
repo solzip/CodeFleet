@@ -12,6 +12,7 @@ import { StringDecoder } from 'node:string_decoder';
 
 const rootOfCodeFleet=fileURLToPath(new URL('../',import.meta.url));
 const mcpServer=join(rootOfCodeFleet,'src','hosts','codex-mcp.mjs');
+const supportedCodexVersions=new Set(['0.167.0','0.167.1']);
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const goal='Implement normalizeTitle in src/todo.mjs: trim nonempty text, reject empty or nonstring input, and pass the immutable Node tests.';
 const initialSource="export function normalizeTitle(value) { throw Error('NOT_IMPLEMENTED'); }\n";
@@ -131,7 +132,7 @@ async function prepare(dir){
   await writeFile(pp.manifest,JSON.stringify(m,null,2)+'\n',{flag:'wx'});
   return {status:'READY_FOR_EXPLICIT_CODEX_LIVE_TURN',repository:pp.project,
     state:pp.state,goal,immutableTests:m.testPaths,modelTurns:0,ownerGrantIssued:false,
-    next:'run --dir '+dir+' --allow-model-turn --acknowledge-unknown-cost (requires authenticated Codex CLI 0.167.1)',
+    next:'run --dir '+dir+' --allow-model-turn --acknowledge-unknown-cost (requires authenticated supported Codex CLI)',
     warning:'Real model usage may be billed and subscription USD spending cannot be capped here; owner grants source/test effects separately'};
 }
 const prompt=m=>[
@@ -177,8 +178,9 @@ function codexInvoke(selected,args){
 function inspectCodexVersion(binary,directory){
   const invocation=codexInvoke(binary,['--version']);
   const version=cmd(invocation.exe,invocation.args,directory);
-  if(!/\b0\.167\.1\b/.test(version))
-    fail('This acceptance is bound to verified Codex CLI 0.167.1; observed version unsupported');
+  const observed=/\bcodex-cli\s+(\d+\.\d+\.\d+)\b/.exec(version)?.[1];
+  if(!observed||!supportedCodexVersions.has(observed))
+    fail('This acceptance supports only verified Codex CLI 0.167.0 or 0.167.1; observed version unsupported');
   return version;
 }
 function inspectCodexLogin(binary,directory){
